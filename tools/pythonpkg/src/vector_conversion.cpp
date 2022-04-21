@@ -319,7 +319,7 @@ static void ConvertPandasType(const string &col_type, LogicalType &duckdb_col_ty
 	} else if (col_type == "float64") {
 		duckdb_col_type = LogicalType::DOUBLE;
 		pandas_type = PandasType::DOUBLE;
-	} else if (col_type == "object") {
+	} else if (col_type == "object" || col_type == "boolean") {
 		//! this better be castable to strings
 		duckdb_col_type = LogicalType::VARCHAR;
 		pandas_type = PandasType::OBJECT;
