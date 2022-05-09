@@ -17,6 +17,17 @@
 
 namespace duckdb {
 
+static vector<string> GetColumnNames(const vector<BindingColumnInfo> &columns, TableColumnType type = TableColumnType::STANDARD) {
+	vector<string>	names;
+	for (auto& col : columns) {
+		if (col.info.column_type != type) {
+			continue;
+		}
+		names.push_back(col.name);
+	}
+	return names;
+}
+
 string BindContext::GetMatchingBinding(const string &column_name, TableColumnType type) {
 	string result;
 	for (auto &kv : bindings) {
@@ -141,12 +152,13 @@ string BindContext::GetActualColumnName(const string &binding_name, const string
 	if (!binding) {
 		throw InternalException("No binding with name \"%s\"", binding_name);
 	}
+	auto names = GetColumnNames(binding->columns);
 	idx_t binding_index;
 	if (!binding->TryGetBindingIndex(column_name, binding_index)) { // LCOV_EXCL_START
 		throw InternalException("Binding with name \"%s\" does not have a column named \"%s\"", binding_name,
 		                        column_name);
 	} // LCOV_EXCL_STOP
-	return binding->names[binding_index];
+	return names[binding_index];
 }
 
 unordered_set<string> BindContext::GetMatchingBindings(const string &column_name) {
@@ -194,9 +206,10 @@ unique_ptr<ParsedExpression> BindContext::CreateColumnReference(const string &sc
 	// as it appears in the binding itself
 	auto binding = GetBinding(table_name, error_message);
 	if (binding) {
+		auto names = GetColumnNames(binding->columns);
 		auto column_index = binding->GetBindingIndex(column_name);
-		if (column_index < binding->names.size() && binding->names[column_index] != column_name) {
-			result->alias = binding->names[column_index];
+		if (column_index < names.size() && names[column_index] != column_name) {
+			result->alias = names[column_index];
 		}
 	}
 	return move(result);
@@ -243,7 +256,9 @@ string BindContext::BindColumn(PositionalReferenceExpression &ref, string &table
 	idx_t total_columns = 0;
 	idx_t current_position = ref.index - 1;
 	for (auto &entry : bindings_list) {
-		idx_t entry_column_count = entry.second->names.size();
+		// This now requires an extra loop
+		vector<string> names = GetColumnNames(entry.second->columns, TableColumnType::STANDARD);
+		idx_t entry_column_count = names.size();
 		if (ref.index == 0) {
 			// this is a row id
 			table_name = entry.first;
@@ -252,7 +267,7 @@ string BindContext::BindColumn(PositionalReferenceExpression &ref, string &table
 		}
 		if (current_position < entry_column_count) {
 			table_name = entry.first;
-			column_name = entry.second->names[current_position];
+			column_name = names[current_position];
 			return string();
 		} else {
 			total_columns += entry_column_count;
@@ -303,7 +318,13 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 		unordered_set<UsingColumnSet *> handled_using_columns;
 		for (auto &entry : bindings_list) {
 			auto binding = entry.second;
-			for (auto &column_name : binding->names) {
+			for (auto &column : binding->columns) {
+				auto& column_name = column.name;
+				// No checks need to be performed for generated columns
+				if (column.info.column_type == TableColumnType::GENERATED) {
+					new_select_list.push_back(make_unique<ColumnRefExpression>(column_name, binding->alias));
+					continue;
+				}
 				if (CheckExclusionList(expr, binding, column_name, new_select_list, excluded_columns)) {
 					continue;
 				}
@@ -335,10 +356,6 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 				}
 				new_select_list.push_back(make_unique<ColumnRefExpression>(column_name, binding->alias));
 			}
-			// Add generated columns
-			for (auto &column_name : binding->gnames) {
-				new_select_list.push_back(make_unique<ColumnRefExpression>(column_name, binding->alias));
-			}
 		}
 	} else {
 		// SELECT tbl.* case
@@ -347,7 +364,8 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 		if (!binding) {
 			throw BinderException(error);
 		}
-		for (auto &column_name : binding->names) {
+		for (auto &column : binding->columns) {
+			auto& column_name = column.name;
 			if (CheckExclusionList(expr, binding, column_name, new_select_list, excluded_columns)) {
 				continue;
 			}
@@ -376,10 +394,8 @@ void BindContext::AddBinding(const string &alias, unique_ptr<Binding> binding) {
 	bindings[alias] = move(binding);
 }
 
-void BindContext::AddBaseTable(idx_t index, const string &alias, const vector<string> &names,
-                               const vector<LogicalType> &types, const vector<string> &gnames,
-                               const vector<LogicalType> &gtypes, LogicalGet &get) {
-	AddBinding(alias, make_unique<TableBinding>(alias, types, names, gtypes, gnames, get, index, true));
+void BindContext::AddBaseTable(idx_t index, const string &alias, const vector<BindingColumnInfo>& columns, LogicalGet &get) {
+	AddBinding(alias, make_unique<TableBinding>(alias, columns, get, index, true));
 }
 
 void BindContext::AddTableFunction(idx_t index, const string &alias, const vector<string> &names,
@@ -413,6 +429,33 @@ vector<string> BindContext::AliasColumnNames(const string &table_name, const vec
 	// if not enough aliases were provided, use the default names for remaining columns
 	for (idx_t i = column_aliases.size(); i < names.size(); i++) {
 		result.push_back(AddColumnNameToBinding(names[i], current_names));
+	}
+	return result;
+}
+
+vector<BindingColumnInfo> BindContext::AliasColumnNames(const string &table_name, const vector<BindingColumnInfo> &columns,
+                                             const vector<string> &column_aliases) {
+	vector<BindingColumnInfo> result;
+	if (column_aliases.size() > columns.size()) {
+		throw BinderException("table \"%s\" has %lld columns available but %lld columns specified", table_name,
+		                      columns.size(), column_aliases.size());
+	}
+	case_insensitive_set_t current_names;
+	// use any provided column aliases first
+	for (idx_t i = 0; i < column_aliases.size(); i++) {
+		auto info = columns[i];
+		if (columns[i].info.column_type == TableColumnType::STANDARD) {
+			info.name = AddColumnNameToBinding(column_aliases[i], current_names);
+		}
+		result.push_back(move(info));
+	}
+	// if not enough aliases were provided, use the default names for remaining columns
+	for (idx_t i = column_aliases.size(); i < columns.size(); i++) {
+		auto info = columns[i];
+		if (columns[i].info.column_type == TableColumnType::STANDARD) {
+			info.name = AddColumnNameToBinding(columns[i].name, current_names);
+		}
+		result.push_back(move(info));
 	}
 	return result;
 }

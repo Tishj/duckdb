@@ -11,6 +11,7 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "duckdb/planner/binding_column_info.hpp"
 
 namespace duckdb {
 
@@ -18,7 +19,7 @@ namespace duckdb {
 class LogicalGet : public LogicalOperator {
 public:
 	LogicalGet(idx_t table_index, TableFunction function, unique_ptr<FunctionData> bind_data,
-	           vector<LogicalType> returned_types, vector<string> returned_names);
+	           vector<BindingColumnInfo> columns);
 
 	//! The table index in the current bind context
 	idx_t table_index;
@@ -27,9 +28,9 @@ public:
 	//! The bind data of the function
 	unique_ptr<FunctionData> bind_data;
 	//! The types of ALL columns that can be returned by the table function
-	vector<LogicalType> returned_types;
+	//vector<LogicalType> returned_types;
 	//! The names of ALL columns that can be returned by the table function
-	vector<string> names;
+	//vector<string> names;
 	//! Bound column IDs
 	vector<column_t> column_ids;
 	//! Filters pushed down for table scan

@@ -20,6 +20,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/planner/table_binding.hpp"
+#include "duckdb/planner/binding_column_info.hpp"
 
 namespace duckdb {
 class Binder;
@@ -79,8 +80,7 @@ public:
 	}
 
 	//! Adds a base table with the given alias to the BindContext.
-	void AddBaseTable(idx_t index, const string &alias, const vector<string> &names, const vector<LogicalType> &types,
-	                  const vector<string> &gnames, const vector<LogicalType> &gtypes, LogicalGet &get);
+	void AddBaseTable(idx_t index, const string &alias, const vector<BindingColumnInfo> &columns, LogicalGet &get);
 	//! Adds a call to a table function with the given alias to the BindContext.
 	void AddTableFunction(idx_t index, const string &alias, const vector<string> &names,
 	                      const vector<LogicalType> &types, LogicalGet &get);
@@ -128,7 +128,9 @@ public:
 
 	//! Alias a set of column names for the specified table, using the original names if there are not enough aliases
 	//! specified.
-	static vector<string> AliasColumnNames(const string &table_name, const vector<string> &names,
+	static vector<string> AliasColumnNames(const string &table_name, const vector<string> &columns,
+	                                       const vector<string> &column_aliases);
+	static vector<BindingColumnInfo> AliasColumnNames(const string &table_name, const vector<BindingColumnInfo> &columns,
 	                                       const vector<string> &column_aliases);
 
 	//! Add all the bindings from a BindContext to this BindContext. The other BindContext is destroyed in the process.

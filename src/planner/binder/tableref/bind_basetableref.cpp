@@ -13,6 +13,7 @@
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/planner/tableref/bound_dummytableref.hpp"
+#include "duckdb/planner/binding_column_info.hpp"
 
 namespace duckdb {
 
@@ -103,25 +104,22 @@ unique_ptr<BoundTableRef> Binder::Bind(BaseTableRef &ref) {
 		auto scan_function = TableScanFunction::GetFunction();
 		auto bind_data = make_unique<TableScanBindData>(table);
 		auto alias = ref.alias.empty() ? ref.table_name : ref.alias;
-		// TODO: bundle the type and name vector in a struct (e.g PackedColumnMetadata)
-		vector<LogicalType> table_types;
-		vector<string> table_names;
-		vector<LogicalType> table_gtypes;
-		vector<string> table_gnames;
-		for (auto &col : table->columns) {
-			table_types.push_back(col.type);
-			table_names.push_back(col.name);
+
+		vector<BindingColumnInfo> columns;
+
+		for (idx_t i = 0; i < table->columns.size(); i++) {
+			auto& col = table->columns[i];
+			columns.push_back(BindingColumnInfo(col.name, col.type, TableColumnInfo(i, TableColumnType::STANDARD)));
 		}
-		for (auto &col : table->generated_columns) {
-			table_gtypes.push_back(col.type);
-			table_gnames.push_back(col.name);
+		for (idx_t i = 0; i < table->generated_columns.size(); i++) {
+			auto& col = table->generated_columns[i];
+			columns.push_back(BindingColumnInfo(col.name, col.type, TableColumnInfo(i, TableColumnType::GENERATED)));
 		}
-		table_names = BindContext::AliasColumnNames(alias, table_names, ref.column_name_alias);
+		columns = BindContext::AliasColumnNames(alias, columns, ref.column_name_alias);
 
 		auto logical_get =
-		    make_unique<LogicalGet>(table_index, scan_function, move(bind_data), table_types, table_names);
-		bind_context.AddBaseTable(table_index, alias, table_names, table_types, table_gnames, table_gtypes,
-		                          *logical_get);
+		    make_unique<LogicalGet>(table_index, scan_function, move(bind_data), columns);
+		bind_context.AddBaseTable(table_index, alias, columns, *logical_get);
 		return make_unique_base<BoundTableRef, BoundBaseTableRef>(table, move(logical_get));
 	}
 	case CatalogType::VIEW_ENTRY: {
