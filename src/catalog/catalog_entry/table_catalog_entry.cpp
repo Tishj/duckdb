@@ -405,11 +405,15 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveGeneratedColumn(ClientContext 
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
 
+static bool IsGenerated(const TableColumnInfo &info) {
+	return info.column_type == TableColumnType::GENERATED;
+}
+
 unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context, RemoveColumnInfo &info) {
 	auto remove_info = GetColumnInfo(info.removed_column, info.if_exists);
-	if (remove_info.column_type == TableColumnType::GENERATED) {
-		return RemoveGeneratedColumn(context, info, remove_info.index);
-	}
+	// if (remove_info.column_type == TableColumnType::GENERATED) {
+	//	return RemoveGeneratedColumn(context, info, remove_info.index);
+	// }
 	idx_t removed_index = remove_info.index;
 	if (removed_index == DConstants::INVALID_INDEX) {
 		return nullptr;
@@ -420,20 +424,21 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 
 	idx_t removed_generated_columns = 0;
 	for (idx_t i = 0; i < generated_columns.size(); i++) {
-		if (DependsOnColumn(*generated_columns[i].expression, columns[removed_index].name)) {
+		if (IsGenerated(remove_info) ||
+		    DependsOnColumn(*generated_columns[i].expression, columns[removed_index].name)) {
 			removed_generated_columns++;
 			continue;
 		}
 		create_info->generated_columns.push_back(generated_columns[i].Copy());
 	}
+	if (!IsGenerated(remove_info) && removed_generated_columns && !info.cascade) {
+		throw CatalogException("Cannot drop column: column is a dependency of 1 or more generated column(s)");
+	}
 	for (idx_t i = 0; i < columns.size(); i++) {
-		if (removed_index != i) {
-			create_info->columns.push_back(columns[i].Copy());
-		} else {
-			if (removed_generated_columns && !info.cascade) {
-				throw CatalogException("Cannot drop column: column is a dependency of 1 or more generated column(s)");
-			}
+		if (!IsGenerated(remove_info) && removed_index == i) {
+			continue;
 		}
+		create_info->columns.push_back(columns[i].Copy());
 	}
 	if (create_info->columns.empty()) {
 		throw CatalogException("Cannot drop column: table only has one column remaining!");
@@ -442,6 +447,10 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 	D_ASSERT(constraints.size() == bound_constraints.size());
 	for (idx_t constr_idx = 0; constr_idx < constraints.size(); constr_idx++) {
 		auto &constraint = constraints[constr_idx];
+		if (IsGenerated(remove_info)) {
+			create_info->constraints.push_back(constraint->Copy());
+			continue;
+		}
 		auto &bound_constraint = bound_constraints[constr_idx];
 		switch (bound_constraint->type) {
 		case ConstraintType::NOT_NULL: {
@@ -519,6 +528,10 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 
 	auto binder = Binder::CreateBinder(context);
 	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
+	if (IsGenerated(remove_info)) {
+		return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
+		                                      storage);
+	}
 	auto new_storage = make_shared<DataTable>(context, *storage, removed_index);
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
 	                                      new_storage);
