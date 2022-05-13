@@ -7,6 +7,32 @@
 
 namespace duckdb {
 
+//static void SortKeysAndValues(Vector& keys, Vector& values, Vector& result) {
+//	Vector &lists = keys;
+
+//	auto &result_validity = FlatVector::Validity(result);
+
+//	if (lists.GetType().id() == LogicalTypeId::SQLNULL) {
+//		result_validity.SetInvalid(0);
+//		return;
+//	}
+
+//	// initialize the global and local sorting state
+//	auto &buffer_manager = BufferManager::GetBufferManager(bind_data.context);
+//	bind_data.info.global_sort_state = make_unique<GlobalSortState>(buffer_manager, bind_data.orders, bind_data.payload_layout);
+
+//	auto &child_vector = ListVector::GetEntry(lists);
+//	auto apply_order_to_lists = [&](const SelectionVector& sel, idx_t sel_size) {
+//		child_vector.Slice(sel, sel_size);
+//		child_vector.Normalify(sel_size);
+//	};
+//	auto mark_result_entry_as_invalid = [&](idx_t index) {
+//		result_validity.SetInvalid(index);
+//	};
+
+//	SortLists(lists, count, apply_order_to_lists, mark_result_entry_as_invalid, bind_data.info, buffer_manager);
+//}
+
 static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(result.GetType().id() == LogicalTypeId::MAP);
 
@@ -43,6 +69,12 @@ static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result)
 	if (ListVector::GetListSize(args.data[0]) != ListVector::GetListSize(args.data[1])) {
 		throw Exception("Key list has a different size from Value list");
 	}
+
+	//! Sort the key and value list(s)
+	//SortKeysAndValues(args.data[0], args.data[1], result);
+
+	//! Make sure they are unique
+
 	key_vector->Reference(args.data[0]);
 	value_vector->Reference(args.data[1]);
 
