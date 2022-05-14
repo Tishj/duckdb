@@ -6,14 +6,9 @@
 #include "duckdb/main/config.hpp"
 
 #include "duckdb/common/sort/sort.hpp"
+#include "duckdb/common/sort/list_sort.hpp"
 
 namespace duckdb {
-
-struct ListSortInfo {
-	vector<LogicalType> types;
-	vector<LogicalType> payload_types;
-	unique_ptr<GlobalSortState> global_sort_state;
-};
 
 struct ListSortBindData : public FunctionData {
 	ListSortBindData(OrderType order_type_p, OrderByNullType null_order_p, const LogicalType &return_type_p,
@@ -25,7 +20,7 @@ struct ListSortBindData : public FunctionData {
 	LogicalType return_type;
 	LogicalType child_type;
 
-	ListSortInfo	info;
+	ListSortInfo info;
 
 	ClientContext &context;
 	RowLayout payload_layout;
@@ -99,12 +94,12 @@ bool SinkDataChunk(Vector *child_vector, SelectionVector &sel, idx_t offset_list
 	return true;
 }
 
-void SortLists(Vector& lists, idx_t count,
-    const std::function<void(const SelectionVector &sel, idx_t sel_size)> &apply_sort,
-	const std::function<void(idx_t index)> &invalid_list_callback,
-	ListSortInfo &info, BufferManager &buffer_manager) {
+void SortLists(Vector &lists, idx_t count,
+               const std::function<void(const SelectionVector &sel, idx_t sel_size)> &apply_sort,
+               const std::function<void(idx_t index)> &invalid_list_callback, ListSortInfo &info,
+               BufferManager &buffer_manager) {
 
-	//initialize the local sort state
+	// initialize the local sort state
 	LocalSortState local_sort_state;
 	local_sort_state.Initialize(*info.global_sort_state, buffer_manager);
 
@@ -163,15 +158,14 @@ void SortLists(Vector& lists, idx_t count,
 			offset_lists_indices++;
 			incr_payload_count++;
 
-			//the lists_indices vector isn't full
-			//and it's not the final iteration of the loop
-			if (offset_lists_indices != STANDARD_VECTOR_SIZE &&
-			    child_idx + 1 != list_entry.length) {
+			// the lists_indices vector isn't full
+			// and it's not the final iteration of the loop
+			if (offset_lists_indices != STANDARD_VECTOR_SIZE && child_idx + 1 != list_entry.length) {
 				continue;
 			}
 
-			data_to_sort = SinkDataChunk(&child_vector, sel, offset_lists_indices, info.types, info.payload_types, payload_vector,
-							local_sort_state, lists_indices);
+			data_to_sort = SinkDataChunk(&child_vector, sel, offset_lists_indices, info.types, info.payload_types,
+			                             payload_vector, local_sort_state, lists_indices);
 			offset_lists_indices = 0;
 		}
 	}
@@ -232,10 +226,11 @@ static void ListSortFunction(DataChunk &args, ExpressionState &state, Vector &re
 
 	// initialize the global and local sorting state
 	auto &buffer_manager = BufferManager::GetBufferManager(bind_data.context);
-	bind_data.info.global_sort_state = make_unique<GlobalSortState>(buffer_manager, bind_data.orders, bind_data.payload_layout);
+	bind_data.info.global_sort_state =
+	    make_unique<GlobalSortState>(buffer_manager, bind_data.orders, bind_data.payload_layout);
 
 	auto &child_vector = ListVector::GetEntry(lists);
-	auto apply_order_to_lists = [&](const SelectionVector& sel, idx_t sel_size) {
+	auto apply_order_to_lists = [&](const SelectionVector &sel, idx_t sel_size) {
 		child_vector.Slice(sel, sel_size);
 		child_vector.Normalify(sel_size);
 	};
