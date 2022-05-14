@@ -10,6 +10,9 @@ select MAP(LIST_VALUE(4, 3, 2, 1),LIST_VALUE(10, 9, 8, 7))
 ----
 {1=7, 2=8, 3=9, 4=10}
 
+# Keys aren't unique
+statement error
+select MAP(LIST_VALUE(4, 4, 2, 1),LIST_VALUE(10, 9, 8, 7))
 
 # Empty maps
 query I

@@ -100,6 +100,32 @@ static void SortKeysAndValues(Vector &keys, Vector &values, Vector &result, MapB
 	SortLists(lists, count, apply_order_to_lists, mark_result_entry_as_invalid, bind_data.info, buffer_manager);
 }
 
+static void EnsureUniqueness(idx_t rows, Vector &lists) {
+	auto lists_data = FlatVector::GetData<list_entry_t>(lists);
+	auto &keys = ListVector::GetEntry(lists);
+	if (keys.GetType() == LogicalType::SQLNULL) {
+		return;
+	}
+	for (idx_t row_idx = 0; row_idx < rows; row_idx++) {
+		auto start = lists_data[row_idx].offset;
+		auto end = start + lists_data[row_idx].length;
+
+		//! Order by null type is NULLS_FIRST so if anything is NULL, it's at the front
+		auto value = keys.GetValue(start);
+		if (value.IsNull()) {
+			throw "The provided list of keys contains NULL(s)";
+		}
+
+		for (idx_t i = start + 1; i < end; i++) {
+			auto value = keys.GetValue(i);
+			auto previous = keys.GetValue(i - 1);
+			if (value.type() != previous.type() || value == previous) {
+				throw InvalidInputException("The provided list of keys isn't unique");
+			}
+		}
+	}
+}
+
 static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(result.GetType().id() == LogicalTypeId::MAP);
 
@@ -135,6 +161,7 @@ static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result)
 	SortKeysAndValues(args.data[0], args.data[1], result, bind_data);
 
 	//! Make sure they are unique
+	EnsureUniqueness(args.size(), args.data[0]);
 
 	key_vector->Reference(args.data[0]);
 	value_vector->Reference(args.data[1]);
