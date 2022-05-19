@@ -17,6 +17,7 @@
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/catalog/catalog_entry/table_column_info.hpp"
 #include "duckdb/catalog/catalog_entry/column_dependency_manager.hpp"
+#include "duckdb/storage/index_constraint_type.hpp"
 
 namespace duckdb {
 
@@ -83,6 +84,8 @@ public:
 	TableColumnInfo GetColumnInfo(string &name, bool if_exists = false);
 
 private:
+	void AddDataTableIndex(DataTable *storage, vector<ColumnDefinition> &columns, vector<idx_t> &keys,
+	                       IndexConstraintType constraint_type);
 	const string &GetColumnName(const TableColumnInfo &info);
 	unique_ptr<CatalogEntry> RenameColumn(ClientContext &context, RenameColumnInfo &info);
 	unique_ptr<CatalogEntry> AddColumn(ClientContext &context, AddColumnInfo &info);

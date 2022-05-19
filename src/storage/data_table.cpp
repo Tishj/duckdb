@@ -1220,18 +1220,16 @@ bool DataTable::ScanCreateIndex(CreateIndexScanState &state, DataChunk &result, 
 	return false;
 }
 
-void DataTable::AddIndex(unique_ptr<Index> index, const vector<unique_ptr<Expression>> &expressions) {
+void DataTable::AddIndex(unique_ptr<Index> index, const vector<unique_ptr<Expression>> &expressions,
+                         vector<LogicalType> intermediate_types) {
 	DataChunk result;
 	result.Initialize(index->logical_types);
 
 	DataChunk intermediate;
-	vector<LogicalType> intermediate_types;
 	auto column_ids = index->column_ids;
 	column_ids.push_back(COLUMN_IDENTIFIER_ROW_ID);
-	for (auto &id : index->column_ids) {
-		intermediate_types.push_back(column_definitions[id].type);
-	}
 	intermediate_types.emplace_back(LogicalType::ROW_TYPE);
+
 	intermediate.Initialize(intermediate_types);
 
 	// initialize an index scan
@@ -1267,6 +1265,14 @@ void DataTable::AddIndex(unique_ptr<Index> index, const vector<unique_ptr<Expres
 		}
 	}
 	info->indexes.AddIndex(move(index));
+}
+
+void DataTable::AddIndex(unique_ptr<Index> index, const vector<unique_ptr<Expression>> &expressions) {
+	vector<LogicalType> intermediate_types;
+	for (auto &id : index->column_ids) {
+		intermediate_types.push_back(column_definitions[id].type);
+	}
+	return AddIndex(move(index), move(expressions), move(intermediate_types));
 }
 
 unique_ptr<BaseStatistics> DataTable::GetStatistics(ClientContext &context, column_t column_id) {

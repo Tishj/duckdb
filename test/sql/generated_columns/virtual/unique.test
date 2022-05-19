@@ -1,0 +1,18 @@
+# name: test/sql/generated_columns/virtual/unique.test
+# description: Test the UNIQUE constraint together with generated columns
+# group: [virtual]
+
+# Create a table with a generated column with a UNIQUE constraint
+
+#Primary key is not supported on a (virtual) generated column
+statement ok
+CREATE TABLE tbl (
+	price INTEGER,
+	pkey AS (price) UNIQUE
+);
+
+statement ok
+INSERT INTO tbl VALUES (5);
+
+statement error
+INSERT INTO tbl VALUES (5);

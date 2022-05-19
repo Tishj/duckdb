@@ -181,6 +181,9 @@ public:
 
 	//! Add an index to the DataTable
 	void AddIndex(unique_ptr<Index> index, const vector<unique_ptr<Expression>> &expressions);
+	//! Add an index to the DataTable, with the specified intermediate_types
+	void AddIndex(unique_ptr<Index> index, const vector<unique_ptr<Expression>> &expressions,
+	              vector<LogicalType> intermediate_types);
 
 	//! Begin appending structs to this table, obtaining necessary locks, etc
 	void InitializeAppend(Transaction &transaction, TableAppendState &state, idx_t append_count);

@@ -28,11 +28,14 @@
 #include "duckdb/catalog/catalog_entry/type_catalog_entry.hpp"
 #include "duckdb/function/table/table_scan.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/main/connection_manager.hpp"
 
 #include <algorithm>
 #include <sstream>
+#include <queue>
 
 namespace duckdb {
+using std::queue;
 
 const string &TableCatalogEntry::GetColumnName(const TableColumnInfo &info) {
 	// TODO: remove this distinction here, not needed anymore
@@ -62,25 +65,89 @@ TableColumnInfo TableCatalogEntry::GetColumnInfo(string &column_name, bool if_ex
 	return entry->second;
 }
 
-void AddDataTableIndex(DataTable *storage, vector<ColumnDefinition> &columns, vector<idx_t> &keys,
-                       IndexConstraintType constraint_type) {
+vector<column_t> GetAllReferencedColumns(ColumnDependencyManager &dependency_manager, string col,
+                                         const case_insensitive_map_t<TableColumnInfo> &name_map) {
+	unordered_set<column_t> columns;
+
+	queue<string> to_check;
+	unordered_set<string> checked;
+	to_check.push(col);
+	while (!to_check.empty()) {
+		auto column = to_check.front();
+		to_check.pop();
+		if (dependency_manager.HasDependencies(column)) {
+			auto &dependencies = dependency_manager.GetDependencies(column);
+			for (auto &dep : dependencies) {
+				to_check.push(dep);
+			}
+		} else {
+			auto entry = name_map.find(column);
+			// Only add the standard columns
+			if (entry != name_map.end() && entry->second.column_type == TableColumnType::STANDARD) {
+				columns.insert(entry->second.index);
+			}
+		}
+		checked.insert(column);
+	}
+	vector<column_t> unique_columns;
+	unique_columns.reserve(columns.size());
+	unique_columns.insert(unique_columns.end(), columns.begin(), columns.end());
+	return unique_columns;
+}
+
+void TableCatalogEntry::AddDataTableIndex(DataTable *storage, vector<ColumnDefinition> &columns, vector<idx_t> &keys,
+                                          IndexConstraintType constraint_type) {
 	// fetch types and create expressions for the index from the columns
 	vector<column_t> column_ids;
 	vector<unique_ptr<Expression>> unbound_expressions;
 	vector<unique_ptr<Expression>> bound_expressions;
-	idx_t key_nr = 0;
+
+	// This is the most hacky code I've ever written
+	auto &conn_manager = storage->db.GetConnectionManager();
+	auto &stolen_conn = *conn_manager.connections.begin()->first;
+	auto binder = Binder::CreateBinder(stolen_conn);
+
+	vector<string> names;
+	vector<LogicalType> types;
+	for (auto &col : columns) {
+		names.push_back(col.name);
+		types.push_back(col.type);
+	}
+	auto table_idx = binder->GenerateTableIndex();
+
+	binder->bind_context.AddGenericBinding(table_idx, name, move(names), move(types));
+	auto expr_binder = ExpressionBinder(*binder, stolen_conn);
+
+	vector<LogicalType> intermediate_types;
 	for (auto &key : keys) {
 		D_ASSERT(key < columns.size());
-
-		unbound_expressions.push_back(make_unique<BoundColumnRefExpression>(columns[key].name, columns[key].type,
-		                                                                    ColumnBinding(0, column_ids.size())));
-
-		bound_expressions.push_back(make_unique<BoundReferenceExpression>(columns[key].type, key_nr++));
-		column_ids.push_back(key);
+		auto &col = columns[key];
+		LogicalType return_type;
+		if (col.Generated()) {
+			auto raw_expr = col.GeneratedExpression().Copy();
+			auto bound_expr = expr_binder.Bind(raw_expr);
+			// return_type = bound_expr->return_type;
+			unbound_expressions.push_back(move(bound_expr));
+			// bound_expressions.push_back(make_unique<BoundReferenceExpression>(return_type, column_ids.size()));
+			auto referenced_columns = GetAllReferencedColumns(column_dependency_manager, col.name, name_map);
+			for (auto &column : referenced_columns) {
+				bound_expressions.push_back(
+				    make_unique<BoundReferenceExpression>(columns[column].type, column_ids.size()));
+				column_ids.push_back(column);
+				intermediate_types.push_back(columns[column].type);
+			}
+		} else {
+			unbound_expressions.push_back(make_unique<BoundColumnRefExpression>(columns[key].name, columns[key].type,
+			                                                                    ColumnBinding(0, column_ids.size())));
+			return_type = columns[key].type;
+			bound_expressions.push_back(make_unique<BoundReferenceExpression>(return_type, column_ids.size()));
+			column_ids.push_back(key);
+			intermediate_types.push_back(return_type);
+		}
 	}
 	// create an adaptive radix tree around the expressions
 	auto art = make_unique<ART>(column_ids, move(unbound_expressions), constraint_type);
-	storage->AddIndex(move(art), bound_expressions);
+	storage->AddIndex(move(art), bound_expressions, move(intermediate_types));
 }
 
 TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schema, BoundCreateTableInfo *info,
@@ -97,6 +164,7 @@ TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schem
 		auto column_info = TableColumnInfo(i, category);
 		name_map[columns[i].name] = column_info;
 	}
+
 	// add the "rowid" alias, if there is no rowid column specified in the table
 	if (name_map.find("rowid") == name_map.end()) {
 		auto column_info = TableColumnInfo(COLUMN_IDENTIFIER_ROW_ID);

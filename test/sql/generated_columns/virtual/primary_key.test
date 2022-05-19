@@ -1,0 +1,12 @@
+# name: test/sql/generated_columns/virtual/primary_key.test
+# description: Test the PRIMARY KEY constraint together with generated columns
+# group: [virtual]
+
+# Create a table with a generated column as the primary key
+
+#Primary key is not supported on a (virtual) generated column
+statement error
+CREATE TABLE tbl (
+	price INTEGER,
+	pkey AS (price) PRIMARY KEY
+);

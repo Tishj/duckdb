@@ -41,3 +41,31 @@ query II
 SELECT * FROM unit;
 ----
 4	4
+
+statement ok
+DROP TABLE unit;
+
+statement ok
+CREATE TABLE tbl (
+	col INTEGER,
+	gcol AS (col),
+	gcoll AS (gcol),
+	gcolll AS (gcoll),
+	locg AS (gcoll * gcol * gcolll + col)
+);
+
+statement ok
+INSERT INTO tbl VALUES (5);
+
+query IIIII
+SELECT * FROM tbl;
+----
+5	5	5	5	130
+
+statement ok
+ALTER TABLE tbl DROP COLUMN gcol CASCADE
+
+query I
+SELECT * FROM tbl;
+----
+5
