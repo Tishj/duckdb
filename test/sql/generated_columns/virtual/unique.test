@@ -16,11 +16,11 @@ CREATE TABLE tbl (
 statement ok
 INSERT INTO tbl VALUES (5, 3);
 
-statement ok
-INSERT INTO tbl VALUES (5, 3);
-
+#Violates unique constraint
 statement error
+INSERT INTO tbl VALUES (3, 5);
+
+query IIII
 SELECT * FROM tbl;
-#----
-#5	3	8
-#5	1	6
+----
+5	3	8	8
