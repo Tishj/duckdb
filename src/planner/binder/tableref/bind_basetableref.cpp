@@ -103,7 +103,6 @@ unique_ptr<BoundTableRef> Binder::Bind(BaseTableRef &ref) {
 		auto scan_function = TableScanFunction::GetFunction();
 		auto bind_data = make_unique<TableScanBindData>(table);
 		auto alias = ref.alias.empty() ? ref.table_name : ref.alias;
-		// TODO: bundle the type and name vector in a struct (e.g PackedColumnMetadata)
 		vector<LogicalType> table_types;
 		vector<string> table_names;
 		vector<TableColumnType> table_categories;

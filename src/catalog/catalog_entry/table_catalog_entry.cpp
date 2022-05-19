@@ -109,13 +109,35 @@ void TableCatalogEntry::AddDataTableIndex(DataTable *storage, vector<ColumnDefin
 
 	vector<string> names;
 	vector<LogicalType> types;
+	vector<TableColumnType> categories;
 	for (auto &col : columns) {
 		names.push_back(col.name);
 		types.push_back(col.type);
+		categories.push_back(col.category);
 	}
 	auto table_idx = binder->GenerateTableIndex();
 
-	binder->bind_context.AddGenericBinding(table_idx, name, move(names), move(types));
+	// GenericBinding isn't sufficient here, as generated columns can reference other generated columns
+	// binder->bind_context.AddGenericBinding(table_idx, name, move(names), move(types), move(categories));
+	auto scan_function = TableScanFunction::GetFunction();
+	auto bind_data = make_unique<TableScanBindData>(this);
+	vector<LogicalType> table_types;
+	vector<string> table_names;
+	vector<TableColumnType> table_categories;
+
+	vector<LogicalType> return_types;
+	vector<string> return_names;
+	for (auto &col : columns) {
+		table_types.push_back(col.type);
+		table_names.push_back(col.name);
+		table_categories.push_back(col.category);
+		return_types.push_back(col.type);
+		return_names.push_back(col.name);
+	}
+
+	auto logical_get =
+	    make_unique<LogicalGet>(table_idx, scan_function, move(bind_data), move(return_types), move(return_names));
+	binder->bind_context.AddBaseTable(table_idx, name, table_names, table_types, table_categories, *logical_get);
 	auto expr_binder = ExpressionBinder(*binder, stolen_conn);
 
 	vector<LogicalType> intermediate_types;

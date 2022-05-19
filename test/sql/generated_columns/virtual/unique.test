@@ -8,11 +8,19 @@
 statement ok
 CREATE TABLE tbl (
 	price INTEGER,
-	pkey AS (price) UNIQUE
+	other INTEGER,
+	pkey AS (price + other),
+	pkeyy AS (pkey) UNIQUE
 );
 
 statement ok
-INSERT INTO tbl VALUES (5);
+INSERT INTO tbl VALUES (5, 3);
+
+statement ok
+INSERT INTO tbl VALUES (5, 3);
 
 statement error
-INSERT INTO tbl VALUES (5);
+SELECT * FROM tbl;
+#----
+#5	3	8
+#5	1	6
