@@ -173,11 +173,11 @@ unique_ptr<FunctionData> HistogramBindFunction(ClientContext &context, Aggregate
 }
 
 template <class OP, class T, class MAP_TYPE = map<T, idx_t>>
-static AggregateFunction GetHistogramFunction(const LogicalType &type) {
+static unique_ptr<AggregateFunction> GetHistogramFunction(const LogicalType &type) {
 
 	using STATE_TYPE = HistogramAggState<T, MAP_TYPE>;
 
-	return AggregateFunction("histogram", {type}, LogicalTypeId::MAP, AggregateFunction::StateSize<STATE_TYPE>,
+	return make_unique<AggregateFunction>("histogram", {type}, LogicalTypeId::MAP, AggregateFunction::StateSize<STATE_TYPE>,
 	                         AggregateFunction::StateInitialize<STATE_TYPE, HistogramFunction>,
 	                         HistogramUpdateFunction<OP, T, MAP_TYPE>, HistogramCombineFunction<T, MAP_TYPE>,
 	                         HistogramFinalizeFunction<OP, T, MAP_TYPE>, nullptr, HistogramBindFunction,
@@ -185,7 +185,7 @@ static AggregateFunction GetHistogramFunction(const LogicalType &type) {
 }
 
 template <class OP, class T, bool IS_ORDERED>
-AggregateFunction GetMapType(const LogicalType &type) {
+unique_ptr<AggregateFunction> GetMapType(const LogicalType &type) {
 
 	if (IS_ORDERED) {
 		return GetHistogramFunction<OP, T>(type);
@@ -194,7 +194,7 @@ AggregateFunction GetMapType(const LogicalType &type) {
 }
 
 template <bool IS_ORDERED = true>
-AggregateFunction GetHistogramFunction(const LogicalType &type) {
+unique_ptr<AggregateFunction> GetHistogramFunction(const LogicalType &type, bool strict = true) {
 
 	switch (type.id()) {
 	case LogicalType::BOOLEAN:
@@ -238,39 +238,41 @@ AggregateFunction GetHistogramFunction(const LogicalType &type) {
 	case LogicalType::DATE:
 		return GetMapType<HistogramFunctor, int32_t, IS_ORDERED>(type);
 	default:
-		throw InvalidInputException("A histogram aggregate function has not yet been implemented for type \"%s\"",
+		if (!strict) {
+			return nullptr;
+		}
+		throw InternalException("A histogram aggregate function has not yet been implemented for type \"%s\"",
 		                            type.ToString());
 	}
 }
 
 void HistogramFun::RegisterFunction(BuiltinFunctions &set) {
 	AggregateFunctionSet fun("histogram");
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::BOOLEAN));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::UTINYINT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::USMALLINT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::UINTEGER));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::UBIGINT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TINYINT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::SMALLINT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::INTEGER));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::BIGINT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::FLOAT));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::DOUBLE));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::VARCHAR));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIMESTAMP));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIMESTAMP_TZ));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIMESTAMP_S));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIMESTAMP_MS));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIMESTAMP_NS));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIME));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIME_TZ));
-	fun.AddFunction(GetHistogramFunction<>(LogicalType::DATE));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::BOOLEAN));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::UTINYINT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::USMALLINT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::UINTEGER));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::UBIGINT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TINYINT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::SMALLINT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::INTEGER));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::BIGINT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::FLOAT));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::DOUBLE));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::VARCHAR));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIMESTAMP));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIMESTAMP_TZ));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIMESTAMP_S));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIMESTAMP_MS));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIMESTAMP_NS));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIME));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::TIME_TZ));
+	fun.AddFunction(*GetHistogramFunction<>(LogicalType::DATE));
 	set.AddFunction(fun);
 }
 
-AggregateFunction HistogramFun::GetHistogramUnorderedMap(LogicalType &type) {
-	const auto &const_type = type;
-	return GetHistogramFunction<false>(const_type);
+AggregateFunction HistogramFun::GetHistogramUnorderedMap(LogicalType &type, bool strict) {
+	return *GetHistogramFunction<false>(type, strict);
 }
 
 } // namespace duckdb

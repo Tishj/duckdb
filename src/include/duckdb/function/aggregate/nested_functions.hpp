@@ -20,7 +20,7 @@ struct ListFun {
 };
 struct HistogramFun {
 	static void RegisterFunction(BuiltinFunctions &set);
-	static AggregateFunction GetHistogramUnorderedMap(LogicalType &type);
+	static AggregateFunction GetHistogramUnorderedMap(LogicalType &type, bool strict = true);
 };
 
 } // namespace duckdb

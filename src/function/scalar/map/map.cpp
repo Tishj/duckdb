@@ -111,7 +111,10 @@ static unique_ptr<FunctionData> MapBind(ClientContext &context, ScalarFunction &
 	if (arguments.empty() || key_type.id() == LogicalTypeId::SQLNULL) {
 		return make_unique<VariableReturnBindData>(bound_function.return_type);
 	}
-	auto aggr_function = HistogramFun::GetHistogramUnorderedMap(key_type);
+	auto aggr_function = HistogramFun::GetHistogramUnorderedMap(key_type, false);
+	if (!aggr_function) {
+		throw InvalidInputException("Uniqueness for keys of type \"%s\" can't be guaranteed yet", key_type.ToString());
+	}
 	bound_function.arguments.push_back(key_type);
 	return ListAggregatesBindFunction(context, bound_function, key_type, aggr_function);
 }
