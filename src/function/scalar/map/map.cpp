@@ -18,14 +18,11 @@ unique_ptr<BoundAggregateExpression> GetBoundUniqueAggregate(ClientContext &cont
 	return AggregateFunction::BindAggregateFunction(context, aggr_function, move(children));
 }
 
-bool VerifyKeyUniqueness(Vector &keys, idx_t row_count, BoundAggregateExpression &aggr) {
+bool AreKeysUnique(Vector &keys, idx_t row_count, BoundAggregateExpression &aggr) {
 	// Get the type of the key and the size (row_count) of the list vector
 	auto list_type = keys.GetType();
 	D_ASSERT(list_type.id() == LogicalTypeId::LIST);
 	auto key_type = ListType::GetChildType(list_type);
-	if (key_type == LogicalType::SQLNULL) {
-		return true;
-	}
 
 	// Create the vector that stores the result of the unique function
 	Vector result(LogicalType::UBIGINT);
@@ -120,7 +117,7 @@ static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result)
 		auto &func_expr = (BoundFunctionExpression &)state.expr;
 		auto &info = (ListAggregatesBindData &)*func_expr.bind_info;
 		auto &aggr = (BoundAggregateExpression &)*info.aggr_expr;
-		if (!VerifyKeyUniqueness(args.data[0], args.size(), aggr)) {
+		if (!AreKeysUnique(args.data[0], args.size(), aggr)) {
 			throw InvalidInputException("Map keys have to be unique");
 		}
 	}
