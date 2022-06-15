@@ -92,37 +92,8 @@ struct DistinctFunctor {
 	}
 };
 
-struct UniqueFunctor {
-	template <class OP, class T, class MAP_TYPE = unordered_map<T, idx_t>>
-	static void ListExecuteFunction(Vector &result, Vector &state_vector, idx_t count) {
-
-		VectorData sdata;
-		state_vector.Orrify(count, sdata);
-		auto states = (HistogramAggState<T, MAP_TYPE> **)sdata.data;
-
-		auto result_data = FlatVector::GetData<uint64_t>(result);
-
-		for (idx_t i = 0; i < count; i++) {
-
-			auto state = states[sdata.sel->get_index(i)];
-
-			if (!state->hist) {
-				result_data[i] = 0;
-				continue;
-			}
-
-			result_data[i] = state->hist->size();
-		}
-		result.Verify(count);
-	}
-};
-
-template <class FUNCTION_FUNCTOR, bool IS_AGGR = false>
-static void ListAggregatesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-
-	auto count = args.size();
-	Vector &lists = args.data[0];
-
+template <class FUNCTION_FUNCTOR, bool IS_AGGR>
+void ListAggregatesFunctionStripped(Vector &lists, idx_t count, BoundAggregateExpression &aggr, Vector &result) {
 	// set the result vector
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto &result_validity = FlatVector::Validity(result);
@@ -131,11 +102,6 @@ static void ListAggregatesFunction(DataChunk &args, ExpressionState &state, Vect
 		result_validity.SetInvalid(0);
 		return;
 	}
-
-	// get the aggregate function
-	auto &func_expr = (BoundFunctionExpression &)state.expr;
-	auto &info = (ListAggregatesBindData &)*func_expr.bind_info;
-	auto &aggr = (BoundAggregateExpression &)*info.aggr_expr;
 
 	D_ASSERT(aggr.function.update);
 
@@ -154,7 +120,7 @@ static void ListAggregatesFunction(DataChunk &args, ExpressionState &state, Vect
 	auto state_buffer = unique_ptr<data_t[]>(new data_t[size * count]);
 
 	// state vector for initialize and finalize
-	StateVector state_vector(count, info.aggr_expr->Copy());
+	StateVector state_vector(count, aggr.Copy());
 	auto states = FlatVector::GetData<data_ptr_t>(state_vector.state_vector);
 
 	// state vector of STANDARD_VECTOR_SIZE holds the pointers to the states
@@ -302,6 +268,19 @@ static void ListAggregatesFunction(DataChunk &args, ExpressionState &state, Vect
 			throw InternalException("Unimplemented histogram aggregate");
 		}
 	}
+}
+
+template <class FUNCTION_FUNCTOR, bool IS_AGGR = false>
+static void ListAggregatesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+
+	auto count = args.size();
+	Vector &lists = args.data[0];
+
+	// get the aggregate function
+	auto &func_expr = (BoundFunctionExpression &)state.expr;
+	auto &info = (ListAggregatesBindData &)*func_expr.bind_info;
+	auto &aggr = (BoundAggregateExpression &)*info.aggr_expr;
+	ListAggregatesFunctionStripped<FUNCTION_FUNCTOR, IS_AGGR>(lists, count, aggr, result);
 }
 
 static void ListAggregateFunction(DataChunk &args, ExpressionState &state, Vector &result) {

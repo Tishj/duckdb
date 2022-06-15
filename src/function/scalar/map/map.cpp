@@ -9,6 +9,43 @@
 
 namespace duckdb {
 
+unique_ptr<BoundAggregateExpression> GetBoundUniqueAggregate(ClientContext &context, LogicalType &type) {
+	// Create and prepare the aggregate function that is used by the unique function
+	auto aggr_function = HistogramFun::GetHistogramUnorderedMap(type);
+	auto expr = make_unique<BoundConstantExpression>(Value(type));
+	vector<unique_ptr<Expression>> children;
+	children.push_back(move(expr));
+	return AggregateFunction::BindAggregateFunction(context, aggr_function, move(children));
+}
+
+bool VerifyKeyUniqueness(Vector &keys, idx_t row_count, BoundAggregateExpression &aggr) {
+	// Get the type of the key and the size (row_count) of the list vector
+	auto list_type = keys.GetType();
+	D_ASSERT(list_type.id() == LogicalTypeId::LIST);
+	auto key_type = ListType::GetChildType(list_type);
+	if (key_type == LogicalType::SQLNULL) {
+		return true;
+	}
+
+	// Create the vector that stores the result of the unique function
+	Vector result(LogicalType::UBIGINT);
+	result.Initialize(false, row_count);
+
+	// Run the unique function, stores its result into `result`
+	ListAggregatesFunctionStripped<UniqueFunctor>(keys, row_count, aggr, result);
+
+	// Verify for every row that all the keys are unique
+	auto keys_data = ListVector::GetData(keys);
+	for (idx_t i = 0; i < row_count; i++) {
+		auto keys_length = keys_data[i].length;
+		auto unique_keys = FlatVector::GetValue<uint64_t>(result, i);
+		if (unique_keys != keys_length) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool KeyListIsEmpty(list_entry_t *data, idx_t rows) {
 	for (idx_t i = 0; i < rows; i++) {
 		auto size = data[i].length;
@@ -19,52 +56,23 @@ bool KeyListIsEmpty(list_entry_t *data, idx_t rows) {
 	return true;
 }
 
-static bool AreKeysNull(Vector &keys) {
+static bool AreKeysNull(Vector &keys, idx_t row_count) {
 	auto list_type = keys.GetType();
 	auto key_type = ListType::GetChildType(list_type).id();
 	auto arg_data = ListVector::GetData(keys);
 	auto &entries = ListVector::GetEntry(keys);
-	auto keys_size = ListVector::GetListSize(keys);
+
 	if (key_type == LogicalTypeId::SQLNULL) {
-		if (KeyListIsEmpty(arg_data, keys_size)) {
+		if (KeyListIsEmpty(arg_data, row_count)) {
 			return false;
 		}
-		// The entire key list is NULL for one (or more) of the rows: (ARRAY[NULL, NULL, NULL])
 		return true;
 	}
 
 	VectorData list_data;
-	keys.Orrify(keys_size, list_data);
+	keys.Orrify(row_count, list_data);
 	auto validity = FlatVector::Validity(entries);
-	return (!validity.CheckAllValid(keys_size));
-}
-
-static void CheckForKeyUniqueness(DataChunk &args, ExpressionState &state) {
-	// Create a copy of the arguments
-	auto types = args.GetTypes();
-	if (types.empty() || ListType::GetChildType(types[0]).id() == LogicalType::SQLNULL) {
-		return;
-	}
-
-	auto arg_data = FlatVector::GetData<list_entry_t>(args.data[0]);
-
-	DataChunk keys;
-	keys.Initialize(args.GetTypes());
-	args.Copy(keys);
-
-	// Split the copy to separate the keys
-	DataChunk remaining_columns;
-	keys.Split(remaining_columns, 1);
-
-	Vector unique_result(LogicalType::UBIGINT, args.size());
-	ListUniqueFunction(keys, state, unique_result);
-	for (idx_t i = 0; i < args.size(); i++) {
-		auto keys_length = arg_data[i].length;
-		auto unique_keys = FlatVector::GetValue<uint64_t>(unique_result, i);
-		if (unique_keys != keys_length) {
-			throw InvalidInputException("Map keys have to be unique!");
-		}
-	}
+	return (!validity.CheckAllValid(row_count));
 }
 
 static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -82,6 +90,7 @@ static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result)
 	D_ASSERT(child_entries.size() == 2);
 	auto &key_vector = child_entries[0];
 	auto &value_vector = child_entries[1];
+	// called signature is 'map()'
 	if (args.data.empty()) {
 		// no arguments: construct an empty map
 		ListVector::SetListSize(*key_vector, 0);
@@ -100,11 +109,21 @@ static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result)
 		return;
 	}
 
-	if (AreKeysNull(args.data[0])) {
+	// map([], []) || map([NULL], [5])
+	if (AreKeysNull(args.data[0], args.size())) {
 		throw InvalidInputException("Map keys can not be NULL");
 	}
 
-	CheckForKeyUniqueness(args, state);
+	auto key_type = ListType::GetChildType(args.data[0].GetType());
+	if (key_type.id() != LogicalTypeId::SQLNULL) {
+		// get the aggregate function
+		auto &func_expr = (BoundFunctionExpression &)state.expr;
+		auto &info = (ListAggregatesBindData &)*func_expr.bind_info;
+		auto &aggr = (BoundAggregateExpression &)*info.aggr_expr;
+		if (!VerifyKeyUniqueness(args.data[0], args.size(), aggr)) {
+			throw InvalidInputException("Map keys have to be unique");
+		}
+	}
 
 	if (ListVector::GetListSize(args.data[0]) != ListVector::GetListSize(args.data[1])) {
 		throw Exception("Key list has a different size from Value list");
@@ -145,9 +164,8 @@ static unique_ptr<FunctionData> MapBind(ClientContext &context, ScalarFunction &
 	if (arguments.empty() || key_type.id() == LogicalTypeId::SQLNULL) {
 		return make_unique<VariableReturnBindData>(bound_function.return_type);
 	}
-	auto aggr_function = HistogramFun::GetHistogramUnorderedMap(key_type);
-	bound_function.arguments.push_back(key_type);
-	return ListAggregatesBindFunction(context, bound_function, key_type, aggr_function);
+	auto aggr = GetBoundUniqueAggregate(context, key_type);
+	return make_unique<ListAggregatesBindData>(bound_function.return_type, move(aggr));
 }
 
 void MapFun::RegisterFunction(BuiltinFunctions &set) {

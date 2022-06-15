@@ -15,7 +15,34 @@
 
 namespace duckdb {
 
+template <class FUNCTION_FUNCTOR, bool IS_AGGR = false>
+void ListAggregatesFunctionStripped(Vector &lists, idx_t count, BoundAggregateExpression &aggr, Vector &result);
 void ListUniqueFunction(DataChunk &args, ExpressionState &state, Vector &result);
+
+struct UniqueFunctor {
+	template <class OP, class T, class MAP_TYPE = unordered_map<T, idx_t>>
+	static void ListExecuteFunction(Vector &result, Vector &state_vector, idx_t count) {
+
+		VectorData sdata;
+		state_vector.Orrify(count, sdata);
+		auto states = (HistogramAggState<T, MAP_TYPE> **)sdata.data;
+
+		auto result_data = FlatVector::GetData<uint64_t>(result);
+
+		for (idx_t i = 0; i < count; i++) {
+
+			auto state = states[sdata.sel->get_index(i)];
+
+			if (!state->hist) {
+				result_data[i] = 0;
+				continue;
+			}
+
+			result_data[i] = state->hist->size();
+		}
+		result.Verify(count);
+	}
+};
 
 struct ListAggregatesBindData : public FunctionData {
 	ListAggregatesBindData(const LogicalType &stype_p, unique_ptr<Expression> aggr_expr_p);
