@@ -4,18 +4,23 @@
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/function/list_aggregate_function.hpp"
 #include "duckdb/function/aggregate/nested_functions.hpp"
+#include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/pair.hpp"
 
 namespace duckdb {
 
-unique_ptr<BoundAggregateExpression> GetBoundUniqueAggregate(ClientContext &context, LogicalType &type) {
+unique_ptr<BoundAggregateExpression> GetBoundUniqueAggregate(const LogicalType &type, unique_ptr<Expression> filter,
+                                                             bool is_distinct, bool cast_parameters) {
 	// Create and prepare the aggregate function that is used by the unique function
 	auto aggr_function = HistogramFun::GetHistogramUnorderedMap(type);
 	auto expr = make_unique<BoundConstantExpression>(Value(type));
+
 	vector<unique_ptr<Expression>> children;
 	children.push_back(move(expr));
-	return AggregateFunction::BindAggregateFunction(context, aggr_function, move(children));
+
+	return AggregateFunction::BindAggregateFunctionNoContext(HistogramAggregateFunctionBinder, move(aggr_function),
+	                                                         move(children));
 }
 
 bool AreKeysUnique(Vector &keys, idx_t row_count, BoundAggregateExpression &aggr) {
@@ -161,7 +166,7 @@ static unique_ptr<FunctionData> MapBind(ClientContext &context, ScalarFunction &
 	if (arguments.empty() || key_type.id() == LogicalTypeId::SQLNULL) {
 		return make_unique<VariableReturnBindData>(bound_function.return_type);
 	}
-	auto aggr = GetBoundUniqueAggregate(context, key_type);
+	auto aggr = GetBoundUniqueAggregate(key_type);
 	return make_unique<ListAggregatesBindData>(bound_function.return_type, move(aggr));
 }
 

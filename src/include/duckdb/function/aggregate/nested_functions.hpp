@@ -21,6 +21,10 @@ struct ListFun {
 struct HistogramFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 	static AggregateFunction GetHistogramUnorderedMap(LogicalType &type);
+	static AggregateFunction GetHistogramUnorderedMap(const LogicalType &type);
 };
+
+unique_ptr<FunctionData> HistogramBindFunctionStripped(AggregateFunction &function,
+                                                       vector<unique_ptr<Expression>> &arguments);
 
 } // namespace duckdb

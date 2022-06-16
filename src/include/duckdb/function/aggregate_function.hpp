@@ -128,6 +128,21 @@ public:
 		return !(*this == rhs);
 	}
 
+	typedef unique_ptr<FunctionData> (*aggr_bind_func_t)(AggregateFunction &, vector<unique_ptr<Expression>> &,
+	                                                     ClientContext *);
+
+	static unique_ptr<BoundAggregateExpression>
+	BindAggregateFunctionContext(aggr_bind_func_t bind_func, ClientContext &context, AggregateFunction bound_function,
+	                             vector<unique_ptr<Expression>> children, unique_ptr<Expression> filter = nullptr,
+	                             bool is_distinct = false, unique_ptr<BoundOrderModifier> order_bys = nullptr,
+	                             bool cast_parameters = true);
+
+	static unique_ptr<BoundAggregateExpression>
+	BindAggregateFunctionNoContext(aggr_bind_func_t bind_func, AggregateFunction bound_function,
+	                               vector<unique_ptr<Expression>> children, unique_ptr<Expression> filter = nullptr,
+	                               bool is_distinct = false, unique_ptr<BoundOrderModifier> order_bys = nullptr,
+	                               bool cast_parameters = true);
+
 	DUCKDB_API static unique_ptr<BoundAggregateExpression>
 	BindAggregateFunction(ClientContext &context, AggregateFunction bound_function,
 	                      vector<unique_ptr<Expression>> children, unique_ptr<Expression> filter = nullptr,
@@ -253,5 +268,12 @@ public:
 		AggregateExecutor::Destroy<STATE, OP>(states, count);
 	}
 };
+
+unique_ptr<FunctionData> DefaultAggregateFunctionBinder(AggregateFunction &bound_function,
+                                                        vector<unique_ptr<Expression>> &children,
+                                                        ClientContext *context = nullptr);
+unique_ptr<FunctionData> HistogramAggregateFunctionBinder(AggregateFunction &bound_function,
+                                                          vector<unique_ptr<Expression>> &children,
+                                                          ClientContext *context = nullptr);
 
 } // namespace duckdb

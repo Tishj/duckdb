@@ -615,8 +615,7 @@ void ColumnArrowToDuckDB(Vector &vector, ArrowArray &array, ArrowScanLocalState 
 		}
 		// TODO remove this when Arrow ensures that their Map type complies with this constraint
 		D_ASSERT(!child_entries.empty());
-		auto bound_aggregate_expr =
-		    GetBoundUniqueAggregate(context, ListType::GetChildType(child_entries[0]->GetType()));
+		auto bound_aggregate_expr = GetBoundUniqueAggregate(ListType::GetChildType(child_entries[0]->GetType()));
 		if (!AreKeysUnique(*child_entries[0], size, *bound_aggregate_expr)) {
 			throw std::runtime_error("Arrow map contains duplicate keys, which is not supported by DuckDB map type");
 		}

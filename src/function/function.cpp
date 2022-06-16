@@ -20,6 +20,7 @@
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
+#include "duckdb/function/aggregate/nested_functions.hpp"
 
 namespace duckdb {
 
@@ -508,15 +509,32 @@ unique_ptr<BoundFunctionExpression> ScalarFunction::BindScalarFunction(ClientCon
 	                                            move(bind_info), is_operator);
 }
 
-unique_ptr<BoundAggregateExpression> AggregateFunction::BindAggregateFunction(
-    ClientContext &context, AggregateFunction bound_function, vector<unique_ptr<Expression>> children,
-    unique_ptr<Expression> filter, bool is_distinct, unique_ptr<BoundOrderModifier> order_bys, bool cast_parameters) {
-	unique_ptr<FunctionData> bind_info;
+unique_ptr<FunctionData> DefaultAggregateFunctionBinder(AggregateFunction &bound_function,
+                                                        vector<unique_ptr<Expression>> &children,
+                                                        ClientContext *context) {
 	if (bound_function.bind) {
-		bind_info = bound_function.bind(context, bound_function, children);
+		D_ASSERT(context);
+		auto bind_info = bound_function.bind(*context, bound_function, children);
 		// we may have lost some arguments in the bind
 		children.resize(MinValue(bound_function.arguments.size(), children.size()));
+		return bind_info;
 	}
+	return nullptr;
+}
+
+unique_ptr<FunctionData> HistogramAggregateFunctionBinder(AggregateFunction &bound_function,
+                                                          vector<unique_ptr<Expression>> &children,
+                                                          ClientContext *context) {
+	auto bind_info = HistogramBindFunctionStripped(bound_function, children);
+	// we may have lost some arguments in the bind
+	children.resize(MinValue(bound_function.arguments.size(), children.size()));
+	return bind_info;
+}
+
+static unique_ptr<BoundAggregateExpression>
+BindAggregateFunctionInternal(unique_ptr<FunctionData> bind_info, AggregateFunction bound_function,
+                              vector<unique_ptr<Expression>> children, unique_ptr<Expression> filter, bool is_distinct,
+                              unique_ptr<BoundOrderModifier> order_bys, bool cast_parameters) {
 
 	// check if we need to add casts to the children
 	bound_function.CastToFunctionArguments(children, cast_parameters);
@@ -524,11 +542,37 @@ unique_ptr<BoundAggregateExpression> AggregateFunction::BindAggregateFunction(
 	// Special case: for ORDER BY aggregates, we wrap the aggregate function in a SortedAggregateFunction
 	// The children are the sort clauses and the binding contains the ordering data.
 	if (order_bys && !order_bys->orders.empty()) {
-		bind_info = BindSortedAggregate(bound_function, children, move(bind_info), move(order_bys));
+		bind_info = AggregateFunction::BindSortedAggregate(bound_function, children, move(bind_info), move(order_bys));
 	}
 
 	return make_unique<BoundAggregateExpression>(move(bound_function), move(children), move(filter), move(bind_info),
 	                                             is_distinct);
+}
+
+unique_ptr<BoundAggregateExpression> AggregateFunction::BindAggregateFunctionContext(
+    aggr_bind_func_t bind_func, ClientContext &context, AggregateFunction bound_function,
+    vector<unique_ptr<Expression>> children, unique_ptr<Expression> filter, bool is_distinct,
+    unique_ptr<BoundOrderModifier> order_bys, bool cast_parameters) {
+
+	unique_ptr<FunctionData> bind_info = bind_func(bound_function, children, &context);
+	return BindAggregateFunctionInternal(move(bind_info), move(bound_function), move(children), move(filter),
+	                                     is_distinct, move(order_bys), cast_parameters);
+}
+
+unique_ptr<BoundAggregateExpression> AggregateFunction::BindAggregateFunctionNoContext(
+    aggr_bind_func_t bind_func, AggregateFunction bound_function, vector<unique_ptr<Expression>> children,
+    unique_ptr<Expression> filter, bool is_distinct, unique_ptr<BoundOrderModifier> order_bys, bool cast_parameters) {
+
+	unique_ptr<FunctionData> bind_info = bind_func(bound_function, children, nullptr);
+	return BindAggregateFunctionInternal(move(bind_info), move(bound_function), move(children), move(filter),
+	                                     is_distinct, move(order_bys), cast_parameters);
+}
+
+unique_ptr<BoundAggregateExpression> AggregateFunction::BindAggregateFunction(
+    ClientContext &context, AggregateFunction bound_function, vector<unique_ptr<Expression>> children,
+    unique_ptr<Expression> filter, bool is_distinct, unique_ptr<BoundOrderModifier> order_bys, bool cast_parameters) {
+	return BindAggregateFunctionContext(DefaultAggregateFunctionBinder, context, move(bound_function), move(children),
+	                                    move(filter), is_distinct, move(order_bys), cast_parameters);
 }
 
 } // namespace duckdb

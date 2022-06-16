@@ -114,6 +114,8 @@ struct StructExtractFun {
 //! Returns false if not all of the elements in the 'keys' Vector are unique
 bool AreKeysUnique(Vector &keys, idx_t row_count, BoundAggregateExpression &aggr);
 //! Create a bound aggregate expression of a UniqueFunctor, for the given type
-unique_ptr<BoundAggregateExpression> GetBoundUniqueAggregate(ClientContext &context, LogicalType &type);
+unique_ptr<BoundAggregateExpression> GetBoundUniqueAggregate(const LogicalType &type,
+                                                             unique_ptr<Expression> filter = nullptr,
+                                                             bool is_distinct = false, bool cast_parameters = true);
 
 } // namespace duckdb

@@ -159,9 +159,8 @@ static void HistogramFinalizeFunction(Vector &state_vector, FunctionData *, Vect
 	}
 }
 
-unique_ptr<FunctionData> HistogramBindFunction(ClientContext &context, AggregateFunction &function,
-                                               vector<unique_ptr<Expression>> &arguments) {
-
+unique_ptr<FunctionData> HistogramBindFunctionStripped(AggregateFunction &function,
+                                                       vector<unique_ptr<Expression>> &arguments) {
 	D_ASSERT(arguments.size() == 1);
 	child_list_t<LogicalType> struct_children;
 	struct_children.push_back({"bucket", LogicalType::LIST(arguments[0]->return_type)});
@@ -170,6 +169,11 @@ unique_ptr<FunctionData> HistogramBindFunction(ClientContext &context, Aggregate
 
 	function.return_type = struct_type;
 	return make_unique<VariableReturnBindData>(function.return_type);
+}
+
+unique_ptr<FunctionData> HistogramBindFunction(ClientContext &context, AggregateFunction &function,
+                                               vector<unique_ptr<Expression>> &arguments) {
+	return HistogramBindFunctionStripped(function, arguments);
 }
 
 template <class OP, class T, class MAP_TYPE = map<T, idx_t>>
@@ -266,6 +270,10 @@ void HistogramFun::RegisterFunction(BuiltinFunctions &set) {
 	fun.AddFunction(GetHistogramFunction<>(LogicalType::TIME_TZ));
 	fun.AddFunction(GetHistogramFunction<>(LogicalType::DATE));
 	set.AddFunction(fun);
+}
+
+AggregateFunction HistogramFun::GetHistogramUnorderedMap(const LogicalType &type) {
+	return GetHistogramFunction<false>(type);
 }
 
 AggregateFunction HistogramFun::GetHistogramUnorderedMap(LogicalType &type) {
