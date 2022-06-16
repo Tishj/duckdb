@@ -113,16 +113,14 @@ static void MapFunction(DataChunk &args, ExpressionState &state, Vector &result)
 
 	// map([], []) || map([NULL], [5])
 	if (AreKeysNull(args.data[0], args.size())) {
+		// map([NULL], [5]) is an error
 		throw InvalidInputException("Map keys can not be NULL");
 	}
 
 	auto key_type = ListType::GetChildType(args.data[0].GetType());
 	if (key_type.id() != LogicalTypeId::SQLNULL) {
-		// get the aggregate function
-		auto &func_expr = (BoundFunctionExpression &)state.expr;
-		auto &info = (ListAggregatesBindData &)*func_expr.bind_info;
-		auto &aggr = (BoundAggregateExpression &)*info.aggr_expr;
-		if (!AreKeysUnique(args.data[0], args.size(), aggr)) {
+		auto aggr = GetBoundUniqueAggregate(key_type);
+		if (!AreKeysUnique(args.data[0], args.size(), *aggr)) {
 			throw InvalidInputException("Map keys have to be unique");
 		}
 	}
@@ -163,11 +161,7 @@ static unique_ptr<FunctionData> MapBind(ClientContext &context, ScalarFunction &
 	//! this is more for completeness reasons
 	auto key_type = ListType::GetChildType(child_types[0].second);
 	bound_function.return_type = LogicalType::MAP(move(child_types));
-	if (arguments.empty() || key_type.id() == LogicalTypeId::SQLNULL) {
-		return make_unique<VariableReturnBindData>(bound_function.return_type);
-	}
-	auto aggr = GetBoundUniqueAggregate(key_type);
-	return make_unique<ListAggregatesBindData>(bound_function.return_type, move(aggr));
+	return make_unique<VariableReturnBindData>(bound_function.return_type);
 }
 
 void MapFun::RegisterFunction(BuiltinFunctions &set) {
