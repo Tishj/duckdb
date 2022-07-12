@@ -1,0 +1,26 @@
+# name: test/sql/copy/csv/auto/test_csv_order_by_storage.test
+# description: Test that csv ordered by an expression roundtrips correctly to disk
+# group: [auto]
+
+statement ok
+PRAGMA enable_verification
+
+statement ok
+CREATE TABLE csv_data AS (SELECT * FROM 'test/sql/copy/csv/data/real/voter.tsv' order by 43, 68);
+
+statement ok
+COPY csv_data TO '__TEST_DIR__/voter.tsv.gz' (COMPRESSION GZIP);
+
+statement ok
+CREATE TABLE csv_data_gz AS (SELECT * FROM '__TEST_DIR__/voter.tsv.gz');
+
+query I
+SELECT COUNT(*) FROM (SELECT * FROM csv_data_gz EXCEPT SELECT * FROM csv_data)
+----
+0
+
+statement ok
+DROP TABLE csv_data;
+
+statement ok
+DROP TABLE csv_data_gz;
