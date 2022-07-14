@@ -647,12 +647,7 @@ function(link_extension_libraries LIBRARY)
 endfunction()
 
 function(link_threads LIBRARY)
-  if (CMAKE_VERSION VERSION_LESS "3.1")
-    target_link_libraries(${LIBRARY} pthread)
-
-  else()
-    target_link_libraries(${LIBRARY} Threads::Threads)
-  endif()
+    target_link_libraries(${LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY)

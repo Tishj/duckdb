@@ -1,0 +1,548 @@
+﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of imdb.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are benchmark\imdb\imdb.cpp, third_party\imdb\imdb.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of main.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are examples\embedded-c++\main.cpp, examples\standalone-plan\main.cpp, examples\standalone-window\main.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of main.c will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are examples\embedded-c\main.c, out\build\x64-debug\cmakefiles\showincludes\main.c.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of date.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are extension\tpcds\dsdgen\dsdgen-c\date.cpp, src\common\types\date.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of decimal.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are extension\tpcds\dsdgen\dsdgen-c\decimal.cpp, src\common\types\decimal.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of list.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are extension\tpcds\dsdgen\dsdgen-c\list.cpp, src\function\aggregate\nested\list.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of permute.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are extension\tpcds\dsdgen\dsdgen-c\permute.cpp, extension\tpch\dbgen\permute.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of text.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are extension\tpcds\dsdgen\dsdgen-c\text.cpp, extension\tpch\dbgen\text.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of md5.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\common\crypto\md5.cpp, src\function\scalar\string\md5.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of types.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\common\types.cpp, tools\rpkg\src\types.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of data_chunk.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\common\types\data_chunk.cpp, tools\nodejs\src\data_chunk.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of hash.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\common\types\hash.cpp, src\function\scalar\generic\hash.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of hyperloglog.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\common\types\hyperloglog.cpp, third_party\hyperloglog\hyperloglog.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of nested_functions.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\aggregate\nested_functions.cpp, src\function\scalar\nested_functions.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of pragma_functions.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\pragma\pragma_functions.cpp, src\function\scalar\pragma_functions.cpp, src\function\table\system\pragma_functions.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of range.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\scalar\list\range.cpp, src\function\table\range.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of map.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\scalar\map\map.cpp, tools\pythonpkg\src\map.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of random.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\scalar\math\random.cpp, third_party\tpce-tool\utilities\Random.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of repeat.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\scalar\string\repeat.cpp, src\function\table\repeat.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of system_functions.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\scalar\system\system_functions.cpp, src\function\table\system_functions.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of table_function.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\function\table_function.cpp, src\parser\tableref\table_function.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of connection.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\main\connection.cpp, tools\nodejs\src\connection.cpp, tools\odbc\connection.cpp, tools\rpkg\src\connection.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of database.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\main\database.cpp, tools\nodejs\src\database.cpp, tools\rpkg\src\database.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of propagate_aggregate.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\optimizer\statistics\expression\propagate_aggregate.cpp, src\optimizer\statistics\operator\propagate_aggregate.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of transform_subquery.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\parser\transform\expression\transform_subquery.cpp, src\parser\transform\tableref\transform_subquery.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of bitpacking.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are src\storage\compression\bitpacking.cpp, third_party\fastpforlib\bitpacking.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of test_aggregate_udf.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are test\api\udf_function\test_aggregate_udf.cpp, test\sql\udf_function\test_aggregate_udf.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of test_checksum.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are test\common\test_checksum.cpp, test\sql\storage\test_checksum.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of stringpiece.cc will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are third_party\google\protobuf\stubs\stringpiece.cc, third_party\re2\re2\stringpiece.cc.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of strutil.cc will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are third_party\google\protobuf\stubs\strutil.cc, third_party\re2\util\strutil.cc.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of utilities.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are third_party\snowball\runtime\utilities.cpp, third_party\tpce-tool\input\Utilities.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of statement.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are tools\nodejs\src\statement.cpp, tools\odbc\statement.cpp, tools\rpkg\src\statement.cpp.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(1098,5): warning MSB8027: Two or more files with the name of utils.cpp will produce outputs to the same location. This can lead to an incorrect build result.  The files involved are tools\nodejs\src\utils.cpp, tools\rpkg\src\utils.cpp.
+  benchmark_runner.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\benchmark_runner.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  imdb.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\imdb\imdb.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  interpreted_benchmark.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\interpreted_benchmark.cpp(1,10): fatal error C1083: Cannot open include file: 'interpreted_benchmark.hpp': No such file or directory
+  append.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\micro\append.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  append_mix.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\micro\append_mix.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  bulkupdate.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\micro\bulkupdate.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  cast.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\micro\cast.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  in.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\micro\in.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  storage.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\micro\storage.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  startup.cpp
+C:\Users\Administrator\Source\Repos\duckdb\benchmark\tpch\startup.cpp(1,10): fatal error C1083: Cannot open include file: 'benchmark_runner.hpp': No such file or directory
+  csvcli.cpp
+C:\Users\Administrator\Source\Repos\duckdb\examples\csvcli\csvcli.cpp(2,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  cppintegration.cpp
+C:\Users\Administrator\Source\Repos\duckdb\examples\embedded-c++-windows\cppintegration.cpp(7,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  main.cpp
+C:\Users\Administrator\Source\Repos\duckdb\examples\embedded-c++\main.cpp(1,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  main.cpp
+C:\Users\Administrator\Source\Repos\duckdb\examples\standalone-plan\main.cpp(1,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  main.cpp
+C:\Users\Administrator\Source\Repos\duckdb\examples\standalone-window\main.cpp(1,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  excel-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\excel\excel-extension.cpp(3,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  nf_calendar.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\excel\numformat\nf_calendar.cpp(28,10): fatal error C1083: Cannot open include file: 'sys/time.h': No such file or directory
+  nf_localedata.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\excel\numformat\nf_localedata.cpp(1,10): fatal error C1083: Cannot open include file: 'nf_calendar.h': No such file or directory
+  nf_zformat.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\excel\numformat\nf_zformat.cpp(30,10): fatal error C1083: Cannot open include file: 'nf_calendar.h': No such file or directory
+  fts-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\fts\fts-extension.cpp(2,10): fatal error C1083: Cannot open include file: 'fts-extension.hpp': No such file or directory
+  Generating Code...
+  Compiling...
+  fts_indexing.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\fts\fts_indexing.cpp(1,10): fatal error C1083: Cannot open include file: 'fts_indexing.hpp': No such file or directory
+  crypto.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\httpfs\crypto.cpp(1,10): fatal error C1083: Cannot open include file: 'crypto.hpp': No such file or directory
+  httpfs-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\httpfs\httpfs-extension.cpp(3,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  httpfs.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\httpfs\httpfs.cpp(1,10): fatal error C1083: Cannot open include file: 'httpfs.hpp': No such file or directory
+  s3fs.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\httpfs\s3fs.cpp(1,10): fatal error C1083: Cannot open include file: 's3fs.hpp': No such file or directory
+  icu-dateadd.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\include\icu-dateadd.hpp(11,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  icu-datefunc.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\include\icu-datefunc.hpp(11,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  icu-datepart.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\include\icu-datepart.hpp(11,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  icu-datesub.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\include\icu-datesub.hpp(11,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  icu-datetrunc.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\include\icu-datetrunc.hpp(11,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  icu-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\icu-extension.cpp(3,10): fatal error C1083: Cannot open include file: 'unicode/ucol.h': No such file or directory
+  icu-makedate.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\icu-makedate.cpp(1,10): fatal error C1083: Cannot open include file: 'duckdb/common/types/date.hpp': No such file or directory
+  icu-strptime.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\include\icu-strptime.hpp(11,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  alphaindex.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\alphaindex.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  astro.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\astro.h(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  basictz.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\basictz.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  bocsu.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\bocsu.cpp(20,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  buddhcal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\buddhcal.cpp(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  calendar.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\calendar.cpp(29,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  cecal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\cecal.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  chnsecal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\chnsecal.h(21,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  choicfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\choicfmt.cpp(28,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  coleitr.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\coleitr.cpp(28,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  coll.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\coll.cpp(43,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  collation.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collation.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationbuilder.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationbuilder.cpp(20,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationcompare.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationcompare.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationdata.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationdata.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationdatabuilder.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationdatabuilder.cpp(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationdatareader.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationdatareader.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationdatawriter.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationdatawriter.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationfastlatin.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationfastlatin.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationfastlatinbuilder.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationfastlatinbuilder.cpp(20,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationfcd.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationfcd.cpp(12,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationiterator.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationiterator.cpp(14,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  collationkeys.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationkeys.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationroot.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationroot.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationrootelements.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationrootelements.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationruleparser.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationruleparser.cpp(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationsets.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationsets.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  collationsettings.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationsettings.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationtailoring.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationtailoring.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  collationweights.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\collationweights.cpp(23,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  compactdecimalformat.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\compactdecimalformat.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  coptccal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\coptccal.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  curramt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\curramt.cpp(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  currfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\currfmt.cpp(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  currpinf.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\currpinf.h(12,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  currunit.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\currunit.cpp(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  dangical.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\chnsecal.h(21,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  datefmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\datefmt.cpp(22,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  dayperiodrules.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\dayperiodrules.h(17,10): fatal error C1083: Cannot open include file: 'unicode/locid.h': No such file or directory
+  dcfmtsym.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\dcfmtsym.cpp(22,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  decContext.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\decContext.h(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  decNumber.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\decNumber.cpp(183,10): fatal error C1083: Cannot open include file: 'cmemory.h': No such file or directory
+  decimfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\decimfmt.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  double-conversion-bignum-dtoa.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-bignum-dtoa.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  double-conversion-bignum.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-bignum.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  double-conversion-cached-powers.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-cached-powers.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  double-conversion-double-to-string.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-double-to-string.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  double-conversion-fast-dtoa.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-fast-dtoa.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  double-conversion-string-to-double.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-string-to-double.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  double-conversion-strtod.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\double-conversion-strtod.cpp(34,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  dtfmtsym.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\dtfmtsym.cpp(27,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  dtitvfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\dtitvfmt.cpp(13,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  dtitvinf.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\dtitvinf.h(17,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  dtptngen.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\dtptngen.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  dtrule.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\dtrule.cpp(10,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  erarules.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\erarules.cpp(6,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ethpccal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ethpccal.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  fmtable.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\fmtable.cpp(18,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  fmtable_cnv.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\fmtable_cnv.cpp(18,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  format.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\format.cpp(24,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  formatted_string_builder.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\formatted_string_builder.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  formattedval_iterimpl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\formattedval_iterimpl.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  formattedval_sbimpl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\formattedval_sbimpl.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  formattedvalue.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\formattedvalue.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  fphdlimp.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\fphdlimp.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  fpositer.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\fpositer.cpp(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  gender.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\gender.cpp(18,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  gregocal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\gregocal.cpp(42,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  gregoimp.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\gregoimp.h(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  hebrwcal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\hebrwcal.h(22,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  indiancal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\indiancal.h(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  islamcal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\islamcal.h(21,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  japancal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\japancal.cpp(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  listformatter.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\listformatter.cpp(19,10): fatal error C1083: Cannot open include file: 'cmemory.h': No such file or directory
+  measfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\measfmt.cpp(13,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  measunit.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\measunit.cpp(13,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  measure.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\measure.cpp(13,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  msgfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\msgfmt.cpp(24,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  nfrs.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\nfrs.h(21,10): fatal error C1083: Cannot open include file: 'unicode/uobject.h': No such file or directory
+  nfrule.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\rbnf.h(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  nfsubs.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\nfsubs.cpp(19,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  nounit.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\nounit.h(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_affixutils.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_affixutils.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_asformat.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_asformat.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_capi.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_capi.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_compact.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_compact.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_currencysymbols.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_currencysymbols.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  number_decimalquantity.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_decimalquantity.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_decimfmtprops.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_decimfmtprops.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_fluent.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_fluent.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_formatimpl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_formatimpl.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_grouping.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_grouping.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_integerwidth.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_integerwidth.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_longnames.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_longnames.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_mapper.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_mapper.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_modifiers.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_modifiers.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_multiplier.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_multiplier.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_notation.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_notation.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_output.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_output.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_padding.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_padding.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_patternmodifier.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_patternmodifier.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_patternstring.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_patternstring.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_rounding.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_rounding.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_scientific.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_scientific.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_skeletons.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_skeletons.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  number_utils.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\number_utils.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numfmt.cpp(27,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  numparse_affixes.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_affixes.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_compositions.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_compositions.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_currency.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_currency.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_decimal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_decimal.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_impl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_impl.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_parsednumber.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_parsednumber.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_scientific.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_scientific.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_symbols.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_symbols.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numparse_validators.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numparse_validators.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numrange_fluent.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numrange_fluent.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numrange_impl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numrange_impl.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  numsys.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\numsys.cpp(18,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  olsontz.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\olsontz.cpp(14,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  persncal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\persncal.h(21,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  plurfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\decimfmt.h(30,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  plurrule.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\plurrule.cpp(15,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  quantityformatter.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\quantityformatter.cpp(11,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  rbnf.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\rbnf.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  rbtz.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\rbtz.cpp(10,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  region.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\region.h(18,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  reldatefmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\reldatefmt.h(17,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  reldtfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\reldtfmt.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  rulebasedcollator.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\rulebasedcollator.cpp(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  scientificnumberformatter.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\scientificnumberformatter.cpp(9,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  selfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\selfmt.cpp(19,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  simpletz.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\simpletz.cpp(26,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  smpdtfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\smpdtfmt.cpp(31,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  smpdtfst.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\smpdtfst.cpp(16,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  sortkey.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\sortkey.cpp(32,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  standardplural.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\standardplural.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  string_segment.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\string_segment.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  taiwncal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\taiwncal.cpp(18,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  timezone.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\timezone.cpp(40,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  tmunit.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\tmunit.h(19,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  tmutamt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\tmutamt.h(19,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  tmutfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unicode\tmutfmt.h(13,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  tzfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\tzfmt.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  tzgnames.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\tzgnames.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  tznames.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\tznames.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  tznames_impl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\tznames_impl.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  tzrule.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\tzrule.cpp(10,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  tztrans.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\tztrans.cpp(10,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  ucal.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ucal.cpp(10,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  ucln_in.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ucln_in.cpp(19,10): fatal error C1083: Cannot open include file: 'ucln.h': No such file or directory
+  ucol.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ucol.cpp(22,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ucol_res.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ucol_res.cpp(27,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ucol_sit.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ucol_sit.cpp(18,10): fatal error C1083: Cannot open include file: 'unicode/ustring.h': No such file or directory
+  ucoleitr.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ucoleitr.cpp(19,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  udat.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\udat.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  udateintervalformat.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\udateintervalformat.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  udatpg.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\udatpg.cpp(19,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ufieldpositer.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ufieldpositer.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  uitercollationiterator.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\uitercollationiterator.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ulistformatter.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ulistformatter.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ulocdata.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ulocdata.cpp(19,10): fatal error C1083: Cannot open include file: 'cmemory.h': No such file or directory
+  umsg.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\umsg.cpp(24,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  unum.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unum.cpp(15,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  unumsys.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\unumsys.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  upluralrules.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\upluralrules.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  uregion.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\uregion.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  Generating Code...
+  Compiling...
+  usearch.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\usearch.cpp(12,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  utf16collationiterator.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\utf16collationiterator.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  utf8collationiterator.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\utf8collationiterator.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  utmscale.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\utmscale.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  vtzone.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\vtzone.cpp(10,10): fatal error C1083: Cannot open include file: 'utypeinfo.h': No such file or directory
+  vzone.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\vzone.cpp(15,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  windtfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\windtfmt.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  winnmfmt.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\winnmfmt.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  wintzimpl.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\wintzimpl.cpp(14,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  zonemeta.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\zonemeta.cpp(10,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  zrule.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\zrule.cpp(15,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  ztrans.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\i18n\ztrans.cpp(15,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  stubdata.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\icu\third_party\icu\stubdata\stubdata.cpp(4,10): fatal error C1083: Cannot open include file: 'unicode/utypes.h': No such file or directory
+  json-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json-extension.cpp(2,10): fatal error C1083: Cannot open include file: 'json-extension.hpp': No such file or directory
+  json_common.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_common.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  json_array_length.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_array_length.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  json_create.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_create.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  json_extract.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_extract.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  json_structure.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_structure.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  json_transform.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_transform.cpp(1,10): fatal error C1083: Cannot open include file: 'duckdb/common/types.hpp': No such file or directory
+  Generating Code...
+  Compiling...
+  json_type.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_type.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  json_valid.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\json_functions\json_valid.cpp(1,10): fatal error C1083: Cannot open include file: 'json_common.hpp': No such file or directory
+  yyjson.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\json\yyjson\yyjson.cpp(9,10): fatal error C1083: Cannot open include file: 'yyjson.hpp': No such file or directory
+  column_reader.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\column_reader.cpp(1,10): fatal error C1083: Cannot open include file: 'column_reader.hpp': No such file or directory
+  column_writer.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\column_writer.cpp(1,10): fatal error C1083: Cannot open include file: 'column_writer.hpp': No such file or directory
+  parquet-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquet-extension.cpp(8,10): fatal error C1083: Cannot open include file: 'parquet-extension.hpp': No such file or directory
+  parquet_metadata.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquet_metadata.cpp(1,10): fatal error C1083: Cannot open include file: 'parquet_metadata.hpp': No such file or directory
+  parquet_reader.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquet_reader.cpp(1,10): fatal error C1083: Cannot open include file: 'parquet_reader.hpp': No such file or directory
+  parquet_statistics.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquet_statistics.cpp(1,10): fatal error C1083: Cannot open include file: 'parquet_statistics.hpp': No such file or directory
+  parquet_timestamp.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquet_timestamp.cpp(1,10): fatal error C1083: Cannot open include file: 'parquet_timestamp.hpp': No such file or directory
+  parquet_writer.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquet_writer.cpp(1,10): fatal error C1083: Cannot open include file: 'parquet_writer.hpp': No such file or directory
+  parquetcli.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\parquetcli.cpp(2,10): fatal error C1083: Cannot open include file: 'duckdb.hpp': No such file or directory
+  zstd_file_system.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\parquet\zstd_file_system.cpp(1,10): fatal error C1083: Cannot open include file: 'zstd_file_system.hpp': No such file or directory
+  sqlsmith-extension.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\sqlsmith-extension.cpp(3,10): fatal error C1083: Cannot open include file: 'sqlsmith-extension.hpp': No such file or directory
+  statement_simplifier.cpp
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\statement_simplifier.cpp(1,10): fatal error C1083: Cannot open include file: 'statement_simplifier.hpp': No such file or directory
+  duckdb.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\duckdb.cc(1,10): fatal error C1083: Cannot open include file: 'duckdb.hh': No such file or directory
+  dump.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\dump.cc(4,10): fatal error C1083: Cannot open include file: 'dump.hh': No such file or directory
+  expr.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\expr.cc(7,10): fatal error C1083: Cannot open include file: 'random.hh': No such file or directory
+  grammar.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\grammar.cc(7,10): fatal error C1083: Cannot open include file: 'random.hh': No such file or directory
+  impedance.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\impedance.cc(1,10): fatal error C1083: Cannot open include file: 'impedance.hh': No such file or directory
+  Generating Code...
+  Compiling...
+  log.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\log.cc(9,10): fatal error C1083: Cannot open include file: 'unistd.h': No such file or directory
+  prod.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\prod.cc(5,10): fatal error C1083: Cannot open include file: 'prod.hh': No such file or directory
+  random.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\random.cc(1,10): fatal error C1083: Cannot open include file: 'random.hh': No such file or directory
+  relmodel.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\relmodel.cc(1,10): fatal error C1083: Cannot open include file: 'relmodel.hh': No such file or directory
+  schema.cc
+C:\Users\Administrator\Source\Repos\duckdb\extension\sqlsmith\third_party\sqlsmith\schema.cc(1,10): fatal error C1083: Cannot open include file: 'schema.hh': No such file or directory
+  sqlsmith.cc
