@@ -9,6 +9,7 @@
 #include "duckdb/storage/statistics/numeric_statistics.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
+#include "duckdb/common/operator/subtract.hpp"
 
 #include <functional>
 
@@ -26,6 +27,23 @@ struct EmptyBitpackingWriter {
 };
 
 template <class T>
+static bool TryApplyFrameOfReference(T* buffer, idx_t buffer_size, T& frame_of_reference) {
+	for (idx_t i = 0; i < buffer_size; i++) {
+		T result;
+		if (!TrySubtractOperator::Operation(buffer[i], frame_of_reference, result)) {
+			//! This vector cant be efficiently compressed with frame-of-reference
+			for (; i > 0; i--) {
+				buffer[i-1] += frame_of_reference;
+			}
+			frame_of_reference = 0;
+			return false;
+		}
+		buffer[i] = result;
+	}
+	return true;
+}
+
+template <class T>
 struct BitpackingState {
 public:
 	BitpackingState() : compression_buffer_idx(0), total_size(0), data_ptr(nullptr) {
@@ -40,18 +58,16 @@ public:
 public:
 	template <class OP>
 	void Flush() {
-		auto frame_of_reference =
-		    *std::min_element<T *>(compression_buffer, compression_buffer + compression_buffer_idx);
 
-		for (idx_t i = 0; i < compression_buffer_idx; i++) {
-			compression_buffer[i] -= frame_of_reference;
+		T frame_of_reference = *std::min_element<T *>(compression_buffer, compression_buffer + compression_buffer_idx);
+		bitpacking_width_t width = sizeof(T) * 8;
+
+		//! If frame of reference cant be applied, compression would be horrible anyways
+		if (TryApplyFrameOfReference(compression_buffer, compression_buffer_idx, frame_of_reference)) {
+			width = BitpackingPrimitives::MinimumBitWidth(compression_buffer, compression_buffer_idx);
 		}
-
-		auto unsigned_compression_buffer = (typename std::make_unsigned<T>::type *)&compression_buffer[0];
-		bitpacking_width_t width =
-		    BitpackingPrimitives::MinimumBitWidth(unsigned_compression_buffer, compression_buffer_idx);
-		OP::Operation(unsigned_compression_buffer, compression_buffer_validity, width, frame_of_reference,
-		              compression_buffer_idx, data_ptr);
+		OP::Operation(compression_buffer, compression_buffer_validity, width, frame_of_reference,
+					compression_buffer_idx, data_ptr);
 		total_size += (BITPACKING_WIDTH_GROUP_SIZE * width) / 8 + sizeof(bitpacking_width_t) + sizeof(T);
 		compression_buffer_idx = 0;
 	}
