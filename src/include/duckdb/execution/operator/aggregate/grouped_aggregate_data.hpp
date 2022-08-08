@@ -84,30 +84,37 @@ public:
 		}
 	}
 	//! Initialize a GroupedAggregateData object for use with distinct aggregates
-	void InitializeDistinct(unique_ptr<Expression> aggregate) {
-		auto &aggr = (BoundAggregateExpression &)*aggregate;
-		D_ASSERT(aggr.distinct);
-		any_distinct = true;
+	void InitializeDistinct(const vector<unique_ptr<Expression>> &expressions) {
+		idx_t expression_idx = 0;
+		for (auto &aggregate : expressions) {
+			auto &aggr = (BoundAggregateExpression &)*aggregate;
 
-		vector<LogicalType> payload_types_filters;
-		aggregate_return_types.push_back(aggr.return_type);
-		for (idx_t i = 0; i < aggr.children.size(); i++) {
-			auto &child = aggr.children[i];
-			auto &child_ref = (BoundColumnRefExpression &)*child;
-			group_types.push_back(child_ref.return_type);
-			payload_types.push_back(child_ref.return_type);
+			if (aggr.distinct) {
+				any_distinct = true;
+			}
+
+			vector<LogicalType> payload_types_filters;
+			for (idx_t child_idx = 0; child_idx < aggr.children.size(); child_idx++) {
+				auto &child = aggr.children[child_idx];
+				group_types.push_back(child->return_type);
+				payload_types.push_back(child->return_type);
+				// TODO: get the actual storage id for the column??
+				groups.push_back(
+				    make_unique_base<Expression, BoundReferenceExpression>(child->return_type, expression_idx++));
+			}
 			if (aggr.filter) {
 				payload_types_filters.push_back(aggr.filter->return_type);
 			}
-			groups.push_back(make_unique<BoundReferenceExpression>(child_ref.return_type, i));
+			if (!aggr.function.combine) {
+				throw InternalException("Aggregate function %s is missing a combine method", aggr.function.name);
+			}
+
+			for (const auto &pay_filters : payload_types_filters) {
+				payload_types.push_back(pay_filters);
+			}
 		}
-		if (!aggr.function.combine) {
-			throw InternalException("Aggregate function %s is missing a combine method", aggr.function.name);
-		}
-		aggregates.push_back(move(aggregate));
-		for (const auto &pay_filters : payload_types_filters) {
-			payload_types.push_back(pay_filters);
-		}
+		D_ASSERT(aggregate_return_types.empty()); // we wont do any actual aggregations with the tables
+		D_ASSERT(any_distinct);
 	}
 
 private:

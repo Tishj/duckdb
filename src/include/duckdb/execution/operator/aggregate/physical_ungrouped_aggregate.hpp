@@ -20,15 +20,15 @@ struct DistinctAggregateData {
 public:
 	DistinctAggregateData() {
 	}
-	//! The data used by the hashtables
-	vector<unique_ptr<GroupedAggregateData>> grouped_aggregate_data;
-	//! The hashtables
-	vector<unique_ptr<RadixPartitionedHashTable>> radix_tables;
-	//! The groups (arguments)
-	vector<GroupingSet> grouping_sets;
+	//! The data used by the hashtable
+	GroupedAggregateData grouped_aggregate_data;
+	//! The group which contains the indices of all children of the distinct aggregates
+	GroupingSet grouping_set;
+	//! The hashtable for distinct aggregates
+	unique_ptr<RadixPartitionedHashTable> radix_table;
 
 public:
-	void Initialize(vector<unique_ptr<Expression>> &aggregates, const vector<idx_t> &indices);
+	void Initialize(vector<unique_ptr<Expression>> &expressions);
 	bool AnyDistinct() const;
 };
 
