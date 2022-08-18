@@ -154,6 +154,18 @@ public:
 	PythonImportCacheItem ndarray;
 };
 
+struct ProtocolCacheItem : public PythonImportCacheItem {
+public:
+	~ProtocolCacheItem() override {
+	}
+	virtual void LoadSubtypes(PythonImportCache &cache) override {
+		table.LoadAttribute("TableLike", cache, *this);
+	}
+
+public:
+	PythonImportCacheItem table;
+};
+
 struct DatetimeCacheItem : public PythonImportCacheItem {
 public:
 	~DatetimeCacheItem() override {
@@ -186,6 +198,7 @@ public:
 		uuid.LoadModule("uuid", *this);
 		pandas.LoadModule("pandas", *this);
 		arrow.LoadModule("pyarrow", *this);
+		protocol.LoadModule("pyduckdb.protocols", *this);
 	}
 	~PythonImportCache();
 
@@ -196,6 +209,7 @@ public:
 	UUIDCacheItem uuid;
 	PandasCacheItem pandas;
 	ArrowCacheItem arrow;
+	ProtocolCacheItem protocol;
 
 public:
 	PyObject *AddCache(py::object item);

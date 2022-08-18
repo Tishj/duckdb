@@ -7,6 +7,9 @@
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "duckdb_python/pyrelation.hpp"
+#include "duckdb_python/pyconnection.hpp"
+#include "duckdb_python/pyresult.hpp"
 
 namespace duckdb {
 
@@ -38,7 +41,9 @@ unique_ptr<ArrowArrayStreamWrapper> PythonTableArrowArrayStreamFactory::Produce(
 	D_ASSERT(factory->arrow_object);
 	py::handle arrow_obj_handle(factory->arrow_object);
 	auto scanner_class = py::module::import("pyarrow.dataset").attr("Scanner");
-	auto table_class = py::module::import("pyarrow.lib").attr("Table");
+	//auto table_class = py::module::import("pyarrow.lib").attr("Table");
+	auto& import_cache = *DuckDBPyConnection::ImportCache();
+	auto table_class = import_cache.protocol.table();
 	auto record_batch_reader_class = py::module::import("pyarrow.lib").attr("RecordBatchReader");
 
 	py::object scanner;
