@@ -41,21 +41,21 @@ unique_ptr<ArrowArrayStreamWrapper> PythonTableArrowArrayStreamFactory::Produce(
 	D_ASSERT(factory->arrow_object);
 	py::handle arrow_obj_handle(factory->arrow_object);
 	auto scanner_class = py::module::import("pyarrow.dataset").attr("Scanner");
-	// auto table_class = py::module::import("pyarrow.lib").attr("Table");
-	auto &import_cache = *DuckDBPyConnection::ImportCache();
+	//auto table_class = py::module::import("pyarrow.lib").attr("Table");
+	auto& import_cache = *DuckDBPyConnection::ImportCache();
 	auto table_class = import_cache.protocol.table();
 	auto record_batch_reader_class = py::module::import("pyarrow.lib").attr("RecordBatchReader");
 
 	py::object scanner;
 	py::object arrow_scanner = scanner_class.attr("from_dataset");
-	if (import_cache.arrow.lib.Table.IsInstance(arrow_obj_handle)) {
+	if (py::isinstance(arrow_obj_handle, table_class)) {
 		auto arrow_dataset = py::module_::import("pyarrow.dataset").attr("dataset");
 		auto dataset = arrow_dataset(arrow_obj_handle);
 		scanner = ProduceScanner(arrow_scanner, dataset, parameters, factory->config);
-	} else if (import_cache.arrow.lib.RecordBatchReader.IsInstance(arrow_obj_handle)) {
+	} else if (py::isinstance(arrow_obj_handle, record_batch_reader_class)) {
 		py::object arrow_batch_scanner = py::module_::import("pyarrow.dataset").attr("Scanner").attr("from_batches");
 		scanner = ProduceScanner(arrow_batch_scanner, arrow_obj_handle, parameters, factory->config);
-	} else if (import_cache.arrow.dataset.Scanner.IsInstance(arrow_obj_handle)) {
+	} else if (py::isinstance(arrow_obj_handle, scanner_class)) {
 		// If it's a scanner we have to turn it to a record batch reader, and then a scanner again since we can't stack
 		// scanners on arrow Otherwise pushed-down projections and filters will disappear like tears in the rain
 		auto record_batches = arrow_obj_handle.attr("to_reader")();
