@@ -160,10 +160,12 @@ public:
 	}
 	virtual void LoadSubtypes(PythonImportCache &cache) override {
 		table.LoadAttribute("TableLike", cache, *this);
+		dataframe.LoadAttribute("PandasDataFrameLike", cache, *this);
 	}
 
 public:
 	PythonImportCacheItem table;
+	PythonImportCacheItem dataframe;
 };
 
 struct DatetimeCacheItem : public PythonImportCacheItem {

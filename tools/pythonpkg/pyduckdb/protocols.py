@@ -67,3 +67,92 @@ class TableLike(Protocol):
 
     def __reduce__(self):
         pass
+
+#taken from Modin: https://github.com/modin-project/modin/blob/master/modin/_compat/pandas_api/abc/base.py
+@runtime_checkable
+class PandasDatasetLike(Protocol):
+    """Interface for compatibility layer for Dataset."""
+
+    def max(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def min(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def mean(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def median(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def rank(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def reindex(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def rolling(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def sample(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def sem(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def shift(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def skew(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def std(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def to_csv(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def to_json(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def to_markdown(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def to_latex(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def to_pickle(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def var(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+#taken from Modin: https://github.com/modin-project/modin/blob/master/modin/_compat/pandas_api/abc/dataframe.py
+
+@runtime_checkable
+class PandasDataFrameLike(Protocol):
+    """Interface for compatibility layer for DataFrame."""
+
+    def applymap(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def apply(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def info(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def pivot_table(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def prod(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def replace(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def sum(self, *args, **kwargs):  # noqa: GL08
+        pass
+
+    def to_parquet(self, *args, **kwargs):  # noqa: GL08
+        pass

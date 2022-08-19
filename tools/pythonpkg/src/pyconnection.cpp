@@ -691,7 +691,7 @@ bool DuckDBPyConnection::TryImportModule(const string &module_name, py::handle &
 
 bool DuckDBPyConnection::IsPandasDataframe(const py::object &object) {
 	auto &import_cache = *DuckDBPyConnection::ImportCache();
-	return import_cache.pandas.DataFrame.IsInstance(object);
+	return import_cache.protocol.dataframe.IsInstance(object);
 }
 
 bool DuckDBPyConnection::IsAcceptedArrowObject(const py::object &object) {
