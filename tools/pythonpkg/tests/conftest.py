@@ -6,6 +6,21 @@ from os.path import abspath
 import glob
 import duckdb
 
+def add_module(name, modules):
+	try:
+		command = f'import {name}'
+		exec(command)
+		command = f'modules += [{name}]'
+		exec(command)
+	except ImportError:
+		pass
+
+def dataframe_modules():
+	modules = []
+	add_module('pandas', modules)
+	add_module('modin.pandas', modules)
+	return modules
+
 @pytest.fixture(scope="function")
 def duckdb_empty_cursor(request):
     connection = duckdb.connect('')

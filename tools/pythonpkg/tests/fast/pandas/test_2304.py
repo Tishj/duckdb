@@ -1,17 +1,21 @@
 import duckdb
 import pandas as pd
 import numpy as np
+import pytest
+from conftest import dataframe_modules
 
+@pytest.mark.parametrize("module", dataframe_modules())
 class TestPandasMergeSameName(object):
-    def test_2304(self, duckdb_cursor):
-        df1 = pd.DataFrame({
+
+    def test_2304(self, module):
+        df1 = module.DataFrame({
             'id_1': [1, 1, 1, 2, 2],
             'agedate': np.array(['2010-01-01','2010-02-01','2010-03-01','2020-02-01', '2020-03-01']).astype('datetime64[D]'),
             'age': [1, 2, 3, 1, 2],
             'v': [1.1, 1.2, 1.3, 2.1, 2.2]
         })
 
-        df2 = pd.DataFrame({
+        df2 = module.DataFrame({
             'id_1': [1, 1, 2],
             'agedate': np.array(['2010-01-01','2010-02-01', '2020-03-01']).astype('datetime64[D]'),
             'v2': [11.1, 11.2, 21.2]
@@ -31,20 +35,20 @@ class TestPandasMergeSameName(object):
 
         assert result == expected_result
 
-    def test_pd_names(self, duckdb_cursor):
-        df1 = pd.DataFrame({
+    def test_pd_names(self, module):
+        df1 = module.DataFrame({
             'id': [1, 1, 2],
             'id_1': [1, 1, 2],
             'id_3': [1, 1, 2],
         })
 
-        df2 = pd.DataFrame({
+        df2 = module.DataFrame({
             'id': [1, 1, 2],
             'id_1': [1, 1, 2],
             'id_2': [1, 1, 1]
         })
 
-        exp_result = pd.DataFrame({
+        exp_result = module.DataFrame({
             'id': [1, 1, 2, 1, 1],
             'id_1': [1, 1, 2, 1, 1],
             'id_3': [1, 1, 2, 1, 1],
@@ -63,18 +67,18 @@ class TestPandasMergeSameName(object):
         result_df = con.execute(query).fetchdf()
         assert(exp_result.equals(result_df))
 
-    def test_repeat_name(self, duckdb_cursor):
-        df1 = pd.DataFrame({
+    def test_repeat_name(self, module):
+        df1 = module.DataFrame({
             'id': [1],
             'id_1': [1],
             'id_2': [1],
         })
 
-        df2 = pd.DataFrame({
+        df2 = module.DataFrame({
             'id': [1]
         })
 
-        exp_result = pd.DataFrame({
+        exp_result = module.DataFrame({
             'id': [1],
             'id_1': [1],
             'id_2': [1],
