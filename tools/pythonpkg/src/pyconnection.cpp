@@ -696,7 +696,7 @@ bool DuckDBPyConnection::IsPandasDataframe(const py::object &object) {
 
 bool DuckDBPyConnection::IsAcceptedArrowObject(const py::object &object) {
 	auto &import_cache = *DuckDBPyConnection::ImportCache();
-	//return import_cache.arrow.lib.Table.IsInstance(object) ||
+	// return import_cache.arrow.lib.Table.IsInstance(object) ||
 	return import_cache.protocol.table.IsInstance(object) ||
 	       import_cache.arrow.lib.RecordBatchReader.IsInstance(object) ||
 	       import_cache.arrow.dataset.FileSystemDataset.IsInstance(object) ||
