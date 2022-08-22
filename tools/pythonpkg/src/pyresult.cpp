@@ -159,30 +159,50 @@ py::object DuckDBPyResult::GetValueToPython(const Value &val, const LogicalType 
 	}
 }
 
-unique_ptr<DataChunk> FetchNext(QueryResult &result) {
-	auto chunk = result.Fetch();
+void DuckDBPyResult::CloseResult() {
+	if (!result || result->type != QueryResultType::STREAM_RESULT) {
+		return;
+	}
+	auto &stream_result = (StreamQueryResult &)*result;
+	stream_result.Close();
+}
+
+unique_ptr<DataChunk> FetchNext(QueryResult &result, bool keep_open = false) {
+	unique_ptr<DataChunk> chunk;
+	if (keep_open && result.type == QueryResultType::STREAM_RESULT) {
+		auto &stream_result = (StreamQueryResult &)result;
+		chunk = stream_result.FetchKeepOpen();
+	} else {
+		chunk = result.Fetch();
+	}
 	if (!result.success) {
 		throw std::runtime_error(result.error);
 	}
 	return chunk;
 }
 
-unique_ptr<DataChunk> FetchNextRaw(QueryResult &result) {
-	auto chunk = result.FetchRaw();
+unique_ptr<DataChunk> FetchNextRaw(QueryResult &result, bool keep_open = false) {
+	unique_ptr<DataChunk> chunk;
+	if (keep_open && result.type == QueryResultType::STREAM_RESULT) {
+		auto &stream_result = (StreamQueryResult &)result;
+		chunk = stream_result.FetchRawKeepOpen();
+	} else {
+		chunk = result.FetchRaw();
+	}
 	if (!result.success) {
 		throw std::runtime_error(result.error);
 	}
 	return chunk;
 }
 
-py::object DuckDBPyResult::Fetchone() {
+py::object DuckDBPyResult::Fetchone(bool keep_open) {
 	{
 		py::gil_scoped_release release;
 		if (!result) {
 			throw std::runtime_error("result closed");
 		}
 		if (!current_chunk || chunk_offset >= current_chunk->size()) {
-			current_chunk = FetchNext(*result);
+			current_chunk = FetchNext(*result, keep_open);
 			chunk_offset = 0;
 		}
 	}
@@ -207,12 +227,17 @@ py::object DuckDBPyResult::Fetchone() {
 
 py::list DuckDBPyResult::Fetchmany(idx_t size) {
 	py::list res;
-	for (idx_t i = 0; i < size; i++) {
-		auto fres = Fetchone();
+
+	idx_t count = 0;
+	for (; count < size; count++) {
+		auto fres = Fetchone(true);
 		if (fres.is_none()) {
 			break;
 		}
 		res.append(fres);
+	}
+	if (count == 0) {
+		CloseResult();
 	}
 	return res;
 }

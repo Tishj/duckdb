@@ -32,6 +32,10 @@ public:
 public:
 	//! Fetches a DataChunk from the query result.
 	DUCKDB_API unique_ptr<DataChunk> FetchRaw() override;
+	//! Fetches a DataChunk and flattens it
+	DUCKDB_API unique_ptr<DataChunk> Fetch() override;
+	DUCKDB_API unique_ptr<DataChunk> FetchRawKeepOpen();
+	DUCKDB_API unique_ptr<DataChunk> FetchKeepOpen();
 	//! Converts the QueryResult to a string
 	DUCKDB_API string ToString() override;
 	//! Materializes the query result and turns it into a materialized query result

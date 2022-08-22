@@ -32,7 +32,7 @@ public:
 public:
 	static void Initialize(py::handle &m);
 
-	py::object Fetchone();
+	py::object Fetchone(bool keep_open = false);
 
 	py::list Fetchmany(idx_t size);
 
@@ -66,6 +66,8 @@ private:
 	DataFrame FrameFromNumpy(const py::handle &o);
 
 	void ChangeToTZType(DataFrame &df);
+
+	void CloseResult();
 };
 
 } // namespace duckdb

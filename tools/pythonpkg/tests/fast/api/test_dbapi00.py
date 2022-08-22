@@ -26,14 +26,15 @@ class TestSimpleDBAPI(object):
             res = duckdb_cursor.fetchmany()
             assert(isinstance(res, list))
             list_of_results.extend(res)
-            if (len(res) < arraysize):
+            if (len(res) == 0):
                 break
         assert(len(list_of_results) == truth_value)
         assert_result_equal(list_of_results)
 
     def test_fetchmany(self, duckdb_cursor):
         # Get truth value
-        truth_value = len(duckdb_cursor.execute("select * from integers").fetchall())
+        #truth_value = len(duckdb_cursor.execute("select * from integers").fetchall())
+        truth_value = 11
         duckdb_cursor.execute('select * from integers')
         list_of_results = []
         arraysize = 3
@@ -48,7 +49,7 @@ class TestSimpleDBAPI(object):
             iteration_count += 1
             assert(isinstance(res, list))
             list_of_results.extend(res)
-            if (len(res) < arraysize):
+            if (len(res) == 0):
                 break
         assert(iteration_count == expected_iteration_count)
         assert(len(list_of_results) == truth_value)

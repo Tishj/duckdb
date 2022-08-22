@@ -57,6 +57,37 @@ unique_ptr<DataChunk> StreamQueryResult::FetchRaw() {
 	return chunk;
 }
 
+unique_ptr<DataChunk> StreamQueryResult::Fetch() {
+	auto chunk = FetchRaw();
+	if (!chunk) {
+		return nullptr;
+	}
+	chunk->Flatten();
+	return chunk;
+}
+
+unique_ptr<DataChunk> StreamQueryResult::FetchRawKeepOpen() {
+	unique_ptr<DataChunk> chunk;
+	{
+		auto lock = LockContext();
+		CheckExecutableInternal(*lock);
+		chunk = context->Fetch(*lock, *this);
+	}
+	if (!chunk || chunk->ColumnCount() == 0 || chunk->size() == 0) {
+		return nullptr;
+	}
+	return chunk;
+}
+
+unique_ptr<DataChunk> StreamQueryResult::FetchKeepOpen() {
+	auto chunk = FetchRawKeepOpen();
+	if (!chunk) {
+		return nullptr;
+	}
+	chunk->Flatten();
+	return chunk;
+}
+
 unique_ptr<MaterializedQueryResult> StreamQueryResult::Materialize() {
 	if (!success || !context) {
 		return make_unique<MaterializedQueryResult>(error);
