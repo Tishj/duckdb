@@ -449,11 +449,21 @@ static bool StartsWithNumericDate(string &separator, const string &value) {
 	return true;
 }
 
+static bool DoesNotExceedValidRange(const string &str, const string::const_iterator &pos, const string &separator) {
+	auto begin = str.cbegin();
+	auto pos_distance = std::distance(begin, pos);
+	if (pos_distance + separator.size() >= str.size()) {
+		return false;
+	}
+	return true;
+}
+
 string GenerateDateFormat(const string &separator, const char *format_template) {
 	string format_specifier = format_template;
 
 	//	replace all dashes with the separator
-	for (auto pos = std::find(format_specifier.begin(), format_specifier.end(), '-'); pos != format_specifier.end();
+	for (auto pos = std::find(format_specifier.begin(), format_specifier.end(), '-');
+	     pos != format_specifier.end() && DoesNotExceedValidRange(format_specifier, pos, separator);
 	     pos = std::find(pos + separator.size(), format_specifier.end(), '-')) {
 		format_specifier.replace(pos, pos + 1, separator);
 	}
