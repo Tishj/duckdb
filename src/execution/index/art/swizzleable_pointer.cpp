@@ -2,9 +2,9 @@
 
 namespace duckdb {
 SwizzleablePointer::~SwizzleablePointer() {
-	if (pointer) {
+	if (Pointer()) {
 		if (!IsSwizzled()) {
-			delete (Node *)pointer;
+			delete (Node *)Pointer();
 		}
 	}
 }
@@ -20,40 +20,31 @@ SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
 	pointer = block_id;
 	pointer = pointer << (pointer_size / 2);
 	pointer += offset;
-	// Set the left most bit to indicate this is a swizzled pointer and send it back to the mother-ship
-	pointer |= PRIMARY_MASK;
+	SetSwizzled();
 }
 
 SwizzleablePointer &SwizzleablePointer::operator=(const Node *ptr) {
-	if (sizeof(ptr) == 4) {
-		pointer = (uint32_t)(size_t)ptr;
-	} else {
-		pointer = (uint64_t)ptr;
-	}
+	FlaggedPointer::operator=(ptr);
 	return *this;
 }
 
 bool operator!=(const SwizzleablePointer &s_ptr, const uint64_t &ptr) {
-	return (s_ptr.pointer != ptr);
+	return (s_ptr.Pointer() != ptr);
 }
 
 BlockPointer SwizzleablePointer::GetSwizzledBlockInfo() {
 	D_ASSERT(IsSwizzled());
+	UnsetSwizzled();
 	idx_t pointer_size = sizeof(pointer) * 8;
-	pointer = pointer & ~(1ULL << (pointer_size - 1));
-	uint32_t block_id = pointer >> (pointer_size / 2);
-	uint32_t offset = pointer & 0xffffffff;
+	uint32_t block_id = Pointer() >> (pointer_size / 2);
+	uint32_t offset = Pointer() & 0xffffffff;
 	return {block_id, offset};
-}
-bool SwizzleablePointer::IsSwizzled() {
-	idx_t pointer_size = sizeof(pointer) * 8;
-	return (pointer >> (pointer_size - 1)) & 1;
 }
 
 void SwizzleablePointer::Reset() {
-	if (pointer) {
+	if (Pointer()) {
 		if (!IsSwizzled()) {
-			delete (Node *)pointer;
+			delete (Node *)Pointer();
 		}
 	}
 	*this = nullptr;
@@ -66,13 +57,13 @@ Node *SwizzleablePointer::Unswizzle(ART &art) {
 		auto block_info = GetSwizzledBlockInfo();
 		*this = Node::Deserialize(art, block_info.block_id, block_info.offset);
 	}
-	return (Node *)pointer;
+	return (Node *)Pointer();
 }
 
 BlockPointer SwizzleablePointer::Serialize(ART &art, duckdb::MetaBlockWriter &writer) {
-	if (pointer) {
+	if (Pointer()) {
 		Unswizzle(art);
-		return ((Node *)pointer)->Serialize(art, writer);
+		return ((Node *)Pointer())->Serialize(art, writer);
 	} else {
 		return {(block_id_t)DConstants::INVALID_INDEX, (uint32_t)DConstants::INVALID_INDEX};
 	}

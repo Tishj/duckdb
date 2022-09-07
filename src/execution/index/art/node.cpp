@@ -140,6 +140,8 @@ Node *Node::Deserialize(ART &art, idx_t block_id, idx_t offset) {
 		deserialized_node = (Node *)new Node256();
 		break;
 	}
+	default:
+		throw InternalException("Type not implemented for NodeType");
 	}
 	deserialized_node->DeserializeInternal(reader);
 	return deserialized_node;

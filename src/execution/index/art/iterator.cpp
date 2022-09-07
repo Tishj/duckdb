@@ -97,6 +97,8 @@ void Iterator::FindMinimum(Node &node) {
 		next = (Node *)n256.children[pos].Unswizzle(*art);
 		break;
 	}
+	default:
+		throw InternalException("Type not implemented for NodeType");
 	}
 	nodes.push(IteratorEntry(&node, pos));
 	FindMinimum(*next);
@@ -116,6 +118,8 @@ void Iterator::PushKey(Node *cur_node, uint16_t pos) {
 		break;
 	case NodeType::NLeaf:
 		break;
+	default:
+		throw InternalException("Type not implemented for NodeType");
 	}
 }
 
