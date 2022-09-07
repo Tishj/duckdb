@@ -7,7 +7,7 @@ Node256::Node256() : Node(NodeType::N256) {
 }
 
 idx_t Node256::GetChildPos(uint8_t k) {
-	if (children[k].pointer) {
+	if (children[k].Pointer()) {
 		return k;
 	} else {
 		return DConstants::INVALID_INDEX;
@@ -16,7 +16,7 @@ idx_t Node256::GetChildPos(uint8_t k) {
 
 idx_t Node256::GetChildGreaterEqual(uint8_t k, bool &equal) {
 	for (idx_t pos = k; pos < 256; pos++) {
-		if (children[pos].pointer) {
+		if (children[pos].Pointer()) {
 			if (pos == k) {
 				equal = true;
 			} else {
@@ -30,7 +30,7 @@ idx_t Node256::GetChildGreaterEqual(uint8_t k, bool &equal) {
 
 idx_t Node256::GetMin() {
 	for (idx_t i = 0; i < 256; i++) {
-		if (children[i].pointer) {
+		if (children[i].Pointer()) {
 			return i;
 		}
 	}
@@ -43,7 +43,7 @@ void Node256::ReplaceChildPointer(idx_t pos, Node *node) {
 
 idx_t Node256::GetNextPos(idx_t pos) {
 	for (pos == DConstants::INVALID_INDEX ? pos = 0 : pos++; pos < 256; pos++) {
-		if (children[pos].pointer) {
+		if (children[pos].Pointer()) {
 			return pos;
 		}
 	}
@@ -69,7 +69,7 @@ void Node256::Erase(Node *&node, int pos, ART &art) {
 		auto new_node = new Node48();
 		new_node->prefix = move(n->prefix);
 		for (idx_t i = 0; i < 256; i++) {
-			if (n->children[i].pointer) {
+			if (n->children[i].Pointer()) {
 				new_node->child_index[i] = new_node->count;
 				new_node->children[new_node->count] = n->children[i];
 				n->children[i] = nullptr;

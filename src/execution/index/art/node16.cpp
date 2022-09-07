@@ -102,7 +102,7 @@ void Node16::Erase(Node *&node, int pos, ART &art) {
 	}
 	// set any remaining nodes as nullptr
 	for (; pos < 16; pos++) {
-		if (!n->children[pos].pointer) {
+		if (!n->children[pos].Pointer()) {
 			break;
 		}
 		n->children[pos] = nullptr;

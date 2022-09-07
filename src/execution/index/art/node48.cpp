@@ -62,10 +62,10 @@ void Node48::Insert(Node *&node, uint8_t key_byte, Node *child) {
 	if (node->count < 48) {
 		// Insert element
 		idx_t pos = n->count;
-		if (n->children[pos].pointer) {
+		if (n->children[pos].Pointer()) {
 			// find an empty position in the node list if the current position is occupied
 			pos = 0;
-			while (n->children[pos].pointer) {
+			while (n->children[pos].Pointer()) {
 				pos++;
 			}
 		}
