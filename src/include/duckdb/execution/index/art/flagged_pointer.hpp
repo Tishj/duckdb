@@ -10,7 +10,8 @@
 
 namespace duckdb {
 
-//! Flagged Pointer distinguishes multiple values inside the same uint64_t by using bit fields
+//! Flagged Pointer distinguishes multiple values that all use the same underlying size
+//! By checking and setting the most significant bit(s)
 class FlaggedPointer {
 public:
 	FlaggedPointer() : pointer(0) {};
