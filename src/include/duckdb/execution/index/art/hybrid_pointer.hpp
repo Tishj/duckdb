@@ -38,11 +38,11 @@ public:
 
 protected:
 protected:
-	uint64_t pointer;
+	SECONDARY pointer;
 	static constexpr uint8_t POINTER_SIZE = sizeof(pointer);
 	static constexpr uint8_t POINTER_BIT_SIZE = POINTER_SIZE * 8;
 	//! If this mask is set, the underlying type is 'Primary'
-	static constexpr uint64_t PRIMARY_MASK = (uint64_t)1 << (POINTER_BIT_SIZE - 1);
+	static constexpr SECONDARY PRIMARY_MASK = (SECONDARY)1 << (POINTER_BIT_SIZE - 1);
 };
 
 } // namespace duckdb

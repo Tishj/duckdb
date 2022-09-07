@@ -16,7 +16,7 @@
 #include "duckdb/execution/index/art/prefix.hpp"
 
 namespace duckdb {
-enum class NodeType : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3, NLeaf = 4 };
+enum class NodeType : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3, NLeaf = 4, NRowIdLeaf = 5 };
 
 class ART;
 class Node;
