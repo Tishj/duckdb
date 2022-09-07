@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/execution/index/art/node_pointer.hpp
+// duckdb/execution/index/art/swizzleable_pointer.hpp
 //
 //
 //===----------------------------------------------------------------------===//
