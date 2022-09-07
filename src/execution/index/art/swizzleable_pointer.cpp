@@ -21,8 +21,6 @@ SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
 	pointer = pointer << (pointer_size / 2);
 	pointer += offset;
 	// Set the left most bit to indicate this is a swizzled pointer and send it back to the mother-ship
-	// uint64_t mask = 1;
-	// mask = mask << (pointer_size - 1);
 	pointer |= PRIMARY_MASK;
 }
 
