@@ -3,11 +3,7 @@
 
 namespace duckdb {
 SwizzleablePointer::~SwizzleablePointer() {
-	if (Pointer()) {
-		if (!IsSwizzled()) {
-			delete (Node *)Pointer();
-		}
-	}
+	Reset();
 }
 
 SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {

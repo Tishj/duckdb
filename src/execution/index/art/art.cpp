@@ -720,7 +720,7 @@ void ART::VerifyExistence(DataChunk &chunk, VerifyExistenceType verify_type, str
 BlockPointer ART::Serialize(duckdb::MetaBlockWriter &writer) {
 	lock_guard<mutex> l(lock);
 	if (tree) {
-		D_ASSERT(!tree->IsLeaf());
+		D_ASSERT(tree->type != NodeType::NRowIdLeaf);
 		auto node = (Node *)tree;
 		return node->Serialize(*this, writer);
 	}

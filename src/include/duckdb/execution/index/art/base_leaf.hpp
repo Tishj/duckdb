@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/execution/index/art/base_node.hpp
+// duckdb/execution/index/art/base_leaf.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -14,7 +14,7 @@
 
 namespace duckdb {
 
-//! This interface adds methods are only relevant to Leaf nodes
+//! This interface adds methods that are only relevant to Leaf nodes
 
 class BaseLeaf {
 public:

@@ -95,7 +95,6 @@ void Node::DeserializeInternal(duckdb::MetaBlockReader &reader) {
 	}
 	// Get Child offsets
 	for (idx_t i = 0; i < internal_type.children_size; i++) {
-		//! TODO: add another level of indirection here, so we can deserialize to something other than a BlockPointer
 		internal_type.children[i] = SwizzleablePointer(reader);
 	}
 }

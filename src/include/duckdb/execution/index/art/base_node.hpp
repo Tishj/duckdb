@@ -26,7 +26,6 @@ class BaseNode {
 public:
 	virtual ~BaseNode() {
 	}
-	//! TODO: move this to Node? - no need to have it in RowIdLeaf
 	//! node type
 	NodeType type;
 
