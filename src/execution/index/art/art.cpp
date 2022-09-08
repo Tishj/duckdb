@@ -344,8 +344,10 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 	D_ASSERT(depth < key.len);
 	idx_t pos = node->GetChildPos(key[depth]);
 	if (pos != DConstants::INVALID_INDEX) {
+		// A child with this key already exists, continue the insertion in that child
 		auto child = node->GetChild(*this, pos);
 		bool insertion_result = Insert(child, move(value), depth + 1, row_id);
+		//! Replace the child with the (potentially) changed node
 		node->ReplaceChildPointer(pos, child);
 		return insertion_result;
 	}
@@ -486,14 +488,14 @@ static unique_ptr<Key> CreateKey(ART &art, PhysicalType type, Value &value) {
 
 bool ART::SearchEqual(ARTIndexScanState *state, idx_t max_count, vector<row_t> &result_ids) {
 	auto key = CreateKey(*this, types[0], state->values[0]);
-	auto leaf = static_cast<Leaf *>(Lookup(tree, *key, 0));
+	auto leaf = Lookup(tree, *key, 0);
 	if (!leaf) {
 		return true;
 	}
-	if (leaf->count > max_count) {
+	if (leaf->Count() > max_count) {
 		return false;
 	}
-	for (idx_t i = 0; i < leaf->count; i++) {
+	for (idx_t i = 0; i < leaf->Count(); i++) {
 		row_t row_id = leaf->GetRowId(i);
 		result_ids.push_back(row_id);
 	}
@@ -503,11 +505,11 @@ bool ART::SearchEqual(ARTIndexScanState *state, idx_t max_count, vector<row_t> &
 void ART::SearchEqualJoinNoFetch(Value &equal_value, idx_t &result_size) {
 	//! We need to look for a leaf
 	auto key = CreateKey(*this, types[0], equal_value);
-	auto leaf = (Leaf *)(Lookup(tree, *key, 0));
+	auto leaf = Lookup(tree, *key, 0);
 	if (!leaf) {
 		return;
 	}
-	result_size = leaf->count;
+	result_size = leaf->Count();
 }
 
 BaseNode *ART::Lookup(BaseNode *node, Key &key, unsigned depth) {

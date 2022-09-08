@@ -30,7 +30,7 @@
 namespace duckdb {
 
 struct ARTIndexScanState : public IndexScanState {
-	ARTIndexScanState() : checked(false), result_index(0) {
+	ARTIndexScanState() : checked(false) {
 	}
 
 	Value values[2];
@@ -38,10 +38,6 @@ struct ARTIndexScanState : public IndexScanState {
 	bool checked;
 	vector<row_t> result_ids;
 	Iterator iterator;
-	//! Stores the current leaf
-	Leaf *cur_leaf = nullptr;
-	//! Offset to leaf
-	idx_t result_index = 0;
 };
 
 enum VerifyExistenceType : uint8_t {
