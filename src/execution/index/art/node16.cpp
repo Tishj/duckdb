@@ -61,7 +61,7 @@ void Node16::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child) {
 	if (n->count < 16) {
 		// Insert element
 		idx_t pos = 0;
-		while (pos < node->count && n->key[pos] < key_byte) {
+		while (pos < node->Count() && n->key[pos] < key_byte) {
 			pos++;
 		}
 		if (n->children[pos] != 0) {
@@ -76,13 +76,13 @@ void Node16::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child) {
 	} else {
 		// Grow to Node48
 		auto new_node = new Node48();
-		for (idx_t i = 0; i < node->count; i++) {
+		for (idx_t i = 0; i < node->Count(); i++) {
 			new_node->child_index[n->key[i]] = i;
 			new_node->children[i] = n->children[i];
 			n->children[i] = nullptr;
 		}
 		new_node->prefix = move(n->prefix);
-		new_node->count = node->count;
+		new_node->count = node->Count();
 		delete node;
 		node = new_node;
 
@@ -108,7 +108,7 @@ void Node16::Erase(BaseNode *&node, int pos, ART &art) {
 		n->children[pos] = nullptr;
 	}
 
-	if (node->count <= 3) {
+	if (node->Count() <= 3) {
 		// Shrink node
 		auto new_node = new Node4();
 		for (unsigned i = 0; i < n->count; i++) {

@@ -1,4 +1,5 @@
 #include "duckdb/execution/index/art/swizzleable_pointer.hpp"
+#include "duckdb/execution/index/art/rowid_leaf.hpp"
 
 namespace duckdb {
 SwizzleablePointer::~SwizzleablePointer() {
@@ -10,8 +11,17 @@ SwizzleablePointer::~SwizzleablePointer() {
 }
 
 SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
-	idx_t block_id = reader.Read<block_id_t>();
-	idx_t offset = reader.Read<uint32_t>();
+	block_id_t raw_block_id = reader.Read<block_id_t>();
+	uint32_t raw_offset = reader.Read<uint32_t>();
+	if ((raw_offset >> 31) & 1) {
+		// Actually a rowid in disguise
+		auto rowid_leaf = new RowidLeaf((row_t)raw_block_id);
+		pointer = (uint64_t)rowid_leaf;
+		return;
+	}
+
+	idx_t block_id = raw_block_id;
+	idx_t offset = raw_offset;
 	if (block_id == DConstants::INVALID_INDEX || offset == DConstants::INVALID_INDEX) {
 		pointer = 0;
 		return;

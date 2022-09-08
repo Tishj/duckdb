@@ -25,6 +25,11 @@ uint8_t &Prefix::operator[](idx_t idx) {
 	return prefix[idx];
 }
 
+const uint8_t &Prefix::operator[](idx_t idx) const {
+	D_ASSERT(idx < Size());
+	return prefix[idx];
+}
+
 Prefix &Prefix::operator=(const Prefix &src) {
 	// Allocate new prefix
 	prefix = unique_ptr<uint8_t[]>(new uint8_t[src.size]);
@@ -89,7 +94,7 @@ void Prefix::Deserialize(duckdb::MetaBlockReader &reader) {
 	}
 }
 
-uint32_t Prefix::KeyMismatchPosition(Key &key, uint64_t depth) {
+uint32_t Prefix::KeyMismatchPosition(Key &key, uint64_t depth) const {
 	uint64_t pos;
 	for (pos = 0; pos < size; pos++) {
 		if (key[depth + pos] != prefix[pos]) {

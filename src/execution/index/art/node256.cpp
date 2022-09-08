@@ -65,7 +65,7 @@ void Node256::Erase(BaseNode *&node, int pos, ART &art) {
 	auto n = (Node256 *)(node);
 	n->children[pos].Reset();
 	n->count--;
-	if (node->count <= 36) {
+	if (node->Count() <= 36) {
 		auto new_node = new Node48();
 		new_node->prefix = move(n->prefix);
 		for (idx_t i = 0; i < 256; i++) {

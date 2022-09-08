@@ -57,10 +57,10 @@ void Node4::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *new_child) {
 	Node4 *n = (Node4 *)node;
 
 	// Insert leaf into inner node
-	if (node->count < 4) {
+	if (node->Count() < 4) {
 		// Insert element
 		idx_t pos = 0;
-		while ((pos < node->count) && (n->key[pos] < key_byte)) {
+		while ((pos < node->Count()) && (n->key[pos] < key_byte)) {
 			pos++;
 		}
 		if (n->children[pos] != 0) {
@@ -76,7 +76,7 @@ void Node4::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *new_child) {
 		// Grow to Node16
 		auto new_node = new Node16();
 		new_node->count = 4;
-		new_node->prefix = move(node->prefix);
+		new_node->prefix = move(node->GetMutPrefix());
 		for (idx_t i = 0; i < 4; i++) {
 			new_node->key[i] = n->key[i];
 			new_node->children[i] = n->children[i];
@@ -109,7 +109,7 @@ void Node4::Erase(BaseNode *&node, int pos, ART &art) {
 	if (n->count == 1) {
 		auto child_ref = n->GetChild(art, 0);
 		// concatenate prefixes
-		child_ref->prefix.Concatenate(n->key[0], node->prefix);
+		child_ref->GetMutPrefix().Concatenate(n->key[0], node->GetMutPrefix());
 		n->children[0] = nullptr;
 		delete node;
 		node = child_ref;

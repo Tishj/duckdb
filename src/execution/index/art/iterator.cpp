@@ -58,12 +58,12 @@ bool IteratorCurrentKey::operator==(const Key &k) const {
 	return true;
 }
 
-void Iterator::FindMinimum(Node &node) {
-	Node *next = nullptr;
+void Iterator::FindMinimum(BaseNode &node) {
+	BaseNode *next = nullptr;
 	idx_t pos = 0;
 	// reconstruct the prefix
-	for (idx_t i = 0; i < node.prefix.Size(); i++) {
-		cur_key.Push(node.prefix[i]);
+	for (idx_t i = 0; i < node.GetPrefix().Size(); i++) {
+		cur_key.Push(node.GetPrefix()[i]);
 	}
 	switch (node.type) {
 	case NodeType::NLeaf:
@@ -94,7 +94,7 @@ void Iterator::FindMinimum(Node &node) {
 			pos++;
 		}
 		cur_key.Push(pos);
-		next = (Node *)n256.children[pos].Unswizzle(*art);
+		next = (BaseNode *)n256.children[pos].Unswizzle(*art);
 		break;
 	}
 	default:
@@ -104,7 +104,7 @@ void Iterator::FindMinimum(Node &node) {
 	FindMinimum(*next);
 }
 
-void Iterator::PushKey(Node *cur_node, uint16_t pos) {
+void Iterator::PushKey(BaseNode *cur_node, uint16_t pos) {
 	switch (cur_node->type) {
 	case NodeType::N4:
 		cur_key.Push(((Node4 *)cur_node)->key[pos]);
@@ -155,7 +155,7 @@ bool Iterator::Next() {
 		auto cur_node = nodes.top().node;
 		if (cur_node->type == NodeType::NLeaf) {
 			// Pop Leaf (We must pop the prefix size + the key to the node (unless we are popping the root)
-			idx_t elements_to_pop = cur_node->prefix.Size() + (nodes.size() != 1);
+			idx_t elements_to_pop = cur_node->GetPrefix().Size() + (nodes.size() != 1);
 			cur_key.Pop(elements_to_pop);
 			nodes.pop();
 		}
@@ -165,7 +165,7 @@ bool Iterator::Next() {
 	while (!nodes.empty()) {
 		// cur_node
 		auto &top = nodes.top();
-		Node *node = top.node;
+		BaseNode *node = top.node;
 		if (node->type == NodeType::NLeaf) {
 			// found a leaf: move to next node
 			last_leaf = (Leaf *)node;
@@ -178,15 +178,15 @@ bool Iterator::Next() {
 			PushKey(node, top.pos);
 			auto next_node = node->GetChild(*art, top.pos);
 			// add prefix of new node
-			for (idx_t i = 0; i < next_node->prefix.Size(); i++) {
-				cur_key.Push(next_node->prefix[i]);
+			for (idx_t i = 0; i < next_node->GetPrefix().Size(); i++) {
+				cur_key.Push(next_node->GetPrefix()[i]);
 			}
 			// next node found: push it
 			nodes.push(IteratorEntry(next_node, DConstants::INVALID_INDEX));
 		} else {
 			// no node found: move up the tree and Pop prefix and key of current node
 			auto cur_node = nodes.top().node;
-			idx_t elements_to_pop = cur_node->prefix.Size() + (nodes.size() != 1);
+			idx_t elements_to_pop = cur_node->GetPrefix().Size() + (nodes.size() != 1);
 			cur_key.Pop(elements_to_pop);
 			nodes.pop();
 		}
@@ -194,7 +194,7 @@ bool Iterator::Next() {
 	return false;
 }
 
-bool Iterator::LowerBound(Node *node, Key &key, bool inclusive) {
+bool Iterator::LowerBound(BaseNode *node, Key &key, bool inclusive) {
 	bool equal = false;
 	if (!node) {
 		return false;
@@ -204,8 +204,8 @@ bool Iterator::LowerBound(Node *node, Key &key, bool inclusive) {
 		nodes.push(IteratorEntry(node, 0));
 		auto &top = nodes.top();
 		// reconstruct the prefix
-		for (idx_t i = 0; i < top.node->prefix.Size(); i++) {
-			cur_key.Push(top.node->prefix[i]);
+		for (idx_t i = 0; i < top.node->GetPrefix().Size(); i++) {
+			cur_key.Push(top.node->GetPrefix()[i]);
 		}
 		if (!equal) {
 			while (node->type != NodeType::NLeaf) {
@@ -214,8 +214,8 @@ bool Iterator::LowerBound(Node *node, Key &key, bool inclusive) {
 				nodes.push(IteratorEntry(node, min_pos));
 				node = node->GetChild(*art, min_pos);
 				// reconstruct the prefix
-				for (idx_t i = 0; i < node->prefix.Size(); i++) {
-					cur_key.Push(node->prefix[i]);
+				for (idx_t i = 0; i < node->GetPrefix().Size(); i++) {
+					cur_key.Push(node->GetPrefix()[i]);
 				}
 				auto &c_top = nodes.top();
 				c_top.node = node;
@@ -256,9 +256,9 @@ bool Iterator::LowerBound(Node *node, Key &key, bool inclusive) {
 			}
 			return false;
 		}
-		uint32_t mismatch_pos = node->prefix.KeyMismatchPosition(key, depth);
-		if (mismatch_pos != node->prefix.Size()) {
-			if (node->prefix[mismatch_pos] < key[depth + mismatch_pos]) {
+		uint32_t mismatch_pos = node->GetPrefix().KeyMismatchPosition(key, depth);
+		if (mismatch_pos != node->GetPrefix().Size()) {
+			if (node->GetPrefix()[mismatch_pos] < key[depth + mismatch_pos]) {
 				// Less
 				nodes.pop();
 				return Next();
@@ -269,7 +269,7 @@ bool Iterator::LowerBound(Node *node, Key &key, bool inclusive) {
 			}
 		}
 		// prefix matches, search inside the child for the key
-		depth += node->prefix.Size();
+		depth += node->GetPrefix().Size();
 
 		top.pos = node->GetChildGreaterEqual(key[depth], equal);
 		if (top.pos == DConstants::INVALID_INDEX) {

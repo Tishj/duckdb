@@ -23,6 +23,13 @@ public:
 };
 
 struct BlockPointer {
+private:
+	static constexpr uint32_t ROWID_OFFSET_MASK = (1 << 31);
+
+public:
+	//! Rowid in disguise
+	BlockPointer(row_t rowid) : block_id(rowid), offset(0 | ROWID_OFFSET_MASK) {};
+	//! Regular block id
 	BlockPointer(block_id_t block_id_p, uint32_t offset_p) : block_id(block_id_p), offset(offset_p) {};
 	BlockPointer() {};
 	block_id_t block_id;

@@ -68,6 +68,10 @@ BlockPointer Node::SerializeInternal(ART &art, duckdb::MetaBlockWriter &writer, 
 }
 
 BlockPointer Node::Serialize(ART &art, duckdb::MetaBlockWriter &writer) {
+	if (IsLeaf()) {
+		auto leaf = (BaseLeaf *)this;
+		return leaf->Serialize(writer);
+	}
 	switch (type) {
 	case NodeType::N4:
 	case NodeType::N16:
@@ -75,10 +79,6 @@ BlockPointer Node::Serialize(ART &art, duckdb::MetaBlockWriter &writer) {
 	case NodeType::N256: {
 		InternalType internal_type(this);
 		return SerializeInternal(art, writer, internal_type);
-	}
-	case NodeType::NLeaf: {
-		auto leaf = (Leaf *)this;
-		return leaf->Serialize(writer);
 	}
 	default:
 		throw InternalException("Invalid ART Node");
@@ -95,6 +95,7 @@ void Node::DeserializeInternal(duckdb::MetaBlockReader &reader) {
 	}
 	// Get Child offsets
 	for (idx_t i = 0; i < internal_type.children_size; i++) {
+		//! TODO: add another level of indirection here, so we can deserialize to something other than a BlockPointer
 		internal_type.children[i] = SwizzleablePointer(reader);
 	}
 }
@@ -123,9 +124,6 @@ BaseNode *Node::Deserialize(ART &art, idx_t block_id, idx_t offset) {
 	case NodeType::N256: {
 		deserialized_node = (BaseNode *)new Node256();
 		break;
-	}
-	case NodeType::NRowIdLeaf: {
-		deserialized_node = (BaseNode *)new RowidLeaf();
 	}
 	default:
 		throw InternalException("Type not implemented for NodeType");

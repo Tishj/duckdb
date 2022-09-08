@@ -16,10 +16,10 @@ namespace duckdb {
 struct IteratorEntry {
 	IteratorEntry() {
 	}
-	IteratorEntry(Node *node, idx_t pos) : node(node), pos(pos) {
+	IteratorEntry(BaseNode *node, idx_t pos) : node(node), pos(pos) {
 	}
 
-	Node *node = nullptr;
+	BaseNode *node = nullptr;
 	idx_t pos = 0;
 };
 
@@ -53,9 +53,9 @@ public:
 	//! Scan the tree
 	bool Scan(Key *bound, idx_t max_count, vector<row_t> &result_ids, bool is_inclusive);
 	//! Finds minimum value of the tree
-	void FindMinimum(Node &node);
+	void FindMinimum(BaseNode &node);
 	//! Goes to lower bound
-	bool LowerBound(Node *node, Key &key, bool inclusive);
+	bool LowerBound(BaseNode *node, Key &key, bool inclusive);
 
 private:
 	//! Stack of iterator entries
@@ -65,6 +65,6 @@ private:
 	//! Go to the next node
 	bool Next();
 	//! Push part of the key to cur_key
-	void PushKey(Node *node, uint16_t pos);
+	void PushKey(BaseNode *node, uint16_t pos);
 };
 } // namespace duckdb

@@ -25,6 +25,10 @@ public:
 		D_ASSERT(0);
 		return DConstants::INVALID_INDEX;
 	}
+
+	virtual BlockPointer Serialize(duckdb::MetaBlockWriter &writer) {
+		throw InternalException("Serialize not implemented for Leaf Node");
+	}
 };
 
 } // namespace duckdb

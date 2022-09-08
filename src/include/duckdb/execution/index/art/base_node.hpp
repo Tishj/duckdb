@@ -20,15 +20,48 @@ enum class NodeType : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3, NLeaf = 4, N
 
 class ART;
 class MetaBlockReader;
+class Prefix;
 
 class BaseNode {
 public:
 	virtual ~BaseNode() {
 	}
+	//! TODO: move this to Node? - no need to have it in RowIdLeaf
 	//! node type
 	NodeType type;
 
 public:
+	// -----------------------------
+	// Accessors
+	// -----------------------------
+
+	//! Get the total amount of child entries in the node
+	virtual idx_t Count() const {
+		D_ASSERT(0);
+		return DConstants::INVALID_INDEX;
+	}
+	//! Set the total amount of child entries in the node
+	virtual void SetCount(idx_t new_count) {
+		(void)new_count;
+		D_ASSERT(0);
+	}
+	//! Get a (constant) reference to the prefix of the node
+	virtual const Prefix &GetPrefix() const {
+		throw InternalException("BaseNode does not have a prefix");
+	}
+	//! Get a mutable reference to the prefix of the node
+	virtual Prefix &GetMutPrefix() {
+		throw InternalException("BaseNode does not have a prefix");
+	}
+	//! Set the prefix of the node
+	virtual void SetPrefix(Prefix &&prefix) {
+		throw InternalException("BaseNode does not have a prefix");
+	}
+
+	// -----------------------------
+	// Methods
+	// -----------------------------
+
 	//! Whether this node is a leaf node
 	virtual bool IsLeaf() const {
 		return false;
@@ -69,6 +102,10 @@ public:
 	virtual void ReplaceChildPointer(idx_t pos, BaseNode *node) {
 		D_ASSERT(0);
 	}
+
+	// -----------------------------
+	// Storage
+	// -----------------------------
 
 	//! Deserialize a Node from storage
 	virtual void DeserializeInternal(MetaBlockReader &reader) {

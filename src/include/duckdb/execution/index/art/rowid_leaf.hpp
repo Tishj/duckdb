@@ -14,7 +14,7 @@ namespace duckdb {
 
 class RowidLeaf : public BaseNode, public BaseLeaf {
 public:
-	RowidLeaf() : BaseNode(NodeType::NRowIdLeaf), BaseLeaf() {
+	RowidLeaf(row_t rowid) : BaseNode(NodeType::NRowIdLeaf), BaseLeaf() {
 	}
 
 public:
@@ -28,8 +28,10 @@ public:
 		//! FIXME: just add an assertion that index is 0?
 		return DConstants::INVALID_INDEX;
 	}
-
-	void DeserializeInternal(MetaBlockReader &reader) override;
+	//! Serialize the rowid by returning a blockpointer with a special flag set
+	BlockPointer Serialize(duckdb::MetaBlockWriter &writer) override {
+		return BlockPointer(rowid);
+	}
 
 private:
 	row_t rowid;

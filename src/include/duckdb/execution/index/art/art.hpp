@@ -105,6 +105,7 @@ private:
 	void Erase(BaseNode *&node, Key &key, unsigned depth, row_t row_id);
 
 	//! Find the node with a matching key, optimistic versiBaseNode *LooBaseNode *node, Key &key, unsigned depth);
+	BaseNode *Lookup(BaseNode *node, Key &key, unsigned depth);
 
 	bool SearchGreater(ARTIndexScanState *state, bool inclusive, idx_t max_count, vector<row_t> &result_ids);
 	bool SearchLess(ARTIndexScanState *state, bool inclusive, idx_t max_count, vector<row_t> &result_ids);

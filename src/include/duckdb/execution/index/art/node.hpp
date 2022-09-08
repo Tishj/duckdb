@@ -34,8 +34,6 @@ struct InternalType {
 class Node : public BaseNode {
 public:
 	static const uint8_t EMPTY_MARKER = 48;
-
-public:
 	explicit Node(NodeType type);
 
 	virtual ~Node() {
@@ -45,15 +43,49 @@ public:
 	//! compressed path (prefix)
 	Prefix prefix;
 
-	//! Serialize this Node
-	BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer);
+public:
+	// -----------------------------
+	// Accessors
+	// -----------------------------
 
-	static BaseNode *Deserialize(ART &art, idx_t block_id, idx_t offset);
+	//! Get the total amount of child entries in the node
+	idx_t Count() const override {
+		return count;
+	}
+	//! Set the total amount of child entries in the node
+	void SetCount(idx_t new_count) override {
+		count = new_count;
+	}
+	//! Get a (constant) reference to the prefix of the node
+	const Prefix &GetPrefix() const override {
+		return prefix;
+	}
+	//! Get a mutable reference to the prefix of the node
+	Prefix &GetMutPrefix() override {
+		return prefix;
+	}
+	//! Set the prefix of the node
+	void SetPrefix(Prefix &&prefix) override {
+		this->prefix = move(prefix);
+	}
+
+	// -----------------------------
+	// Methods
+	// -----------------------------
 
 	//! Insert leaf into inner node
 	static void InsertLeaf(BaseNode *&node, uint8_t key, BaseNode *new_node);
 	//! Erase entry from node
 	static void Erase(BaseNode *&node, idx_t pos, ART &art);
+
+	// -----------------------------
+	// Storage
+	// -----------------------------
+
+	//! Serialize this Node
+	BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer);
+
+	static BaseNode *Deserialize(ART &art, idx_t block_id, idx_t offset);
 
 private:
 	//! Serialize Internal Nodes

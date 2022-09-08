@@ -59,7 +59,7 @@ void Node48::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child) {
 	auto n = (Node48 *)node;
 
 	// Insert leaf into inner node
-	if (node->count < 48) {
+	if (node->Count() < 48) {
 		// Insert element
 		idx_t pos = n->count;
 		if (n->children[pos].Pointer()) {
@@ -98,7 +98,7 @@ void Node48::Erase(BaseNode *&node, int pos, ART &art) {
 	n->children[n->child_index[pos]].Reset();
 	n->child_index[pos] = Node::EMPTY_MARKER;
 	n->count--;
-	if (node->count <= 12) {
+	if (node->Count() <= 12) {
 		auto new_node = new Node16();
 		new_node->prefix = move(n->prefix);
 		for (idx_t i = 0; i < 256; i++) {

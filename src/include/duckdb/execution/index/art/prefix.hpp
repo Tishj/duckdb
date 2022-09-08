@@ -23,6 +23,8 @@ public:
 
 	// Subscript operator
 	uint8_t &operator[](idx_t idx);
+	//! Const subscript operator
+	const uint8_t &operator[](idx_t idx) const;
 
 	// Assign operator
 	Prefix &operator=(const Prefix &src);
@@ -42,7 +44,7 @@ public:
 	void Deserialize(duckdb::MetaBlockReader &reader);
 
 	// Compare the key with the prefix of the node, return the position where it mismatches
-	uint32_t KeyMismatchPosition(Key &key, uint64_t depth);
+	uint32_t KeyMismatchPosition(Key &key, uint64_t depth) const;
 
 private:
 	unique_ptr<uint8_t[]> prefix;

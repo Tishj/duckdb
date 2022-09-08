@@ -311,8 +311,8 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 		}
 
 		BaseNode *new_node = new Node4();
-		new_node->prefix = Prefix(key, depth, new_prefix_length);
-		auto key_byte = node->prefix.Reduce(new_prefix_length);
+		new_node->SetPrefix(Prefix(key, depth, new_prefix_length));
+		auto key_byte = node->GetMutPrefix().Reduce(new_prefix_length);
 		Node4::Insert(new_node, key_byte, node);
 		BaseNode *leaf_node = new Leaf(*value, depth + new_prefix_length + 1, row_id);
 		Node4::Insert(new_node, key[depth + new_prefix_length], leaf_node);
@@ -321,14 +321,14 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 	}
 
 	// Handle prefix of inner node
-	if (node->prefix.Size()) {
-		uint32_t mismatch_pos = node->prefix.KeyMismatchPosition(key, depth);
-		if (mismatch_pos != node->prefix.Size()) {
+	if (node->GetPrefix().Size()) {
+		uint32_t mismatch_pos = node->GetPrefix().KeyMismatchPosition(key, depth);
+		if (mismatch_pos != node->GetPrefix().Size()) {
 			// Prefix differs, create new node
 			BaseNode *new_node = new Node4();
-			new_node->prefix = Prefix(key, depth, mismatch_pos);
+			new_node->SetPrefix(Prefix(key, depth, mismatch_pos));
 			// Break up prefix
-			auto key_byte = node->prefix.Reduce(mismatch_pos);
+			auto key_byte = node->GetMutPrefix().Reduce(mismatch_pos);
 			Node4::Insert(new_node, key_byte, node);
 
 			BaseNode *leaf_node = new Leaf(*value, depth + mismatch_pos + 1, row_id);
@@ -336,7 +336,7 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 			node = new_node;
 			return true;
 		}
-		depth += node->prefix.Size();
+		depth += node->GetPrefix().Size();
 	}
 
 	// Recurse
@@ -406,11 +406,11 @@ void ART::Erase(BaseNode *&node, Key &key, unsigned depth, row_t row_id) {
 	}
 
 	// Handle prefix
-	if (node->prefix.Size()) {
-		if (node->prefix.KeyMismatchPosition(key, depth) != node->prefix.Size()) {
+	if (node->GetPrefix().Size()) {
+		if (node->GetPrefix().KeyMismatchPosition(key, depth) != node->GetPrefix().Size()) {
 			return;
 		}
-		depth += node->prefix.Size();
+		depth += node->GetPrefix().Size();
 	}
 	idx_t pos = node->GetChildPos(key[depth]);
 	if (pos != DConstants::INVALID_INDEX) {
@@ -509,13 +509,13 @@ BaseNode *ART::Lookup(BaseNode *node, Key &key, unsigned depth) {
 			}
 			return node;
 		}
-		if (node->prefix.Size()) {
-			for (idx_t pos = 0; pos < node->prefix.Size(); pos++) {
-				if (key[depth + pos] != node->prefix[pos]) {
+		if (node->GetPrefix().Size()) {
+			for (idx_t pos = 0; pos < node->GetPrefix().Size(); pos++) {
+				if (key[depth + pos] != node->GetPrefix()[pos]) {
 					return nullptr;
 				}
 			}
-			depth += node->prefix.Size();
+			depth += node->GetPrefix().Size();
 		}
 		idx_t pos = node->GetChildPos(key[depth]);
 		if (pos == DConstants::INVALID_INDEX) {
@@ -720,7 +720,9 @@ void ART::VerifyExistence(DataChunk &chunk, VerifyExistenceType verify_type, str
 BlockPointer ART::Serialize(duckdb::MetaBlockWriter &writer) {
 	lock_guard<mutex> l(lock);
 	if (tree) {
-		return tree->Serialize(*this, writer);
+		D_ASSERT(!tree->IsLeaf());
+		auto node = (Node *)tree;
+		return node->Serialize(*this, writer);
 	}
 	return {(block_id_t)DConstants::INVALID_INDEX, (uint32_t)DConstants::INVALID_INDEX};
 }
