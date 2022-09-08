@@ -22,11 +22,25 @@ public:
 	block_id_t id;
 };
 
+class MetaBlockReader;
+
 struct BlockPointer {
 private:
 	static constexpr uint32_t ROWID_OFFSET_MASK = (1 << 31);
 
 public:
+	//! The BlockPointer value indicating invalid
+	static const BlockPointer &Invalid() {
+		static const BlockPointer invalid = {(block_id_t)DConstants::INVALID_INDEX, (uint32_t)0};
+		return invalid;
+	}
+	static BlockPointer Deserialize(MetaBlockReader &reader);
+	bool operator==(const BlockPointer &other) const {
+		return other.block_id == block_id && other.offset == offset;
+	}
+	bool IsInvalid() const {
+		return *this == Invalid();
+	}
 	//! Rowid in disguise
 	BlockPointer(row_t rowid) : block_id(rowid), offset(0 | ROWID_OFFSET_MASK) {};
 	//! Regular block id

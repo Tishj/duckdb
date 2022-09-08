@@ -7,26 +7,23 @@ SwizzleablePointer::~SwizzleablePointer() {
 }
 
 SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
-	block_id_t raw_block_id = reader.Read<block_id_t>();
-	uint32_t raw_offset = reader.Read<uint32_t>();
-	if ((raw_offset >> 31) & 1) {
+	auto block_pointer = BlockPointer::Deserialize(reader);
+
+	if ((block_pointer.offset >> 31) & 1) {
 		// Actually a rowid in disguise
-		auto rowid_leaf = new RowidLeaf((row_t)raw_block_id);
+		auto rowid_leaf = new RowidLeaf((row_t)block_pointer.block_id);
 		pointer = (uint64_t)rowid_leaf;
 		SetRowid();
 		return;
 	}
-
-	idx_t block_id = raw_block_id;
-	idx_t offset = raw_offset;
-	if (block_id == DConstants::INVALID_INDEX || offset == DConstants::INVALID_INDEX) {
+	if (block_pointer.IsInvalid()) {
 		pointer = 0;
 		return;
 	}
 	idx_t pointer_size = sizeof(pointer) * 8;
-	pointer = block_id;
+	pointer = block_pointer.block_id;
 	pointer = pointer << (pointer_size / 2);
-	pointer += offset;
+	pointer += block_pointer.offset;
 	SetSwizzled();
 }
 
@@ -73,7 +70,7 @@ BlockPointer SwizzleablePointer::Serialize(ART &art, duckdb::MetaBlockWriter &wr
 		Unswizzle(art);
 		return ((Node *)Pointer())->Serialize(art, writer);
 	} else {
-		return {(block_id_t)DConstants::INVALID_INDEX, (uint32_t)DConstants::INVALID_INDEX};
+		return BlockPointer::Invalid();
 	}
 }
 } // namespace duckdb

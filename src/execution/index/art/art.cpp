@@ -724,7 +724,7 @@ BlockPointer ART::Serialize(duckdb::MetaBlockWriter &writer) {
 		auto node = (Node *)tree;
 		return node->Serialize(*this, writer);
 	}
-	return {(block_id_t)DConstants::INVALID_INDEX, (uint32_t)DConstants::INVALID_INDEX};
+	return BlockPointer::Invalid();
 }
 
 } // namespace duckdb
