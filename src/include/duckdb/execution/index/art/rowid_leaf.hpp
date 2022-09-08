@@ -19,6 +19,10 @@ public:
 	}
 
 public:
+	idx_t Count() const override {
+		return 1;
+	}
+
 	const Prefix &GetPrefix() const override {
 		return prefix;
 	}

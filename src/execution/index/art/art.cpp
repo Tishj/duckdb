@@ -434,6 +434,11 @@ void ART::Erase(BaseNode *&node, Key &key, unsigned depth, row_t row_id) {
 				// Leaf is empty, delete leaf, decrement node counter and maybe shrink node
 				Node::Erase(node, pos, *this);
 			}
+		} else if (child->type == NodeType::NRowIdLeaf) {
+			// Leaf found, remove entry
+			if (child->GetRowId(0) == row_id) {
+				Node::Erase(node, pos, *this);
+			}
 		} else {
 			// Recurse
 			Erase(child, key, depth + 1, row_id);
@@ -507,7 +512,7 @@ void ART::SearchEqualJoinNoFetch(Value &equal_value, idx_t &result_size) {
 
 BaseNode *ART::Lookup(BaseNode *node, Key &key, unsigned depth) {
 	while (node) {
-		if (node->type == NodeType::NLeaf || node->type == NodeType::NRowIdLeaf) {
+		if (node->IsLeaf()) {
 			auto &leaf_prefix = node->GetPrefix();
 			//! Check leaf
 			for (idx_t i = 0; i < node->GetPrefix().Size(); i++) {

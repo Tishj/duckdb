@@ -66,8 +66,9 @@ void Iterator::FindMinimum(BaseNode &node) {
 		cur_key.Push(node.GetPrefix()[i]);
 	}
 	switch (node.type) {
+	case NodeType::NRowIdLeaf:
 	case NodeType::NLeaf:
-		last_leaf = (Leaf *)&node;
+		last_leaf = &node;
 		return;
 	case NodeType::N4: {
 		next = ((Node4 &)node).children[0].Unswizzle(*art);
@@ -137,11 +138,11 @@ bool Iterator::Scan(Key *bound, idx_t max_count, vector<row_t> &result_ids, bool
 				}
 			}
 		}
-		if (result_ids.size() + last_leaf->count > max_count) {
+		if (result_ids.size() + last_leaf->Count() > max_count) {
 			// adding these elements would exceed the max count
 			return false;
 		}
-		for (idx_t i = 0; i < last_leaf->count; i++) {
+		for (idx_t i = 0; i < last_leaf->Count(); i++) {
 			row_t row_id = last_leaf->GetRowId(i);
 			result_ids.push_back(row_id);
 		}
@@ -153,7 +154,7 @@ bool Iterator::Scan(Key *bound, idx_t max_count, vector<row_t> &result_ids, bool
 bool Iterator::Next() {
 	if (!nodes.empty()) {
 		auto cur_node = nodes.top().node;
-		if (cur_node->type == NodeType::NLeaf) {
+		if (cur_node->IsLeaf()) {
 			// Pop Leaf (We must pop the prefix size + the key to the node (unless we are popping the root)
 			idx_t elements_to_pop = cur_node->GetPrefix().Size() + (nodes.size() != 1);
 			cur_key.Pop(elements_to_pop);
@@ -166,9 +167,9 @@ bool Iterator::Next() {
 		// cur_node
 		auto &top = nodes.top();
 		BaseNode *node = top.node;
-		if (node->type == NodeType::NLeaf) {
+		if (node->IsLeaf()) {
 			// found a leaf: move to next node
-			last_leaf = (Leaf *)node;
+			last_leaf = node;
 			return true;
 		}
 		// Find next node
@@ -221,10 +222,9 @@ bool Iterator::LowerBound(BaseNode *node, Key &key, bool inclusive) {
 				c_top.node = node;
 			}
 		}
-		if (node->type == NodeType::NLeaf) {
+		if (node->IsLeaf()) {
 			// found a leaf node: check if it is bigger or equal than the current key
-			auto leaf = static_cast<Leaf *>(node);
-			last_leaf = leaf;
+			last_leaf = node;
 			// if the search is not inclusive the leaf node could still be equal to the current value
 			// check if leaf is equal to the current key
 			if (cur_key == key) {

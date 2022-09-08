@@ -61,7 +61,7 @@ private:
 	//! Stack of iterator entries
 	stack<IteratorEntry> nodes;
 	//! Last visited leaf
-	Leaf *last_leaf = nullptr;
+	BaseNode *last_leaf = nullptr;
 	//! Go to the next node
 	bool Next();
 	//! Push part of the key to cur_key
