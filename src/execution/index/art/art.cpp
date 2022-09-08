@@ -216,6 +216,7 @@ bool ART::Insert(IndexLock &lock, DataChunk &input, Vector &row_ids) {
 	row_ids.Flatten(input.size());
 	auto row_identifiers = FlatVector::GetData<row_t>(row_ids);
 	idx_t failed_index = DConstants::INVALID_INDEX;
+
 	for (idx_t i = 0; i < input.size(); i++) {
 		if (!keys[i]) {
 			continue;
@@ -293,7 +294,6 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 	}
 
 	if (node->type == NodeType::NLeaf) {
-		// Replace leaf with Node4 and store both leaves in it
 		auto leaf = (Leaf *)node;
 
 		auto &leaf_prefix = leaf->prefix;
@@ -310,6 +310,7 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 			}
 		}
 
+		// Replace leaf with Node4 and store both leaves in it
 		BaseNode *new_node = new Node4();
 		new_node->GetMutPrefix() = Prefix(key, depth, new_prefix_length);
 		auto key_byte = node->GetMutPrefix().Reduce(new_prefix_length);
@@ -348,7 +349,8 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 		node->ReplaceChildPointer(pos, child);
 		return insertion_result;
 	}
-	BaseNode *new_node = new Leaf(*value, depth + 1, row_id);
+	//! No child with that key exists yet, create it
+	BaseNode *new_node = Node::CreateLeaf(*value, depth + 1, row_id, IsPrimary());
 	Node::InsertLeaf(node, key[depth], new_node);
 	return true;
 }
@@ -402,6 +404,13 @@ void ART::Erase(BaseNode *&node, Key &key, unsigned depth, row_t row_id) {
 			node = nullptr;
 		}
 
+		return;
+	}
+	if (node->type == NodeType::NRowIdLeaf) {
+		if (node->GetRowId(0) == row_id) {
+			delete node;
+			node = nullptr;
+		}
 		return;
 	}
 
@@ -498,11 +507,10 @@ void ART::SearchEqualJoinNoFetch(Value &equal_value, idx_t &result_size) {
 
 BaseNode *ART::Lookup(BaseNode *node, Key &key, unsigned depth) {
 	while (node) {
-		if (node->type == NodeType::NLeaf) {
-			auto leaf = (Leaf *)node;
-			auto &leaf_prefix = leaf->prefix;
+		if (node->type == NodeType::NLeaf || node->type == NodeType::NRowIdLeaf) {
+			auto &leaf_prefix = node->GetPrefix();
 			//! Check leaf
-			for (idx_t i = 0; i < leaf->prefix.Size(); i++) {
+			for (idx_t i = 0; i < node->GetPrefix().Size(); i++) {
 				if (leaf_prefix[i] != key[i + depth]) {
 					return nullptr;
 				}

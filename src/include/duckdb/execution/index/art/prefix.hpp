@@ -8,8 +8,9 @@
 #pragma once
 
 #include "duckdb/execution/index/art/art_key.hpp"
-#include "duckdb/storage/meta_block_writer.hpp"
-#include "duckdb/storage/meta_block_reader.hpp"
+
+class MetaBlockWriter;
+class MetaBlockReader;
 
 namespace duckdb {
 class Prefix {

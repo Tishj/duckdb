@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/execution/index/art/base_node.hpp"
+#include "duckdb/execution/index/art/prefix.hpp"
 
 namespace duckdb {
 
@@ -18,6 +19,10 @@ public:
 	}
 
 public:
+	const Prefix &GetPrefix() const override {
+		return prefix;
+	}
+
 	bool IsLeaf() const override {
 		return true;
 	}
@@ -25,7 +30,6 @@ public:
 		if (!index) {
 			return rowid;
 		}
-		//! FIXME: just add an assertion that index is 0?
 		return DConstants::INVALID_INDEX;
 	}
 	//! Serialize the rowid by returning a blockpointer with a special flag set
@@ -34,6 +38,7 @@ public:
 	}
 
 private:
+	Prefix prefix;
 	row_t rowid;
 };
 

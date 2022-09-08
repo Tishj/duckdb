@@ -1,4 +1,6 @@
 #include "duckdb/execution/index/art/prefix.hpp"
+#include "duckdb/storage/meta_block_writer.hpp"
+#include "duckdb/storage/meta_block_reader.hpp"
 
 namespace duckdb {
 

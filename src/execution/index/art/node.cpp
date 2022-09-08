@@ -131,6 +131,18 @@ BaseNode *Node::Deserialize(ART &art, idx_t block_id, idx_t offset) {
 	return deserialized_node;
 }
 
+static bool RequiresNoPrefix(idx_t key_length, unsigned depth) {
+	return key_length == depth;
+}
+
+BaseNode *Node::CreateLeaf(Key &value, unsigned depth, row_t row_id, bool is_primary) {
+	if (is_primary && RequiresNoPrefix(value.len, depth)) {
+		// We can use a special RowIdLeaf because the index is on a PRIMARY key and this leaf requires no prefix
+		return new RowidLeaf(row_id);
+	}
+	return new Leaf(value, depth, row_id);
+}
+
 void Node::InsertLeaf(BaseNode *&node, uint8_t key, BaseNode *new_node) {
 	switch (node->type) {
 	case NodeType::N4:

@@ -73,6 +73,8 @@ public:
 	// Methods
 	// -----------------------------
 
+	//! Create leaf node
+	static BaseNode *CreateLeaf(Key &value, unsigned depth, row_t row_id, bool is_primary);
 	//! Insert leaf into inner node
 	static void InsertLeaf(BaseNode *&node, uint8_t key, BaseNode *new_node);
 	//! Erase entry from node
