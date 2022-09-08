@@ -70,6 +70,7 @@ BlockPointer Node::SerializeInternal(ART &art, duckdb::MetaBlockWriter &writer, 
 BlockPointer Node::Serialize(ART &art, duckdb::MetaBlockWriter &writer) {
 	if (IsLeaf()) {
 		auto leaf = (BaseLeaf *)this;
+		D_ASSERT(type == NodeType::NLeaf);
 		return leaf->Serialize(writer);
 	}
 	switch (type) {

@@ -13,6 +13,7 @@ SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
 		// Actually a rowid in disguise
 		auto rowid_leaf = new RowidLeaf((row_t)raw_block_id);
 		pointer = (uint64_t)rowid_leaf;
+		SetRowid();
 		return;
 	}
 
@@ -61,6 +62,7 @@ Node *SwizzleablePointer::Unswizzle(ART &art) {
 		// This means our pointer is not yet in memory, gotta deserialize this
 		// first we unset the bae
 		auto block_info = GetSwizzledBlockInfo();
+		D_ASSERT(!IsRowid()); // RowIdLeaf can and should not be deserialized
 		*this = Node::Deserialize(art, block_info.block_id, block_info.offset);
 	}
 	return (Node *)Pointer();

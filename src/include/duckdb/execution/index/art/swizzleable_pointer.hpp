@@ -11,6 +11,8 @@
 
 namespace duckdb {
 
+//! Swizzleable pointers are owning pointers
+
 class SwizzleablePointer : public FlaggedPointer {
 public:
 	~SwizzleablePointer() override;
