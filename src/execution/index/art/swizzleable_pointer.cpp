@@ -10,10 +10,10 @@ SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
 	block_id_t raw_block_id = reader.Read<block_id_t>();
 	uint32_t raw_offset = reader.Read<uint32_t>();
 	if ((raw_offset >> 31) & 1) {
-		//// Actually a rowid in disguise
-		// auto rowid_leaf = new RowidLeaf((row_t)raw_block_id);
-		// pointer = (uint64_t)rowid_leaf;
-		// SetRowid();
+		// Actually a rowid in disguise
+		auto rowid_leaf = new RowidLeaf((row_t)raw_block_id);
+		pointer = (uint64_t)rowid_leaf;
+		SetRowid();
 		return;
 	}
 
