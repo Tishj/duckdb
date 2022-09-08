@@ -4,24 +4,8 @@
 #include "duckdb/execution/index/art/swizzleable_pointer.hpp"
 namespace duckdb {
 
-Node::Node(NodeType type) : count(0), type(type) {
+Node::Node(NodeType type) : BaseNode(type), count(0) {
 }
-
-// LCOV_EXCL_START
-Node *Node::GetChild(ART &art, idx_t pos) {
-	D_ASSERT(0);
-	return nullptr;
-}
-
-void Node::ReplaceChildPointer(idx_t pos, Node *node) {
-	D_ASSERT(0);
-}
-
-idx_t Node::GetMin() {
-	D_ASSERT(0);
-	return 0;
-}
-// LCOV_EXCL_STOP
 
 void InternalType::Set(uint8_t *key_p, uint16_t key_size_p, SwizzleablePointer *children_p, uint16_t children_size_p) {
 	key = key_p;
@@ -30,7 +14,7 @@ void InternalType::Set(uint8_t *key_p, uint16_t key_size_p, SwizzleablePointer *
 	children_size = children_size_p;
 }
 
-InternalType::InternalType(Node *n) {
+InternalType::InternalType(BaseNode *n) {
 	switch (n->type) {
 	case NodeType::N4: {
 		auto n4 = (Node4 *)n;
@@ -115,30 +99,33 @@ void Node::DeserializeInternal(duckdb::MetaBlockReader &reader) {
 	}
 }
 
-Node *Node::Deserialize(ART &art, idx_t block_id, idx_t offset) {
+BaseNode *Node::Deserialize(ART &art, idx_t block_id, idx_t offset) {
 	MetaBlockReader reader(art.db, block_id);
 	reader.offset = offset;
 	auto n = reader.Read<uint8_t>();
 	NodeType node_type(static_cast<NodeType>(n));
-	Node *deserialized_node;
+	BaseNode *deserialized_node;
 	switch (node_type) {
 	case NodeType::NLeaf:
 		return Leaf::Deserialize(reader);
 	case NodeType::N4: {
-		deserialized_node = (Node *)new Node4();
+		deserialized_node = (BaseNode *)new Node4();
 		break;
 	}
 	case NodeType::N16: {
-		deserialized_node = (Node *)new Node16();
+		deserialized_node = (BaseNode *)new Node16();
 		break;
 	}
 	case NodeType::N48: {
-		deserialized_node = (Node *)new Node48();
+		deserialized_node = (BaseNode *)new Node48();
 		break;
 	}
 	case NodeType::N256: {
-		deserialized_node = (Node *)new Node256();
+		deserialized_node = (BaseNode *)new Node256();
 		break;
+	}
+	case NodeType::NRowIdLeaf: {
+		deserialized_node = (BaseNode *)new RowidLeaf();
 	}
 	default:
 		throw InternalException("Type not implemented for NodeType");
@@ -147,7 +134,7 @@ Node *Node::Deserialize(ART &art, idx_t block_id, idx_t offset) {
 	return deserialized_node;
 }
 
-void Node::InsertLeaf(Node *&node, uint8_t key, Node *new_node) {
+void Node::InsertLeaf(BaseNode *&node, uint8_t key, BaseNode *new_node) {
 	switch (node->type) {
 	case NodeType::N4:
 		Node4::Insert(node, key, new_node);
@@ -166,7 +153,7 @@ void Node::InsertLeaf(Node *&node, uint8_t key, Node *new_node) {
 	}
 }
 
-void Node::Erase(Node *&node, idx_t pos, ART &art) {
+void Node::Erase(BaseNode *&node, idx_t pos, ART &art) {
 	switch (node->type) {
 	case NodeType::N4: {
 		Node4::Erase(node, pos, art);

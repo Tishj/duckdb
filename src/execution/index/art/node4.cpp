@@ -9,7 +9,7 @@ Node4::Node4() : Node(NodeType::N4) {
 	memset(key, 0, sizeof(key));
 }
 
-void Node4::ReplaceChildPointer(idx_t pos, Node *node) {
+void Node4::ReplaceChildPointer(idx_t pos, BaseNode *node) {
 	children[pos] = node;
 }
 
@@ -48,12 +48,12 @@ idx_t Node4::GetNextPos(idx_t pos) {
 	return pos < count ? pos : DConstants::INVALID_INDEX;
 }
 
-Node *Node4::GetChild(ART &art, idx_t pos) {
+BaseNode *Node4::GetChild(ART &art, idx_t pos) {
 	D_ASSERT(pos < count);
 	return children[pos].Unswizzle(art);
 }
 
-void Node4::Insert(Node *&node, uint8_t key_byte, Node *new_child) {
+void Node4::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *new_child) {
 	Node4 *n = (Node4 *)node;
 
 	// Insert leaf into inner node
@@ -89,7 +89,7 @@ void Node4::Insert(Node *&node, uint8_t key_byte, Node *new_child) {
 	}
 }
 
-void Node4::Erase(Node *&node, int pos, ART &art) {
+void Node4::Erase(BaseNode *&node, int pos, ART &art) {
 	Node4 *n = (Node4 *)node;
 	D_ASSERT(pos < n->count);
 	// erase the child and decrease the count

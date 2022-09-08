@@ -41,7 +41,7 @@ idx_t Node48::GetNextPos(idx_t pos) {
 	return Node::GetNextPos(pos);
 }
 
-Node *Node48::GetChild(ART &art, idx_t pos) {
+BaseNode *Node48::GetChild(ART &art, idx_t pos) {
 	D_ASSERT(child_index[pos] != Node::EMPTY_MARKER);
 	return children[child_index[pos]].Unswizzle(art);
 }
@@ -55,7 +55,7 @@ idx_t Node48::GetMin() {
 	return DConstants::INVALID_INDEX;
 }
 
-void Node48::Insert(Node *&node, uint8_t key_byte, Node *child) {
+void Node48::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child) {
 	auto n = (Node48 *)node;
 
 	// Insert leaf into inner node
@@ -89,11 +89,11 @@ void Node48::Insert(Node *&node, uint8_t key_byte, Node *child) {
 	}
 }
 
-void Node48::ReplaceChildPointer(idx_t pos, Node *node) {
+void Node48::ReplaceChildPointer(idx_t pos, BaseNode *node) {
 	children[child_index[pos]] = node;
 }
 
-void Node48::Erase(Node *&node, int pos, ART &art) {
+void Node48::Erase(BaseNode *&node, int pos, ART &art) {
 	auto n = (Node48 *)(node);
 	n->children[n->child_index[pos]].Reset();
 	n->child_index[pos] = Node::EMPTY_MARKER;

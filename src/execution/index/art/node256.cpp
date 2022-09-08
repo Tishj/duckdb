@@ -37,7 +37,7 @@ idx_t Node256::GetMin() {
 	return DConstants::INVALID_INDEX;
 }
 
-void Node256::ReplaceChildPointer(idx_t pos, Node *node) {
+void Node256::ReplaceChildPointer(idx_t pos, BaseNode *node) {
 	children[pos] = node;
 }
 
@@ -50,18 +50,18 @@ idx_t Node256::GetNextPos(idx_t pos) {
 	return Node::GetNextPos(pos);
 }
 
-Node *Node256::GetChild(ART &art, idx_t pos) {
+BaseNode *Node256::GetChild(ART &art, idx_t pos) {
 	return children[pos].Unswizzle(art);
 }
 
-void Node256::Insert(Node *&node, uint8_t key_byte, Node *child) {
+void Node256::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child) {
 	auto n = (Node256 *)(node);
 
 	n->count++;
 	n->children[key_byte] = child;
 }
 
-void Node256::Erase(Node *&node, int pos, ART &art) {
+void Node256::Erase(BaseNode *&node, int pos, ART &art) {
 	auto n = (Node256 *)(node);
 	n->children[pos].Reset();
 	n->count--;

@@ -23,7 +23,7 @@ SwizzleablePointer::SwizzleablePointer(duckdb::MetaBlockReader &reader) {
 	SetSwizzled();
 }
 
-SwizzleablePointer &SwizzleablePointer::operator=(const Node *ptr) {
+SwizzleablePointer &SwizzleablePointer::operator=(const BaseNode *ptr) {
 	FlaggedPointer::operator=(ptr);
 	return *this;
 }

@@ -42,7 +42,7 @@ idx_t Node16::GetNextPos(idx_t pos) {
 	return pos < count ? pos : DConstants::INVALID_INDEX;
 }
 
-Node *Node16::GetChild(ART &art, idx_t pos) {
+BaseNode *Node16::GetChild(ART &art, idx_t pos) {
 	D_ASSERT(pos < count);
 	return children[pos].Unswizzle(art);
 }
@@ -51,11 +51,11 @@ idx_t Node16::GetMin() {
 	return 0;
 }
 
-void Node16::ReplaceChildPointer(idx_t pos, Node *node) {
+void Node16::ReplaceChildPointer(idx_t pos, BaseNode *node) {
 	children[pos] = node;
 }
 
-void Node16::Insert(Node *&node, uint8_t key_byte, Node *child) {
+void Node16::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child) {
 	Node16 *n = (Node16 *)node;
 
 	if (n->count < 16) {
@@ -90,7 +90,7 @@ void Node16::Insert(Node *&node, uint8_t key_byte, Node *child) {
 	}
 }
 
-void Node16::Erase(Node *&node, int pos, ART &art) {
+void Node16::Erase(BaseNode *&node, int pos, ART &art) {
 	auto n = (Node16 *)node;
 	// erase the child and decrease the count
 	n->children[pos].Reset();

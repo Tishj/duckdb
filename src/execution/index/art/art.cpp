@@ -284,7 +284,7 @@ bool ART::InsertToLeaf(Leaf &leaf, row_t row_id) {
 	return true;
 }
 
-bool ART::Insert(Node *&node, unique_ptr<Key> value, unsigned depth, row_t row_id) {
+bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t row_id) {
 	Key &key = *value;
 	if (!node) {
 		// node is currently empty, create a leaf here with the key
@@ -310,11 +310,11 @@ bool ART::Insert(Node *&node, unique_ptr<Key> value, unsigned depth, row_t row_i
 			}
 		}
 
-		Node *new_node = new Node4();
+		BaseNode *new_node = new Node4();
 		new_node->prefix = Prefix(key, depth, new_prefix_length);
 		auto key_byte = node->prefix.Reduce(new_prefix_length);
 		Node4::Insert(new_node, key_byte, node);
-		Node *leaf_node = new Leaf(*value, depth + new_prefix_length + 1, row_id);
+		BaseNode *leaf_node = new Leaf(*value, depth + new_prefix_length + 1, row_id);
 		Node4::Insert(new_node, key[depth + new_prefix_length], leaf_node);
 		node = new_node;
 		return true;
@@ -325,13 +325,13 @@ bool ART::Insert(Node *&node, unique_ptr<Key> value, unsigned depth, row_t row_i
 		uint32_t mismatch_pos = node->prefix.KeyMismatchPosition(key, depth);
 		if (mismatch_pos != node->prefix.Size()) {
 			// Prefix differs, create new node
-			Node *new_node = new Node4();
+			BaseNode *new_node = new Node4();
 			new_node->prefix = Prefix(key, depth, mismatch_pos);
 			// Break up prefix
 			auto key_byte = node->prefix.Reduce(mismatch_pos);
 			Node4::Insert(new_node, key_byte, node);
 
-			Node *leaf_node = new Leaf(*value, depth + mismatch_pos + 1, row_id);
+			BaseNode *leaf_node = new Leaf(*value, depth + mismatch_pos + 1, row_id);
 			Node4::Insert(new_node, key[depth + mismatch_pos], leaf_node);
 			node = new_node;
 			return true;
@@ -348,7 +348,7 @@ bool ART::Insert(Node *&node, unique_ptr<Key> value, unsigned depth, row_t row_i
 		node->ReplaceChildPointer(pos, child);
 		return insertion_result;
 	}
-	Node *new_node = new Leaf(*value, depth + 1, row_id);
+	BaseNode *new_node = new Leaf(*value, depth + 1, row_id);
 	Node::InsertLeaf(node, key[depth], new_node);
 	return true;
 }
@@ -388,7 +388,7 @@ void ART::Delete(IndexLock &state, DataChunk &input, Vector &row_ids) {
 	}
 }
 
-void ART::Erase(Node *&node, Key &key, unsigned depth, row_t row_id) {
+void ART::Erase(BaseNode *&node, Key &key, unsigned depth, row_t row_id) {
 	if (!node) {
 		return;
 	}
@@ -496,7 +496,7 @@ void ART::SearchEqualJoinNoFetch(Value &equal_value, idx_t &result_size) {
 	result_size = leaf->count;
 }
 
-Node *ART::Lookup(Node *node, Key &key, unsigned depth) {
+BaseNode *ART::Lookup(BaseNode *node, Key &key, unsigned depth) {
 	while (node) {
 		if (node->type == NodeType::NLeaf) {
 			auto leaf = (Leaf *)node;
@@ -674,7 +674,7 @@ void ART::VerifyExistence(DataChunk &chunk, VerifyExistenceType verify_type, str
 		if (!keys[i]) {
 			continue;
 		}
-		Node *node_ptr = Lookup(tree, *keys[i], 0);
+		BaseNode *node_ptr = Lookup(tree, *keys[i], 0);
 		bool throw_exception =
 		    verify_type == VerifyExistenceType::APPEND_FK ? node_ptr == nullptr : node_ptr != nullptr;
 		if (!throw_exception) {

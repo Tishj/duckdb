@@ -19,8 +19,28 @@ public:
 	}
 
 public:
+	void SetSwizzled() {
+		Set<0>();
+	}
+	void SetRowid() {
+		Set<1>();
+	}
+	void UnsetSwizzled() {
+		Unset<0>();
+	}
+	void UnsetRowid() {
+		Unset<1>();
+	}
+
+	bool IsSwizzled() const {
+		return IsSet<0>();
+	}
+	bool IsRowid() const {
+		return IsSet<1>();
+	}
+
 	//! Transforms from Node* to uint64_t
-	SwizzleablePointer &operator=(const Node *ptr);
+	SwizzleablePointer &operator=(const BaseNode *ptr);
 	friend bool operator!=(const SwizzleablePointer &s_ptr, const uint64_t &ptr);
 
 	//! Get the swizzled data (the block info)

@@ -17,11 +17,13 @@
 
 #include "duckdb/execution/index/art/art_key.hpp"
 #include "duckdb/execution/index/art/leaf.hpp"
+#include "duckdb/execution/index/art/base_node.hpp"
 #include "duckdb/execution/index/art/node.hpp"
 #include "duckdb/execution/index/art/node4.hpp"
 #include "duckdb/execution/index/art/node16.hpp"
 #include "duckdb/execution/index/art/node48.hpp"
 #include "duckdb/execution/index/art/node256.hpp"
+#include "duckdb/execution/index/art/rowid_leaf.hpp"
 #include "duckdb/storage/meta_block_writer.hpp"
 #include "duckdb/execution/index/art/iterator.hpp"
 
@@ -56,7 +58,7 @@ public:
 	~ART() override;
 
 	//! Root of the tree
-	Node *tree;
+	BaseNode *tree;
 
 	DatabaseInstance &db;
 
@@ -97,13 +99,12 @@ private:
 	//! Insert a row id into a leaf node
 	bool InsertToLeaf(Leaf &leaf, row_t row_id);
 	//! Insert the leaf value into the tree
-	bool Insert(Node *&node, unique_ptr<Key> key, unsigned depth, row_t row_id);
+	bool Insert(BaseNode *&node, unique_ptr<Key> key, unsigned depth, row_t row_id);
 
 	//! Erase element from leaf (if leaf has more than one value) or eliminate the leaf itself
-	void Erase(Node *&node, Key &key, unsigned depth, row_t row_id);
+	void Erase(BaseNode *&node, Key &key, unsigned depth, row_t row_id);
 
-	//! Find the node with a matching key, optimistic version
-	Node *Lookup(Node *node, Key &key, unsigned depth);
+	//! Find the node with a matching key, optimistic versiBaseNode *LooBaseNode *node, Key &key, unsigned depth);
 
 	bool SearchGreater(ARTIndexScanState *state, bool inclusive, idx_t max_count, vector<row_t> &result_ids);
 	bool SearchLess(ARTIndexScanState *state, bool inclusive, idx_t max_count, vector<row_t> &result_ids);

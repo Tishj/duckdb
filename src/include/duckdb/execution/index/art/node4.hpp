@@ -28,15 +28,15 @@ public:
 	//! Get the next position in the node, or DConstants::INVALID_INDEX if there is no next position
 	idx_t GetNextPos(idx_t pos) override;
 	//! Get Node4 Child
-	Node *GetChild(ART &art, idx_t pos) override;
+	BaseNode *GetChild(ART &art, idx_t pos) override;
 	//! Replace child pointer
-	void ReplaceChildPointer(idx_t pos, Node *node) override;
+	void ReplaceChildPointer(idx_t pos, BaseNode *node) override;
 
 	idx_t GetMin() override;
 
 	//! Insert Leaf to the Node4
-	static void Insert(Node *&node, uint8_t key_byte, Node *new_child);
+	static void Insert(BaseNode *&node, uint8_t key_byte, BaseNode *new_child);
 	//! Remove Leaf from Node4
-	static void Erase(Node *&node, int pos, ART &art);
+	static void Erase(BaseNode *&node, int pos, ART &art);
 };
 } // namespace duckdb
