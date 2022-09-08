@@ -83,7 +83,7 @@ public:
 	// -----------------------------
 
 	//! Serialize this Node
-	BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer);
+	BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer) override;
 
 	static BaseNode *Deserialize(ART &art, idx_t block_id, idx_t offset);
 

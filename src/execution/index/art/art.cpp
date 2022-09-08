@@ -311,7 +311,7 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 		}
 
 		BaseNode *new_node = new Node4();
-		new_node->SetPrefix(Prefix(key, depth, new_prefix_length));
+		new_node->GetMutPrefix() = Prefix(key, depth, new_prefix_length);
 		auto key_byte = node->GetMutPrefix().Reduce(new_prefix_length);
 		Node4::Insert(new_node, key_byte, node);
 		BaseNode *leaf_node = new Leaf(*value, depth + new_prefix_length + 1, row_id);
@@ -326,7 +326,7 @@ bool ART::Insert(BaseNode *&node, unique_ptr<Key> value, unsigned depth, row_t r
 		if (mismatch_pos != node->GetPrefix().Size()) {
 			// Prefix differs, create new node
 			BaseNode *new_node = new Node4();
-			new_node->SetPrefix(Prefix(key, depth, mismatch_pos));
+			new_node->GetMutPrefix() = Prefix(key, depth, mismatch_pos);
 			// Break up prefix
 			auto key_byte = node->GetMutPrefix().Reduce(mismatch_pos);
 			Node4::Insert(new_node, key_byte, node);

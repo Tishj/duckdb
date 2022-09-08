@@ -8,13 +8,13 @@
 
 #pragma once
 
-#include "duckdb/execution/index/art/base_leaf.hpp"
+#include "duckdb/execution/index/art/base_node.hpp"
 
 namespace duckdb {
 
-class RowidLeaf : public BaseNode, public BaseLeaf {
+class RowidLeaf : public BaseNode {
 public:
-	RowidLeaf(row_t rowid) : BaseNode(NodeType::NRowIdLeaf), BaseLeaf() {
+	RowidLeaf(row_t rowid) : BaseNode(NodeType::NRowIdLeaf) {
 	}
 
 public:
@@ -29,7 +29,7 @@ public:
 		return DConstants::INVALID_INDEX;
 	}
 	//! Serialize the rowid by returning a blockpointer with a special flag set
-	BlockPointer Serialize(duckdb::MetaBlockWriter &writer) override {
+	BlockPointer SerializeLeaf(duckdb::MetaBlockWriter &writer) override {
 		return BlockPointer(rowid);
 	}
 

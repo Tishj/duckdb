@@ -11,6 +11,8 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/assert.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/storage/meta_block_writer.hpp"
+#include "duckdb/storage/meta_block_reader.hpp"
 
 namespace duckdb {
 
@@ -58,7 +60,7 @@ public:
 	}
 
 	// -----------------------------
-	// Methods
+	// General Node Methods
 	// -----------------------------
 
 	//! Whether this node is a leaf node
@@ -103,8 +105,25 @@ public:
 	}
 
 	// -----------------------------
-	// Storage
+	// Leaf Node Methods
 	// -----------------------------
+
+	virtual row_t GetRowId(idx_t index) {
+		D_ASSERT(0);
+		return DConstants::INVALID_INDEX;
+	}
+
+	virtual BlockPointer SerializeLeaf(duckdb::MetaBlockWriter &writer) {
+		throw InternalException("(Leaf) Serialize not implemented for Node");
+	}
+
+	// -----------------------------
+	// Node Storage
+	// -----------------------------
+
+	virtual BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer) {
+		throw InternalException("(General) Serialize not implemented for Node");
+	}
 
 	//! Deserialize a Node from storage
 	virtual void DeserializeInternal(MetaBlockReader &reader) {
