@@ -17,6 +17,7 @@
 #include "duckdb_python/python_import_cache.hpp"
 #include "duckdb_python/registered_py_object.hpp"
 #include "duckdb_python/pandas_type.hpp"
+#include "duckdb/common/unordered_map.hpp"
 
 namespace duckdb {
 
@@ -37,7 +38,8 @@ public:
 	unique_ptr<Connection> connection;
 	unique_ptr<DuckDBPyResult> result;
 	vector<shared_ptr<DuckDBPyConnection>> cursors;
-	unordered_map<string, shared_ptr<Relation>> temporary_views;
+	// 'schema' -> map{view_name, relation}
+	unordered_map < string, unordered_map<string, shared_ptr<Relation>> temporary_views;
 	std::mutex py_connection_lock;
 
 public:

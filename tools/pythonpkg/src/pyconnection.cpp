@@ -210,12 +210,16 @@ DuckDBPyConnection *DuckDBPyConnection::RegisterPythonObject(const string &name,
 	}
 	auto py_object_type = string(py::str(python_object.get_type().attr("__name__")));
 
+	auto qname = QualifiedName::Parse(name);
+	auto schema = qname.schema.empty() ? DEFAULT_SCHEMA : qname.schema;
+
 	if (py_object_type == "DataFrame") {
 		auto new_df = PandasScanFunction::PandasReplaceCopiedNames(python_object);
 		{
 			py::gil_scoped_release release;
-			temporary_views[name] = connection->TableFunction("pandas_scan", {Value::POINTER((uintptr_t)new_df.ptr())})
-			                            ->CreateView(name, true, true);
+			temporary_views[schema][name] =
+			    connection->TableFunction("pandas_scan", {Value::POINTER((uintptr_t)new_df.ptr())})
+			        ->CreateView(name, true, true);
 		}
 
 		// keep a reference
@@ -230,7 +234,7 @@ DuckDBPyConnection *DuckDBPyConnection::RegisterPythonObject(const string &name,
 		auto stream_factory_get_schema = PythonTableArrowArrayStreamFactory::GetSchema;
 		{
 			py::gil_scoped_release release;
-			temporary_views[name] =
+			temporary_views[schema][name] =
 			    connection
 			        ->TableFunction("arrow_scan", {Value::POINTER((uintptr_t)stream_factory.get()),
 			                                       Value::POINTER((uintptr_t)stream_factory_produce),
@@ -300,11 +304,19 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::View(const string &vname) {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
 	}
+	auto qname = QualifiedName::Parse(vname);
+	auto schema = qname.schema.empty() ? DEFAULT_SCHEMA : qname.schema;
+
 	// First check our temporary view
-	if (temporary_views.find(vname) != temporary_views.end()) {
-		return make_unique<DuckDBPyRelation>(temporary_views[vname]);
+	auto &schema_views_p = temporary_views.find(schema);
+	if (schema_views_p != temporary_views.end()) {
+		auto &schema_views = *schema_views_p;
+		auto view_p = schema_views.find(qname.name);
+		if (view_p != schema_views.end()) {
+			return make_unique<DuckDBPyRelation>(*view_p);
+		}
 	}
-	return make_unique<DuckDBPyRelation>(connection->View(vname));
+	return make_unique<DuckDBPyRelation>(connection->View(schema, qname.name));
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::TableFunction(const string &fname, py::object params) {
@@ -431,7 +443,23 @@ unordered_set<string> DuckDBPyConnection::GetTableNames(const string &query) {
 
 DuckDBPyConnection *DuckDBPyConnection::UnregisterPythonObject(const string &name) {
 	connection->context->external_dependencies.erase(name);
-	temporary_views.erase(name);
+	auto qname = QualifiedName::Parse(name);
+	auto schema = qname.schema.empty() ? DEFAULT_SCHEMA : qname.schema;
+
+	auto &schema_views_p = temporary_views.find(schema);
+	if (schema_views_p != temporary_views.end()) {
+		auto &schema_views = *schema_views_p;
+		auto view_p = schema_views.find(qname.name);
+		if (view_p != schema_views.end()) {
+			//! Erase the view
+			schema_views.erase(view_p);
+		}
+		//! Erase the schema if there are no more views in it
+		if (schema_views.empty()) {
+			temporary_views.erase(schema_views_p);
+		}
+	}
+
 	py::gil_scoped_release release;
 	if (connection) {
 		connection->Query("DROP VIEW \"" + name + "\"");
