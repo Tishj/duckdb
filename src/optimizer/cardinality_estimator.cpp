@@ -149,9 +149,9 @@ double CardinalityEstimator::EstimateCrossProduct(const JoinNode *left, const Jo
 }
 
 void CardinalityEstimator::AddRelationColumnMapping(LogicalGet *get, idx_t relation_id) {
-	for (idx_t it = 0; it < get->column_ids.size(); it++) {
+	for (idx_t it = 0; it < get->ColumnIds().size(); it++) {
 		auto key = ColumnBinding(relation_id, it);
-		auto value = ColumnBinding(get->table_index, get->column_ids[it]);
+		auto value = ColumnBinding(get->table_index, get->ColumnIds()[it]);
 		AddRelationToColumnMapping(key, value);
 	}
 }

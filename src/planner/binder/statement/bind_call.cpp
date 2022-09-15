@@ -17,7 +17,7 @@ BoundStatement Binder::Bind(CallStatement &stmt) {
 	auto &get = (LogicalGet &)*bound_table_func.get;
 	D_ASSERT(get.returned_types.size() > 0);
 	for (idx_t i = 0; i < get.returned_types.size(); i++) {
-		get.column_ids.push_back(i);
+		get.AddColumnId(i);
 	}
 
 	result.types = get.returned_types;

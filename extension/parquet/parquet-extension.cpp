@@ -495,8 +495,8 @@ public:
 
 		if (data->parquet_options.hive_partitioning || data->parquet_options.filename) {
 			unordered_map<string, column_t> column_map;
-			for (idx_t i = 0; i < get.column_ids.size(); i++) {
-				column_map.insert({get.names[get.column_ids[i]], i});
+			for (idx_t i = 0; i < get.ColumnIds().size(); i++) {
+				column_map.insert({get.names[get.ColumnIds()[i]], i});
 			}
 
 			HivePartitioning::ApplyFiltersToFileList(data->files, filters, column_map, get.table_index,

@@ -55,7 +55,7 @@ column_t TableCatalogEntry::GetColumnIndex(string &column_name, bool if_exists) 
 void AddDataTableIndex(DataTable *storage, vector<ColumnDefinition> &columns, vector<idx_t> &keys,
                        IndexConstraintType constraint_type, BlockPointer *index_block = nullptr) {
 	// fetch types and create expressions for the index from the columns
-	vector<column_t> column_ids;
+	vector<storage_t> column_ids;
 	vector<unique_ptr<Expression>> unbound_expressions;
 	vector<unique_ptr<Expression>> bound_expressions;
 	idx_t key_nr = 0;
@@ -318,7 +318,11 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AddColumn(ClientContext &context, Ad
 	}
 	Binder::BindLogicalType(context, info.new_column.TypeMutable(), schema->name);
 	info.new_column.SetOid(columns.size());
+#ifdef DEBUG
+	info.new_column.SetStorageOid(1 + storage->column_definitions.size());
+#else
 	info.new_column.SetStorageOid(storage->column_definitions.size());
+#endif
 
 	auto col = info.new_column.Copy();
 
@@ -441,7 +445,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 		return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
 		                                      storage);
 	}
-	auto new_storage = make_shared<DataTable>(context, *storage, removed_index);
+	auto new_storage = make_shared<DataTable>(context, *storage, columns[removed_index].StorageOid());
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
 	                                      new_storage);
 }
@@ -614,8 +618,8 @@ unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &cont
 		bound_columns.push_back(COLUMN_IDENTIFIER_ROW_ID);
 	}
 
-	auto new_storage =
-	    make_shared<DataTable>(context, *storage, change_idx, info.target_type, move(bound_columns), *bound_expression);
+	auto new_storage = make_shared<DataTable>(context, *storage, columns[change_idx].StorageOid(), info.target_type,
+	                                          move(bound_columns), *bound_expression);
 	auto result =
 	    make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), new_storage);
 	return move(result);

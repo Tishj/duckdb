@@ -208,8 +208,8 @@ static void RewriteIndexExpression(Index &index, LogicalGet &get, Expression &ex
 		bound_colref.binding.table_index = get.table_index;
 		column_t referenced_column = index.column_ids[bound_colref.binding.column_index];
 		// search for the referenced column in the set of column_ids
-		for (idx_t i = 0; i < get.column_ids.size(); i++) {
-			if (get.column_ids[i] == referenced_column) {
+		for (idx_t i = 0; i < get.ColumnIds().size(); i++) {
+			if (get.ColumnIds()[i] == referenced_column) {
 				bound_colref.binding.column_index = i;
 				return;
 			}

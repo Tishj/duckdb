@@ -41,6 +41,22 @@ string LogicalGet::ParamsToString() const {
 	return function.to_string(bind_data.get());
 }
 
+void LogicalGet::AddColumnId(column_t id) {
+	column_ids.push_back(id);
+}
+
+vector<column_t> &LogicalGet::MutableColumnIds() {
+	return column_ids;
+}
+
+const vector<column_t> &LogicalGet::ColumnIds() const {
+	return column_ids;
+}
+
+void LogicalGet::ClearColumnIds() {
+	column_ids.clear();
+}
+
 vector<ColumnBinding> LogicalGet::GetColumnBindings() {
 	if (column_ids.empty()) {
 		return {ColumnBinding(table_index, 0)};

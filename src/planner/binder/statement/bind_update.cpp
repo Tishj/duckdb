@@ -46,8 +46,8 @@ static void BindExtraColumns(TableCatalogEntry &table, LogicalGet &get, LogicalP
 			update.expressions.push_back(make_unique<BoundColumnRefExpression>(
 			    column.Type(), ColumnBinding(proj.table_index, proj.expressions.size())));
 			proj.expressions.push_back(make_unique<BoundColumnRefExpression>(
-			    column.Type(), ColumnBinding(get.table_index, get.column_ids.size())));
-			get.column_ids.push_back(check_column_id);
+			    column.Type(), ColumnBinding(get.table_index, get.ColumnIds().size())));
+			get.AddColumnId(check_column_id);
 			update.columns.push_back(check_column_id);
 		}
 	}
@@ -213,8 +213,8 @@ BoundStatement Binder::Bind(UpdateStatement &stmt) {
 
 	// finally add the row id column to the projection list
 	proj->expressions.push_back(make_unique<BoundColumnRefExpression>(
-	    LogicalType::ROW_TYPE, ColumnBinding(get->table_index, get->column_ids.size())));
-	get->column_ids.push_back(COLUMN_IDENTIFIER_ROW_ID);
+	    LogicalType::ROW_TYPE, ColumnBinding(get->table_index, get->ColumnIds().size())));
+	get->AddColumnId(COLUMN_IDENTIFIER_ROW_ID);
 
 	// set the projection as child of the update node and finalize the result
 	update->AddChild(move(proj));

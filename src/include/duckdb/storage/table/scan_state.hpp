@@ -108,19 +108,34 @@ public:
 class TableScanState {
 public:
 	TableScanState() : row_group_scan_state(*this), max_row(0) {};
+	TableScanState(vector<column_t> column_ids, idx_t max_row)
+	    : row_group_scan_state(*this), max_row(max_row), column_ids(column_ids) {};
 
 	//! The row_group scan state
 	RowGroupScanState row_group_scan_state;
 	//! The total maximum row index
 	idx_t max_row = 0;
-	//! The column identifiers of the scan
-	vector<column_t> column_ids;
 	//! The table filters (if any)
 	TableFilterSet *table_filters = nullptr;
 	//! Adaptive filter info (if any)
 	unique_ptr<AdaptiveFilter> adaptive_filter;
 	//! Transaction-local scan state
 	LocalScanState local_state;
+
+public:
+	void AddColumnId(column_t id) {
+		column_ids.push_back(id);
+	}
+	const vector<column_t> &ColumnIds() const {
+		return column_ids;
+	}
+	void AssignColumnIds(vector<column_t> column_ids) {
+		this->column_ids = column_ids;
+	}
+
+private:
+	//! The column identifiers of the scan
+	vector<column_t> column_ids;
 };
 
 class CreateIndexScanState : public TableScanState {

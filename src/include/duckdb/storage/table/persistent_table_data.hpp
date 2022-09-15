@@ -23,6 +23,11 @@ public:
 
 	vector<RowGroupPointer> row_groups;
 	vector<unique_ptr<BaseStatistics>> column_stats;
+
+public:
+	void AddColumnStats(unique_ptr<BaseStatistics> stats) {
+		column_stats.push_back(move(stats));
+	}
 };
 
 } // namespace duckdb

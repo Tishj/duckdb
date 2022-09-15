@@ -57,10 +57,10 @@ BoundStatement Binder::Bind(VacuumStatement &stmt) {
 
 			auto &get = (LogicalGet &)*table_scan;
 
-			D_ASSERT(select_list.size() == get.column_ids.size());
-			D_ASSERT(stmt.info->columns.size() == get.column_ids.size());
-			for (idx_t i = 0; i < get.column_ids.size(); i++) {
-				stmt.info->column_id_map[i] = ref->table->columns[get.column_ids[i]].StorageOid();
+			D_ASSERT(select_list.size() == get.ColumnIds().size());
+			D_ASSERT(stmt.info->columns.size() == get.ColumnIds().size());
+			for (idx_t i = 0; i < get.ColumnIds().size(); i++) {
+				stmt.info->column_id_map[i] = ref->table->columns[get.ColumnIds()[i]].StorageOid();
 			}
 
 			auto projection = make_unique<LogicalProjection>(GenerateTableIndex(), move(select_list));

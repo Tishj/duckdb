@@ -70,8 +70,8 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 
 	// set up the delete expression
 	del->expressions.push_back(make_unique<BoundColumnRefExpression>(
-	    LogicalType::ROW_TYPE, ColumnBinding(get.table_index, get.column_ids.size())));
-	get.column_ids.push_back(COLUMN_IDENTIFIER_ROW_ID);
+	    LogicalType::ROW_TYPE, ColumnBinding(get.table_index, get.ColumnIds().size())));
+	get.AddColumnId(COLUMN_IDENTIFIER_ROW_ID);
 
 	if (!stmt.returning_list.empty()) {
 		del->return_chunk = true;

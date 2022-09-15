@@ -347,7 +347,7 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 			throw BinderException("Cannot create index on a view!");
 		}
 		auto &get = (LogicalGet &)*plan;
-		for (auto &column_id : get.column_ids) {
+		for (auto &column_id : get.ColumnIds()) {
 			if (column_id == COLUMN_IDENTIFIER_ROW_ID) {
 				throw BinderException("Cannot create an index on the rowid!");
 			}
@@ -355,7 +355,7 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 		// this gives us a logical table scan
 		// we take the required columns from here
 		// create the logical operator
-		result.plan = make_unique<LogicalCreateIndex>(*table, get.column_ids, move(expressions),
+		result.plan = make_unique<LogicalCreateIndex>(*table, get.ColumnIds(), move(expressions),
 		                                              unique_ptr_cast<CreateInfo, CreateIndexInfo>(move(stmt.info)));
 		break;
 	}

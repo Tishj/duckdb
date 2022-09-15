@@ -199,8 +199,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 			// being projected out
 			for (auto &filter : get.table_filters.filters) {
 				idx_t index = DConstants::INVALID_INDEX;
-				for (idx_t i = 0; i < get.column_ids.size(); i++) {
-					if (get.column_ids[i] == filter.first) {
+				for (idx_t i = 0; i < get.ColumnIds().size(); i++) {
+					if (get.ColumnIds()[i] == filter.first) {
 						index = i;
 						break;
 					}
@@ -214,13 +214,13 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				}
 			}
 			// table scan: figure out which columns are referenced
-			ClearUnusedExpressions(get.column_ids, get.table_index);
+			ClearUnusedExpressions(get.MutableColumnIds(), get.table_index);
 
-			if (get.column_ids.empty()) {
+			if (get.ColumnIds().empty()) {
 				// this generally means we are only interested in whether or not anything exists in the table (e.g.
 				// EXISTS(SELECT * FROM tbl)) in this case, we just scan the row identifier column as it means we do not
 				// need to read any of the columns
-				get.column_ids.push_back(COLUMN_IDENTIFIER_ROW_ID);
+				get.AddColumnId(COLUMN_IDENTIFIER_ROW_ID);
 			}
 		}
 		return;

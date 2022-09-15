@@ -153,7 +153,7 @@ BindResult TableBinding::Bind(ColumnRefExpression &colref, idx_t depth) {
 		}
 	}
 
-	auto &column_ids = get.column_ids;
+	auto &column_ids = get.ColumnIds();
 	// check if the entry already exists in the column list for the table
 	ColumnBinding binding;
 
@@ -166,7 +166,7 @@ BindResult TableBinding::Bind(ColumnRefExpression &colref, idx_t depth) {
 	}
 	if (binding.column_index == column_ids.size()) {
 		// column binding not found: add it to the list of bindings
-		column_ids.push_back(column_index);
+		get.AddColumnId(column_index);
 	}
 	binding.table_index = index;
 	return BindResult(make_unique<BoundColumnRefExpression>(colref.GetName(), col_type, binding, depth));

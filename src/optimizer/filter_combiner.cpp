@@ -382,7 +382,7 @@ bool FilterCombiner::HasFilters() {
 // 	return zonemap_checks;
 // }
 
-TableFilterSet FilterCombiner::GenerateTableScanFilters(vector<idx_t> &column_ids) {
+TableFilterSet FilterCombiner::GenerateTableScanFilters(const vector<idx_t> &column_ids) {
 	TableFilterSet table_filters;
 	//! First, we figure the filters that have constant expressions that we can push down to the table scan
 	for (auto &constant_value : constant_values) {

@@ -25,6 +25,12 @@ DataTable::DataTable(DatabaseInstance &db, const string &schema, const string &t
                      vector<ColumnDefinition> column_definitions_p, unique_ptr<PersistentTableData> data)
     : info(make_shared<DataTableInfo>(db, schema, table)), column_definitions(move(column_definitions_p)), db(db),
       total_rows(0), is_root(true) {
+
+#ifdef DEBUG
+	for (auto &col : this->column_definitions) {
+		D_ASSERT(!col.Generated());
+	}
+#endif
 	// initialize the table with the existing data from disk, if any
 	this->row_groups = make_shared<SegmentTree>();
 	auto types = GetTypes();
@@ -37,20 +43,35 @@ DataTable::DataTable(DatabaseInstance &db, const string &schema, const string &t
 			}
 			row_groups->AppendSegment(move(new_row_group));
 		}
+#ifdef DEBUG
+		// Make room for a dummy item
 		column_stats.reserve(data->column_stats.size());
+		AddColumnStats(nullptr);
+#else
+		column_stats.reserve(data->column_stats.size());
+#endif
 		for (auto &stats : data->column_stats) {
-			column_stats.push_back(make_shared<ColumnStatistics>(move(stats)));
+			AddColumnStats(make_shared<ColumnStatistics>(move(stats)));
 		}
+#ifdef DEBUG
+		if (column_stats.size() != types.size() + 1) { // LCOV_EXCL_START
+			throw IOException("Table statistics column count is not aligned with table column count. Corrupt file?");
+		} // LCOV_EXCL_STOP
+#else
 		if (column_stats.size() != types.size()) { // LCOV_EXCL_START
 			throw IOException("Table statistics column count is not aligned with table column count. Corrupt file?");
 		} // LCOV_EXCL_STOP
+#endif
 	}
 	if (column_stats.empty()) {
 		D_ASSERT(total_rows == 0);
 
 		AppendRowGroup(0);
+#ifdef DEBUG
+		AddColumnStats(nullptr);
+#endif
 		for (auto &type : types) {
-			column_stats.push_back(ColumnStatistics::CreateEmptyStats(type));
+			AddColumnStats(ColumnStatistics::CreateEmptyStats(type));
 		}
 	} else {
 		D_ASSERT(column_stats.size() == types.size());
@@ -65,22 +86,41 @@ void DataTable::AppendRowGroup(idx_t start_row) {
 	row_groups->AppendSegment(move(new_row_group));
 }
 
+//#ifdef DEBUG
+// static ColumnDefinition DummyColumn() {
+//	ColumnDefinition column("DUMMY", LogicalType::ANY);
+//	column.SetGeneratedExpression(make_unique_base<ParsedExpression, ColumnRefExpression>("DUMMY_REF"));
+//	return column;
+//}
+//#endif
+
 DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression *default_value)
     : info(parent.info), db(parent.db), total_rows(parent.total_rows.load()), is_root(true) {
+	//#ifdef DEBUG
+	// if (column_definitions.empty()) {
+	//	column_definitions.push_back(DummyColumn());
+	//}
+	//#endif
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
 	// prevent any new tuples from being added to the parent
 	lock_guard<mutex> parent_lock(parent.append_lock);
 	// add the new column to this DataTable
+	D_ASSERT(!new_column.Generated());
 	auto new_column_type = new_column.Type();
-	auto new_column_idx = parent.column_definitions.size();
+	auto new_column_idx = new_column.StorageOid();
 
+#ifdef DEBUG
+	if (column_stats.empty()) {
+		AddColumnStats(nullptr);
+	}
+#endif
 	// set up the statistics
 	for (idx_t i = 0; i < parent.column_stats.size(); i++) {
-		column_stats.push_back(parent.column_stats[i]);
+		AddColumnStats(parent.column_stats[i]);
 	}
-	column_stats.push_back(ColumnStatistics::CreateEmptyStats(new_column_type));
+	AddColumnStats(ColumnStatistics::CreateEmptyStats(new_column_type));
 
 	// add the column definitions from this DataTable
 	column_definitions.emplace_back(new_column.Copy());
@@ -139,7 +179,7 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_co
 	// erase the stats from this DataTable
 	for (idx_t i = 0; i < parent.column_stats.size(); i++) {
 		if (i != removed_column) {
-			column_stats.push_back(parent.column_stats[i]);
+			AddColumnStats(parent.column_stats[i]);
 		}
 	}
 
@@ -154,7 +194,11 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_co
 		if (col.Generated()) {
 			continue;
 		}
+#ifdef DEBUG
+		col.SetStorageOid(1 + storage_idx++);
+#else
 		col.SetStorageOid(storage_idx++);
+#endif
 	}
 
 	// alter the row_groups and remove the column from each of them
@@ -180,7 +224,7 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, unique_ptr<Const
 		column_definitions.emplace_back(column_def.Copy());
 	}
 	for (idx_t i = 0; i < column_definitions.size(); i++) {
-		column_stats.push_back(parent.column_stats[i]);
+		AddColumnStats(parent.column_stats[i]);
 	}
 
 	// Verify the new constraint against current persistent/local data
@@ -218,9 +262,9 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
 	// the column that had its type changed will have the new statistics computed during conversion
 	for (idx_t i = 0; i < column_definitions.size(); i++) {
 		if (i == changed_idx) {
-			column_stats.push_back(ColumnStatistics::CreateEmptyStats(column_definitions[i].Type()));
+			AddColumnStats(ColumnStatistics::CreateEmptyStats(column_definitions[i].Type()));
 		} else {
-			column_stats.push_back(parent.column_stats[i]);
+			AddColumnStats(parent.column_stats[i]);
 		}
 	}
 
@@ -242,9 +286,7 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
 	ExpressionExecutor executor(allocator);
 	executor.AddExpression(cast_expr);
 
-	TableScanState scan_state;
-	scan_state.column_ids = bound_columns;
-	scan_state.max_row = total_rows;
+	TableScanState scan_state(bound_columns, total_rows);
 
 	// now alter the type of the column within all of the row_groups individually
 	this->row_groups = make_shared<SegmentTree>();
@@ -279,7 +321,7 @@ void DataTable::InitializeScan(TableScanState &state, const vector<column_t> &co
 	// initialize a column scan state for each column
 	// initialize the chunk scan state
 	auto row_group = (RowGroup *)row_groups->GetRootSegment();
-	state.column_ids = column_ids;
+	state.AssignColumnIds(column_ids);
 	state.max_row = total_rows;
 	state.table_filters = table_filters;
 	if (table_filters) {
@@ -301,7 +343,7 @@ void DataTable::InitializeScanWithOffset(TableScanState &state, const vector<col
                                          idx_t end_row) {
 
 	auto row_group = (RowGroup *)row_groups->GetSegment(start_row);
-	state.column_ids = column_ids;
+	state.AssignColumnIds(column_ids);
 	state.max_row = end_row;
 	state.table_filters = nullptr;
 	idx_t start_vector = (start_row - row_group->start) / STANDARD_VECTOR_SIZE;
@@ -313,7 +355,7 @@ void DataTable::InitializeScanWithOffset(TableScanState &state, const vector<col
 bool DataTable::InitializeScanInRowGroup(TableScanState &state, const vector<column_t> &column_ids,
                                          TableFilterSet *table_filters, RowGroup *row_group, idx_t vector_index,
                                          idx_t max_row) {
-	state.column_ids = column_ids;
+	state.AssignColumnIds(column_ids);
 	state.max_row = max_row;
 	state.table_filters = table_filters;
 	if (table_filters) {
@@ -454,6 +496,10 @@ void DataTable::Fetch(Transaction &transaction, DataChunk &result, const vector<
 //===--------------------------------------------------------------------===//
 // Append
 //===--------------------------------------------------------------------===//
+void DataTable::AddColumnStats(shared_ptr<ColumnStatistics> stats) {
+	column_stats.push_back(stats);
+}
+
 static void VerifyNotNullConstraint(TableCatalogEntry &table, Vector &vector, idx_t count, const string &col_name) {
 	if (VectorOperations::HasNull(vector, count)) {
 		throw ConstraintException("NOT NULL constraint failed: %s.%s", table.name, col_name);
@@ -657,15 +703,15 @@ void DataTable::VerifyNewConstraint(ClientContext &context, DataTable &parent, c
 	}
 
 	TableScanState scan_state;
-	scan_state.column_ids.push_back(not_null_constraint.index);
 	scan_state.max_row = total_rows;
+	scan_state.AddColumnId(not_null_constraint.index);
 
 	// For local storage
 	transaction.storage.InitializeScan(&parent, scan_state.local_state, nullptr);
 	if (scan_state.local_state.GetStorage()) {
 		while (scan_state.local_state.chunk_index <= scan_state.local_state.max_index) {
 			scan_chunk.Reset();
-			transaction.storage.Scan(scan_state.local_state, scan_state.column_ids, scan_chunk);
+			transaction.storage.Scan(scan_state.local_state, scan_state.ColumnIds(), scan_chunk);
 			if (scan_chunk.size() == 0) {
 				break;
 			}
@@ -787,7 +833,8 @@ void DataTable::Append(Transaction &transaction, DataChunk &chunk, TableAppendSt
 			// merge the stats
 			lock_guard<mutex> stats_guard(stats_lock);
 			for (idx_t i = 0; i < column_definitions.size(); i++) {
-				current_row_group->MergeIntoStatistics(i, *column_stats[i]->stats);
+				const auto storage_idx = column_definitions[i].StorageOid();
+				current_row_group->MergeIntoStatistics(i, *column_stats[storage_idx]->stats);
 			}
 		}
 		state.remaining_append_count -= append_count;
@@ -816,12 +863,28 @@ void DataTable::Append(Transaction &transaction, DataChunk &chunk, TableAppendSt
 		}
 	}
 	state.current_row += append_count;
-	for (idx_t col_idx = 0; col_idx < column_stats.size(); col_idx++) {
-		auto type = chunk.data[col_idx].GetType().InternalType();
+#ifdef DEBUG
+	const idx_t column_count = column_stats.size() - 1;
+#else
+	const idx_t column_count = column_stats.size();
+#endif
+
+	for (idx_t col_idx = 0; col_idx < column_count; col_idx++) {
+		const auto storage_idx = column_definitions[col_idx].StorageOid();
+#ifdef DEBUG
+		auto type = chunk.data[storage_idx - 1].GetType().InternalType();
+#else
+		auto type = chunk.data[storage_idx].GetType().InternalType();
+#endif
 		if (type == PhysicalType::LIST || type == PhysicalType::STRUCT) {
 			continue;
 		}
-		column_stats[col_idx]->stats->UpdateDistinctStatistics(chunk.data[col_idx], chunk.size());
+
+#ifdef DEBUG
+		column_stats[storage_idx]->stats->UpdateDistinctStatistics(chunk.data[storage_idx - 1], chunk.size());
+#else
+		column_stats[storage_idx]->stats->UpdateDistinctStatistics(chunk.data[storage_idx], chunk.size());
+#endif
 	}
 }
 
@@ -1032,7 +1095,7 @@ void DataTable::RemoveFromIndexes(Vector &row_identifiers, idx_t count) {
 	state.max_row = total_rows;
 	auto types = GetTypes();
 	for (idx_t i = 0; i < types.size(); i++) {
-		state.column_ids.push_back(i);
+		state.AddColumnId(i);
 	}
 	DataChunk result;
 	result.Initialize(Allocator::Get(db), types);

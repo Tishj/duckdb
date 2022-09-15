@@ -62,7 +62,7 @@ void RowGroup::InitializeEmpty(const vector<LogicalType> &types) {
 }
 
 bool RowGroup::InitializeScanWithOffset(RowGroupScanState &state, idx_t vector_offset) {
-	auto &column_ids = state.parent.column_ids;
+	auto &column_ids = state.parent.ColumnIds();
 	if (state.parent.table_filters) {
 		if (!CheckZonemap(*state.parent.table_filters, column_ids)) {
 			return false;
@@ -75,7 +75,11 @@ bool RowGroup::InitializeScanWithOffset(RowGroupScanState &state, idx_t vector_o
 	    this->start > state.parent.max_row ? 0 : MinValue<idx_t>(this->count, state.parent.max_row - this->start);
 	state.column_scans = unique_ptr<ColumnScanState[]>(new ColumnScanState[column_ids.size()]);
 	for (idx_t i = 0; i < column_ids.size(); i++) {
+#ifdef DEBUG
+		auto column = column_ids[i] - 1;
+#else
 		auto column = column_ids[i];
+#endif
 		if (column != COLUMN_IDENTIFIER_ROW_ID) {
 			columns[column]->InitializeScanWithOffset(state.column_scans[i],
 			                                          start + vector_offset * STANDARD_VECTOR_SIZE);
@@ -87,7 +91,7 @@ bool RowGroup::InitializeScanWithOffset(RowGroupScanState &state, idx_t vector_o
 }
 
 bool RowGroup::InitializeScan(RowGroupScanState &state) {
-	auto &column_ids = state.parent.column_ids;
+	auto &column_ids = state.parent.ColumnIds();
 	if (state.parent.table_filters) {
 		if (!CheckZonemap(*state.parent.table_filters, column_ids)) {
 			return false;
@@ -223,8 +227,8 @@ void RowGroup::CommitDropColumn(idx_t column_idx) {
 
 void RowGroup::NextVector(RowGroupScanState &state) {
 	state.vector_index++;
-	for (idx_t i = 0; i < state.parent.column_ids.size(); i++) {
-		auto column = state.parent.column_ids[i];
+	for (idx_t i = 0; i < state.parent.ColumnIds().size(); i++) {
+		auto column = state.parent.ColumnIds()[i];
 		if (column == COLUMN_IDENTIFIER_ROW_ID) {
 			continue;
 		}
@@ -252,7 +256,7 @@ bool RowGroup::CheckZonemapSegments(RowGroupScanState &state) {
 	if (!state.parent.table_filters) {
 		return true;
 	}
-	auto &column_ids = state.parent.column_ids;
+	auto &column_ids = state.parent.ColumnIds();
 	for (auto &entry : state.parent.table_filters->filters) {
 		D_ASSERT(entry.first < column_ids.size());
 		auto column_idx = entry.first;
@@ -288,7 +292,7 @@ void RowGroup::TemplatedScan(Transaction *transaction, RowGroupScanState &state,
 	const bool ALLOW_UPDATES = TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES &&
 	                           TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED;
 	auto &table_filters = state.parent.table_filters;
-	auto &column_ids = state.parent.column_ids;
+	auto &column_ids = state.parent.ColumnIds();
 	auto &adaptive_filter = state.parent.adaptive_filter;
 	while (true) {
 		if (state.vector_index * STANDARD_VECTOR_SIZE >= state.max_row) {

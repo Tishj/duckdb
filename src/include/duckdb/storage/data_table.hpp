@@ -180,6 +180,7 @@ public:
 	static bool IsForeignKeyIndex(const vector<idx_t> &fk_keys, Index &index, ForeignKeyType fk_type);
 
 private:
+	void AddColumnStats(shared_ptr<ColumnStatistics> stats);
 	//! Verify the new added constraints against current persistent&local data
 	void VerifyNewConstraint(ClientContext &context, DataTable &parent, const Constraint *constraint);
 	//! Verify constraints with a chunk from the Append containing all columns of the table
