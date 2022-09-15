@@ -42,7 +42,11 @@ static void CreateColumnMap(BoundCreateTableInfo &info, bool allow_duplicate_nam
 		if (col.Generated()) {
 			continue;
 		}
+#ifdef DEBUG
+		col.SetStorageOid(1 + storage_idx++);
+#else
 		col.SetStorageOid(storage_idx++);
+#endif
 	}
 }
 
