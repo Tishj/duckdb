@@ -26,11 +26,6 @@ DataTable::DataTable(DatabaseInstance &db, const string &schema, const string &t
     : info(make_shared<DataTableInfo>(db, schema, table)), column_definitions(move(column_definitions_p)), db(db),
       total_rows(0), is_root(true) {
 
-#ifdef DEBUG
-	for (auto &col : this->column_definitions) {
-		D_ASSERT(!col.Generated());
-	}
-#endif
 	// initialize the table with the existing data from disk, if any
 	this->row_groups = make_shared<SegmentTree>();
 	auto types = GetTypes();
@@ -43,39 +38,18 @@ DataTable::DataTable(DatabaseInstance &db, const string &schema, const string &t
 			}
 			row_groups->AppendSegment(move(new_row_group));
 		}
-#ifdef DEBUG
-		// Make room for a dummy item
 		column_stats.reserve(data->column_stats.size());
-		AddColumnStats(nullptr);
-#else
-		column_stats.reserve(data->column_stats.size());
-#endif
 		for (auto &stats : data->column_stats) {
 			AddColumnStats(make_shared<ColumnStatistics>(move(stats)));
 		}
-#ifdef DEBUG
-		if (column_stats.size() != types.size() + 1) { // LCOV_EXCL_START
-			throw IOException("Table statistics column count is not aligned with table column count. Corrupt file?");
-		} // LCOV_EXCL_STOP
-#else
 		if (column_stats.size() != types.size()) { // LCOV_EXCL_START
 			throw IOException("Table statistics column count is not aligned with table column count. Corrupt file?");
 		} // LCOV_EXCL_STOP
-#endif
 	}
-#ifdef DEBUG
-	if (column_stats.size() <= 1) {
-#else
 	if (column_stats.empty()) {
-#endif
 		D_ASSERT(total_rows == 0);
 
 		AppendRowGroup(0);
-#ifdef DEBUG
-		if (column_stats.empty()) {
-			AddColumnStats(nullptr);
-		}
-#endif
 		for (auto &type : types) {
 			AddColumnStats(ColumnStatistics::CreateEmptyStats(type));
 		}
@@ -92,21 +66,8 @@ void DataTable::AppendRowGroup(idx_t start_row) {
 	row_groups->AppendSegment(move(new_row_group));
 }
 
-//#ifdef DEBUG
-// static ColumnDefinition DummyColumn() {
-//	ColumnDefinition column("DUMMY", LogicalType::ANY);
-//	column.SetGeneratedExpression(make_unique_base<ParsedExpression, ColumnRefExpression>("DUMMY_REF"));
-//	return column;
-//}
-//#endif
-
 DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression *default_value)
     : info(parent.info), db(parent.db), total_rows(parent.total_rows.load()), is_root(true) {
-	//#ifdef DEBUG
-	// if (column_definitions.empty()) {
-	//	column_definitions.push_back(DummyColumn());
-	//}
-	//#endif
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -117,11 +78,6 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition
 	auto new_column_type = new_column.Type();
 	auto new_column_idx = new_column.StorageOid();
 
-#ifdef DEBUG
-	if (column_stats.empty()) {
-		AddColumnStats(nullptr);
-	}
-#endif
 	// set up the statistics
 	for (idx_t i = 0; i < parent.column_stats.size(); i++) {
 		AddColumnStats(parent.column_stats[i]);
@@ -200,11 +156,7 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_co
 		if (col.Generated()) {
 			continue;
 		}
-#ifdef DEBUG
-		col.SetStorageOid(1 + storage_idx++);
-#else
 		col.SetStorageOid(storage_idx++);
-#endif
 	}
 
 	// alter the row_groups and remove the column from each of them
@@ -254,9 +206,6 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
 	// first check if there are any indexes that exist that point to the changed column
 	info->indexes.Scan([&](Index &index) {
 		for (auto column_id : index.column_ids) {
-#ifdef DEBUG
-			column_id--;
-#endif
 			if (column_id == changed_idx) {
 				throw CatalogException("Cannot change the type of this column: an index depends on it!");
 			}
@@ -264,9 +213,6 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
 		return false;
 	});
 	idx_t changed_column = changed_idx;
-#ifdef DEBUG
-	changed_column--;
-#endif
 
 	// change the type in this DataTable
 	column_definitions[changed_column].SetType(target_type);
@@ -876,28 +822,16 @@ void DataTable::Append(Transaction &transaction, DataChunk &chunk, TableAppendSt
 		}
 	}
 	state.current_row += append_count;
-#ifdef DEBUG
-	const idx_t column_count = column_stats.size() - 1;
-#else
 	const idx_t column_count = column_stats.size();
-#endif
 
 	for (idx_t col_idx = 0; col_idx < column_count; col_idx++) {
 		const auto storage_idx = column_definitions[col_idx].StorageOid();
-#ifdef DEBUG
-		auto type = chunk.data[storage_idx - 1].GetType().InternalType();
-#else
 		auto type = chunk.data[storage_idx].GetType().InternalType();
-#endif
 		if (type == PhysicalType::LIST || type == PhysicalType::STRUCT) {
 			continue;
 		}
 
-#ifdef DEBUG
-		column_stats[storage_idx]->stats->UpdateDistinctStatistics(chunk.data[storage_idx - 1], chunk.size());
-#else
 		column_stats[storage_idx]->stats->UpdateDistinctStatistics(chunk.data[storage_idx], chunk.size());
-#endif
 	}
 }
 
