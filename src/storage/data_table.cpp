@@ -63,12 +63,18 @@ DataTable::DataTable(DatabaseInstance &db, const string &schema, const string &t
 		} // LCOV_EXCL_STOP
 #endif
 	}
+#ifdef DEBUG
+	if (column_stats.size() <= 1) {
+#else
 	if (column_stats.empty()) {
+#endif
 		D_ASSERT(total_rows == 0);
 
 		AppendRowGroup(0);
 #ifdef DEBUG
-		AddColumnStats(nullptr);
+		if (column_stats.empty()) {
+			AddColumnStats(nullptr);
+		}
 #endif
 		for (auto &type : types) {
 			AddColumnStats(ColumnStatistics::CreateEmptyStats(type));
@@ -247,21 +253,28 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
 	}
 	// first check if there are any indexes that exist that point to the changed column
 	info->indexes.Scan([&](Index &index) {
-		for (auto &column_id : index.column_ids) {
+		for (auto column_id : index.column_ids) {
+#ifdef DEBUG
+			column_id--;
+#endif
 			if (column_id == changed_idx) {
 				throw CatalogException("Cannot change the type of this column: an index depends on it!");
 			}
 		}
 		return false;
 	});
+	idx_t changed_column = changed_idx;
+#ifdef DEBUG
+	changed_column--;
+#endif
 
 	// change the type in this DataTable
-	column_definitions[changed_idx].SetType(target_type);
+	column_definitions[changed_column].SetType(target_type);
 
 	// set up the statistics for the table
 	// the column that had its type changed will have the new statistics computed during conversion
 	for (idx_t i = 0; i < column_definitions.size(); i++) {
-		if (i == changed_idx) {
+		if (i == changed_column) {
 			AddColumnStats(ColumnStatistics::CreateEmptyStats(column_definitions[i].Type()));
 		} else {
 			AddColumnStats(parent.column_stats[i]);
