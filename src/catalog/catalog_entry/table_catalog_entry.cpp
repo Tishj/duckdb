@@ -613,6 +613,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &cont
 	AlterBinder expr_binder(*binder, context, *this, bound_columns, info.target_type);
 	auto expression = info.expression->Copy();
 	auto bound_expression = expr_binder.Bind(expression);
+	D_ASSERT(bound_expression->type != ExpressionType::INVALID);
 	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	if (bound_columns.empty()) {
 		bound_columns.push_back(COLUMN_IDENTIFIER_ROW_ID);
