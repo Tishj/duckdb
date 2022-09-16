@@ -361,7 +361,9 @@ bool LocalStorage::ScanTableStorage(DataTable &table, LocalTableStorage &storage
 	vector<column_t> column_ids;
 	column_ids.reserve(table.column_definitions.size());
 	for (idx_t i = 0; i < table.column_definitions.size(); i++) {
-		column_ids.push_back(i);
+		auto &column = table.column_definitions[i];
+		D_ASSERT(!column.Generated());
+		column_ids.push_back(column.StorageOid());
 	}
 
 	DataChunk chunk;

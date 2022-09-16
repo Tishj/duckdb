@@ -83,6 +83,16 @@ void AddDataTableIndex(DataTable *storage, vector<ColumnDefinition> &columns, ve
 	}
 }
 
+#ifdef DEBUG
+static ColumnDefinition DummyColumn() {
+	static const child_list_t<LogicalType> children {{"DUMMY", LogicalType::LIST(LogicalType::INTEGER)},
+	                                                 {"SCAN", LogicalType::LIST(LogicalType::INTEGER)}};
+	auto column = ColumnDefinition("DUMMY", LogicalType::STRUCT(children));
+	column.SetStorageOid(0);
+	return column;
+}
+#endif
+
 TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schema, BoundCreateTableInfo *info,
                                      std::shared_ptr<DataTable> inherited_storage)
     : StandardEntry(CatalogType::TABLE_ENTRY, schema, catalog, info->Base().table), storage(move(inherited_storage)),
@@ -106,6 +116,9 @@ TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schem
 		// create the physical storage
 		vector<ColumnDefinition> storage_columns;
 		vector<ColumnDefinition> get_columns;
+#ifdef DEBUG
+		storage_columns.push_back(DummyColumn());
+#endif
 		for (auto &col_def : columns) {
 			get_columns.push_back(col_def.Copy());
 			if (col_def.Generated()) {

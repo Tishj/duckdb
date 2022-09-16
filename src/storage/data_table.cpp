@@ -66,8 +66,21 @@ void DataTable::AppendRowGroup(idx_t start_row) {
 	row_groups->AppendSegment(move(new_row_group));
 }
 
+#ifdef DEBUG
+static ColumnDefinition DummyColumn() {
+	static const child_list_t<LogicalType> children {{"DUMMY", LogicalType::LIST(LogicalType::INTEGER)},
+	                                                 {"SCAN", LogicalType::LIST(LogicalType::INTEGER)}};
+	auto column = ColumnDefinition("DUMMY", LogicalType::STRUCT(children));
+	column.SetStorageOid(0);
+	return column;
+}
+#endif
+
 DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression *default_value)
     : info(parent.info), db(parent.db), total_rows(parent.total_rows.load()), is_root(true) {
+#ifdef DEBUG
+	column_definitions.push_back(DummyColumn());
+#endif
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -123,6 +136,9 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_co
 	// prevent any new tuples from being added to the parent
 	lock_guard<mutex> parent_lock(parent.append_lock);
 
+#ifdef DEBUG
+	column_definitions.push_back(DummyColumn());
+#endif
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -149,7 +165,11 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_co
 	D_ASSERT(removed_column < column_definitions.size());
 	column_definitions.erase(column_definitions.begin() + removed_column);
 
+#ifdef DEBUG
+	storage_t storage_idx = 1;
+#else
 	storage_t storage_idx = 0;
+#endif
 	for (idx_t i = 0; i < column_definitions.size(); i++) {
 		auto &col = column_definitions[i];
 		col.SetOid(i);
@@ -178,6 +198,9 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, unique_ptr<Bound
       is_root(true) {
 
 	lock_guard<mutex> parent_lock(parent.append_lock);
+#ifdef DEBUG
+	column_definitions.push_back(DummyColumn());
+#endif
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -200,6 +223,9 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
     : info(parent.info), db(parent.db), total_rows(parent.total_rows.load()), is_root(true) {
 	// prevent any tuples from being added to the parent
 	lock_guard<mutex> lock(append_lock);
+#ifdef DEBUG
+	column_definitions.push_back(DummyColumn());
+#endif
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -838,7 +864,7 @@ void DataTable::ScanTableSegment(idx_t row_start, idx_t count, const std::functi
 	vector<LogicalType> types;
 	for (idx_t i = 0; i < this->column_definitions.size(); i++) {
 		auto &col = this->column_definitions[i];
-		column_ids.push_back(i);
+		column_ids.push_back(col.StorageOid());
 		types.push_back(col.Type());
 	}
 	DataChunk chunk;

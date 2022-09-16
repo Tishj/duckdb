@@ -22,7 +22,11 @@ namespace duckdb {
 static void CreateColumnMap(BoundCreateTableInfo &info, bool allow_duplicate_names) {
 	auto &base = (CreateTableInfo &)*info.base;
 
+#ifdef DEBUG
+	idx_t storage_idx = 1;
+#else
 	idx_t storage_idx = 0;
+#endif
 	for (uint64_t oid = 0; oid < base.columns.size(); oid++) {
 		auto &col = base.columns[oid];
 		if (allow_duplicate_names) {
