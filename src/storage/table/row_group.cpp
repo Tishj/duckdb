@@ -76,11 +76,6 @@ bool RowGroup::InitializeScanWithOffset(RowGroupScanState &state, idx_t vector_o
 	state.column_scans = unique_ptr<ColumnScanState[]>(new ColumnScanState[column_ids.size()]);
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		auto column = column_ids[i];
-#ifdef DEBUG
-		if (column != COLUMN_IDENTIFIER_ROW_ID) {
-			column--;
-		}
-#endif
 		if (column != COLUMN_IDENTIFIER_ROW_ID) {
 			columns[column]->InitializeScanWithOffset(state.column_scans[i],
 			                                          start + vector_offset * STANDARD_VECTOR_SIZE);
@@ -243,11 +238,6 @@ bool RowGroup::CheckZonemap(TableFilterSet &filters, const vector<column_t> &col
 		auto column_index = entry.first;
 		auto &filter = entry.second;
 		auto base_column_index = column_ids[column_index];
-#ifdef DEBUG
-		if (base_column_index != COLUMN_IDENTIFIER_ROW_ID) {
-			base_column_index--;
-		}
-#endif
 
 		auto propagate_result = filter->CheckStatistics(*stats[base_column_index]->statistics);
 		if (propagate_result == FilterPropagateResult::FILTER_ALWAYS_FALSE ||
@@ -267,11 +257,6 @@ bool RowGroup::CheckZonemapSegments(RowGroupScanState &state) {
 		D_ASSERT(entry.first < column_ids.size());
 		auto column_idx = entry.first;
 		auto base_column_idx = column_ids[column_idx];
-#ifdef DEBUG
-		if (base_column_idx != COLUMN_IDENTIFIER_ROW_ID) {
-			base_column_idx--;
-		}
-#endif
 		bool read_segment = columns[base_column_idx]->CheckZonemap(state.column_scans[column_idx], *entry.second);
 		if (!read_segment) {
 			idx_t target_row =
@@ -347,11 +332,6 @@ void RowGroup::TemplatedScan(Transaction *transaction, RowGroupScanState &state,
 			// scan all vectors completely: full scan without deletions or table filters
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				auto column = column_ids[i];
-#ifdef DEBUG
-				if (column != COLUMN_IDENTIFIER_ROW_ID) {
-					column--;
-				}
-#endif
 				if (column == COLUMN_IDENTIFIER_ROW_ID) {
 					// scan row id
 					D_ASSERT(result.data[i].GetType().InternalType() == ROW_TYPE);
@@ -383,11 +363,6 @@ void RowGroup::TemplatedScan(Transaction *transaction, RowGroupScanState &state,
 				for (idx_t i = 0; i < table_filters->filters.size(); i++) {
 					auto tf_idx = adaptive_filter->permutation[i];
 					auto col_idx = column_ids[tf_idx];
-#ifdef DEBUG
-					if (col_idx != COLUMN_IDENTIFIER_ROW_ID) {
-						col_idx--;
-					}
-#endif
 					columns[col_idx]->Select(*transaction, state.vector_index, state.column_scans[tf_idx],
 					                         result.data[tf_idx], sel, approved_tuple_count,
 					                         *table_filters->filters[tf_idx]);
