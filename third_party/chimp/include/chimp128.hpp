@@ -275,7 +275,7 @@ public:
 		switch (flag) {
 		case VALUE_IDENTICAL: {
 			//! Value is identical to previous value
-			auto index = state.input.template ReadValue<uint8_t, INDEX_BITS_SIZE>();
+			const auto index = state.input.template ReadValue<uint8_t, (INDEX_BITS_SIZE >> 3), INDEX_BITS_SIZE & 7>();
 			value = state.ring_buffer.Value(index);
 			break;
 		}
@@ -283,7 +283,7 @@ public:
 			uint16_t index;
 			uint8_t leading_zeros;
 			uint16_t significant_bits;
-			uint16_t temp = state.input.template ReadValue<uint64_t, INITIAL_FILL>();
+			uint16_t temp = state.input.template ReadValue<uint32_t, (INITIAL_FILL >> 3), INITIAL_FILL & 7>();
 			UnpackPackedData(temp, index, leading_zeros, significant_bits);
 			state.leading_zeros = LEADING_REPRESENTATION[leading_zeros];
 			if (significant_bits == 0) {
@@ -301,7 +301,7 @@ public:
 			break;
 		}
 		case LEADING_ZERO_LOAD: {
-			const auto deserialized_leading_zeros = state.input.template ReadValue<uint8_t>(LEADING_BITS_SIZE);
+			const auto deserialized_leading_zeros = state.input.template ReadValue<uint8_t, (LEADING_BITS_SIZE >> 3), LEADING_BITS_SIZE & 7>();
 			state.SetLeadingZeros(LEADING_REPRESENTATION[deserialized_leading_zeros]);
             value = state.input.template ReadValue<uint64_t>(BIT_SIZE - state.LeadingZeros());
             value ^= state.reference_value;
