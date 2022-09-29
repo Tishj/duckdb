@@ -6,70 +6,49 @@
 
 namespace duckdb_chimp {
 
-// This class reads arbitrary amounts of bits from a buffer
-// If 41 bits are requested (5 bytes + 1 bit), we will read 6 bytes and increment the byte index by 6
-// With the assumption that the remainder of the last byte read is zero-initialized
 class ByteReader {
-private:
-	static constexpr uint8_t final_shifts[8] = {
-		0,
-		7,
-		6,
-		5,
-		4,
-		3,
-		2,
-		1
-	};
 public:
-	ByteReader() : buffer(nullptr), index(0) {
+	ByteReader() : buffer(nullptr) {
 
 	}
 public:
 	void SetStream(uint8_t* buffer) {
 		this->buffer = buffer;
-		index = 0;
 	}
 
 	template <class T>
 	T ReadValue() {
-		throw std::runtime_error("fixme read value");
-//		uint64_t bytes = 0;
-//		const uint8_t bytes_to_read = (SIZE >> 3) + ((SIZE & 7) != 0);
-//		duckdb::FastMemcpy(&bytes, (void*)(buffer + index), bytes_to_read);
-//		T result = (T)bytes;
-//		index += bytes_to_read;
-//		return result;
+		throw std::runtime_error("Unsupported type for ReadValue");
 	}
 
 	template <>
 	uint8_t ReadValue<uint8_t>() {
-		auto result = duckdb::Load<uint8_t>(buffer + index);
-		index ++;
+		auto result = duckdb::Load<uint8_t>(buffer);
+		buffer++;
 		return result;
 	}
 	template <>
 	uint16_t ReadValue<uint16_t>() {
-		auto result = duckdb::Load<uint16_t>(buffer + index);
-		index += 2;
+		auto result = duckdb::Load<uint16_t>(buffer);
+		buffer += 2;
 		return result;
 	}
 	template <>
 	uint32_t ReadValue<uint32_t>() {
-		auto result = duckdb::Load<uint32_t>(buffer + index);
-		index += 4;
+		auto result = duckdb::Load<uint32_t>(buffer);
+		buffer += 4;
 		return result;
 	}
 	template <>
 	uint64_t ReadValue<uint64_t>() {
-		auto result = duckdb::Load<uint64_t>(buffer + index);
-		index += 8;
+		auto result = duckdb::Load<uint64_t>(buffer);
+		buffer += 8;
 		return result;
 	}
 
 	template <class T> 
-	T ReadValue(const uint8_t &size) {
-		T result = 0;
+	T ReadValue(uint8_t size) {
+		T result;
 		switch(size) {
 		case 1:
 		case 2:
@@ -79,8 +58,8 @@ public:
 		case 6:
 		case 7:
 		case 8:
-			result = duckdb::Load<uint8_t>(buffer + index);
-			index++;
+			result = duckdb::Load<uint8_t>(buffer);
+			buffer++;
 			return result;
 		case 9:
 		case 10:
@@ -90,8 +69,8 @@ public:
 		case 14:
 		case 15:
 		case 16:
-			result = duckdb::Load<uint16_t>(buffer + index);
-			index+=2;
+			result = duckdb::Load<uint16_t>(buffer);
+			buffer += 2;
 			return result;
 		case 17:
 		case 18:
@@ -101,8 +80,8 @@ public:
 		case 22:
 		case 23:
 		case 24:
-			memcpy(&result, (void *)(buffer + index), 3);
-			index+=3;
+			result = duckdb::Load<uint8_t>(buffer) + (duckdb::Load<uint16_t>(buffer + 1) << 8);
+			buffer += 3;
 			return result;
 		case 25:
 		case 26:
@@ -112,8 +91,8 @@ public:
 		case 30:
 		case 31:
 		case 32:
-			result = duckdb::Load<uint32_t>(buffer + index);
-			index+=4;
+			result = duckdb::Load<uint32_t>(buffer);
+			buffer+=4;
 			return result;
 		case 33:
 		case 34:
@@ -123,8 +102,8 @@ public:
 		case 38:
 		case 39:
 		case 40:
-			memcpy(&result, (void *)(buffer + index), 5);
-			index+=5;
+			result = duckdb::Load<uint8_t>(buffer) + (duckdb::Load<uint32_t>(buffer + 1) << 8);
+			buffer+=5;
 			return result;
 		case 41:
 		case 42:
@@ -134,8 +113,8 @@ public:
 		case 46:
 		case 47:
 		case 48:
-			memcpy(&result, (void *)(buffer + index), 6);
-			index+=6;
+			result = duckdb::Load<uint16_t>(buffer) + (duckdb::Load<uint32_t>(buffer + 2) << 16);
+			buffer+=6;
 			return result;
 		case 49:
 		case 50:
@@ -145,20 +124,18 @@ public:
 		case 54:
 		case 55:
 		case 56:
-			memcpy(&result, (void *)(buffer + index), 7);
-			index+=7;
+			result = 0;
+			memcpy(&result, (void *)(buffer), 7);
+			buffer+=7;
 			return result;
 		default:
-			result = duckdb::Load<uint64_t>(buffer + index);
-//			memcpy(&result, (void *)(buffer + index), 8);
-			index+=8;
+			result = duckdb::Load<uint64_t>(buffer);
+			buffer+=8;
 			return result;
 		}
 	}
 private:
-private:
 	uint8_t *buffer;
-	uint32_t index;
 };
 
 } //namespace duckdb
