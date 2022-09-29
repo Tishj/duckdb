@@ -170,7 +170,7 @@ public:
 				auto result = 512U * (RingBuffer::RING_SIZE + previous_index) + BIT_SIZE * LEADING_REPRESENTATION[leading_zeros] + significant_bits;
 				state.output.template WriteValue<uint16_t, 16>((uint16_t)(result & 0xFFFF));
 				state.output.template WriteValue<uint64_t>(xor_result >> trailing_zeros, significant_bits);
-				state.SetLeadingZeros();
+				state.SetLeadingZeros(leading_zeros);
 			}
 			else if (leading_zeros == state.previous_leading_zeros) {
 				state.flag_buffer.Insert(LEADING_ZERO_EQUALITY);
@@ -310,11 +310,8 @@ public:
 			const uint16_t temp = state.input.template ReadValue<uint16_t>();
 			UnpackPackedData(temp, index, leading_zeros, significant_bits);
 			state.leading_zeros = LEADING_REPRESENTATION[leading_zeros];
-			if (significant_bits == 0) {
-				significant_bits = 64;
-			}
 			state.SetTrailingZeros(BIT_SIZE - significant_bits - state.LeadingZeros());
-			result = state.input.template ReadValue<uint64_t>(BIT_SIZE - state.LeadingZeros() - state.TrailingZeros());
+			result = state.input.template ReadValue<uint64_t>(significant_bits);
 			result <<= state.TrailingZeros();
 			result ^= state.ring_buffer.Value(index);
 			break;
