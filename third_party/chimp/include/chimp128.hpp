@@ -283,7 +283,7 @@ public:
 
 	static inline RETURN_TYPE LoadFirst(Chimp128DecompressionState& state) {
 		RETURN_TYPE result = state.input.template ReadValue<RETURN_TYPE>();
-		state.ring_buffer.Insert<true>(result);
+		state.ring_buffer.InsertScan<true>(result);
 		state.first = false;
 		state.reference_value = result;
 		return result;
@@ -294,14 +294,14 @@ public:
 			0, 8, 12, 16, 18, 20, 22, 24
 		};
 
+		RETURN_TYPE result;
+
 		switch (flag) {
 		case VALUE_IDENTICAL: {
 			//! Value is identical to previous value
 			auto index = state.input.template ReadValue<uint8_t>();
-			RETURN_TYPE result = state.ring_buffer.Value(index);
-			state.reference_value = result;
-			state.ring_buffer.Insert(result);
-			return result;
+			result = state.ring_buffer.Value(index);
+			break;
 		}
 		case TRAILING_EXCEEDS_THRESHOLD: {
 			uint16_t index;
@@ -314,32 +314,29 @@ public:
 				significant_bits = 64;
 			}
 			state.SetTrailingZeros(BIT_SIZE - significant_bits - state.LeadingZeros());
-			RETURN_TYPE result = state.input.template ReadValue<uint64_t>(BIT_SIZE - state.LeadingZeros() - state.TrailingZeros());
+			result = state.input.template ReadValue<uint64_t>(BIT_SIZE - state.LeadingZeros() - state.TrailingZeros());
 			result <<= state.TrailingZeros();
 			result ^= state.ring_buffer.Value(index);
-			state.reference_value = result;
-			state.ring_buffer.Insert(result);
-			return result;
+			break;
 		}
 		case LEADING_ZERO_EQUALITY: {
-			RETURN_TYPE result = state.input.template ReadValue<uint64_t>(BIT_SIZE - state.LeadingZeros());
+			result = state.input.template ReadValue<uint64_t>(BIT_SIZE - state.LeadingZeros());
 			result ^= state.reference_value;
-			state.reference_value = result;
-			state.ring_buffer.Insert(result);
-			return result;
+			break;
 		}
 		case LEADING_ZERO_LOAD: {
 			auto leading_zero = leading_zeros[leading_zero_index++];
-			RETURN_TYPE result = state.input.template ReadValue<uint64_t>(BIT_SIZE - leading_zero);
+			result = state.input.template ReadValue<uint64_t>(BIT_SIZE - leading_zero);
 			result ^= state.reference_value;
-			state.reference_value = result;
-			state.ring_buffer.Insert(result);
 			state.leading_zeros = leading_zero;
-			return result;
+			break;
 		}
 		default:
 			throw std::runtime_error("eek");
 		}
+		state.reference_value = result;
+		state.ring_buffer.InsertScan(result);
+		return result;
 	}
 };
 
