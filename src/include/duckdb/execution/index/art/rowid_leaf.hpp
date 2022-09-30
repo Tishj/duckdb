@@ -41,6 +41,14 @@ public:
 		return BlockPointer(rowid);
 	}
 
+	static void Merge(BaseNode *&l_node, BaseNode *&r_node) {
+		auto l_rowid = l_node->GetRowId(0);
+		auto r_rowid = l_node->GetRowId(0);
+		if (l_rowid != r_rowid) {
+			throw ConstraintException("Data contains duplicates on indexed column(s)");
+		}
+	}
+
 private:
 	Prefix prefix;
 	row_t rowid;

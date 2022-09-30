@@ -19,11 +19,13 @@ public:
 	SwizzleablePointer children[16];
 
 public:
-	//! Get position of a byte, returns -1 if not exists
+	//! Get position of a specific byte, returns DConstants::INVALID_INDEX if not exists
 	idx_t GetChildPos(uint8_t k) override;
 	//! Get the position of the first child that is greater or equal to the specific byte, or DConstants::INVALID_INDEX
 	//! if there are no children matching the criteria
 	idx_t GetChildGreaterEqual(uint8_t k, bool &equal) override;
+	//! Get the position of the minimum element in the node
+	idx_t GetMin() override;
 	//! Get the next position in the node, or DConstants::INVALID_INDEX if there is no next position
 	idx_t GetNextPos(idx_t pos) override;
 	//! Get Node16 Child
@@ -31,12 +33,17 @@ public:
 
 	//! Replace child pointer
 	void ReplaceChildPointer(idx_t pos, BaseNode *node) override;
-
-	idx_t GetMin() override;
-
 	//! Insert node into Node16
 	static void Insert(BaseNode *&node, uint8_t key_byte, BaseNode *child);
-	//! Shrink to node 4
-	static void Erase(BaseNode *&node, int pos, ART &art);
+	////! Shrink to node 4
+	// static void Erase(BaseNode *&node, int pos, ART &art);
+	//! Insert a new child node at key_byte into the Node16
+	static void InsertChild(BaseNode *&node, uint8_t key_byte, BaseNode *new_child);
+	//! Erase the child at pos and (if necessary) shrink to Node4
+	static void EraseChild(BaseNode *&node, int pos, ART &art);
+	//! Merge Node16 into l_node
+	static void Merge(MergeInfo &info, idx_t depth, BaseNode *&l_parent, idx_t l_pos);
+	//! Returns the size (maximum capacity) of the Node16
+	static idx_t GetSize();
 };
 } // namespace duckdb

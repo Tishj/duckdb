@@ -17,9 +17,11 @@ class Leaf : public Node {
 public:
 	~Leaf() override {
 	}
-	Leaf(Key &value, unsigned depth, row_t row_id);
 
+	Leaf(Key &value, uint32_t depth, row_t row_id);
+	Leaf(Key &value, uint32_t depth, unique_ptr<row_t[]> row_ids, idx_t num_elements);
 	Leaf(unique_ptr<row_t[]> row_ids, idx_t num_elements, Prefix &prefix);
+
 	idx_t capacity;
 
 public:
@@ -30,11 +32,18 @@ public:
 		return true;
 	}
 
+public:
+	//! Insert a row_id into a leaf
 	void Insert(row_t row_id);
+	//! Remove a row_id from a leaf
 	void Remove(row_t row_id);
 
-	BlockPointer SerializeLeaf(duckdb::MetaBlockWriter &writer) override;
+	//! Merge two NLeaf nodes
+	static void Merge(bool &has_constraint, BaseNode *&l_node, BaseNode *&r_node);
 
+	//! Serialize a leaf
+	BlockPointer SerializeLeaf(duckdb::MetaBlockWriter &writer) override;
+	// Deserialize a leaf
 	static Leaf *Deserialize(duckdb::MetaBlockReader &reader);
 
 private:

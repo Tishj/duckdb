@@ -54,7 +54,7 @@ public:
 	//! Deletes the underlying object (if necessary) and set the pointer to null_ptr
 	void Reset();
 	//! Unswizzle the pointer (if possible)
-	Node *Unswizzle(ART &art);
+	BaseNode *Unswizzle(ART &art);
 
 	BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer);
 };

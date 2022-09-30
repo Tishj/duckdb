@@ -1,4 +1,5 @@
 #include "duckdb/execution/index/art/node4.hpp"
+
 #include "duckdb/execution/index/art/node16.hpp"
 #include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/storage/meta_block_reader.hpp"
@@ -7,10 +8,6 @@ namespace duckdb {
 
 Node4::Node4() : Node(NodeType::N4) {
 	memset(key, 0, sizeof(key));
-}
-
-void Node4::ReplaceChildPointer(idx_t pos, BaseNode *node) {
-	children[pos] = node;
 }
 
 idx_t Node4::GetChildPos(uint8_t k) {
@@ -53,10 +50,14 @@ BaseNode *Node4::GetChild(ART &art, idx_t pos) {
 	return children[pos].Unswizzle(art);
 }
 
-void Node4::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *new_child) {
+void Node4::ReplaceChildPointer(idx_t pos, BaseNode *node) {
+	children[pos] = node;
+}
+
+void Node4::InsertChild(BaseNode *&node, uint8_t key_byte, BaseNode *new_child) {
 	Node4 *n = (Node4 *)node;
 
-	// Insert leaf into inner node
+	// Insert new child node into node
 	if (node->Count() < 4) {
 		// Insert element
 		idx_t pos = 0;
@@ -76,20 +77,20 @@ void Node4::Insert(BaseNode *&node, uint8_t key_byte, BaseNode *new_child) {
 		// Grow to Node16
 		auto new_node = new Node16();
 		new_node->count = 4;
-		new_node->prefix = move(node->GetMutPrefix());
+		new_node->GetMutPrefix() = move(node->GetMutPrefix());
 		for (idx_t i = 0; i < 4; i++) {
 			new_node->key[i] = n->key[i];
 			new_node->children[i] = n->children[i];
 			n->children[i] = nullptr;
 		}
-		// Delete old node and replace it with new node
+		// Delete old node and replace it with new Node16
 		delete node;
 		node = new_node;
-		Node16::Insert(node, key_byte, new_child);
+		Node16::InsertChild(node, key_byte, new_child);
 	}
 }
 
-void Node4::Erase(BaseNode *&node, int pos, ART &art) {
+void Node4::EraseChild(BaseNode *&node, int pos, ART &art) {
 	Node4 *n = (Node4 *)node;
 	D_ASSERT(pos < n->count);
 	// erase the child and decrease the count
@@ -114,6 +115,21 @@ void Node4::Erase(BaseNode *&node, int pos, ART &art) {
 		delete node;
 		node = child_ref;
 	}
+}
+
+void Node4::Merge(MergeInfo &info, idx_t depth, BaseNode *&l_parent, idx_t l_pos) {
+
+	Node4 *r_n = (Node4 *)info.r_node;
+
+	for (idx_t i = 0; i < info.r_node->Count(); i++) {
+
+		auto l_child_pos = info.l_node->GetChildPos(r_n->key[i]);
+		Node::MergeAtByte(info, depth, l_child_pos, i, r_n->key[i], l_parent, l_pos);
+	}
+}
+
+idx_t Node4::GetSize() {
+	return 4;
 }
 
 } // namespace duckdb

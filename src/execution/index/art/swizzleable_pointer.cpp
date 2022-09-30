@@ -48,13 +48,13 @@ BlockPointer SwizzleablePointer::GetSwizzledBlockInfo() {
 void SwizzleablePointer::Reset() {
 	if (Pointer()) {
 		if (!IsSwizzled()) {
-			delete (Node *)Pointer();
+			delete (BaseNode *)Pointer();
 		}
 	}
 	*this = nullptr;
 }
 
-Node *SwizzleablePointer::Unswizzle(ART &art) {
+BaseNode *SwizzleablePointer::Unswizzle(ART &art) {
 	if (IsSwizzled()) {
 		// This means our pointer is not yet in memory, gotta deserialize this
 		// first we unset the bae
@@ -62,13 +62,13 @@ Node *SwizzleablePointer::Unswizzle(ART &art) {
 		D_ASSERT(!IsRowid()); // RowIdLeaf can and should not be deserialized
 		*this = Node::Deserialize(art, block_info.block_id, block_info.offset);
 	}
-	return (Node *)Pointer();
+	return (BaseNode *)Pointer();
 }
 
 BlockPointer SwizzleablePointer::Serialize(ART &art, duckdb::MetaBlockWriter &writer) {
 	if (Pointer()) {
 		Unswizzle(art);
-		return ((Node *)Pointer())->Serialize(art, writer);
+		return ((BaseNode *)Pointer())->Serialize(art, writer);
 	} else {
 		return BlockPointer::Invalid();
 	}

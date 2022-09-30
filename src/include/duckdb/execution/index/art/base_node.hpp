@@ -28,7 +28,7 @@ class BaseNode {
 public:
 	virtual ~BaseNode() {
 	}
-	//! node type
+	//! Node type
 	NodeType type;
 
 public:
