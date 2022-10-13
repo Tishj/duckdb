@@ -14,6 +14,8 @@
 #include "duckdb/storage/compression/chimp/algorithm/chimp_utils.hpp"
 #include "duckdb/storage/compression/patas/shared.hpp"
 
+#include "duckdb/storage/compression/patas/algorithm/grouped_byte_writer.hpp"
+
 static constexpr uint32_t PATAS_GROUP_SIZE = duckdb::PatasPrimitives::PATAS_GROUP_SIZE;
 
 namespace duckdb {
@@ -55,7 +57,7 @@ public:
 	}
 
 public:
-	ByteWriter<EMPTY> byte_writer;
+	GroupedByteWriter<EMPTY> byte_writer;
 	uint8_t trailing_zeros[PATAS_GROUP_SIZE];
 	uint8_t byte_counts[PATAS_GROUP_SIZE];
 	uint8_t indices[PATAS_GROUP_SIZE];
@@ -80,7 +82,7 @@ struct PatasCompression {
 	static void StoreFirst(EXACT_TYPE value, State &state) {
 		// write first value, uncompressed
 		state.ring_buffer.template Insert<true>(value);
-		state.byte_writer.template WriteValue<EXACT_TYPE, EXACT_TYPE_BITSIZE>(value);
+		state.byte_writer.template WriteValue<EXACT_TYPE, sizeof(EXACT_TYPE)>(value);
 		state.first = false;
 		state.UpdateMetadata(0, sizeof(EXACT_TYPE), 0);
 	}
@@ -112,7 +114,7 @@ struct PatasCompression {
 		const uint8_t significant_bytes = (significant_bits >> 3) + ((significant_bits & 7) != 0);
 
 		// Avoid an invalid shift error when xor_result is 0
-		state.byte_writer.template WriteValue<EXACT_TYPE>(xor_result >> (trailing_zero - is_equal), significant_bits);
+		state.byte_writer.template WriteValue<EXACT_TYPE>(xor_result >> (trailing_zero - is_equal), significant_bytes);
 
 		state.ring_buffer.Insert(value);
 		const uint8_t index_difference = state.ring_buffer.Size() - reference_index;
@@ -146,15 +148,14 @@ template <class EXACT_TYPE>
 struct PatasDecompression {
 	using State = PatasDecompressionState<EXACT_TYPE>;
 
-	static inline EXACT_TYPE Load(State &state, idx_t index, uint8_t byte_counts[], uint8_t trailing_zeros[],
+	static inline EXACT_TYPE Load(idx_t index, uint8_t trailing_zeros[], EXACT_TYPE byte_values[],
 	                              EXACT_TYPE previous) {
-		return DecompressValue(state, index, byte_counts, trailing_zeros, previous);
+		return DecompressValue(index, trailing_zeros, byte_values, previous);
 	}
 
-	static inline EXACT_TYPE DecompressValue(State &state, idx_t index, uint8_t byte_counts[], uint8_t trailing_zeros[],
+	static inline EXACT_TYPE DecompressValue(idx_t index, uint8_t trailing_zeros[], EXACT_TYPE byte_values[],
 	                                         EXACT_TYPE previous) {
-		return (state.byte_reader.template ReadValue<EXACT_TYPE>(byte_counts[index]) << trailing_zeros[index]) ^
-		       previous;
+		return (byte_values[index] << trailing_zeros[index]) ^ previous;
 	}
 };
 

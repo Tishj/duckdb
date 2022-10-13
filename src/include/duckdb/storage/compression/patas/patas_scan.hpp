@@ -24,6 +24,7 @@
 
 namespace duckdb {
 
+using duckdb_chimp::ByteReader;
 using duckdb_chimp::SignificantBits;
 
 template <class EXACT_TYPE>
@@ -58,12 +59,46 @@ public:
 		                                            PatasPrimitives::INDEX_BITSIZE);
 	}
 
+	uint8_t ByteCount(idx_t index) const {
+		return ((byte_counts[index] == 0) * 8) + byte_counts[index];
+	}
+
+	void LoadByteValues(uint8_t *data, idx_t value_count) {
+		uint64_t counts[8] = {0};
+		uint16_t indices[8][PatasPrimitives::PATAS_GROUP_SIZE];
+
+		// Count how many of each length there is
+		// Also registers for each value of a length group which index it should be
+		for (idx_t i = 0; i < value_count; i++) {
+			const auto length_index = ByteCount(i) - 1;
+			auto &indices_for_length = indices[length_index];
+			auto &count_for_length = counts[length_index];
+			indices_for_length[count_for_length++] = i;
+			// indices[ByteCount(i) - 1][counts[ByteCount(i) - 1]++] = i;
+		}
+
+		ByteReader byte_reader;
+		byte_reader.SetStream(data);
+		for (idx_t length = 0; length < 8; length++) {
+			const auto byte_size = length + 1;
+			const idx_t count = counts[length];
+			printf("LENGTH: %llu | COUNT: %llu\n", length, count);
+			for (idx_t i = 0; i < counts[length]; i++) {
+				auto index = indices[length][i];
+				byte_values[index] = byte_reader.ReadValue<EXACT_TYPE>(byte_size);
+				printf("[%llu] - EXTRACTED VALUE: %llu | SIZE: %u\n", index, byte_values[index], byte_size);
+			}
+		}
+	}
+
 public:
 	idx_t index;
 	uint8_t trailing_zeros[PatasPrimitives::PATAS_GROUP_SIZE];
 	uint8_t byte_counts[PatasPrimitives::PATAS_GROUP_SIZE];
 	uint8_t index_diffs[PatasPrimitives::PATAS_GROUP_SIZE];
 	EXACT_TYPE previous_values[PatasPrimitives::PATAS_GROUP_SIZE];
+
+	EXACT_TYPE byte_values[PatasPrimitives::PATAS_GROUP_SIZE];
 };
 
 template <class T>
@@ -82,12 +117,14 @@ public:
 		patas_state.byte_reader.SetStream(start_of_data_segment);
 		auto metadata_offset = Load<uint32_t>(dataptr + segment.GetBlockOffset());
 		metadata_ptr = dataptr + segment.GetBlockOffset() + metadata_offset;
+		segment_data = start_of_data_segment;
 		LoadGroup();
 	}
 
 	patas::PatasDecompressionState<EXACT_TYPE> patas_state;
 	BufferHandle handle;
 	data_ptr_t metadata_ptr;
+	data_ptr_t segment_data;
 	idx_t total_value_count = 0;
 	PatasGroupState<EXACT_TYPE> group_state;
 
@@ -155,9 +192,8 @@ public:
 			for (idx_t i = 0; i < group_size; i++) {
 				const auto index_diff = group_state.index_diffs[i];
 				D_ASSERT(index_diff <= i);
-				values[i] = patas::PatasDecompression<EXACT_TYPE>::Load(patas_state, i, group_state.byte_counts,
-				                                                        group_state.trailing_zeros,
-				                                                        (i != 0) * values[i - index_diff]);
+				values[i] = patas::PatasDecompression<EXACT_TYPE>::Load(
+				    i, group_state.trailing_zeros, group_state.byte_values, (i != 0) * values[i - index_diff]);
 				group_state.previous_values[i] = values[i];
 			}
 			if (!GroupFinished()) {
@@ -174,7 +210,7 @@ public:
 			for (idx_t i = 0; i < group_size; i++) {
 				const auto index_diff = group_state.index_diffs[group_state.index + i];
 				values[i] = patas::PatasDecompression<EXACT_TYPE>::Load(
-				    patas_state, group_state.index + i, group_state.byte_counts, group_state.trailing_zeros,
+				    group_state.index + i, group_state.trailing_zeros, group_state.byte_values,
 				    ((group_state.index) + i != 0) * group_state.previous_values[group_state.index + i - index_diff]);
 				group_state.previous_values[group_state.index + i] = values[i];
 			}
@@ -197,6 +233,7 @@ public:
 		(void)data_byte_offset;
 
 		// Load how many blocks of bitpacked data we have
+		// TODO: we can derive this from the segment.count - total_value_count
 		metadata_ptr -= sizeof(uint8_t);
 		auto bitpacked_block_count = Load<uint8_t>(metadata_ptr);
 		D_ASSERT(bitpacked_block_count <=
@@ -222,6 +259,11 @@ public:
 		metadata_ptr -= AlignValue(index_diff_bits) / 8;
 		// Unpack and store the index differences for the entire group
 		group_state.LoadIndexDifferences(metadata_ptr, bitpacked_block_count);
+
+		const idx_t group_size =
+		    MinValue((idx_t)PatasPrimitives::PATAS_GROUP_SIZE, (segment.count - total_value_count));
+
+		group_state.LoadByteValues(segment_data, group_size);
 
 		// First value of a group references this
 		group_state.previous_values[0] = (EXACT_TYPE)0;

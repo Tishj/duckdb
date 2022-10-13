@@ -37,8 +37,8 @@ void PatasFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id
 	const auto previous_index = scan_state.group_state.index - index_diff;
 
 	result_data[result_idx] = patas::PatasDecompression<EXACT_TYPE>::Load(
-	    scan_state.patas_state, scan_state.group_state.index, scan_state.group_state.byte_counts,
-	    scan_state.group_state.trailing_zeros, scan_state.group_state.previous_values[previous_index]);
+	    scan_state.group_state.index, scan_state.group_state.trailing_zeros, scan_state.group_state.byte_values,
+	    scan_state.group_state.previous_values[previous_index]);
 	scan_state.group_state.previous_values[scan_state.group_state.index] = result_data[result_idx];
 }
 

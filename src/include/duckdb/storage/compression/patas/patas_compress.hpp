@@ -181,6 +181,13 @@ public:
 	}
 
 	void FlushGroup() {
+		// Write data
+
+		state.patas_state.byte_writer.Serialize(segment_data);
+		state.patas_state.byte_writer.ResetGroup();
+
+		// Write metadata
+
 		metadata_ptr -= sizeof(byte_index_t);
 		metadata_byte_size += sizeof(byte_index_t);
 		// Store where this groups data starts, relative to the start of the segment
@@ -232,7 +239,6 @@ public:
 
 	//! FIXME: only compact if the unused space meets a certain threshold (20%)
 	void FlushSegment() {
-		//! TODO: only flush the group if the group idx is not 0
 		if (group_idx != 0) {
 			FlushGroup();
 		}

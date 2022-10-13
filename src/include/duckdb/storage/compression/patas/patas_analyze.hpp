@@ -80,6 +80,7 @@ public:
 		group_idx = 0;
 		metadata_byte_size += CurrentGroupMetadataSize();
 		state.patas_state.Reset();
+		state.patas_state.byte_writer.ResetGroup();
 	}
 
 	idx_t UsedSpace() const {
