@@ -296,7 +296,6 @@ bool Merge(MergeInfo &info, idx_t depth, ParentsOfNodes &parents) {
 	}
 	case NodeType::NRowIdLeaf: {
 		D_ASSERT(info.l_node->type == NodeType::NRowIdLeaf);
-		D_ASSERT(info.r_node->type == NodeType::NRowIdLeaf);
 		RowidLeaf::Merge(info.l_node, info.r_node);
 		// FIXME: true or false??
 		return false;
