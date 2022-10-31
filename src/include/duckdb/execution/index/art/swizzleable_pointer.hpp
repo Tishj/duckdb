@@ -28,6 +28,8 @@ public:
 		Set<1>();
 	}
 	void UnsetSwizzled() {
+		// This is destructive. Pointer will be invalid after this operation.
+		// That's okay because this is only ever called from UnsetSwizzled.
 		Unset<0>();
 	}
 	void UnsetRowid() {
@@ -58,4 +60,5 @@ public:
 
 	BlockPointer Serialize(ART &art, duckdb::MetaBlockWriter &writer);
 };
+
 } // namespace duckdb

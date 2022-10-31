@@ -32,7 +32,7 @@ idx_t Node16::GetChildGreaterEqual(uint8_t k, bool &equal) {
 			return pos;
 		}
 	}
-	return Node::GetChildGreaterEqual(k, equal);
+	return DConstants::INVALID_INDEX;
 }
 
 idx_t Node16::GetMin() {
@@ -66,7 +66,7 @@ void Node16::InsertChild(BaseNode *&node, uint8_t key_byte, BaseNode *new_child)
 		while (pos < node->Count() && n->key[pos] < key_byte) {
 			pos++;
 		}
-		if (n->children[pos] != 0) {
+		if (n->children[pos].Pointer()) {
 			for (idx_t i = n->count; i > pos; i--) {
 				n->key[i] = n->key[i - 1];
 				n->children[i] = n->children[i - 1];
@@ -124,15 +124,18 @@ void Node16::EraseChild(BaseNode *&node, int pos, ART &art) {
 	}
 }
 
-void Node16::Merge(MergeInfo &info, idx_t depth, BaseNode *&l_parent, idx_t l_pos) {
+bool Node16::Merge(MergeInfo &info, idx_t depth, BaseNode *&l_parent, idx_t l_pos) {
 
 	Node16 *r_n = (Node16 *)info.r_node;
 
 	for (idx_t i = 0; i < info.r_node->Count(); i++) {
 
 		auto l_child_pos = info.l_node->GetChildPos(r_n->key[i]);
-		Node::MergeAtByte(info, depth, l_child_pos, i, r_n->key[i], l_parent, l_pos);
+		if (!Node::MergeAtByte(info, depth, l_child_pos, i, r_n->key[i], l_parent, l_pos)) {
+			return false;
+		}
 	}
+	return true;
 }
 
 idx_t Node16::GetSize() {

@@ -38,8 +38,10 @@ public:
 	//! Remove a row_id from a leaf
 	void Remove(row_t row_id);
 
+	//! Returns the string representation of a leaf
+	static string ToString(BaseNode *node);
 	//! Merge two NLeaf nodes
-	static void Merge(bool &has_constraint, BaseNode *&l_node, BaseNode *&r_node);
+	static void Merge(BaseNode *&l_node, BaseNode *&r_node);
 
 	//! Serialize a leaf
 	BlockPointer SerializeLeaf(duckdb::MetaBlockWriter &writer) override;

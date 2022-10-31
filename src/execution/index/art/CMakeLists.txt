@@ -4,6 +4,7 @@ add_library_unity(
   art_key.cpp
   iterator.cpp
   leaf.cpp
+  base_node.cpp
   node.cpp
   node4.cpp
   node16.cpp

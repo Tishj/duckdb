@@ -130,6 +130,9 @@ public:
 		D_ASSERT(0);
 	}
 
+	//! Returns the string representation of a node
+	string ToString(ART &art);
+
 protected:
 	BaseNode(NodeType type) : type(type) {
 	}

@@ -268,6 +268,7 @@ option(USER_SPACE "Build the DuckDB Python in the user space" FALSE)
 option(FORCE_QUERY_LOG "If enabled, all queries will be logged to the specified path" OFF)
 option(BUILD_SHELL "Build the DuckDB Shell and SQLite API Wrappers" TRUE)
 option(DISABLE_THREADS "Disable support for multi-threading" FALSE)
+option(DISABLE_STR_INLINE "Debug setting: disable inlining of strings" FALSE)
 option(CLANG_TIDY "Enable build for clang-tidy, this disables all source files excluding the core database. This does not produce a working build." FALSE)
 option(BUILD_UNITTESTS "Build the C++ Unit Tests." TRUE)
 option(
@@ -308,6 +309,10 @@ if(BUILD_PYTHON)
   set(BUILD_EXCEL_EXTENSION TRUE)
 endif()
 
+if (BUILD_BENCHMARKS)
+  set(BUILD_PARQUET_EXTENSION TRUE)
+endif()
+
 if(BUILD_SQLSMITH)
   set(BUILD_SQLSMITH_EXTENSION TRUE)
 endif()
@@ -319,6 +324,10 @@ endif()
 if(ASSERT_EXCEPTION)
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_CRASH_ON_ASSERT")
+endif()
+
+if(DISABLE_STR_INLINE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_DEBUG_NO_INLINE")
 endif()
 
 if(FORCE_ASSERT)
@@ -402,6 +411,7 @@ endif()
 
 
 include_directories(src/include)
+include_directories(third_party/fsst)
 include_directories(third_party/fmt/include)
 include_directories(third_party/hyperloglog)
 include_directories(third_party/fastpforlib)
@@ -667,7 +677,7 @@ function(link_threads LIBRARY)
   endif()
 endfunction()
 
-function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY IGNORE_WARNINGS)
+function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY PARAMETERS)
   #  skip building extensions on mingw because its weird
   if(WIN32 AND NOT MSVC)
     return()
@@ -680,13 +690,19 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY IGNORE_WARNING
   list(REMOVE_AT FILES 0)
   # remove output_directory
   list(REMOVE_AT FILES 0)
+  # remove parameters
+  list(REMOVE_AT FILES 0)
+
+  # parse parameters
+  string(FIND "${PARAMETERS}" "-no-warnings" IGNORE_WARNINGS)
+
 
   add_library(${TARGET_NAME} SHARED ${FILES})
   # this disables the -Dsome_target_EXPORTS define being added by cmake which otherwise trips clang-tidy (yay)
   set_target_properties(${TARGET_NAME} PROPERTIES DEFINE_SYMBOL "")
   set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME ${NAME})
   set_target_properties(${TARGET_NAME} PROPERTIES PREFIX "")
-  if(IGNORE_WARNINGS)
+  if(${IGNORE_WARNINGS} GREATER_EQUAL 0)
     disable_target_warnings(${TARGET_NAME})
   endif()
   # loadable extension binaries can be built two ways:
@@ -708,7 +724,7 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY IGNORE_WARNING
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
       set_target_properties(${TARGET_NAME} PROPERTIES CXX_VISIBILITY_PRESET hidden)
       # Note that on MacOS we need to use the -exported_symbol whitelist feature due to a lack of -exclude-libs flag in mac's ld variant
-      set(WHITELIST "-Wl,-exported_symbol,_${NAME}_init -Wl,-exported_symbol,_${NAME}_version -Wl,-exported_symbol,_${NAME}_replacement_open_pre, -Wl,-exported_symbol,_${NAME}_replacement_open_post")
+      set(WHITELIST "-Wl,-exported_symbol,_${NAME}_init -Wl,-exported_symbol,_${NAME}_version -Wl,-exported_symbol,_${NAME}_replacement_open_*")
       target_link_libraries(${TARGET_NAME} duckdb_static ${DUCKDB_EXTRA_LINK_FLAGS} -Wl,-dead_strip ${WHITELIST})
     else()
       error("EXTENSION static build is only intended for Linux and Windows on MVSC")
@@ -754,12 +770,13 @@ endif()
 
 endfunction()
 
-function(build_loadable_extension NAME IGNORE_WARNINGS)
+function(build_loadable_extension NAME PARAMETERS)
   # all parameters after name
   set(FILES ${ARGV})
   list(REMOVE_AT FILES 0)
+  list(REMOVE_AT FILES 0)
 
-  build_loadable_extension_directory(${NAME} extension/${NAME} ${FILES} ${IGNORE_WARNINGS})
+  build_loadable_extension_directory(${NAME} "extension/${NAME}" "${PARAMETERS}" ${FILES})
 endfunction()
 
 if(${EXPORT_DLL_SYMBOLS})

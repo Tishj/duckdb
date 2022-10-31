@@ -40,6 +40,7 @@ BlockPointer SwizzleablePointer::GetSwizzledBlockInfo() {
 	D_ASSERT(IsSwizzled());
 	UnsetSwizzled();
 	idx_t pointer_size = sizeof(pointer) * 8;
+
 	uint32_t block_id = Pointer() >> (pointer_size / 2);
 	uint32_t offset = Pointer() & 0xffffffff;
 	return {block_id, offset};
@@ -57,7 +58,6 @@ void SwizzleablePointer::Reset() {
 BaseNode *SwizzleablePointer::Unswizzle(ART &art) {
 	if (IsSwizzled()) {
 		// This means our pointer is not yet in memory, gotta deserialize this
-		// first we unset the bae
 		auto block_info = GetSwizzledBlockInfo();
 		D_ASSERT(!IsRowid()); // RowIdLeaf can and should not be deserialized
 		*this = Node::Deserialize(art, block_info.block_id, block_info.offset);
@@ -73,4 +73,5 @@ BlockPointer SwizzleablePointer::Serialize(ART &art, duckdb::MetaBlockWriter &wr
 		return BlockPointer::Invalid();
 	}
 }
+
 } // namespace duckdb

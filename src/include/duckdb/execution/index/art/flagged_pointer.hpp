@@ -21,6 +21,11 @@ public:
 	}
 	template <class T>
 	FlaggedPointer &operator=(const T *ptr) {
+		// If the object already has a non-swizzled pointer, this will leak memory.
+		//
+		// TODO: If enabled, this assert will fire, indicating a possible leak. If an exception
+		// is thrown here, it will cause a double-free. There is some work to do to make all this safer.
+		// D_ASSERT(empty() || IsSwizzled());
 		if (sizeof(ptr) == 4) {
 			pointer = (uint32_t)(size_t)ptr;
 		} else {

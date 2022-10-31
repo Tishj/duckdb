@@ -30,6 +30,12 @@ public:
 	bool IsLeaf() const override {
 		return true;
 	}
+
+	static string ToString(BaseNode *node) {
+		auto leaf = (RowidLeaf *)node;
+		return "RowIDLeaf: [" + to_string(leaf->rowid) + "]";
+	}
+
 	row_t GetRowId(idx_t index) override {
 		if (!index) {
 			return rowid;
