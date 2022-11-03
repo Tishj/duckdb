@@ -1,4 +1,4 @@
-include_directories(src)
+include_directories(src/include)
 
 find_package(PythonLibs)
 find_package(pybind11)

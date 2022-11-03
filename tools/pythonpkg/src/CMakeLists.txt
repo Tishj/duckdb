@@ -1,5 +1,6 @@
 add_subdirectory(pyrelation)
 add_subdirectory(common)
+add_subdirectory(pandas)
 
 add_library(
   python_src OBJECT
