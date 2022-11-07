@@ -4,6 +4,11 @@
 statement ok
 pragma enable_verification;
 
+# Describe a schema name, no table name
+query IIIIII
+describe main;
+----
+
 # Quoted table name, no schema name
 statement ok
 create table "a.b.c" (x int);

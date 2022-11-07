@@ -22,6 +22,22 @@ static void TransformShowName(unique_ptr<PragmaStatement> &result, const string 
 	}
 }
 
+void Transformer::TransformShowRelation(unique_ptr<PragmaStatement> &result, duckdb_libpgquery::PGRangeVar *relation) {
+	auto &info = *result->info;
+
+	info.name = "show";
+
+	auto qualified_name = TransformQualifiedName(relation);
+	vector<Value> qualified_parts;
+
+	if (!qualified_name.schema.empty()) {
+		qualified_parts.emplace_back(qualified_name.schema);
+	}
+	qualified_parts.emplace_back(qualified_name.name);
+	auto qualified_list = Value::LIST(move(qualified_parts));
+	info.parameters.push_back(qualified_list);
+}
+
 unique_ptr<SQLStatement> Transformer::TransformShow(duckdb_libpgquery::PGNode *node) {
 	// we transform SHOW x into PRAGMA SHOW('x')
 
@@ -42,10 +58,13 @@ unique_ptr<SQLStatement> Transformer::TransformShow(duckdb_libpgquery::PGNode *n
 	}
 
 	auto result = make_unique<PragmaStatement>();
-	auto &info = *result->info;
 
-	auto show_name = stmt->name;
-	TransformShowName(result, show_name);
+	if (stmt->name) {
+		auto show_name = stmt->name;
+		TransformShowName(result, show_name);
+	} else {
+		TransformShowRelation(result, stmt->rel);
+	}
 	return move(result);
 }
 

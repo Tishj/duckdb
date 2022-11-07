@@ -21,10 +21,11 @@ VariableShowStmt:
 				n->is_summary = 1;
 				$$ = (PGNode *) n;
 			}
-		 | show_or_describe var_name_describe
+		 | show_or_describe table_name_describe
 			{
 				PGVariableShowStmt *n = makeNode(PGVariableShowStmt);
-				n->name = $2;
+				n->name = NULL;
+				n->rel = $2;
 				n->is_summary = 0;
 				$$ = (PGNode *) n;
 			}
@@ -69,3 +70,5 @@ var_name_describe:	ColId								{ $$ = psprintf("\"%s\"", $1); }
 			| var_name_describe '.' ColId
 				{ $$ = psprintf("%s.\"%s\"", $1, $3); }
 		;
+
+table_name_describe: qualified_name { $$ = $1; }

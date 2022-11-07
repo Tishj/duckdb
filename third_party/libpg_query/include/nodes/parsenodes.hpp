@@ -1502,6 +1502,7 @@ typedef struct PGVariableSetStmt {
 typedef struct PGVariableShowStmt {
 	PGNodeTag   type;
 	char       *name;
+	PGRangeVar* rel;
 	int         is_summary; // whether or not this is a DESCRIBE or a SUMMARIZE
 } PGVariableShowStmt;
 

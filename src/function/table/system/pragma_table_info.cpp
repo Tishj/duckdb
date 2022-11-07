@@ -49,7 +49,9 @@ static unique_ptr<FunctionData> PragmaTableInfoBind(ClientContext &context, Tabl
 	names.emplace_back("pk");
 	return_types.emplace_back(LogicalType::BOOLEAN);
 
-	auto qname = QualifiedName::Parse(input.inputs[0].GetValue<string>());
+	D_ASSERT(!input.inputs.empty());
+	D_ASSERT(input.inputs[0].type().id() == LogicalTypeId::LIST);
+	auto qname = QualifiedName::FromList(input.inputs[0]);
 
 	// look up the table name in the catalog
 	auto &catalog = Catalog::GetCatalog(context);
