@@ -10,12 +10,10 @@ CREATE TABLE t0 (
 	c0 INT
 );
 
-statement error
+query I
 SELECT c0 FROM t0 AS t2(c0);
 ----
-Binder Error: Query could not complete because generated column 'c0' has been turned into a self referencing expression
 
-statement error
+query I
 SELECT 1 FROM t0 t2(c0) WHERE c0 = 0;
 ----
-Binder Error: Query could not complete because generated column 'c0' has been turned into a self referencing expression
