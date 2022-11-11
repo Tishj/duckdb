@@ -5,6 +5,25 @@
 using namespace duckdb;
 using namespace std;
 
+TEST_CASE("Test appending DECIMAL values from string", "[api]") {
+	auto db = make_unique<DuckDB>(nullptr);
+	auto conn = make_unique<Connection>(*db);
+	unique_ptr<Appender> appender;
+	unique_ptr<QueryResult> result;
+
+	REQUIRE_NO_FAIL(conn->Query(StringUtil::Format("CREATE TABLE decimals (i DECIMAL(%d,%d))", 12, 5)));
+
+	appender = make_unique<Appender>(*conn, "decimals");
+
+	appender->BeginRow();
+	appender->Append<const char *>("0.00234");
+	appender->EndRow();
+	appender->Flush();
+
+	result = conn->Query("SELECT * FROM decimals");
+	REQUIRE(CHECK_COLUMN(result, 0, {Value::DECIMAL(234, 12, 5)}));
+}
+
 TEST_CASE("Test using appender after connection is gone", "[api]") {
 	auto db = make_unique<DuckDB>(nullptr);
 	auto conn = make_unique<Connection>(*db);
