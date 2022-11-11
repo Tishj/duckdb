@@ -94,19 +94,19 @@ TableBinding::TableBinding(const string &alias, vector<LogicalType> types_p, vec
 	}
 }
 
-static void ReplaceAliases(ParsedExpression &expr, const case_insensitive_map_t<idx_t> &name_map,
+static void ReplaceAliases(ParsedExpression &expr, const ColumnList &list,
                            const unordered_map<idx_t, string> &alias_map) {
 	if (expr.type == ExpressionType::COLUMN_REF) {
 		auto &colref = (ColumnRefExpression &)expr;
 		D_ASSERT(!colref.IsQualified());
 		auto &col_names = colref.column_names;
 		D_ASSERT(col_names.size() == 1);
-		auto &idx_entry = name_map.at(col_names[0]);
-		auto &alias = alias_map.at(idx_entry);
+		auto idx_entry = list.GetColumnIndex(col_names[0]);
+		auto &alias = alias_map.at(idx_entry.index);
 		col_names = {alias};
 	}
 	ParsedExpressionIterator::EnumerateChildren(
-	    expr, [&](const ParsedExpression &child) { ReplaceAliases((ParsedExpression &)child, name_map, alias_map); });
+	    expr, [&](const ParsedExpression &child) { ReplaceAliases((ParsedExpression &)child, list, alias_map); });
 }
 
 static void BakeTableName(ParsedExpression &expr, const string &table_name, const string &column_name) {
@@ -135,25 +135,15 @@ unique_ptr<ParsedExpression> TableBinding::ExpandGeneratedColumn(const string &c
 
 	// Get the index of the generated column
 	auto column_index = GetBindingIndex(column_name);
-	D_ASSERT(table_entry->columns[column_index].Generated());
+	D_ASSERT(table_entry->columns.GetColumn(LogicalIndex(column_index)).Generated());
 	// Get a copy of the generated column
 	// FIXME: this does not respect query-level column aliases
-	auto expression = table_entry->columns[column_index].GeneratedExpression().Copy();
-	vector<string> aliases;
-	vector<string> columns;
-	idx_t count = 0;
-	for (auto &item : table_entry->name_map) {
-		auto &first = item.first;
-		auto &second = item.second;
-		(void)first;
-		(void)second;
-		count++;
-	}
+	auto expression = table_entry->columns.GetColumn(LogicalIndex(column_index)).GeneratedExpression().Copy();
 	unordered_map<idx_t, string> alias_map;
 	for (auto &entry : name_map) {
 		alias_map[entry.second] = entry.first;
 	}
-	ReplaceAliases(*expression, table_entry->name_map, alias_map);
+	ReplaceAliases(*expression, table_entry->columns, alias_map);
 	BakeTableName(*expression, alias, column_name);
 	return (expression);
 }
@@ -173,7 +163,8 @@ BindResult TableBinding::Bind(ColumnRefExpression &colref, idx_t depth) {
 		auto table_entry = (TableCatalogEntry *)entry;
 		//! Either there is no table, or the columns category has to be standard
 		if (column_index != COLUMN_IDENTIFIER_ROW_ID) {
-			D_ASSERT(table_entry->columns[column_index].Category() == TableColumnType::STANDARD);
+			D_ASSERT(table_entry->columns.GetColumn(LogicalIndex(column_index)).Category() ==
+			         TableColumnType::STANDARD);
 		}
 	}
 #endif /* DEBUG */
