@@ -664,6 +664,10 @@ void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Connect(const string &database, bool read_only,
                                                            py::object config_options) {
+	if (database.empty() && !read_only && config_options.is_none()) {
+		// Don't create a new connection if no arguments are provided
+		return DefaultConnection();
+	}
 	if (config_options.is_none()) {
 		config_options = py::dict();
 	}

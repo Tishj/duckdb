@@ -19,8 +19,8 @@ def test_multiple_writes():
     os.remove('test.db')
 
 def test_multiple_writes_memory():
-    con1 = duckdb.connect()
-    con2 = duckdb.connect()
+    con1 = duckdb.connect(':memory:')
+    con2 = duckdb.connect(':memory:')
     con1.execute("CREATE TABLE foo1 as SELECT 1 as a, 2 as b")
     con2.execute("CREATE TABLE bar1 as SELECT 2 as a, 3 as b")
     con3 = duckdb.connect(":memory:")
