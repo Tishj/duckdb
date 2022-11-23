@@ -639,7 +639,7 @@ unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_di
 
 void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig &config) {
 	// We don't cache unnamed memory instances (i.e., :memory:)
-	bool cache_instance = database != ":memory:" && !database.empty();
+	bool cache_instance = database != IN_MEMORY_CONNECTION && !database.empty();
 	res.database = instance_cache.CreateInstance(database, config, cache_instance);
 	res.connection = make_unique<Connection>(*res.database);
 	auto &context = *res.connection->context;
@@ -702,7 +702,7 @@ vector<Value> DuckDBPyConnection::TransformPythonParamList(const py::handle &par
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::DefaultConnection() {
 	if (!default_connection) {
 		py::dict config_dict;
-		default_connection = DuckDBPyConnection::Connect(":memory:", false, config_dict);
+		default_connection = DuckDBPyConnection::Connect(IN_MEMORY_CONNECTION, false, config_dict);
 	}
 	return default_connection;
 }

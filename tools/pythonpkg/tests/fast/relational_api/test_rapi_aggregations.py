@@ -118,7 +118,7 @@ class TestRAPIAggregations(object):
             table.value_counts('i,j').execute().fetchall()
 
     def test_length(self, table):
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         assert len(table) == 3
 
     def test_shape(self, table):

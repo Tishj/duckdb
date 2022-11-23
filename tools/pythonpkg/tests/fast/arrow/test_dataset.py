@@ -15,7 +15,7 @@ class TestArrowDataset(object):
         if not can_run:
             return
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("PRAGMA threads=4")
         duckdb_conn.execute("PRAGMA verify_parallelism")
 
@@ -36,7 +36,7 @@ class TestArrowDataset(object):
         if not can_run:
             return
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("PRAGMA threads=4")
         duckdb_conn.execute("PRAGMA verify_parallelism")
 
@@ -57,7 +57,7 @@ class TestArrowDataset(object):
         if not can_run:
             return
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("PRAGMA threads=4")
         duckdb_conn.execute("PRAGMA verify_parallelism")
 

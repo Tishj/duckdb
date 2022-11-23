@@ -22,7 +22,7 @@ class TestArrowTimestampsTimezone(object):
 			return
 		precisions = ['us','s','ns','ms']
 		current_time = datetime.datetime(2017, 11, 28, 23, 55, 59)
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		con.execute("SET TimeZone = 'UTC'")
 		for precision in precisions:
 			arrow_table = generate_table(current_time,precision,'UTC')
@@ -44,7 +44,7 @@ class TestArrowTimestampsTimezone(object):
 			return
 		precisions = ['us','s','ns','ms']
 		current_time =  datetime.datetime(2017, 11, 28, 23, 55, 59)
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		for precision in precisions:
 			for timezone in timezones:
 				con.execute("SET TimeZone = '"+timezone+"'")
@@ -56,7 +56,7 @@ class TestArrowTimestampsTimezone(object):
 	def test_timestamp_tz_with_null(self, duckdb_cursor):
 		if not can_run:
 			return
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		con.execute("create table t (i timestamptz)")
 		con.execute("insert into t values (NULL),('2021-11-15 02:30:00'::timestamptz)")
 		rel = con.table('t')
@@ -68,7 +68,7 @@ class TestArrowTimestampsTimezone(object):
 	def test_timestamp_stream(self, duckdb_cursor):
 		if not can_run:
 			return
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		con.execute("create table t (i timestamptz)")
 		con.execute("insert into t values (NULL),('2021-11-15 02:30:00'::timestamptz)")
 		rel = con.table('t')

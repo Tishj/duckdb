@@ -7,7 +7,7 @@ def check_result_list(res):
         assert res_item[0] == res_item[1]
 
 def check_create_table(category):
-    conn = duckdb.connect()
+    conn = duckdb.connect(':memory:')
 
     conn.execute ("PRAGMA enable_verification")
     df_in = pd.DataFrame({

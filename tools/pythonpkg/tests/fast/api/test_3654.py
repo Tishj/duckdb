@@ -11,7 +11,7 @@ class Test3654(object):
         df1 = pd.DataFrame({
             'id': [1, 1, 2],
         })
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register("df1",df1)
         rel = con.view("df1")
         print(rel.execute().fetchall())
@@ -25,7 +25,7 @@ class Test3654(object):
             'id': [1, 1, 2],
         })
         table = pa.Table.from_pandas(df1)
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register("df1",table)
         rel = con.view("df1")
         print(rel.execute().fetchall())

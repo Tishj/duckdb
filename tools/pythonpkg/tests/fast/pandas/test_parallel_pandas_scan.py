@@ -20,7 +20,7 @@ def run_parallel_queries(main_table, left_join_table, expected_df, iteration_cou
             on main_table.join_column = t2.join_column
         """
         try:
-            duckdb_conn = duckdb.connect()
+            duckdb_conn = duckdb.connect(':memory:')
             duckdb_conn.execute("PRAGMA threads=4")
             duckdb_conn.register('main_table', main_table)
             duckdb_conn.register('left_join_table', left_join_table)
@@ -72,7 +72,7 @@ class TestParallelPandasScan(object):
 
     def test_parallel_empty(self,duckdb_cursor):
         df_empty = pd.DataFrame({'A' : []})
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("PRAGMA threads=4")
         duckdb_conn.execute("PRAGMA verify_parallelism")
         duckdb_conn.register('main_table', df_empty)

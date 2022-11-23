@@ -9,7 +9,7 @@ def create_generic_dataframe(data):
 
 class TestResolveObjectColumns(object):
 	def test_sample_low_correct(self, duckdb_cursor):
-		duckdb_conn = duckdb.connect()
+		duckdb_conn = duckdb.connect(':memory:')
 		duckdb_conn.execute("SET GLOBAL pandas_analyze_sample=3")
 		data = [1000008, 6, 9, 4, 1, 6]
 		df = create_generic_dataframe(data)
@@ -18,7 +18,7 @@ class TestResolveObjectColumns(object):
 		pd.testing.assert_frame_equal(duckdb_df, roundtripped_df)
 
 	def test_sample_low_incorrect_detected(self, duckdb_cursor):
-		duckdb_conn = duckdb.connect()
+		duckdb_conn = duckdb.connect(':memory:')
 		duckdb_conn.execute("SET GLOBAL pandas_analyze_sample=2")
 		# size of list (6) divided by 'pandas_analyze_sample' (2) is the increment used
 		# in this case index 0 (1000008) and index 3 ([4]) are checked, which dont match
@@ -29,7 +29,7 @@ class TestResolveObjectColumns(object):
 		assert(roundtripped_df['col0'].dtype == np.dtype('object'))
 
 	def test_sample_zero(self, duckdb_cursor):
-		duckdb_conn = duckdb.connect()
+		duckdb_conn = duckdb.connect(':memory:')
 		# Disable dataframe analyze
 		duckdb_conn.execute("SET GLOBAL pandas_analyze_sample=0")
 		data = [1000008, 6, 9, 3, 1, 6]
@@ -39,7 +39,7 @@ class TestResolveObjectColumns(object):
 		assert(roundtripped_df['col0'].dtype == np.dtype('object'))
 
 	def test_sample_low_incorrect_undetected(self, duckdb_cursor):
-		duckdb_conn = duckdb.connect()
+		duckdb_conn = duckdb.connect(':memory:')
 		duckdb_conn.execute("SET GLOBAL pandas_analyze_sample=1")
 		data = [1000008, 6, 9, [4], [1], 6]
 		df = create_generic_dataframe(data)

@@ -22,7 +22,7 @@ def insert_from_same_connection(duckdb_cursor):
 
 class TestPythonMultithreading(object):
     def test_multiple_cursors(self, duckdb_cursor):
-        duckdb_con = duckdb.connect() # In Memory DuckDB
+        duckdb_con = duckdb.connect(':memory:') # In Memory DuckDB
         duckdb_con.execute("""CREATE OR REPLACE TABLE my_inserts (thread_name varchar)""")
 
         thread_count = 3
@@ -44,7 +44,7 @@ class TestPythonMultithreading(object):
         assert duckdb_con.execute("""SELECT * FROM my_inserts order by thread_name""").fetchall() == [('my_thread_0',), ('my_thread_1',), ('my_thread_2',)]
 
     def test_same_connection(self, duckdb_cursor):
-        duckdb_con = duckdb.connect() # In Memory DuckDB
+        duckdb_con = duckdb.connect(':memory:') # In Memory DuckDB
         duckdb_con.execute("""CREATE OR REPLACE TABLE my_inserts (thread_name varchar)""")
 
         thread_count = 3

@@ -16,7 +16,7 @@ static void test_in_memory_initialization(string dbdir) {
 	DeleteDatabase(dbdir);
 	fs->RemoveDirectory(in_memory_tmp);
 
-	// cannot create an in-memory database using ":memory:" argument
+	// cannot create an in-memory database using IN_MEMORY_CONNECTION argument
 	REQUIRE_NOTHROW(db = make_unique<DuckDB>(dbdir));
 	REQUIRE_NOTHROW(con = make_unique<Connection>(*db));
 
@@ -40,7 +40,7 @@ static void test_in_memory_initialization(string dbdir) {
 }
 
 TEST_CASE("Test in-memory database initialization argument \":memory:\"", "[api][.]") {
-	test_in_memory_initialization(":memory:");
+	test_in_memory_initialization(IN_MEMORY_CONNECTION);
 }
 
 TEST_CASE("Test in-memory database initialization argument \"\"", "[api][.]") {

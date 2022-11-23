@@ -53,7 +53,7 @@ def require():
 @pytest.fixture(scope='session', autouse=True)
 def duckdb_cursor(request):
 
-    connection = duckdb.connect('')
+    connection = duckdb.connect(':memory:')
     cursor = connection.cursor()
     cursor.execute('CREATE TABLE integers (i integer)')
     cursor.execute('INSERT INTO integers VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(NULL)')

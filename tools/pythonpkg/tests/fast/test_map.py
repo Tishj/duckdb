@@ -7,7 +7,7 @@ from datetime import date, timedelta
 class TestMap(object):
     def test_map(self, duckdb_cursor):
         testrel = duckdb.values([1, 2])
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         conn.execute('CREATE TABLE t (a integer)')
         empty_rel = conn.table('t')
 

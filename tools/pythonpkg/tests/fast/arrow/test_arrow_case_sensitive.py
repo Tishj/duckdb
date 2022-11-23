@@ -13,7 +13,7 @@ class TestArrowCaseSensitive(object):
         data = (pa.array([1], type=pa.int32()),pa.array([1000], type=pa.int32()))
         arrow_table = pa.Table.from_arrays([data[0],data[1]],['A1','a1'])
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register('arrow_tbl', arrow_table)
         print (con.execute("DESCRIBE arrow_tbl;").fetchall())
         assert con.execute("DESCRIBE arrow_tbl;").fetchall() == [('A1', 'INTEGER', 'YES', None, None, None), ('a1_1', 'INTEGER', 'YES', None, None, None)]
@@ -27,7 +27,7 @@ class TestArrowCaseSensitive(object):
         data = (pa.array([1], type=pa.int32()),pa.array([1000], type=pa.int32()))
         arrow_table = pa.Table.from_arrays([data[0],data[1],data[1]],['A1','a1_1','a1'])
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register('arrow_tbl', arrow_table)
         print (con.execute("DESCRIBE arrow_tbl;").fetchall())
         assert con.execute("DESCRIBE arrow_tbl;").fetchall() == [('A1', 'INTEGER', 'YES', None, None, None), ('a1_1', 'INTEGER', 'YES', None, None, None), ('a1_2', 'INTEGER', 'YES', None, None, None)]

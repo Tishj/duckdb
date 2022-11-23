@@ -47,6 +47,8 @@ using std::make_shared;
 #define TEMP_SCHEMA    "temp"
 #define INVALID_SCHEMA ""
 
+#define IN_MEMORY_CONNECTION ":memory:"
+
 //! a saner size_t for loop indices etc
 typedef uint64_t idx_t;
 

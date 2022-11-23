@@ -36,7 +36,7 @@ class TestTPCHArrow(object):
         tpch_tables = ['part', 'partsupp', 'supplier', 'customer', 'lineitem', 'orders', 'nation', 'region']
         arrow_tables = []
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("CALL dbgen(sf=0.01);")
 
         for tpch_table in tpch_tables:
@@ -60,7 +60,7 @@ class TestTPCHArrow(object):
         tpch_tables = ['part', 'partsupp', 'supplier', 'customer', 'lineitem', 'orders', 'nation', 'region']
         arrow_tables = []
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("CALL dbgen(sf=0.1);")
 
         for tpch_table in tpch_tables:
@@ -84,7 +84,7 @@ class TestTPCHArrow(object):
         tpch_tables = ['part', 'partsupp', 'supplier', 'customer', 'lineitem', 'orders', 'nation', 'region']
         arrow_tables = []
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.execute("CALL dbgen(sf=0.01);")
 
         for tpch_table in tpch_tables:

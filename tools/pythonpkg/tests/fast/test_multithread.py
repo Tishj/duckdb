@@ -22,7 +22,7 @@ class DuckDBThreaded:
         self.thread_function = thread_function
         
     def multithread_test(self,if_all_true=True):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         queue = Queue.Queue()
         return_value = False
 
@@ -56,7 +56,7 @@ def execute_query_same_connection(duckdb_conn, queue):
 
 def execute_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)')
         queue.put(True)
@@ -65,7 +65,7 @@ def execute_query(duckdb_conn, queue):
 
 def insert_runtime_error(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('insert into T values (42), (84), (NULL), (128)')
         queue.put(False)
@@ -74,7 +74,7 @@ def insert_runtime_error(duckdb_conn, queue):
 
 def execute_many_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         # from python docs
         duckdb_conn.execute('''CREATE TABLE stocks
@@ -91,7 +91,7 @@ def execute_many_query(duckdb_conn, queue):
 
 def fetchone_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetchone()
         queue.put(True)
@@ -100,7 +100,7 @@ def fetchone_query(duckdb_conn, queue):
 
 def fetchall_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetchall()
         queue.put(True)
@@ -109,7 +109,7 @@ def fetchall_query(duckdb_conn, queue):
 
 def conn_close(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.close()
         queue.put(True)
@@ -118,7 +118,7 @@ def conn_close(duckdb_conn, queue):
 
 def fetchnp_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetchnumpy()
         queue.put(True)
@@ -127,7 +127,7 @@ def fetchnp_query(duckdb_conn, queue):
 
 def fetchdf_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetchdf()
         queue.put(True)
@@ -136,7 +136,7 @@ def fetchdf_query(duckdb_conn, queue):
 
 def fetchdf_chunk_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetch_df_chunk()
         queue.put(True)
@@ -145,7 +145,7 @@ def fetchdf_chunk_query(duckdb_conn, queue):
 
 def fetch_arrow_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetch_arrow_table()
         queue.put(True)
@@ -155,7 +155,7 @@ def fetch_arrow_query(duckdb_conn, queue):
 
 def fetch_record_batch_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetch_record_batch()
         queue.put(True)
@@ -164,7 +164,7 @@ def fetch_record_batch_query(duckdb_conn, queue):
 
 def transaction_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     duckdb_conn.execute("CREATE TABLE T ( i INTEGER)")
     try:
         duckdb_conn.begin()
@@ -178,7 +178,7 @@ def transaction_query(duckdb_conn, queue):
 
 def df_append(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     duckdb_conn.execute("CREATE TABLE T ( i INTEGER)")
     df = pd.DataFrame(np.random.randint(0,100,size=15), columns=['A'])
     try:
@@ -189,7 +189,7 @@ def df_append(duckdb_conn, queue):
 
 def df_register(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     df = pd.DataFrame(np.random.randint(0,100,size=15), columns=['A'])
     try:
         duckdb_conn.register('T',df)
@@ -199,7 +199,7 @@ def df_register(duckdb_conn, queue):
 
 def df_unregister(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     df = pd.DataFrame(np.random.randint(0,100,size=15), columns=['A'])
     try:
         duckdb_conn.register('T',df)
@@ -210,7 +210,7 @@ def df_unregister(duckdb_conn, queue):
 
 def arrow_register_unregister(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     arrow_tbl = pa.Table.from_pydict({'my_column':pa.array([1,2,3,4,5],type=pa.int64())})
     try:
         duckdb_conn.register('T',arrow_tbl)
@@ -221,7 +221,7 @@ def arrow_register_unregister(duckdb_conn, queue):
 
 def table(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     duckdb_conn.execute("CREATE TABLE T ( i INTEGER)")
     try:
         out = duckdb_conn.table('T')
@@ -231,7 +231,7 @@ def table(duckdb_conn, queue):
 
 def view(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     duckdb_conn.execute("CREATE TABLE T ( i INTEGER)")
     duckdb_conn.execute("CREATE VIEW V as (SELECT * FROM T)")
     try:
@@ -241,7 +241,7 @@ def view(duckdb_conn, queue):
         queue.put(False) 
 def values(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         out = duckdb_conn.values([5, 'five'])
         queue.put(True)
@@ -251,7 +251,7 @@ def values(duckdb_conn, queue):
 
 def from_query(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     try:
         out = duckdb_conn.from_query("select i from (values (42), (84), (NULL), (128)) tbl(i)")
         queue.put(True)
@@ -260,7 +260,7 @@ def from_query(duckdb_conn, queue):
 
 def from_df(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     df = pd.DataFrame(['bla', 'blabla']*10, columns=['A'])
     try:
         out = duckdb_conn.execute("select * from df").fetchall()
@@ -270,7 +270,7 @@ def from_df(duckdb_conn, queue):
 
 def from_arrow(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     arrow_tbl = pa.Table.from_pydict({'my_column':pa.array([1,2,3,4,5],type=pa.int64())})
     try:
         out = duckdb_conn.from_arrow(arrow_tbl)
@@ -280,7 +280,7 @@ def from_arrow(duckdb_conn, queue):
 
 def from_csv_auto(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     filename = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data','integers.csv')
     try:
         out = duckdb_conn.from_csv_auto(filename)
@@ -290,7 +290,7 @@ def from_csv_auto(duckdb_conn, queue):
 
 def from_parquet(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     filename = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data','binary_string.parquet')
     try:
         out = duckdb_conn.from_parquet(filename)
@@ -300,7 +300,7 @@ def from_parquet(duckdb_conn, queue):
 
 def description(duckdb_conn, queue):
     # Get a new connection
-    duckdb_conn = duckdb.connect()
+    duckdb_conn = duckdb.connect(':memory:')
     duckdb_conn.execute('CREATE TABLE test (i bool, j TIME, k VARCHAR)')
     duckdb_conn.execute("INSERT INTO test VALUES (TRUE, '01:01:01', 'bla' )")
     rel = duckdb_conn.table("test")

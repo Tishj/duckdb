@@ -466,7 +466,7 @@ SQLRETURN SQL_API SQLGetInfo(SQLHDBC connection_handle, SQLUSMALLINT info_type, 
 	case SQL_DATABASE_NAME: {
 		return duckdb::WithConnection(connection_handle, [&](duckdb::OdbcHandleDbc *dbc) -> SQLRETURN {
 			std::string db_name = dbc->GetDatabaseName();
-			if (db_name == ":memory:") {
+			if (db_name == IN_MEMORY_CONNECTION) {
 				db_name = "";
 			}
 			duckdb::OdbcUtils::WriteString(db_name, (SQLCHAR *)info_value_ptr, buffer_length, string_length_ptr);

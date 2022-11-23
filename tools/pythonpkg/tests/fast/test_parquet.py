@@ -7,7 +7,7 @@ filename = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data','bina
 class TestParquet(object):
 
     def test_scan_binary(self, duckdb_cursor):
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         res = conn.execute("SELECT typeof(#1) FROM parquet_scan('"+filename+"') limit 1").fetchall()
         assert res[0] == ('BLOB',)
 
@@ -22,7 +22,7 @@ class TestParquet(object):
         assert res[0] == (b'foo',)
 
     def test_scan_binary_as_string(self, duckdb_cursor):
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         res = conn.execute("SELECT typeof(#1) FROM parquet_scan('"+filename+"',binary_as_string=True) limit 1").fetchall()
         assert res[0] == ('VARCHAR',)
 
@@ -37,7 +37,7 @@ class TestParquet(object):
         assert res[0] == ('foo',)
 
     def test_parquet_binary_as_string_pragma(self, duckdb_cursor):
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         res = conn.execute("SELECT typeof(#1) FROM parquet_scan('"+filename+"') limit 1").fetchall()
         assert res[0] == ('BLOB',)
 

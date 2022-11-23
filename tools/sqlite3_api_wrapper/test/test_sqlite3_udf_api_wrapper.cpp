@@ -17,7 +17,7 @@ TEST_CASE("SQLite UDF wrapper: basic usage", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// create and populate table
 	REQUIRE(db_w.Execute("CREATE TABLE integers(i INTEGER)"));
@@ -36,7 +36,7 @@ TEST_CASE("SQLite UDF wrapper: testing NULL values", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// testing null values
 	REQUIRE(db_w.Execute("SELECT NULL"));
@@ -75,7 +75,7 @@ TEST_CASE("SQLite UDF wrapper: multiple arguments", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// create and populate table "integers"
 	REQUIRE(db_w.Execute("CREATE TABLE integers(t_int TINYINT, s_int SMALLINT, i_int INTEGER, b_int BIGINT)"));
@@ -119,7 +119,7 @@ TEST_CASE("SQLite UDF wrapper: double values", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// create and populate table "floats"
 	REQUIRE(db_w.Execute("CREATE TABLE floats(f FLOAT, d DOUBLE)"));
@@ -142,7 +142,7 @@ TEST_CASE("SQLite UDF wrapper: text and blob values", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// create function check_text
 	REQUIRE(sqlite3_create_function(db_w.db, "check_text", 1, 0, nullptr, &check_text, nullptr, nullptr) == SQLITE_OK);
@@ -169,7 +169,7 @@ TEST_CASE("SQLite UDF wrapper: check type", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// create function
 	REQUIRE(sqlite3_create_function(db_w.db, "check_type", 1, 0, nullptr, &check_type, nullptr, nullptr) == SQLITE_OK);
@@ -195,7 +195,7 @@ TEST_CASE("SQLite UDF wrapper: set null", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	// create function
 	REQUIRE(sqlite3_create_function(db_w.db, "set_null", 1, 0, nullptr, &set_null, nullptr, nullptr) == SQLITE_OK);
@@ -221,7 +221,7 @@ TEST_CASE("SQLite UDF wrapper: get user data", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	char user_data[] = {"TEST"}; // user data to be used along the UDF
 	// create function that gets user data (string) and replace the input value
@@ -236,7 +236,7 @@ TEST_CASE("SQLite UDF wrapper: testing sqlite cast numbers to text", "[sqlite3wr
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 	REQUIRE(sqlite3_create_function(db_w.db, "cast_numbers_to_text", 1, 0, nullptr, &cast_numbers_to_text, nullptr,
 	                                nullptr) == SQLITE_OK);
 
@@ -272,7 +272,7 @@ TEST_CASE("SQLite UDF wrapper: testing more casts", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	REQUIRE(db_w.Execute("CREATE TABLE tbl(str VARCHAR, blob BLOB, big BIGINT, f_real FLOAT)"));
 	REQUIRE(db_w.Execute("INSERT INTO tbl VALUES('DuckDB string', 'DuckDB blob', 999999999999999999, 55.0)"));
@@ -321,7 +321,7 @@ TEST_CASE("SQLite UDF wrapper: overload function", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	int argc = 1;
 	REQUIRE(sqlite3_create_function(db_w.db, "sum_overload_function", argc, 0, nullptr, &sum_overload_function, nullptr,
@@ -364,7 +364,7 @@ TEST_CASE("SQLite UDF wrapper: calling sqlite3_value_text() multiple times", "[s
 	SQLiteDBWrapper db_w;
 
 	// open an in-memory db
-	REQUIRE(db_w.Open(":memory:"));
+	REQUIRE(db_w.Open(IN_MEMORY_CONNECTION));
 
 	int argc = 1;
 	REQUIRE(sqlite3_create_function(db_w.db, "calling_value_text_multiple_times", argc, 0, nullptr,

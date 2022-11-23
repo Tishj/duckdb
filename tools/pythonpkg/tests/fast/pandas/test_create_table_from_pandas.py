@@ -5,7 +5,7 @@ import numpy as np
 import sys
 
 def assert_create(internal_data, expected_result, data_type):
-    conn = duckdb.connect()
+    conn = duckdb.connect(':memory:')
     df_in = pd.DataFrame(data=internal_data, dtype=data_type)
 
     conn.execute("CREATE TABLE t AS SELECT * FROM df_in")
@@ -14,7 +14,7 @@ def assert_create(internal_data, expected_result, data_type):
     assert result == expected_result
 
 def assert_create_register(internal_data, expected_result, data_type):
-    conn = duckdb.connect()
+    conn = duckdb.connect(':memory:')
     df_in = pd.DataFrame(data=internal_data, dtype=data_type)
     conn.register("dataframe", df_in)
     conn.execute("CREATE TABLE t AS SELECT * FROM dataframe")

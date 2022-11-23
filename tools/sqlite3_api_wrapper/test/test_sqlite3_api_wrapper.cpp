@@ -16,7 +16,7 @@ TEST_CASE("Basic sqlite wrapper usage", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db;
 
 	// open an in-memory db
-	REQUIRE(db.Open(":memory:"));
+	REQUIRE(db.Open(IN_MEMORY_CONNECTION));
 
 	// standard selection
 	REQUIRE(db.Execute("SELECT 42;"));
@@ -55,7 +55,7 @@ TEST_CASE("Basic prepared statement usage", "[sqlite3wrapper]") {
 	SQLiteStmtWrapper stmt;
 
 	// open an in-memory db
-	REQUIRE(db.Open(":memory:"));
+	REQUIRE(db.Open(IN_MEMORY_CONNECTION));
 	REQUIRE(db.Execute("CREATE TABLE test(i INTEGER, j BIGINT, k DATE, l VARCHAR, b BLOB)"));
 #ifndef SQLITE_TEST
 	// sqlite3_prepare_v2 errors
@@ -245,7 +245,7 @@ TEST_CASE("Test sqlite3_interrupt", "[sqlite3wrapper]") {
 	bool success;
 
 	// open an in-memory db
-	REQUIRE(db.Open(":memory:"));
+	REQUIRE(db.Open(IN_MEMORY_CONNECTION));
 	REQUIRE(db.Execute("CREATE TABLE integers(i INTEGER)"));
 	// create a database with 5 values
 	REQUIRE(db.Execute("INSERT INTO integers VALUES (1), (2), (3), (4), (5)"));
@@ -268,7 +268,7 @@ TEST_CASE("Test different statement types", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db;
 
 	// open an in-memory db
-	REQUIRE(db.Open(":memory:"));
+	REQUIRE(db.Open(IN_MEMORY_CONNECTION));
 	// create
 	REQUIRE(db.Execute("CREATE TABLE integers(i INTEGER)"));
 	// prepare
@@ -310,7 +310,7 @@ TEST_CASE("Test rollback of aborted transaction", "[sqlite3wrapper]") {
 	SQLiteDBWrapper db;
 
 	// open an in-memory db
-	REQUIRE(db.Open(":memory:"));
+	REQUIRE(db.Open(IN_MEMORY_CONNECTION));
 
 	// can start a transaction
 	REQUIRE(db.Execute("START TRANSACTION"));

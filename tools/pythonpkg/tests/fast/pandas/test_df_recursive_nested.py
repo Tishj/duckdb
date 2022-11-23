@@ -8,7 +8,7 @@ import copy
 NULL = None
 
 def check_equal(df, reference_query):
-	duckdb_conn = duckdb.connect()
+	duckdb_conn = duckdb.connect(':memory:')
 	duckdb_conn.execute(reference_query)
 	res = duckdb.query('SELECT * FROM tbl', connection=duckdb_conn).fetchall()
 	df_res = duckdb.query('SELECT * FROM tbl', connection=duckdb_conn).df()

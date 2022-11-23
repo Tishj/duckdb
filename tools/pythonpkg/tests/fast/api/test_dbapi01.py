@@ -19,7 +19,7 @@ class TestMultipleResultSets(object):
         numpy.testing.assert_array_equal(result['i'], expected)
 
     def test_numpy_materialized(self, duckdb_cursor):
-        connection = duckdb.connect('')
+        connection = duckdb.connect(':memory:')
         cursor = connection.cursor()
         cursor.execute('CREATE TABLE integers (i integer)')
         cursor.execute('INSERT INTO integers VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(NULL)')

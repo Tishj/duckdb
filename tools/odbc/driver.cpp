@@ -210,7 +210,7 @@ static SQLRETURN SetConnection(SQLHDBC connection_handle, SQLCHAR *conn_str) {
 		if (dbc->sql_attr_access_mode == SQL_MODE_READ_ONLY) {
 			config.options.access_mode = duckdb::AccessMode::READ_ONLY;
 		}
-		bool cache_instance = db_name != ":memory:" && !db_name.empty();
+		bool cache_instance = db_name != IN_MEMORY_CONNECTION && !db_name.empty();
 		dbc->env->db = instance_cache.GetOrCreateInstance(db_name, config, cache_instance);
 	}
 

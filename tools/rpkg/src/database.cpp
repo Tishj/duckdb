@@ -15,7 +15,7 @@ void duckdb::DBDeleter(DBWrapper *db) {
 
 	const char *dbdirchar;
 
-	if (dbdir.length() == 0 || dbdir.compare(":memory:") == 0) {
+	if (dbdir.length() == 0 || dbdir.compare(IN_MEMORY_CONNECTION) == 0) {
 		dbdirchar = NULL;
 	} else {
 		dbdirchar = dbdir.c_str();

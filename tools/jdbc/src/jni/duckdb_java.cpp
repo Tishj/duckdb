@@ -283,7 +283,7 @@ JNIEXPORT jobject JNICALL Java_org_duckdb_DuckDBNative_duckdb_1jdbc_1startup(JNI
 				    StringUtil::CandidatesErrorMessage(DBConfig::GetOptionNames(), key_str, "Did you mean"));
 			}
 		}
-		bool cache_instance = database != ":memory:" && !database.empty();
+		bool cache_instance = database != IN_MEMORY_CONNECTION && !database.empty();
 		auto shared_db = instance_cache.GetOrCreateInstance(database, config, cache_instance);
 		auto db = shared_db.get();
 		std::lock_guard<std::mutex> lock(db_map_lock);

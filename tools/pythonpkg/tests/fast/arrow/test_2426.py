@@ -11,7 +11,7 @@ class Test2426(object):
         if not can_run:
             return
             
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.execute("Create Table test (a integer)")
 
         for i in range (1024):

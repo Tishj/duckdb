@@ -13,7 +13,7 @@ class TestArrowView(object):
             return
         parquet_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data','userdata1.parquet')
         cols = 'id, first_name, last_name, email, gender, ip_address, cc, country, birthdate, salary, title, comments'
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         userdata_parquet_table = pyarrow.parquet.read_table(parquet_filename)
         userdata_parquet_table.validate(full=True)
         duckdb_conn.from_arrow(userdata_parquet_table).create_view('arrow_view')

@@ -17,7 +17,7 @@ class TestPandasMergeSameName(object):
             'v2': [11.1, 11.2, 21.2]
         })
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register('df1', df1)
         con.register('df2', df2)
         query = """SELECT * from df1
@@ -53,7 +53,7 @@ class TestPandasMergeSameName(object):
             'id_2_2': [1, 1, 1, 1, 1]
         })
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register('df1', df1)
         con.register('df2', df2)
         query = """SELECT * from df1
@@ -81,7 +81,7 @@ class TestPandasMergeSameName(object):
             'id_2_1': [1],
         })
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register('df1', df1)
         con.register('df2', df2)
         query = """SELECT * from df1

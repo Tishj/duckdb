@@ -40,7 +40,7 @@ bool ObjectCache::ObjectCacheEnabled(ClientContext &context) {
 }
 
 bool StorageManager::InMemory() {
-	return path.empty() || path == ":memory:";
+	return path.empty() || path == IN_MEMORY_CONNECTION;
 }
 
 void StorageManager::CreateBufferManager() {

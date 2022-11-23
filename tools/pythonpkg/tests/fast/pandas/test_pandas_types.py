@@ -51,7 +51,7 @@ class TestPandasTypes(object):
             data[letter] = base_df.a.astype(dtype)
 
         df = pd.DataFrame.from_dict(data)
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         out_df = conn.execute('select * from df').df()
 
         # Verify that the types in the out_df are correct

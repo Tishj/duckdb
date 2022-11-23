@@ -16,7 +16,7 @@ class TestPandasNA(object):
         # DataFrame containing a single pd.NA
         df = pd.DataFrame(pd.Series([pd.NA]))
 
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
 
         res = conn.execute("select * from df").fetchall()
         assert(res[0][0] == None)

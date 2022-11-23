@@ -3,7 +3,7 @@ import pandas as pd
 
 class TestConnectionTransaction(object):
     def test_transaction(self, duckdb_cursor):
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.execute('create table t (i integer)')
         con.execute ('insert into t values (1)')
 

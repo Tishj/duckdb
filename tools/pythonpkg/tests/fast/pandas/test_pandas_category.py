@@ -15,7 +15,7 @@ def check_result_list(category,res):
         assert category[i][0] == res[i]
 
 def check_create_table(category):
-    conn = duckdb.connect()
+    conn = duckdb.connect(':memory:')
 
     conn.execute ("PRAGMA enable_verification")
     df_in = pd.DataFrame({
@@ -98,7 +98,7 @@ class TestCategory(object):
         check_create_table(category)
 
     def test_category_fetch_df_chunk(self, duckdb_cursor):
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         categories = ['foo','bla',None,'zoo', 'foo', 'foo',None, 'bla']
         result = categories*256
         categories = result * 2

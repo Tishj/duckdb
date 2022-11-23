@@ -52,7 +52,7 @@ class TestArrowIntegration(object):
 
         assert rel_from_arrow.equals(rel_from_duckdb, check_metadata=True)
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.execute("select NULL c_null, (c % 4 = 0)::bool c_bool, (c%128)::tinyint c_tinyint, c::smallint*1000 c_smallint, c::integer*100000 c_integer, c::bigint*1000000000000 c_bigint, c::float c_float, c::double c_double, 'c_' || c::string c_string from (select case when range % 2 == 0 then range else null end as c from range(-10000, 10000)) sq")
         arrow_result = con.fetch_arrow_table()
         arrow_result.validate(full=True)
@@ -68,7 +68,7 @@ class TestArrowIntegration(object):
         if not can_run:
             return
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
 
         duckdb_conn.execute("CREATE TABLE test (a DECIMAL(4,2), b DECIMAL(9,2), c DECIMAL (18,2), d DECIMAL (30,2))")
 
@@ -96,7 +96,7 @@ class TestArrowIntegration(object):
         #Lets also test big number comming from arrow land
         data = (pyarrow.array(np.array([9999999999999999999999999999999999]), type=pyarrow.decimal128(38,0)))
         arrow_tbl = pyarrow.Table.from_arrays([data],['a'])
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         duckdb_conn.from_arrow(arrow_tbl).create("bigdecimal")
         result = duckdb_conn.execute('select * from bigdecimal')
         assert (result.fetchone()[0] == 9999999999999999999999999999999999)
@@ -105,7 +105,7 @@ class TestArrowIntegration(object):
         if not can_run:
             return
 
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
 
         duckdb_conn.execute("CREATE TABLE test (a varchar)")
 

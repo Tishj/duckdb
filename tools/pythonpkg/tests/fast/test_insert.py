@@ -6,7 +6,7 @@ import pandas as pd
 class TestInsert(object):
     test_df = pd.DataFrame.from_dict({"i":[1, 2, 3], "j":["one", "two", "three"]})\
     # connect to an in-memory temporary database
-    conn = duckdb.connect()
+    conn = duckdb.connect(':memory:')
     # get a cursor
     cursor = conn.cursor()
     conn.execute("CREATE TABLE test (i INTEGER, j STRING)")

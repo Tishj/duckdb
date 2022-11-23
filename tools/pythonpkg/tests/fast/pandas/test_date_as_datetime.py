@@ -8,7 +8,7 @@ def run_checks(df):
     assert pd.isnull(df['d'][1])
 
 def test_date_as_datetime():
-    con = duckdb.connect()
+    con = duckdb.connect(':memory:')
     con.execute("create table t (d date)")
     con.execute("insert into t values ('1992-07-30'), (NULL)")
 

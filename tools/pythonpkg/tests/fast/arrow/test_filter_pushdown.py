@@ -14,7 +14,7 @@ except:
     can_run = False
 
 ## DuckDB connection used in this test
-duckdb_conn = duckdb.connect()
+duckdb_conn = duckdb.connect(':memory:')
 
 def numeric_operators(data_type, tbl_name):
         duckdb_conn.execute("CREATE TABLE " +tbl_name+ " (a "+data_type+", b "+data_type+", c "+data_type+")")
@@ -354,7 +354,7 @@ class TestArrowFilterPushdown(object):
 
         table = pq.ParquetDataset(["data1.parquet", "data2.parquet"]).read()
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register("testarrow",table)
 
         output_df = duckdb.arrow(table).filter("date > '2019-01-01'").df()

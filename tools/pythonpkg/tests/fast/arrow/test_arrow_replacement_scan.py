@@ -18,7 +18,7 @@ class TestArrowReplacementScan(object):
         userdata_parquet_table = pq.read_table(parquet_filename)
         df = userdata_parquet_table.to_pandas()
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         
         for i in range (5):
             assert con.execute("select count(*) from userdata_parquet_table").fetchone() ==  (1000,)
@@ -31,7 +31,7 @@ class TestArrowReplacementScan(object):
         parquet_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)),'data','userdata1.parquet')
         userdata_parquet_table = pq.read_table(parquet_filename)
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         
         con.execute("create view x as select * from userdata_parquet_table")
         del userdata_parquet_table
@@ -45,11 +45,11 @@ class TestArrowReplacementScan(object):
         userdata_parquet_table = pq.read_table(parquet_filename)
         userdata_parquet_dataset= ds.dataset(parquet_filename)
 
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         assert con.execute("select count(*) from userdata_parquet_dataset").fetchone() ==  (1000,)
 
     def test_replacement_scan_fail(self, duckdb_cursor):
         random_object = "I love salmiak rondos"
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         with pytest.raises(duckdb.InvalidInputException, match=r'Python Object "random_object" of type "str" found on line .* not suitable for replacement scans.'):
             con.execute("select count(*) from random_object").fetchone()

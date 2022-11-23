@@ -59,5 +59,5 @@ class TestRelationApi(object):
 
 
 
-# cursor = duckdb.connect().cursor()
+# cursor = duckdb.connect(':memory:').cursor()
 # TestRelationApi().test_readonly(cursor)

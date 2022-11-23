@@ -89,7 +89,7 @@ int sqlite3_open_v2(const char *filename, /* Database filename (UTF-8) */
                     int flags,            /* Flags */
                     const char *zVfs      /* Name of VFS module to use */
 ) {
-	if (filename && strcmp(filename, ":memory:") == 0) {
+	if (filename && strcmp(filename, IN_MEMORY_CONNECTION) == 0) {
 		filename = NULL;
 	}
 	*ppDb = nullptr;

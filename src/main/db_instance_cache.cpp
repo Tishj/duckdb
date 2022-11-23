@@ -4,9 +4,9 @@ namespace duckdb {
 
 string GetDBAbsolutePath(const string &database) {
 	if (database.empty()) {
-		return ":memory:";
+		return IN_MEMORY_CONNECTION;
 	}
-	if (database.rfind(":memory:", 0) == 0) {
+	if (database.rfind(IN_MEMORY_CONNECTION, 0) == 0) {
 		// this is a memory db, just return it.
 		return database;
 	}
@@ -36,6 +36,10 @@ shared_ptr<DuckDB> DBInstanceCache::GetInstanceInternal(const string &database, 
 }
 
 shared_ptr<DuckDB> DBInstanceCache::GetInstance(const string &database, const DBConfig &config) {
+	if (database == IN_MEMORY_CONNECTION) {
+		// We explicitly called for a new in-memory database connection
+		return nullptr;
+	}
 	lock_guard<mutex> l(cache_lock);
 	return GetInstanceInternal(database, config);
 }
@@ -49,8 +53,8 @@ shared_ptr<DuckDB> DBInstanceCache::CreateInstanceInternal(const string &databas
 	}
 	// Creates new instance
 	string instance_path = abs_database_path;
-	if (abs_database_path.rfind(":memory:", 0) == 0) {
-		instance_path = ":memory:";
+	if (abs_database_path.rfind(IN_MEMORY_CONNECTION, 0) == 0) {
+		instance_path = IN_MEMORY_CONNECTION;
 	}
 	auto db_instance = make_shared<DuckDB>(instance_path, &config);
 	if (cache_instance) {

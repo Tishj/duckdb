@@ -22,7 +22,7 @@ def parquet_types_test(type_list):
         df = pandas.DataFrame.from_dict({
             'val': numpy.array(value_list, dtype=numpy_type)
         })
-        duckdb_cursor = duckdb.connect()
+        duckdb_cursor = duckdb.connect(':memory:')
         duckdb_cursor.execute(f"CREATE TABLE tmp AS SELECT val::{sql_type} val FROM df")
         duckdb_cursor.execute(f"COPY tmp TO '{temp_name}' (FORMAT PARQUET)")
         read_df = pandas.read_parquet(temp_name)

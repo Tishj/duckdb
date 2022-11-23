@@ -4,7 +4,7 @@ import pytest
 # A closed connection should invalidate all relation's methods
 class TestRAPICloseConnRel(object):
 	def test_close_conn_rel(self, duckdb_cursor):
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		con.execute("CREATE TABLE items(item VARCHAR, value DECIMAL(10,2), count INTEGER)")
 		con.execute("INSERT INTO items VALUES ('jeans', 20.0, 1), ('hammer', 42.2, 2)")
 		rel = con.table("items")
@@ -111,7 +111,7 @@ class TestRAPICloseConnRel(object):
 			rel.describe()
 		with pytest.raises(duckdb.ConnectionException, match='Connection has already been closed'):
 			rel.fetchnumpy()
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		con.execute("CREATE TABLE items(item VARCHAR, value DECIMAL(10,2), count INTEGER)")
 		con.execute("INSERT INTO items VALUES ('jeans', 20.0, 1), ('hammer', 42.2, 2)")
 		valid_rel = con.table("items")
@@ -127,7 +127,7 @@ class TestRAPICloseConnRel(object):
 			valid_rel.join(rel, "rel.items = valid_rel.items")
 
 	def test_del_conn(self, duckdb_cursor):
-		con = duckdb.connect()
+		con = duckdb.connect(':memory:')
 		con.execute("CREATE TABLE items(item VARCHAR, value DECIMAL(10,2), count INTEGER)")
 		con.execute("INSERT INTO items VALUES ('jeans', 20.0, 1), ('hammer', 42.2, 2)")
 		rel = con.table("items")

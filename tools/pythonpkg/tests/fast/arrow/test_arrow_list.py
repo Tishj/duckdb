@@ -51,7 +51,7 @@ class TestArrowListType(object):
     def test_regular_list(self):
         if not can_run:
             return
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
 
         n = 5               #Amount of lists
         generated_size = 3  #Size of each list
@@ -72,7 +72,7 @@ class TestArrowListType(object):
     def test_fixedsize_list(self):
         if not can_run:
             return
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
 
         n = 5               #Amount of lists
         generated_size = 3  #Size of each list

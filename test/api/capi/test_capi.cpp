@@ -472,11 +472,11 @@ TEST_CASE("Test C API config", "[capi]") {
 	// open the database & connection
 	// cannot open an in-memory database in read-only mode
 	char *error = nullptr;
-	REQUIRE(duckdb_open_ext(":memory:", &db, config, &error) == DuckDBError);
+	REQUIRE(duckdb_open_ext(IN_MEMORY_CONNECTION, &db, config, &error) == DuckDBError);
 	REQUIRE(strlen(error) > 0);
 	duckdb_free(error);
 	// now without the error
-	REQUIRE(duckdb_open_ext(":memory:", &db, config, nullptr) == DuckDBError);
+	REQUIRE(duckdb_open_ext(IN_MEMORY_CONNECTION, &db, config, nullptr) == DuckDBError);
 	// cannot open a database that does not exist
 	REQUIRE(duckdb_open_ext(dbdir.c_str(), &db, config, &error) == DuckDBError);
 	REQUIRE(strlen(error) > 0);

@@ -7,7 +7,7 @@ from decimal import Decimal
 from uuid import UUID
 
 def get_all_types():
-    conn = duckdb.connect()
+    conn = duckdb.connect(':memory:')
     all_types = conn.execute("describe select * from test_all_types()").fetchall()
     types = []
     for cur_type in all_types:
@@ -38,7 +38,7 @@ def recursive_equality(o1, o2):
 
 class TestAllTypes(object):
     def test_fetchall(self, duckdb_cursor):
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         # We replace these values since the extreme ranges are not supported in native-python.
         replacement_values = {
             'timestamp': "'1990-01-01 00:00:00'::TIMESTAMP",
@@ -87,7 +87,7 @@ class TestAllTypes(object):
             assert recursive_equality(result, correct_result)
 
     def test_fetchnumpy(self, duckdb_cursor):
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
 
         correct_answer_map = {
             'bool': np.ma.array(
@@ -341,7 +341,7 @@ class TestAllTypes(object):
         replacement_values = {'interval': "INTERVAL '2 years'"}
         # We do not round trip enum types
         enum_types = {'small_enum', 'medium_enum', 'large_enum', 'double_array'}
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         for cur_type in all_types:
             if cur_type in replacement_values:
                 arrow_table = conn.execute("select "+replacement_values[cur_type]).arrow()
@@ -369,7 +369,7 @@ class TestAllTypes(object):
             'timestamptz_array': "[], ['1970-01-01 00:00:00Z'::TIMESTAMPTZ, NULL, '0001-01-01 00:00:00Z'::TIMESTAMPTZ, '9999-12-31 23:59:59.999999Z'::TIMESTAMPTZ,], [NULL::TIMESTAMPTZ,]",
             }
 
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         for cur_type in all_types:
             if cur_type in replacement_values:
                 dataframe = conn.execute("select "+replacement_values[cur_type]).df()

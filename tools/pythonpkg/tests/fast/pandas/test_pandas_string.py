@@ -25,7 +25,7 @@ class TestPandasString(object):
         # Create DataFrame with string attribute
         df = pd.DataFrame({"city": ["Amsterdam", "New York", "London"] * N})
         # Copy Dataframe to DuckDB
-        con = duckdb.connect()
+        con = duckdb.connect(':memory:')
         con.register("df", df)
         con.execute(f"""
             CREATE TABLE t1 AS SELECT * FROM df

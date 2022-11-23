@@ -389,7 +389,7 @@ class TestResolveObjectColumns(object):
         pd.testing.assert_frame_equal(duckdb_col, df_expected_res)
 
     def test_numeric_decimal(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
 
         # DuckDB uses DECIMAL where possible, so all the 'float' types here are actually DECIMAL
         reference_query = """
@@ -416,7 +416,7 @@ class TestResolveObjectColumns(object):
         assert(conversion == reference)
 
     def test_numeric_decimal_coverage(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
 
         x = pd.DataFrame({
             '0': [Decimal("nan"), Decimal("+nan"), Decimal("-nan"), Decimal("inf"), Decimal("+inf"), Decimal("-inf")]
@@ -448,7 +448,7 @@ class TestResolveObjectColumns(object):
         assert(len(res['dates'].__array__()) == 4)
 
     def test_multiple_chunks_aggregate(self):
-        conn = duckdb.connect()
+        conn = duckdb.connect(':memory:')
         conn.execute("create table dates as select '2022-09-14'::DATE + INTERVAL (i::INTEGER) DAY as i from range(0, 4096) tbl(i);")
         res = duckdb.query("select * from dates", connection=conn).df()
         date_df = res.copy()
@@ -493,7 +493,7 @@ class TestResolveObjectColumns(object):
             res = duckdb.query_df(x, "x", "select * from x").df()
 
     def test_numeric_decimal_zero_fractional(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         decimals = pd.DataFrame(
             data={
                 "0": [
@@ -526,7 +526,7 @@ class TestResolveObjectColumns(object):
         assert(conversion == reference)
 
     def test_numeric_decimal_incompatible(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         reference_query = """
             CREATE TABLE tbl AS SELECT * FROM (
                 VALUES
@@ -553,7 +553,7 @@ class TestResolveObjectColumns(object):
 
     #result: [('1E-28',), ('10000000000000000000000000.0',)]
     def test_numeric_decimal_combined(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         decimals = pd.DataFrame(
             data={
                 "0": [
@@ -578,7 +578,7 @@ class TestResolveObjectColumns(object):
 
     #result: [('1234.0',), ('123456789.0',), ('1234567890123456789.0',), ('0.1234567890123456789',)]
     def test_numeric_decimal_varying_sizes(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         decimals = pd.DataFrame(
             data={
                 "0": [
@@ -606,7 +606,7 @@ class TestResolveObjectColumns(object):
         print(conversion)
 
     def test_numeric_decimal_fallback_to_double(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         # The widths of these decimal values are bigger than the max supported width for DECIMAL
         data = [Decimal("1.234567890123456789012345678901234567890123456789"), Decimal("123456789012345678901234567890123456789012345678.0")]
         decimals = pd.DataFrame(
@@ -628,7 +628,7 @@ class TestResolveObjectColumns(object):
         assert(isinstance(conversion[0][0], float))
 
     def test_numeric_decimal_double_mixed(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         data = [
             Decimal("1.234"),
             Decimal("1.234567891234567890123456789012345678901234567890123456789"),
@@ -664,7 +664,7 @@ class TestResolveObjectColumns(object):
         assert(isinstance(conversion[0][0], float))
 
     def test_numeric_decimal_out_of_range(self):
-        duckdb_conn = duckdb.connect()
+        duckdb_conn = duckdb.connect(':memory:')
         data = [Decimal("1.234567890123456789012345678901234567"), Decimal("123456789012345678901234567890123456.0")]
         decimals = pd.DataFrame(
             data={
