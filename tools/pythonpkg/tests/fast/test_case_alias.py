@@ -1,12 +1,11 @@
-import pandas
-import numpy as np
 import datetime
 import duckdb
+import pytest
 
 class TestCaseAlias(object):
     def test_case_alias(self, duckdb_cursor):
-        import pandas
-        import numpy as np
+        pandas = pytest.importorskip("pandas")
+        np = pytest.importorskip("numpy")
         import datetime
         import duckdb
 

@@ -1,8 +1,7 @@
-import pandas as pd
-import numpy as np
 import duckdb
 import os
 import tempfile
+import pytest
 
 class TestNonDefaultConn(object):
 
@@ -20,6 +19,7 @@ class TestNonDefaultConn(object):
         assert duckdb.from_query("select count(*) from t",connection=conn).execute().fetchall()[0] ==  (1,)
 
     def test_from_csv(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         temp_file_name = os.path.join(tempfile.mkdtemp(), next(tempfile._get_candidate_names()))
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
@@ -30,10 +30,8 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select count(*) from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,)
        
     def test_from_parquet(self, duckdb_cursor):
-        try:
-            import pyarrow as pa
-        except:
-            return
+        pa = pytest.importorskip("pyarrow")
+        pd = pytest.importorskip("pandas")
         temp_file_name = os.path.join(tempfile.mkdtemp(), next(tempfile._get_candidate_names()))
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
@@ -44,6 +42,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select count(*) from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,)
  
     def test_from_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1)")
@@ -54,11 +53,8 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select count(*) from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,)
     
     def test_from_arrow(self, duckdb_cursor):
-        try:
-            import pyarrow as pa
-        except:
-            return
-
+        pa = pytest.importorskip("pyarrow")
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1)")
@@ -70,6 +66,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select count(*) from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,)
           
     def test_filter_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1), (4)")
@@ -78,6 +75,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select count(*) from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,)
 
     def test_project_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1), (4)")
@@ -86,6 +84,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select * from t inner join t_2 on (a = i)').fetchall()[0] ==  (1, 1)
   
     def test_agg_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1), (4)")
@@ -94,6 +93,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select * from t inner join t_2 on (a = i)').fetchall()[0] ==  (4, 4)       
 
     def test_distinct_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1)")
@@ -102,6 +102,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select * from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,1) 
 
     def test_limit_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1),(4)")
@@ -110,6 +111,7 @@ class TestNonDefaultConn(object):
         assert rel.query('t_2','select * from t inner join t_2 on (a = i)').fetchall()[0] ==  (1,1) 
    
     def test_query_df(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1),(4)")
@@ -118,6 +120,7 @@ class TestNonDefaultConn(object):
         assert rel.fetchall()[0] ==  (1,1) 
  
     def test_query_order(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         conn = duckdb.connect()
         conn.execute("create table t (a integer)")
         conn.execute("insert into t values (1),(4)")

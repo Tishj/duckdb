@@ -1,10 +1,9 @@
 import duckdb
-import pandas as pd
-import numpy as np
 import datetime
 import math
 from decimal import Decimal
 from uuid import UUID
+import pytest
 
 def get_all_types():
     conn = duckdb.connect()
@@ -18,6 +17,7 @@ all_types = get_all_types()
 
 # we need to write our own equality function that considers nan==nan for testing purposes
 def recursive_equality(o1, o2):
+    np = pytest.importorskip("numpy")
     if o1 == o2:
         return True
     if type(o1) != type(o2):
@@ -86,7 +86,9 @@ class TestAllTypes(object):
             correct_result = correct_answer_map[cur_type]
             assert recursive_equality(result, correct_result)
 
-    def test_fetchnumpy(self, duckdb_cursor):
+    def test_fetchnumpy(self):
+        pd = pytest.importorskip("pandas")
+        np = pytest.importorskip("numpy")
         conn = duckdb.connect()
 
         correct_answer_map = {
@@ -357,6 +359,7 @@ class TestAllTypes(object):
                 assert arrow_table.equals(round_trip_arrow_table, check_metadata=True)
 
     def test_pandas(self):
+        pd = pytest.importorskip("pandas")
         # We skip those since the extreme ranges are not supported in python.
         replacement_values = { 'timestamp': "'1990-01-01 00:00:00'::TIMESTAMP",
             'timestamp_s': "'1990-01-01 00:00:00'::TIMESTAMP_S",

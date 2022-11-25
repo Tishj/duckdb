@@ -738,7 +738,12 @@ py::object ArrayWrapper::ToArray(idx_t count) const {
 	auto nullmask = move(mask->array);
 
 	// create masked array and return it
-	auto masked_array = py::module::import("numpy.ma").attr("masked_array")(values, nullmask);
+	auto &import_cache = *DuckDBPyConnection::ImportCache();
+	if (!import_cache.numpy.ma.masked_array.IsLoaded()) {
+		throw InvalidInputException("Could not perform this operation, install the 'numpy' module and try again");
+	}
+	auto masked_array_attr = import_cache.numpy.ma.masked_array();
+	auto masked_array = masked_array_attr(values, nullmask);
 	return masked_array;
 }
 

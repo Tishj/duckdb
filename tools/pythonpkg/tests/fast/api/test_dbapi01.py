@@ -1,6 +1,6 @@
 # multiple result sets
 
-import numpy
+import pytest
 import duckdb
 
 class TestMultipleResultSets(object):
@@ -11,6 +11,7 @@ class TestMultipleResultSets(object):
         assert result == [(0,), (1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (None,)], "Incorrect result returned"
 
     def test_numpy_selection(self, duckdb_cursor):
+        numpy = pytest.importorskip("numpy")
         duckdb_cursor.execute('SELECT * FROM integers')
         duckdb_cursor.execute('SELECT * FROM integers')
         result = duckdb_cursor.fetchnumpy()
@@ -18,7 +19,8 @@ class TestMultipleResultSets(object):
 
         numpy.testing.assert_array_equal(result['i'], expected)
 
-    def test_numpy_materialized(self, duckdb_cursor):
+    def test_numpy_materialized(self):
+        numpy = pytest.importorskip("numpy")
         connection = duckdb.connect('')
         cursor = connection.cursor()
         cursor.execute('CREATE TABLE integers (i integer)')

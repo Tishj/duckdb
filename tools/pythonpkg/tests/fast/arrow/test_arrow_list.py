@@ -1,10 +1,5 @@
 import duckdb
-import numpy as np
-try:
-    import pyarrow as pa
-    can_run = True
-except:
-    can_run = False
+import pytest
 
 def check_equal(duckdb_conn):
     true_result = duckdb_conn.execute("SELECT * from test").fetchall()
@@ -12,7 +7,8 @@ def check_equal(duckdb_conn):
     assert(arrow_result == true_result)
 
 def create_and_register_arrow_table(column_list, duckdb_conn):
-
+    pa = pytest.importorskip("pyarrow")
+    pa = pytest.importorskip("pyarrow")
     pydict = {name: data for (name, _, data) in column_list}
     arrow_schema = pa.schema([
         (name, dtype) for (name, dtype, _) in column_list
@@ -24,6 +20,7 @@ def create_and_register_arrow_table(column_list, duckdb_conn):
 
 # If the value is a numpy array, turn it into a list (numpy.ndarray not currently supported by TransformPythonValue)
 def transform(val):
+    np = pytest.importorskip("numpy")
     if (isinstance(val, np.ndarray)):
         val = list(val)
     return val
@@ -49,8 +46,8 @@ def create_and_register_comparison_result(column_list, duckdb_conn):
 
 class TestArrowListType(object):
     def test_regular_list(self):
-        if not can_run:
-            return
+        pa = pytest.importorskip("pyarrow")
+        np = pytest.importorskip("numpy")
         duckdb_conn = duckdb.connect()
 
         n = 5               #Amount of lists
@@ -70,8 +67,8 @@ class TestArrowListType(object):
         check_equal(duckdb_conn)
 
     def test_fixedsize_list(self):
-        if not can_run:
-            return
+        pa = pytest.importorskip("pyarrow")
+        np = pytest.importorskip("numpy")
         duckdb_conn = duckdb.connect()
 
         n = 5               #Amount of lists

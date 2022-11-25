@@ -1,19 +1,11 @@
 import duckdb
 import os
-try:
-    import pyarrow
-    import pyarrow.parquet
-    import pyarrow.dataset
-    import numpy as np
-    can_run = True
-except:
-    can_run = False
+import pytest
 
 class TestArrowDataset(object):
 
-    def test_parallel_dataset(self,duckdb_cursor):
-        if not can_run:
-            return
+    def test_parallel_dataset(self):
+        pyarrow = pytest.importorskip("pyarrow")
 
         duckdb_conn = duckdb.connect()
         duckdb_conn.execute("PRAGMA threads=4")
@@ -32,9 +24,8 @@ class TestArrowDataset(object):
 
         assert rel.filter("first_name=\'Jose\' and salary > 134708.82").aggregate('count(*)').execute().fetchone()[0] == 12
 
-    def test_parallel_dataset_register(self,duckdb_cursor):
-        if not can_run:
-            return
+    def test_parallel_dataset_register(self):
+        pyarrow = pytest.importorskip("pyarrow")
 
         duckdb_conn = duckdb.connect()
         duckdb_conn.execute("PRAGMA threads=4")
@@ -53,9 +44,9 @@ class TestArrowDataset(object):
 
         assert duckdb_conn.execute("Select count(*) from dataset where first_name = 'Jose' and salary > 134708.82").fetchone()[0] == 12
 
-    def test_parallel_dataset_roundtrip(self,duckdb_cursor):
-        if not can_run:
-            return
+    def test_parallel_dataset_roundtrip(self):
+        pyarrow = pytest.importorskip("pyarrow")
+        pd = pytest.importorskip("pandas")
 
         duckdb_conn = duckdb.connect()
         duckdb_conn.execute("PRAGMA threads=4")

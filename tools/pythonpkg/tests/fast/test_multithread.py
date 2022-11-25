@@ -2,14 +2,7 @@ import duckdb
 import pytest
 import threading
 import queue as Queue
-import pandas as pd
-import numpy as np
 import os
-try:
-    import pyarrow as pa
-    can_run = True
-except:
-    can_run = False
 
 def connect_duck(duckdb_conn):
     out = duckdb_conn.execute('select i from (values (42), (84), (NULL), (128)) tbl(i)').fetchall()
@@ -177,6 +170,8 @@ def transaction_query(duckdb_conn, queue):
         queue.put(False) 
 
 def df_append(duckdb_conn, queue):
+    pd = pytest.importorskip("pandas")
+    np = pytest.importorskip("numpy")
     # Get a new connection
     duckdb_conn = duckdb.connect()
     duckdb_conn.execute("CREATE TABLE T ( i INTEGER)")
@@ -188,6 +183,8 @@ def df_append(duckdb_conn, queue):
         queue.put(False) 
 
 def df_register(duckdb_conn, queue):
+    pd = pytest.importorskip("pandas")
+    np = pytest.importorskip("numpy")
     # Get a new connection
     duckdb_conn = duckdb.connect()
     df = pd.DataFrame(np.random.randint(0,100,size=15), columns=['A'])
@@ -198,6 +195,8 @@ def df_register(duckdb_conn, queue):
         queue.put(False) 
 
 def df_unregister(duckdb_conn, queue):
+    pd = pytest.importorskip("pandas")
+    np = pytest.importorskip("numpy")
     # Get a new connection
     duckdb_conn = duckdb.connect()
     df = pd.DataFrame(np.random.randint(0,100,size=15), columns=['A'])
@@ -343,26 +342,27 @@ class TestDuckMultithread(object):
         duck_threads.multithread_test()
 
     def test_fetchnp(self, duckdb_cursor):
+        np = pytest.importorskip("numpy")
         duck_threads = DuckDBThreaded(10,fetchnp_query)
         duck_threads.multithread_test()
 
     def test_fetchdf(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         duck_threads = DuckDBThreaded(10,fetchdf_query)
         duck_threads.multithread_test()
 
     def test_fetchdfchunk(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         duck_threads = DuckDBThreaded(10,fetchdf_chunk_query)
         duck_threads.multithread_test()
 
     def test_fetcharrow(self, duckdb_cursor):
-        if not can_run:
-            return
+        pa = pytest.importorskip("pyarrow")
         duck_threads = DuckDBThreaded(10,fetch_arrow_query)
         duck_threads.multithread_test()
 
     def test_fetch_record_batch(self, duckdb_cursor):
-        if not can_run:
-            return
+        pa = pytest.importorskip("pyarrow")
         duck_threads = DuckDBThreaded(10,fetch_record_batch_query)
         duck_threads.multithread_test()
 
@@ -371,20 +371,22 @@ class TestDuckMultithread(object):
         duck_threads.multithread_test()
 
     def test_df_append(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         duck_threads = DuckDBThreaded(10,df_append)
         duck_threads.multithread_test()
 
     def test_df_register(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         duck_threads = DuckDBThreaded(10,df_register)
         duck_threads.multithread_test()
 
     def test_df_unregister(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         duck_threads = DuckDBThreaded(10,df_unregister)
         duck_threads.multithread_test()
 
     def test_arrow_register_unregister(self, duckdb_cursor):
-        if not can_run:
-            return
+        pa = pytest.importorskip("pyarrow")
         duck_threads = DuckDBThreaded(10,arrow_register_unregister)
         duck_threads.multithread_test()
 
@@ -405,12 +407,12 @@ class TestDuckMultithread(object):
         duck_threads.multithread_test()
 
     def test_from_DF(self, duckdb_cursor):
+        pd = pytest.importorskip("pandas")
         duck_threads = DuckDBThreaded(10,from_df)
         duck_threads.multithread_test() 
 
     def test_from_arrow(self, duckdb_cursor):
-        if not can_run:
-            return
+        pa = pytest.importorskip("pyarrow")
         duck_threads = DuckDBThreaded(10,from_arrow)
         duck_threads.multithread_test()
  

@@ -1,7 +1,6 @@
 import os
 import sys
 import duckdb
-import numpy
 import subprocess
 from io import StringIO
 import csv

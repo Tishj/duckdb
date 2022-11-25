@@ -238,7 +238,7 @@ PythonObjectType GetPythonObjectType(py::handle &ele) {
 		return PythonObjectType::List;
 	} else if (py::isinstance<py::dict>(ele)) {
 		return PythonObjectType::Dict;
-	} else if (py::isinstance(ele, import_cache.numpy.ndarray())) {
+	} else if (import_cache.numpy.ndarray.IsInstance(ele)) {
 		return PythonObjectType::NdArray;
 	} else {
 		return PythonObjectType::Other;

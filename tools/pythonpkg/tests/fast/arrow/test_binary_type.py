@@ -1,22 +1,15 @@
 import duckdb
-import os
-try:
-    import pyarrow as pa
-    from pyarrow import parquet as pq
-    import numpy as np
-    can_run = True
-except:
-    can_run = False
+import pytest
 
 def create_binary_table(type):
+    pa = pytest.importorskip("pyarrow")
     schema = pa.schema([("data", type)])
     inputs = [pa.array([b"foo", b"bar", b"baz"], type=type)]
     return pa.Table.from_arrays(inputs, schema=schema)
 
 class TestArrowBinary(object):
-    def test_binary_types(self,duckdb_cursor):
-        if not can_run:
-            return
+    def test_binary_types(self):
+        pa = pytest.importorskip("pyarrow")
 
         # Fixed Size Binary
         arrow_table = create_binary_table(pa.binary(3))

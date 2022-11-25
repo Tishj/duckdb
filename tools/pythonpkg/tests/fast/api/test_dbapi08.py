@@ -1,9 +1,9 @@
 # test fetchdf with various types
-import pandas
-import numpy
+import pytest
 
 class TestType(object):
     def test_fetchdf(self, duckdb_cursor):
+        pandas = pytest.importorskip("pandas")
         duckdb_cursor.execute("CREATE TABLE items(item VARCHAR)")
         duckdb_cursor.execute("INSERT INTO items VALUES ('jeans'), (''), (NULL)")
         res = duckdb_cursor.execute("SELECT item FROM items").fetchdf()

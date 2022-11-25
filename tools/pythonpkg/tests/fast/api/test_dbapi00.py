@@ -1,7 +1,5 @@
 # simple DB API testcase
 
-import numpy
-import pandas
 import pytest
 import duckdb
 
@@ -73,7 +71,8 @@ class TestSimpleDBAPI(object):
         with pytest.raises(duckdb.InvalidInputException):
             res = duckdb_cursor.fetchmany(3)
 
-    def test_numpy_selection(self, duckdb_cursor):
+    def test_numpy_selection(self):
+        numpy = pytest.importorskip("numpy")
         duckdb_cursor.execute('SELECT * FROM integers')
         result = duckdb_cursor.fetchnumpy()
         arr = numpy.ma.masked_array(numpy.arange(11))
@@ -86,7 +85,9 @@ class TestSimpleDBAPI(object):
         arr.mask = [False, False, True]
         numpy.testing.assert_array_equal(result['t'], arr, "Incorrect result returned")
 
-    def test_pandas_selection(self, duckdb_cursor):
+    def test_pandas_selection(self):
+        numpy = pytest.importorskip("numpy")
+        pandas = pytest.importorskip("pandas")
         duckdb_cursor.execute('SELECT * FROM integers')
         result = duckdb_cursor.fetchdf()
         arr = numpy.ma.masked_array(numpy.arange(11))

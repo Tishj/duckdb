@@ -160,16 +160,40 @@ public:
 	PythonImportCacheItem UUID;
 };
 
+struct NumpyMaskedArrayCacheItem : public PythonImportCacheItem {
+public:
+	~NumpyMaskedArrayCacheItem() override {
+	}
+	virtual void LoadSubtypes(PythonImportCache &cache) override {
+		masked_array.LoadAttribute("masked_array", cache, *this);
+	}
+
+public:
+	PythonImportCacheItem masked_array;
+
+protected:
+	bool IsRequired() const override final {
+		return false;
+	}
+};
+
 struct NumpyCacheItem : public PythonImportCacheItem {
 public:
 	~NumpyCacheItem() override {
 	}
 	virtual void LoadSubtypes(PythonImportCache &cache) override {
 		ndarray.LoadAttribute("ndarray", cache, *this);
+		ma.LoadModule("numpy.ma", cache);
 	}
 
 public:
 	PythonImportCacheItem ndarray;
+	NumpyMaskedArrayCacheItem ma;
+
+protected:
+	bool IsRequired() const override final {
+		return false;
+	}
 };
 
 struct DatetimeCacheItem : public PythonImportCacheItem {

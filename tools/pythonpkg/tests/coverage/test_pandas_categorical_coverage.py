@@ -1,6 +1,5 @@
 import duckdb
 import pandas as pd
-import numpy
 
 def check_result_list(res):
     for res_item in res:

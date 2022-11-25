@@ -1,11 +1,10 @@
 #! /usr/bin/env python3
 
 import itertools
-import numpy as np
-from numpy.random import Generator, PCG64
 from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 
 
 """Generate data to test parquet data page decompression."""
@@ -31,6 +30,11 @@ DATA_PAGE_VERSIONS = [
 
 
 def build_table():
+	numpy_module = pytest.importorskip("numpy")
+	numpy_random = pytest.importorskip("numpy.random")
+
+	Generator = numpy_random.Generator
+	PCG64 = numpy_random.PCG64
     # Init rng in a reproducible way
     rng = Generator(PCG64(12345))
 

@@ -1,11 +1,11 @@
 import duckdb
-import pandas as pd
-import numpy
 import pytest
+pd = pytest.importorskip("pandas")
+numpy = pytest.importorskip("numpy")
 from datetime import date, timedelta
 
 class TestMap(object):
-    def test_map(self, duckdb_cursor):
+    def test_map(self):
         testrel = duckdb.values([1, 2])
         conn = duckdb.connect()
         conn.execute('CREATE TABLE t (a integer)')
