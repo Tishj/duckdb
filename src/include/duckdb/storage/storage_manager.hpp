@@ -101,7 +101,7 @@ public:
 	SingleFileStorageManager(DatabaseInstance &db, string path, bool read_only);
 
 	//! The BlockManager to read/store meta information and data in blocks
-	unique_ptr<BlockManager> block_manager;
+	unique_ptr<BlockManagerInterface> block_manager;
 	//! TableIoManager
 	unique_ptr<TableIOManager> table_io_manager;
 

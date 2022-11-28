@@ -136,7 +136,7 @@ public:
 	using CHIMP_TYPE = typename ChimpType<T>::type;
 
 	explicit ChimpScanState(ColumnSegment &segment) : segment(segment), segment_count(segment.count) {
-		auto &buffer_manager = VirtualBufferManager::GetBufferManager(segment.db);
+		auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 
 		handle = buffer_manager.Pin(segment.block);
 		auto dataptr = handle.Ptr();

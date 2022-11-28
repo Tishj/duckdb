@@ -71,13 +71,12 @@ DatabaseInstance::~DatabaseInstance() {
 	}
 }
 
-VirtualBufferManager &VirtualBufferManager::GetBufferManager(DatabaseInstance &db) {
+BufferManager &BufferManager::GetBufferManager(DatabaseInstance &db) {
 	auto &config = DBConfig::GetConfig(db);
 	if (config.virtual_buffer_manager) {
-		D_ASSERT(db.GetStorageManager().buffer_manager == nullptr);
-		return *config.virtual_buffer_manager;
+		throw InternalException("Could not get BufferManager, because a custom buffer manager was supplied");
 	}
-	return *db.GetStorageManager().buffer_manager;
+	return (BufferManager&)*db.GetStorageManager().buffer_manager;
 }
 
 DatabaseInstance &DatabaseInstance::GetDatabase(ClientContext &context) {

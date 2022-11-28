@@ -101,7 +101,7 @@ public:
 	using Types = vector<LogicalType>;
 
 	WindowGlobalSinkState(const PhysicalWindow &op_p, ClientContext &context)
-	    : op(op_p), context(context), buffer_manager(VirtualBufferManager::GetBufferManager(context)),
+	    : op(op_p), context(context), buffer_manager(BufferManager::GetBufferManager(context)),
 	      allocator(Allocator::Get(context)),
 	      partition_info((idx_t)TaskScheduler::GetScheduler(context).NumberOfThreads()), next_sort(0),
 	      memory_per_thread(0), count(0), mode(DBConfig::GetConfig(context).options.window_mode) {

@@ -1,6 +1,7 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/checkpoint_manager.hpp"
 #include "duckdb/storage/in_memory_block_manager.hpp"
+#include "duckdb/storage/virtual_block_manager.hpp"
 #include "duckdb/storage/single_file_block_manager.hpp"
 #include "duckdb/storage/object_cache.hpp"
 
@@ -27,8 +28,8 @@ StorageManager &StorageManager::GetStorageManager(ClientContext &context) {
 	return StorageManager::GetStorageManager(*context.db);
 }
 
-VirtualBufferManager &VirtualBufferManager::GetBufferManager(ClientContext &context) {
-	return VirtualBufferManager::GetBufferManager(*context.db);
+VirtualBufferManager &BufferManager::GetBufferManager(ClientContext &context) {
+	return BufferManager::GetBufferManager(*context.db);
 }
 
 ObjectCache &ObjectCache::GetObjectCache(ClientContext &context) {
@@ -111,7 +112,7 @@ void SingleFileStorageManager::LoadDatabase() {
 	auto &config = db.config;
 	if (InMemory()) {
 		if (config.virtual_buffer_manager) {
-			block_manager = nullptr;
+			block_manager = make_unique<VirtualBlockManager>();
 		} else {
 			block_manager = make_unique<InMemoryBlockManager>(*buffer_manager);
 		}

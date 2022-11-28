@@ -34,7 +34,7 @@ void PartitionedColumnData::InitializeAppendState(PartitionedColumnDataAppendSta
 
 unique_ptr<DataChunk> PartitionedColumnData::CreatePartitionBuffer() const {
 	auto result = make_unique<DataChunk>();
-	result->Initialize(VirtualBufferManager::GetBufferManager(context).GetBufferAllocator(), types, BufferSize());
+	result->Initialize(BufferManager::GetBufferManager(context).GetBufferAllocator(), types, BufferSize());
 	return result;
 }
 
@@ -158,7 +158,7 @@ vector<unique_ptr<ColumnDataCollection>> &PartitionedColumnData::GetPartitions()
 
 void PartitionedColumnData::CreateAllocator() {
 	allocators->allocators.emplace_back(
-	    make_shared<ColumnDataAllocator>(VirtualBufferManager::GetBufferManager(context)));
+	    make_shared<ColumnDataAllocator>(BufferManager::GetBufferManager(context)));
 	allocators->allocators.back()->MakeShared();
 }
 

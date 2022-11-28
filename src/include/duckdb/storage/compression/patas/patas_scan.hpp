@@ -89,7 +89,7 @@ public:
 	using EXACT_TYPE = typename FloatingToExact<T>::type;
 
 	explicit PatasScanState(ColumnSegment &segment) : segment(segment), count(segment.count) {
-		auto &buffer_manager = VirtualBufferManager::GetBufferManager(segment.db);
+		auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 
 		handle = buffer_manager.Pin(segment.block);
 		// ScanStates never exceed the boundaries of a Segment,

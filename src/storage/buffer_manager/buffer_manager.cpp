@@ -454,7 +454,7 @@ public:
 	unique_ptr<FileBuffer> ReadTemporaryBuffer(block_id_t id, idx_t block_index,
 	                                           unique_ptr<FileBuffer> reusable_buffer) {
 		auto buffer =
-		    ReadTemporaryBufferInternal(VirtualBufferManager::GetBufferManager(db), *handle,
+		    ReadTemporaryBufferInternal(BufferManager::GetBufferManager(db), *handle,
 		                                GetPositionInFile(block_index), Storage::BLOCK_SIZE, id, move(reusable_buffer));
 		{
 			// remove the block (and potentially truncate the temp file)
@@ -783,12 +783,12 @@ data_ptr_t BufferManager::BufferAllocatorRealloc(PrivateAllocatorData *private_d
 }
 
 Allocator &BufferAllocator::Get(ClientContext &context) {
-	auto &manager = VirtualBufferManager::GetBufferManager(context);
+	auto &manager = BufferManager::GetBufferManager(context);
 	return manager.GetBufferAllocator();
 }
 
 Allocator &BufferAllocator::Get(DatabaseInstance &db) {
-	return VirtualBufferManager::GetBufferManager(db).GetBufferAllocator();
+	return BufferManager::GetBufferManager(db).GetBufferAllocator();
 }
 
 Allocator &BufferManager::GetBufferAllocator() {

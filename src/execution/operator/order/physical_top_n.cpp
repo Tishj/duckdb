@@ -223,7 +223,7 @@ void TopNSortState::Scan(TopNScanState &state, DataChunk &chunk) {
 //===--------------------------------------------------------------------===//
 TopNHeap::TopNHeap(ClientContext &context, Allocator &allocator, const vector<LogicalType> &payload_types_p,
                    const vector<BoundOrderByNode> &orders_p, idx_t limit, idx_t offset)
-    : allocator(allocator), buffer_manager(VirtualBufferManager::GetBufferManager(context)),
+    : allocator(allocator), buffer_manager(BufferManager::GetBufferManager(context)),
       payload_types(payload_types_p), orders(orders_p), limit(limit), offset(offset), sort_state(*this),
       executor(context), has_boundary_values(false), final_sel(STANDARD_VECTOR_SIZE), true_sel(STANDARD_VECTOR_SIZE),
       false_sel(STANDARD_VECTOR_SIZE), new_remaining_sel(STANDARD_VECTOR_SIZE) {

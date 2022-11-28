@@ -58,7 +58,7 @@ unique_ptr<GlobalSinkState> PhysicalOrder::GetGlobalSinkState(ClientContext &con
 	// Get the payload layout from the return types
 	RowLayout payload_layout;
 	payload_layout.Initialize(types);
-	auto state = make_unique<OrderGlobalState>(VirtualBufferManager::GetBufferManager(context), *this, payload_layout);
+	auto state = make_unique<OrderGlobalState>(BufferManager::GetBufferManager(context), *this, payload_layout);
 	// Set external (can be force with the PRAGMA)
 	state->global_sort_state.external = ClientConfig::GetConfig(context).force_external;
 	state->memory_per_thread = GetMaxThreadMemory(context);
@@ -79,7 +79,7 @@ SinkResultType PhysicalOrder::Sink(ExecutionContext &context, GlobalSinkState &g
 
 	// Initialize local state (if necessary)
 	if (!local_sort_state.initialized) {
-		local_sort_state.Initialize(global_sort_state, VirtualBufferManager::GetBufferManager(context.client));
+		local_sort_state.Initialize(global_sort_state, BufferManager::GetBufferManager(context.client));
 	}
 
 	// Obtain sorting columns
@@ -117,7 +117,7 @@ public:
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
 		// Initialize merge sorted and iterate until done
 		auto &global_sort_state = state.global_sort_state;
-		MergeSorter merge_sorter(global_sort_state, VirtualBufferManager::GetBufferManager(context));
+		MergeSorter merge_sorter(global_sort_state, BufferManager::GetBufferManager(context));
 		merge_sorter.PerformInMergeRound();
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;

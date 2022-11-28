@@ -132,7 +132,7 @@ public:
 		compressed_segment->function = function;
 		current_segment = move(compressed_segment);
 
-		auto &buffer_manager = VirtualBufferManager::GetBufferManager(db);
+		auto &buffer_manager = BufferManager::GetBufferManager(db);
 		handle = buffer_manager.Pin(current_segment->block);
 
 		segment_data = handle.Ptr() + PatasPrimitives::HEADER_SIZE;

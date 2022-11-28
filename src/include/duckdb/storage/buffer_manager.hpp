@@ -71,6 +71,9 @@ public:
 		return db;
 	}
 
+	static BufferManager &GetBufferManager(ClientContext &context);
+	DUCKDB_API static BufferManager &GetBufferManager(DatabaseInstance &db);
+
 	//! Construct a managed buffer.
 	//! The block_id is just used for internal tracking. It doesn't map to any actual
 	//! BlockManager.

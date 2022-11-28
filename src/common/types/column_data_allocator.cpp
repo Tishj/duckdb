@@ -18,7 +18,7 @@ ColumnDataAllocator::ColumnDataAllocator(ClientContext &context, ColumnDataAlloc
     : type(allocator_type) {
 	switch (type) {
 	case ColumnDataAllocatorType::BUFFER_MANAGER_ALLOCATOR:
-		alloc.buffer_manager = &VirtualBufferManager::GetBufferManager(context);
+		alloc.buffer_manager = &BufferManager::GetBufferManager(context);
 		break;
 	case ColumnDataAllocatorType::IN_MEMORY_ALLOCATOR:
 		alloc.allocator = &Allocator::Get(context);
