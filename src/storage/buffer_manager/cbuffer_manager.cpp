@@ -24,7 +24,7 @@ BufferHandle CBufferManager::Allocate(idx_t block_size, bool can_destroy = true,
 	shared_ptr<BlockHandle> temp_block; // Doesn't this cause a memory-leak, or at the very least heap-use-after-free???
 	shared_ptr<BlockHandle> *handle_p = block ? block : &temp_block;
 
-	auto buffer = make_shared<ExternalFileBuffer>(custom_allocator, config, alloc_size);
+	auto buffer = make_shared<FileBuffer>(custom_allocator, FileBufferType::MANAGED_BUFFER, alloc_size);
 	BufferPoolReservation reservation;
 	reservation.size = alloc_size;
 
