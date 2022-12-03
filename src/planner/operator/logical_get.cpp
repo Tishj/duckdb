@@ -174,8 +174,4 @@ unique_ptr<LogicalOperator> LogicalGet::Deserialize(LogicalDeserializationState 
 	return move(result);
 }
 
-vector<idx_t> LogicalGet::GetTableIndex() const {
-	return vector<idx_t> {table_index};
-}
-
 } // namespace duckdb

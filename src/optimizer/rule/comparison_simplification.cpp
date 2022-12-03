@@ -52,8 +52,7 @@ unique_ptr<Expression> ComparisonSimplificationRule::Apply(LogicalOperator &op, 
 		}
 
 		// Is the constant cast invertible?
-		if (!cast_constant.IsNull() &&
-		    !BoundCastExpression::CastIsInvertible(cast_expression->return_type, target_type)) {
+		if (!BoundCastExpression::CastIsInvertible(cast_expression->return_type, target_type)) {
 			// Is it actually invertible?
 			Value uncast_constant;
 			if (!cast_constant.DefaultTryCastAs(constant_value.type(), uncast_constant, &error_message, true) ||

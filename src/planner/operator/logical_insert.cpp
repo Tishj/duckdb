@@ -42,9 +42,10 @@ unique_ptr<LogicalOperator> LogicalInsert::Deserialize(LogicalDeserializationSta
 		throw InternalException("Cant find catalog entry for table %s", info->table);
 	}
 
-	auto result = make_unique<LogicalInsert>(table_catalog_entry, table_index);
+	auto result = make_unique<LogicalInsert>(table_catalog_entry);
 	result->type = state.type;
 	result->table = table_catalog_entry;
+	result->table_index = table_index;
 	result->return_chunk = return_chunk;
 	result->insert_values = move(insert_values);
 	result->column_index_map = column_index_map;
@@ -55,10 +56,6 @@ unique_ptr<LogicalOperator> LogicalInsert::Deserialize(LogicalDeserializationSta
 
 idx_t LogicalInsert::EstimateCardinality(ClientContext &context) {
 	return return_chunk ? LogicalOperator::EstimateCardinality(context) : 1;
-}
-
-vector<idx_t> LogicalInsert::GetTableIndex() const {
-	return vector<idx_t> {table_index};
 }
 
 } // namespace duckdb

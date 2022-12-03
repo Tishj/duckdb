@@ -593,16 +593,15 @@ string StrTimeFormat::ParseFormatSpecifier(const string &format_string, StrTimeF
 }
 
 struct StrfTimeBindData : public FunctionData {
-	explicit StrfTimeBindData(StrfTimeFormat format_p, string format_string_p, bool is_null)
-	    : format(move(format_p)), format_string(move(format_string_p)), is_null(is_null) {
+	explicit StrfTimeBindData(StrfTimeFormat format_p, string format_string_p)
+	    : format(move(format_p)), format_string(move(format_string_p)) {
 	}
 
 	StrfTimeFormat format;
 	string format_string;
-	bool is_null;
 
 	unique_ptr<FunctionData> Copy() const override {
-		return make_unique<StrfTimeBindData>(format, format_string, is_null);
+		return make_unique<StrfTimeBindData>(format, format_string);
 	}
 
 	bool Equals(const FunctionData &other_p) const override {
@@ -625,14 +624,13 @@ static unique_ptr<FunctionData> StrfTimeBindFunction(ClientContext &context, Sca
 	Value options_str = ExpressionExecutor::EvaluateScalar(context, *format_arg);
 	auto format_string = options_str.GetValue<string>();
 	StrfTimeFormat format;
-	bool is_null = options_str.IsNull();
-	if (!is_null) {
+	if (!options_str.IsNull()) {
 		string error = StrTimeFormat::ParseFormatSpecifier(format_string, format);
 		if (!error.empty()) {
 			throw InvalidInputException("Failed to parse format specifier %s: %s", format_string, error);
 		}
 	}
-	return make_unique<StrfTimeBindData>(format, format_string, is_null);
+	return make_unique<StrfTimeBindData>(format, format_string);
 }
 
 void StrfTimeFormat::ConvertDateVector(Vector &input, Vector &result, idx_t count) {
@@ -659,7 +657,7 @@ static void StrfTimeFunctionDate(DataChunk &args, ExpressionState &state, Vector
 	auto &func_expr = (BoundFunctionExpression &)state.expr;
 	auto &info = (StrfTimeBindData &)*func_expr.bind_info;
 
-	if (info.is_null) {
+	if (ConstantVector::IsNull(args.data[REVERSED ? 0 : 1])) {
 		result.SetVectorType(VectorType::CONSTANT_VECTOR);
 		ConstantVector::SetNull(result, true);
 		return;
@@ -693,7 +691,7 @@ static void StrfTimeFunctionTimestamp(DataChunk &args, ExpressionState &state, V
 	auto &func_expr = (BoundFunctionExpression &)state.expr;
 	auto &info = (StrfTimeBindData &)*func_expr.bind_info;
 
-	if (info.is_null) {
+	if (ConstantVector::IsNull(args.data[REVERSED ? 0 : 1])) {
 		result.SetVectorType(VectorType::CONSTANT_VECTOR);
 		ConstantVector::SetNull(result, true);
 		return;

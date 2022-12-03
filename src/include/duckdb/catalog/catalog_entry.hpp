@@ -52,7 +52,6 @@ public:
 
 public:
 	virtual unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo *info);
-	virtual void UndoAlter(ClientContext &context, AlterInfo *info);
 
 	virtual unique_ptr<CatalogEntry> Copy(ClientContext &context);
 

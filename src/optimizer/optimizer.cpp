@@ -22,7 +22,6 @@
 #include "duckdb/optimizer/topn_optimizer.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/planner.hpp"
-#include "duckdb/execution/column_binding_resolver.hpp"
 
 namespace duckdb {
 
@@ -60,18 +59,9 @@ void Optimizer::RunOptimizer(OptimizerType type, const std::function<void()> &ca
 	profiler.StartPhase(OptimizerTypeToString(type));
 	callback();
 	profiler.EndPhase();
-	if (plan) {
-		Verify(*plan);
-	}
 }
 
-void Optimizer::Verify(LogicalOperator &op) {
-	ColumnBindingResolver::Verify(op);
-}
-
-unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan_p) {
-	Verify(*plan_p);
-	this->plan = move(plan_p);
+unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan) {
 	// first we perform expression rewrites using the ExpressionRewriter
 	// this does not change the logical plan structure, but only simplifies the expression trees
 	RunOptimizer(OptimizerType::EXPRESSION_REWRITER, [&]() { rewriter.VisitOperator(*plan); });
@@ -158,7 +148,7 @@ unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan
 
 	Planner::VerifyPlan(context, plan);
 
-	return move(plan);
+	return plan;
 }
 
 } // namespace duckdb

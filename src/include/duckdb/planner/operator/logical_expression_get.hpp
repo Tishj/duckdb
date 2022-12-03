@@ -37,7 +37,6 @@ public:
 	idx_t EstimateCardinality(ClientContext &context) override {
 		return expressions.size();
 	}
-	vector<idx_t> GetTableIndex() const override;
 
 protected:
 	void ResolveTypes() override {

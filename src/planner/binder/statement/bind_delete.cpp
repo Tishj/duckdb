@@ -39,8 +39,7 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 		unique_ptr<LogicalOperator> child_operator;
 		for (auto &using_clause : stmt.using_clauses) {
 			// bind the using clause
-			auto using_binder = Binder::CreateBinder(context, this);
-			auto bound_node = using_binder->Bind(*using_clause);
+			auto bound_node = Bind(*using_clause);
 			auto op = CreatePlan(*bound_node);
 			if (child_operator) {
 				// already bound a child: create a cross product to unify the two
@@ -48,7 +47,6 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 			} else {
 				child_operator = move(op);
 			}
-			bind_context.AddContext(move(using_binder->bind_context));
 		}
 		if (child_operator) {
 			root = LogicalCrossProduct::Create(move(root), move(child_operator));
@@ -67,7 +65,7 @@ BoundStatement Binder::Bind(DeleteStatement &stmt) {
 		root = move(filter);
 	}
 	// create the delete node
-	auto del = make_unique<LogicalDelete>(table, GenerateTableIndex());
+	auto del = make_unique<LogicalDelete>(table);
 	del->AddChild(move(root));
 
 	// set up the delete expression

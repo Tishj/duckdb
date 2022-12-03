@@ -30,9 +30,4 @@ unique_ptr<LogicalOperator> LogicalUnnest::Deserialize(LogicalDeserializationSta
 	result->expressions = move(expressions);
 	return move(result);
 }
-
-vector<idx_t> LogicalUnnest::GetTableIndex() const {
-	return vector<idx_t> {unnest_index};
-}
-
 } // namespace duckdb

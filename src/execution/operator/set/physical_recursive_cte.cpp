@@ -129,14 +129,15 @@ void PhysicalRecursiveCTE::ExecuteRecursivePipelines(ExecutionContext &context) 
 	for (auto &pipeline : pipelines) {
 		auto sink = pipeline->GetSink();
 		if (sink != this) {
-			sink->sink_state.reset();
+			// reset the sink state for any intermediate sinks
+			sink->sink_state = sink->GetGlobalSinkState(context.client);
 		}
 		for (auto &op : pipeline->GetOperators()) {
 			if (op) {
-				op->op_state.reset();
+				op->op_state = op->GetGlobalOperatorState(context.client);
 			}
 		}
-		pipeline->ClearSource();
+		pipeline->ResetSource(true);
 	}
 
 	// get the MetaPipelines in the recursive_meta_pipeline and reschedule them

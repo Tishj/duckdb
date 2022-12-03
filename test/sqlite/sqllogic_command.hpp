@@ -14,7 +14,6 @@ namespace duckdb {
 class SQLLogicTestRunner;
 
 enum class SortStyle : uint8_t { NO_SORT, ROW_SORT, VALUE_SORT };
-enum class ExpectedResult : uint8_t { RESULT_SUCCESS, RESULT_ERROR, RESULT_UNKNOWN };
 
 struct LoopDefinition {
 	string loop_iterator_name;
@@ -68,7 +67,7 @@ class Statement : public Command {
 public:
 	Statement(SQLLogicTestRunner &runner);
 
-	ExpectedResult expected_result;
+	bool expect_ok;
 	string expected_error;
 
 public:

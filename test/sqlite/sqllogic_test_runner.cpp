@@ -256,11 +256,9 @@ void SQLLogicTestRunner::ExecuteFile(string script) {
 
 			// parse the first parameter
 			if (token.parameters[0] == "ok") {
-				command->expected_result = ExpectedResult::RESULT_SUCCESS;
+				command->expect_ok = true;
 			} else if (token.parameters[0] == "error") {
-				command->expected_result = ExpectedResult::RESULT_ERROR;
-			} else if (token.parameters[0] == "maybe") {
-				command->expected_result = ExpectedResult::RESULT_UNKNOWN;
+				command->expect_ok = false;
 			} else {
 				parser.Fail("statement argument should be 'ok' or 'error");
 			}
@@ -274,8 +272,7 @@ void SQLLogicTestRunner::ExecuteFile(string script) {
 			if (statement_text.empty()) {
 				parser.Fail("Unexpected empty statement text");
 			}
-			command->expected_error =
-			    parser.ExtractExpectedError(command->expected_result == ExpectedResult::RESULT_SUCCESS);
+			command->expected_error = parser.ExtractExpectedError(command->expect_ok);
 
 			// perform any renames in the text
 			command->base_sql_query = ReplaceKeywords(move(statement_text));

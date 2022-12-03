@@ -30,8 +30,4 @@ unique_ptr<LogicalOperator> LogicalWindow::Deserialize(LogicalDeserializationSta
 	return move(result);
 }
 
-vector<idx_t> LogicalWindow::GetTableIndex() const {
-	return vector<idx_t> {window_index};
-}
-
 } // namespace duckdb

@@ -666,12 +666,7 @@ bool DataTable::AppendToIndexes(TableIndexList &indexes, DataChunk &chunk, row_t
 	bool append_failed = false;
 	// now append the entries to the indices
 	indexes.Scan([&](Index &index) {
-		try {
-			if (!index.Append(chunk, row_identifiers)) {
-				append_failed = true;
-				return true;
-			}
-		} catch (...) {
+		if (!index.Append(chunk, row_identifiers)) {
 			append_failed = true;
 			return true;
 		}
@@ -685,6 +680,7 @@ bool DataTable::AppendToIndexes(TableIndexList &indexes, DataChunk &chunk, row_t
 		for (auto *index : already_appended) {
 			index->Delete(chunk, row_identifiers);
 		}
+
 		return false;
 	}
 	return true;
