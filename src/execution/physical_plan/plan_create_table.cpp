@@ -8,6 +8,8 @@
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/execution/operator/persistent/physical_batch_insert.hpp"
+#include "duckdb/planner/constraints/bound_check_constraint.hpp"
+#include "duckdb/parallel/task_scheduler.hpp"
 
 namespace duckdb {
 
@@ -38,13 +40,14 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateTabl
 
 		bool parallel_streaming_insert = !PreserveInsertionOrder(*plan);
 		bool use_batch_index = UseBatchIndex(*plan);
+		auto num_threads = TaskScheduler::GetScheduler(context).NumberOfThreads();
 		unique_ptr<PhysicalOperator> create;
 		if (!parallel_streaming_insert && use_batch_index) {
 			create = make_unique<PhysicalBatchInsert>(op, op.schema, move(op.info), op.estimated_cardinality);
 
 		} else {
 			create = make_unique<PhysicalInsert>(op, op.schema, move(op.info), op.estimated_cardinality,
-			                                     parallel_streaming_insert);
+			                                     parallel_streaming_insert && num_threads > 1);
 		}
 
 		D_ASSERT(op.children.size() == 1);

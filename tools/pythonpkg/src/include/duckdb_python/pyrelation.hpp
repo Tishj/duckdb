@@ -54,6 +54,17 @@ public:
 	       shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
 
 	static unique_ptr<DuckDBPyRelation>
+	FromParquet(const string &file_glob, bool binary_as_string, bool file_row_number, bool filename,
+	            bool hive_partitioning, shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
+
+	static unique_ptr<DuckDBPyRelation>
+	FromParquets(const vector<string> &file_globs, bool binary_as_string, bool file_row_number, bool filename,
+	             bool hive_partitioning, shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
+
+	static unique_ptr<DuckDBPyRelation>
+	FromSubstrait(py::bytes &proto, shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
+
+	static unique_ptr<DuckDBPyRelation>
 	FromQuery(const string &query, const string &alias,
 	          shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
 
@@ -63,13 +74,6 @@ public:
 
 	static unique_ptr<DuckDBPyRelation>
 	FromCsvAuto(const string &filename, shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
-
-	static unique_ptr<DuckDBPyRelation>
-	FromParquet(const string &filename, bool binary_as_string,
-	            shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
-
-	static unique_ptr<DuckDBPyRelation>
-	FromSubstrait(py::bytes &proto, shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
 
 	static unique_ptr<DuckDBPyRelation>
 	GetSubstrait(const string &query, shared_ptr<DuckDBPyConnection> conn = DuckDBPyConnection::DefaultConnection());
