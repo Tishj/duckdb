@@ -123,20 +123,7 @@ SQLLogicToken SQLLogicParser::Tokenize() {
 
 	vector<string> argument_list;
 	auto &line = lines[current_line];
-	idx_t last_pos = 0;
-	for (idx_t i = 0; i < line.size(); i++) {
-		if (StringUtil::CharacterIsSpace(line[i])) {
-			if (i == last_pos) {
-				last_pos++;
-			} else {
-				argument_list.push_back(line.substr(last_pos, i - last_pos));
-				last_pos = i + 1;
-			}
-		}
-	}
-	if (last_pos != line.size()) {
-		argument_list.push_back(line.substr(last_pos, line.size() - last_pos));
-	}
+	argument_list = StringUtil::Split(line, " ");
 	if (argument_list.empty()) {
 		Fail("Empty line!?");
 	}
