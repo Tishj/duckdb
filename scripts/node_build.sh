@@ -22,7 +22,10 @@ if [[ "$TARGET_ARCH" != "arm64" ]] ; then
   npm test
 fi
 
-export PATH=$(npm bin):$PATH
+# REMOVE ME: these echos are here to debug the state of PATH, we suspect it sometimes contains spaces and that's why it broke
+echo "BEFORE" $PATH
+export PATH="$(npm bin):$PATH"
+echo "AFTER" $PATH
 node-pre-gyp package testpackage testbinary --target_arch="$TARGET_ARCH"
 if [[ "$GITHUB_REF" =~ ^(refs/heads/master|refs/tags/v.+)$ ]] ; then
   node-pre-gyp publish --target_arch=$TARGET_ARCH
