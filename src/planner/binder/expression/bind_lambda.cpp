@@ -77,12 +77,32 @@ BindResult ExpressionBinder::BindExpression(LambdaExpression &expr, idx_t depth,
 	lambda_bindings->push_back(new_lambda_binding);
 
 	// bind the parameter expressions
-	for (idx_t i = 0; i < expr.params.size(); i++) {
-		auto result = BindExpression(&expr.params[i], depth, false);
+	for (idx_t param_idx = 0; param_idx < expr.params.size(); param_idx++) {
+		auto result = BindExpression(&expr.params[param_idx], depth, false);
 		D_ASSERT(!result.HasError());
 	}
 
 	auto result = BindExpression(&expr.expr, depth, false);
+
+	vector<BoundColumnReferenceInfo> filtered_bound_columns;
+	filtered_bound_columns.reserve(bound_columns.size());
+
+	// Remove the lambda expressions from the 'bound_columns' vector,
+	// so they don't show up us as "not appearing in the group by clause"
+	for (idx_t i = 0; i < bound_columns.size(); i++) {
+		auto &colref = bound_columns[i];
+		bool is_lambda = false;
+		for (auto &binding : *lambda_bindings) {
+			if (binding.names.back() == colref.name) {
+				is_lambda = true;
+			}
+		}
+		if (is_lambda) {
+			continue;
+		}
+		filtered_bound_columns.push_back(move(colref));
+	}
+	bound_columns = move(filtered_bound_columns);
 	lambda_bindings->pop_back();
 
 	// successfully bound a subtree of nested lambdas, set this to nullptr in case other parts of the
@@ -99,21 +119,22 @@ BindResult ExpressionBinder::BindExpression(LambdaExpression &expr, idx_t depth,
 	                                                     move(result.expression), params_strings.size()));
 }
 
+static bool IsLambdaParameter(Expression &original) {
+	if (original.expression_class != ExpressionClass::BOUND_COLUMN_REF) {
+		return false;
+	}
+	auto &bound_col_ref = (BoundColumnRefExpression &)original;
+	return bound_col_ref.binding.table_index == DConstants::INVALID_INDEX;
+}
+
 void ExpressionBinder::TransformCapturedLambdaColumn(unique_ptr<Expression> &original,
                                                      unique_ptr<Expression> &replacement,
                                                      vector<unique_ptr<Expression>> &captures,
                                                      LogicalType &list_child_type, string &alias) {
 
 	// check if the original expression is a lambda parameter
-	bool is_lambda_parameter = false;
-	if (original->expression_class == ExpressionClass::BOUND_COLUMN_REF) {
-
-		// determine if this is the lambda parameter
-		auto &bound_col_ref = (BoundColumnRefExpression &)*original;
-		if (bound_col_ref.binding.table_index == DConstants::INVALID_INDEX) {
-			is_lambda_parameter = true;
-		}
-	}
+	D_ASSERT(original);
+	auto is_lambda_parameter = IsLambdaParameter(*original);
 
 	if (is_lambda_parameter) {
 		// this is a lambda parameter, so the replacement refers to the first argument, which is the list
