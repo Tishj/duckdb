@@ -10,9 +10,9 @@ SET wal_autocheckpoint='1TB';
 statement ok
 CREATE TABLE t(i int, j int);
 
-# Insert >= 1024 NULLs
+# Insert >= 2048 NULLs
 statement ok
-INSERT INTO t SELECT ii, NULL FROM range(1024) tbl(ii);
+INSERT INTO t SELECT ii, NULL FROM range(2048) tbl(ii);
 
 query III
 select COUNT(j), MIN(j), MAX(j) from t;
@@ -34,4 +34,4 @@ UPDATE t SET j = 1;
 query III
 select COUNT(j), MIN(j), MAX(j) from t;
 ----
-1024	1	1
+2048	1	1

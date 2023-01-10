@@ -6,7 +6,7 @@ statement ok
 PRAGMA enable_verification
 
 statement ok
-CREATE TABLE integers AS SELECT range a, 1 AS b, 1 AS c FROM range(1024)
+CREATE TABLE integers AS SELECT range a, 1 AS b, 1 AS c FROM range(2048)
 
 statement ok
 CREATE INDEX b_index ON integers(b)
@@ -16,17 +16,17 @@ CREATE INDEX b_index ON integers(b)
 query I
 SELECT sum(b) FROM integers
 ----
-1024
+2048
 
 query I
 SELECT sum(b) FROM integers WHERE b = 1
 ----
-1024
+2048
 
 query I
 SELECT sum(b) FROM integers
 ----
-1024
+2048
 
 # now delete some elements
 
@@ -38,17 +38,17 @@ DELETE FROM integers WHERE a < 100
 query I
 SELECT COUNT(b) FROM integers
 ----
-924
+1948
 
 query I
 SELECT COUNT(b) FROM integers WHERE b = 1
 ----
-924
+1948
 
 query I
 SELECT sum(b) FROM integers
 ----
-924
+1948
 
 # now delete more elements
 
@@ -60,22 +60,22 @@ DELETE FROM integers WHERE a < 600
 query I
 SELECT COUNT(b) FROM integers
 ----
-424
+1448
 
 query I
 SELECT COUNT(b) FROM integers WHERE b = 1
 ----
-424
+1448
 
 query I
 SELECT sum(b) FROM integers
 ----
-424
+1448
 
 # now delete all elements
 
 statement ok
-DELETE FROM integers WHERE a < 1024
+DELETE FROM integers WHERE a < 2048
 
 # verify counts
 

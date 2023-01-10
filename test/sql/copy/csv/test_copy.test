@@ -190,7 +190,7 @@ CREATE TABLE unterminated (a VARCHAR);
 statement error
 COPY unterminated FROM 'test/sql/copy/csv/data/test/unterminated.csv' (HEADER 0, AUTO_DETECT FALSE);
 
-# 1024 rows (vector size)
+# 2048 rows (vector size)
 # load CSV file into a table
 statement ok
 CREATE TABLE vsize (a INTEGER, b INTEGER, c VARCHAR(10));
@@ -198,5 +198,4 @@ CREATE TABLE vsize (a INTEGER, b INTEGER, c VARCHAR(10));
 query I
 COPY vsize FROM 'test/sql/copy/csv/data/test/vsize.csv';
 ----
-1024
-
+2048

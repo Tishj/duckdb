@@ -7,12 +7,12 @@ require skip_reload
 statement ok con1
 CREATE TABLE a(i INTEGER);
 
-# insert the values [0, 1, 2, .. 1022, 1023] repeatedly
+# insert the values [0, 1, 2, .. 2046, 2047] repeatedly
 # however, make sure the order that we insert them is 
 loop i 0 20
 
 statement ok con1
-INSERT INTO a SELECT * FROM range(0, 1024, 1);
+INSERT INTO a SELECT * FROM range(0, 2048, 1);
 
 endloop
 
@@ -21,9 +21,9 @@ endloop
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20480
+40960
 
-# we test the values 0, 1, 1022 and 1023
+# we test the values 0, 1, 2046 and 2047
 # for every tested value, delete it and then rollback
 
 # value = 0
@@ -35,7 +35,7 @@ DELETE FROM a WHERE i=0;
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20460
+40940
 
 statement ok con1
 ROLLBACK
@@ -44,7 +44,7 @@ ROLLBACK
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20480
+40960
 
 # value = 1
 statement ok con1
@@ -55,7 +55,7 @@ DELETE FROM a WHERE i=1;
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20460
+40940
 
 statement ok con1
 ROLLBACK
@@ -64,18 +64,18 @@ ROLLBACK
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20480
+40960
 
-# value = 1022
+# value = 2046
 statement ok con1
 BEGIN TRANSACTION;
-DELETE FROM a WHERE i=1022;
+DELETE FROM a WHERE i=2046;
 
 # verify the deleted count
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20460
+40940
 
 statement ok con1
 ROLLBACK
@@ -84,18 +84,18 @@ ROLLBACK
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20480
+40960
 
 # value = 1023
 statement ok con1
 BEGIN TRANSACTION;
-DELETE FROM a WHERE i=1023;
+DELETE FROM a WHERE i=2047;
 
 # verify the deleted count
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20460
+40940
 
 statement ok con1
 ROLLBACK
@@ -104,7 +104,7 @@ ROLLBACK
 query I con1
 SELECT COUNT(*) FROM a
 ----
-20480
+40960
 
 # now, for every tested value, delete it in a separate connection and verify the count
 # con2 -> 0
@@ -117,7 +117,7 @@ DELETE FROM a WHERE i=0;
 query I con2
 SELECT COUNT(*) FROM a;
 ----
-20460
+40940
 
 # con3 -> 1
 statement ok con3
@@ -129,37 +129,37 @@ DELETE FROM a WHERE i=1;
 query I con3
 SELECT COUNT(*) FROM a;
 ----
-20460
+40940
 
-# con4 -> 1022
+# con4 -> 2046
 statement ok con4
 BEGIN TRANSACTION;
 
 statement ok con4
-DELETE FROM a WHERE i=1022;
+DELETE FROM a WHERE i=2046;
 
 query I con4
 SELECT COUNT(*) FROM a;
 ----
-20460
+40940
 
-# con5 -> 1023
+# con5 -> 2047
 statement ok con5
 BEGIN TRANSACTION;
 
 statement ok con5
-DELETE FROM a WHERE i=1023;
+DELETE FROM a WHERE i=2047;
 
 query I con5
 SELECT COUNT(*) FROM a;
 ----
-20460
+40940
 
 # con1 still has the original count
 query I con1
 SELECT COUNT(*) FROM a;
 ----
-20480
+40960
 
 # until we update the other transactions
 statement ok con2
@@ -178,4 +178,4 @@ COMMIT
 query I con1
 SELECT COUNT(*) FROM a;
 ----
-20400
+40880

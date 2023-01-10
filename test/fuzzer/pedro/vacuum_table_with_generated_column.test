@@ -2,7 +2,7 @@
 # group: [pedro]
 
 # need this, else the distinct stats sampling is different
-require vector_size 1024
+require vector_size 2048
 
 require skip_reload
 
