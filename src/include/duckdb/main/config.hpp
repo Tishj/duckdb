@@ -198,6 +198,8 @@ public:
 	                                   const Value &default_value = Value(), set_option_callback_t function = nullptr);
 	//! Fetch an option by index. Returns a pointer to the option, or nullptr if out of range
 	DUCKDB_API static ConfigurationOption *GetOptionByIndex(idx_t index);
+	//! Fetch an option's index by name. Returns a boolean to indicate whether the lookup succeeded or not.
+	DUCKDB_API static bool GetOptionIndexByName(const string &name, idx_t &index);
 	//! Fetch an option by name. Returns a pointer to the option, or nullptr if none exists.
 	DUCKDB_API static ConfigurationOption *GetOptionByName(const string &name);
 

@@ -24,6 +24,23 @@ size_t duckdb_config_count() {
 	return DBConfig::GetOptionCount();
 }
 
+duckdb_state duckdb_get_config_option_index(size_t *index, const char *name) {
+	if (!index) {
+		return DuckDBError;
+	}
+	if (!name) {
+		return DuckDBError;
+	}
+	std::string option_name = name;
+	idx_t result;
+
+	if (!DBConfig::GetOptionIndexByName(option_name, result)) {
+		return DuckDBError;
+	}
+	*index = result;
+	return DuckDBSuccess;
+}
+
 duckdb_state duckdb_get_config_flag(size_t index, const char **out_name, const char **out_description) {
 	auto option = DBConfig::GetOptionByIndex(index);
 	if (!option) {
@@ -35,6 +52,20 @@ duckdb_state duckdb_get_config_flag(size_t index, const char **out_name, const c
 	if (out_description) {
 		*out_description = option->description;
 	}
+	return DuckDBSuccess;
+}
+
+duckdb_state duckdb_get_config_option(const char *name, duckdb_config_option *result) {
+	size_t index;
+	if (!duckdb_get_config_option_index(&index, name)) {
+		return DuckDBError;
+	}
+	auto option = DBConfig::GetOptionByIndex(index);
+	if (!option) {
+		// D_ASSERT(option);
+		return DuckDBError;
+	}
+	*result = (duckdb_config_option)option;
 	return DuckDBSuccess;
 }
 

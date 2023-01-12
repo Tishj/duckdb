@@ -128,15 +128,25 @@ ConfigurationOption *DBConfig::GetOptionByIndex(idx_t target_index) {
 	return nullptr;
 }
 
-ConfigurationOption *DBConfig::GetOptionByName(const string &name) {
+bool DBConfig::GetOptionIndexByName(const string &name, idx_t &index_out) {
 	auto lname = StringUtil::Lower(name);
+
 	for (idx_t index = 0; internal_options[index].name; index++) {
 		D_ASSERT(StringUtil::Lower(internal_options[index].name) == string(internal_options[index].name));
 		if (internal_options[index].name == lname) {
-			return internal_options + index;
+			index_out = index;
+			return true;
 		}
 	}
-	return nullptr;
+	return false;
+}
+
+ConfigurationOption *DBConfig::GetOptionByName(const string &name) {
+	idx_t index;
+	if (!GetOptionIndexByName(name, index)) {
+		return nullptr;
+	}
+	return internal_options + index;
 }
 
 void DBConfig::SetOption(const ConfigurationOption &option, const Value &value) {

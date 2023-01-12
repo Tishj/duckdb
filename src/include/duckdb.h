@@ -257,6 +257,9 @@ typedef struct _duckdb_arrow {
 typedef struct _duckdb_config {
 	void *__cnfg;
 } * duckdb_config;
+typedef struct _duckdb_config_option {
+	void *__cnfg_option;
+} * duckdb_config_option;
 typedef struct _duckdb_arrow_schema {
 	void *__arrs;
 } * duckdb_arrow_schema;
@@ -379,6 +382,19 @@ The result name or description MUST NOT be freed.
 * returns: `DuckDBSuccess` on success or `DuckDBError` on failure.
 */
 DUCKDB_API duckdb_state duckdb_get_config_flag(size_t index, const char **out_name, const char **out_description);
+
+/*!
+Obtains a specific configuration option. This can be used to e.g.
+retrieve current settings for a configuration option from a client.
+This will succeed unless `name` does not correspond to a valid (core) configuration option.
+
+The resulting configuration option `result` MUST NOT be freed.
+
+* index: The name of the configuration option.
+* result: A configuration option.
+* returns: `DuckDBSuccess` on success or `DuckDBError` on failure.
+*/
+DUCKDB_API duckdb_state duckdb_get_config_option(const char *name, duckdb_config_option *result);
 
 /*!
 Sets the specified option for the specified configuration. The configuration option is indicated by name.

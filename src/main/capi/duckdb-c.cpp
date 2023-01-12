@@ -1,5 +1,7 @@
 #include "duckdb/main/capi/capi_internal.hpp"
+#include "duckdb/main/config.hpp"
 
+using duckdb::ConfigurationOption;
 using duckdb::Connection;
 using duckdb::DatabaseData;
 using duckdb::DBConfig;
@@ -70,4 +72,26 @@ duckdb_state duckdb_query(duckdb_connection connection, const char *query, duckd
 
 const char *duckdb_library_version() {
 	return DuckDB::LibraryVersion();
+}
+
+duckdb_state get_option_setting(duckdb_connection connection, duckdb_config_option option, duckdb_value *result) {
+	if (!connection) {
+		return DuckDBError;
+	}
+	if (!option) {
+		return DuckDBError;
+	}
+	auto *conn = (Connection *)connection;
+	auto opt = (ConfigurationOption *)option;
+	auto res = opt->get_setting(*conn->context);
+
+	duckdb::Value *res_val;
+	try {
+		res_val = new duckdb::Value(res);
+	} catch (...) { // LCOV_EXCL_START
+		return DuckDBError;
+	} // LCOV_EXCL_STOP
+
+	*result = (duckdb_value)res_val;
+	return DuckDBSuccess;
 }
