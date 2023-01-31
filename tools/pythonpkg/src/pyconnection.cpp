@@ -124,6 +124,14 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	    .def("table_function", &DuckDBPyConnection::TableFunction,
 	         "Create a relation object from the name'd table function with given parameters", py::arg("name"),
 	         py::arg("parameters") = py::none())
+	    .def("read_parquet", &DuckDBPyConnection::FromParquet,
+	         "Create a relation object from the Parquet files in file_glob", py::arg("file_glob"),
+	         py::arg("binary_as_string") = false, py::kw_only(), py::arg("file_row_number") = false,
+	         py::arg("filename") = false, py::arg("hive_partitioning") = false, py::arg("union_by_name") = false)
+	    .def("read_parquet", &DuckDBPyConnection::FromParquets,
+	         "Create a relation object from the Parquet files in file_globs", py::arg("file_globs"),
+	         py::arg("binary_as_string") = false, py::kw_only(), py::arg("file_row_number") = false,
+	         py::arg("filename") = false, py::arg("hive_partitioning") = false, py::arg("union_by_name") = false)
 	    .def("from_query", &DuckDBPyConnection::FromQuery, "Create a relation object from the given SQL query",
 	         py::arg("query"), py::arg("alias") = "query_relation")
 	    .def("query", &DuckDBPyConnection::RunQuery,

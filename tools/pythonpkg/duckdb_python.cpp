@@ -132,6 +132,16 @@ static void InitializeConnectionMethods(py::module_ &m) {
 	    .def("from_csv_auto", &PyConnectionWrapper::FromCsvAuto,
 	         "Create a relation object from the CSV file in file_name", py::arg("file_name"),
 	         py::arg("connection") = py::none())
+	    .def("read_parquet", &PyConnectionWrapper::FromParquet,
+	         "Create a relation object from the Parquet files in file_glob", py::arg("file_glob"),
+	         py::arg("binary_as_string") = false, py::kw_only(), py::arg("file_row_number") = false,
+	         py::arg("filename") = false, py::arg("hive_partitioning") = false, py::arg("union_by_name") = false,
+	         py::arg("connection") = py::none())
+	    .def("read_parquet", &PyConnectionWrapper::FromParquets,
+	         "Create a relation object from the Parquet files in file_globs", py::arg("file_globs"),
+	         py::arg("binary_as_string") = false, py::kw_only(), py::arg("file_row_number") = false,
+	         py::arg("filename") = false, py::arg("hive_partitioning") = false, py::arg("union_by_name") = false,
+	         py::arg("connection") = py::none())
 	    .def("from_parquet", &PyConnectionWrapper::FromParquet,
 	         "Create a relation object from the Parquet files in file_glob", py::arg("file_glob"),
 	         py::arg("binary_as_string") = false, py::kw_only(), py::arg("file_row_number") = false,
