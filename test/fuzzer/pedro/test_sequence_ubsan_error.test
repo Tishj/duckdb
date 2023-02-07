@@ -1,0 +1,32 @@
+# name: test/fuzzer/pedro/test_sequence_ubsan_error.test
+# group: [pedro]
+
+# load the DB from disk
+load __TEST_DIR__/sequence_ubsan.db
+
+statement ok
+CREATE SEQUENCE t2;
+
+# They live in different catalogs, so this doesn't work
+statement error
+CREATE TEMP TABLE t0 (c0 INT, CHECK(nextval('t2')));
+----
+Dependency Error: Error adding dependency for object "t0" - dependency "t2" is in catalog "sequence_ubsan", which does not match the catalog "temp".
+Cross catalog dependencies are not supported.
+
+statement ok
+drop sequence t2;
+
+# Only way to make this work is to also make the sequence temporary
+statement ok
+CREATE temp SEQUENCE t2;
+
+statement ok
+CREATE TEMP TABLE t0 (c0 INT, CHECK(nextval('t2')));
+
+restart
+
+statement error
+DROP SEQUENCE t2;
+---
+Catalog Error: Sequence with name t2 does not exist!

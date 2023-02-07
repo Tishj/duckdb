@@ -262,7 +262,7 @@ void SQLLogicTestRunner::ExecuteFile(string script) {
 			} else if (token.parameters[0] == "maybe") {
 				command->expected_result = ExpectedResult::RESULT_UNKNOWN;
 			} else {
-				parser.Fail("statement argument should be 'ok' or 'error");
+				parser.Fail("statement argument should be 'ok', 'maybe' or 'error");
 			}
 
 			command->file_name = script;

@@ -98,11 +98,7 @@ string SQLLogicParser::ExtractExpectedError(bool expect_ok) {
 	current_line++;
 	string error;
 	while (current_line < lines.size() && !lines[current_line].empty()) {
-		if (error.empty()) {
-			error = lines[current_line];
-		} else {
-			Fail("Failed to parse statement error: expected single line error message");
-		}
+		error += (error.empty() ? "" : "\n") + lines[current_line];
 		current_line++;
 	}
 	return error;
