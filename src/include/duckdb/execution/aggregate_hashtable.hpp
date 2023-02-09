@@ -133,6 +133,8 @@ private:
 	//! The data of the HT
 	vector<BufferHandle> payload_hds;
 	vector<data_ptr_t> payload_hds_ptrs;
+	//! Used to indicate if the aggregate state is initialized
+	vector<bool> initialized;
 
 	//! The hashes of the HT
 	BufferHandle hashes_hdl;

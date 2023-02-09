@@ -88,12 +88,16 @@ void GroupedAggregateHashTable::PayloadApply(FUNC fun) {
 	idx_t page_nr = 0;
 	idx_t page_offset = 0;
 
-	for (auto &payload_chunk_ptr : payload_hds_ptrs) {
+	D_ASSERT(payload_hds_ptrs.size() == initialized.size());
+	for (idx_t i = 0; i < payload_hds_ptrs.size(); i++) {
+		auto &payload_chunk_ptr = payload_hds_ptrs[i];
+		bool payload_chunk_initialized = initialized[i];
+
 		auto this_entries = MinValue(tuples_per_block, apply_entries);
 		page_offset = 0;
-		for (data_ptr_t ptr = payload_chunk_ptr, end = payload_chunk_ptr + this_entries * tuple_size; ptr < end;
-		     ptr += tuple_size) {
-			fun(page_nr, page_offset++, ptr);
+		data_ptr_t end = payload_chunk_ptr + this_entries * tuple_size;
+		for (data_ptr_t ptr = payload_chunk_ptr; ptr < end; ptr += tuple_size) {
+			fun(page_nr, page_offset++, ptr, payload_chunk_initialized);
 		}
 		apply_entries -= this_entries;
 		page_nr++;
@@ -105,6 +109,8 @@ void GroupedAggregateHashTable::NewBlock() {
 	auto pin = buffer_manager.Allocate(Storage::BLOCK_SIZE);
 	payload_hds.push_back(std::move(pin));
 	payload_hds_ptrs.push_back(payload_hds.back().Ptr());
+	// All aggregate states start off as uninitialized
+	initialized.push_back(false);
 	payload_page_offset = 0;
 }
 
@@ -123,10 +129,17 @@ void GroupedAggregateHashTable::Destroy() {
 	// and call the destructor method for each of the aggregates
 	data_ptr_t data_pointers[STANDARD_VECTOR_SIZE];
 	Vector state_vector(LogicalType::POINTER, (data_ptr_t)data_pointers);
+	// used to indicate whether the state was Initialized or not
+	auto &state_validity = FlatVector::Validity(state_vector);
 	idx_t count = 0;
 
-	PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr) {
-		data_pointers[count++] = ptr;
+	PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr, bool initialized) {
+		data_pointers[count] = ptr;
+		if (!initialized) {
+			state_validity.SetInvalid(count);
+		}
+		++count;
+
 		if (count == STANDARD_VECTOR_SIZE) {
 			RowOperations::DestroyStates(layout, state_vector, count);
 			count = 0;
@@ -213,7 +226,7 @@ void GroupedAggregateHashTable::Resize(idx_t size) {
 
 	auto hashes_arr = (ENTRY *)hashes_hdl_ptr;
 
-	PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr) {
+	PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr, bool initialized) {
 		auto hash = Load<hash_t>(ptr + hash_offset);
 		D_ASSERT((hash & bitmask) == (hash % capacity));
 		auto entry_idx = (idx_t)hash & bitmask;
@@ -442,6 +455,11 @@ idx_t GroupedAggregateHashTable::FindOrCreateGroupsInternal(DataChunk &groups, V
 		                       new_entry_count);
 		RowOperations::InitializeStates(layout, addresses, empty_vector, new_entry_count);
 
+		// All of the 'new_entry_count' states have been initialized
+		for (idx_t i = 0; i < new_entry_count; i++) {
+			initialized[i] = true;
+		}
+
 		// now we have only the tuples remaining that might match to an existing group
 		// start performing comparisons with each of the groups
 		RowOperations::Match(group_chunk, group_data.get(), layout, addresses, predicates, group_compare_vector,
@@ -542,7 +560,7 @@ void GroupedAggregateHashTable::Combine(GroupedAggregateHashTable &other) {
 	idx_t group_idx = 0;
 
 	FlushMoveState state(allocator, layout);
-	other.PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr) {
+	other.PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr, bool initialized) {
 		auto hash = Load<hash_t>(ptr + hash_offset);
 
 		hashes_ptr[group_idx] = hash;
@@ -576,7 +594,7 @@ void GroupedAggregateHashTable::Partition(vector<GroupedAggregateHashTable *> &p
 	vector<PartitionInfo> partition_info(partition_hts.size());
 
 	FlushMoveState state(allocator, layout);
-	PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr) {
+	PayloadApply([&](idx_t page_nr, idx_t page_offset, data_ptr_t ptr, bool initialized) {
 		auto hash = Load<hash_t>(ptr + hash_offset);
 
 		idx_t partition = (hash & mask) >> shift;

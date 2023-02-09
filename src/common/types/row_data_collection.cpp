@@ -43,7 +43,8 @@ idx_t RowDataCollection::AppendToBlock(RowDataBlock &block, BufferHandle &handle
 }
 
 RowDataBlock &RowDataCollection::CreateBlock() {
-	blocks.push_back(make_unique<RowDataBlock>(buffer_manager, block_capacity, entry_size));
+	auto new_block = make_unique<RowDataBlock>(buffer_manager, block_capacity, entry_size);
+	blocks.push_back(std::move(new_block));
 	return *blocks.back();
 }
 
@@ -57,8 +58,11 @@ vector<BufferHandle> RowDataCollection::Build(idx_t added_count, data_ptr_t key_
 	{
 		// first append to the last block (if any)
 		lock_guard<mutex> append_lock(rdc_lock);
-		count += added_count;
+#ifdef DEBUG
+		idx_t old_count = count;
+#endif
 
+		// Load the existing blocks
 		if (!blocks.empty()) {
 			auto &last_block = *blocks.back();
 			if (last_block.count < last_block.capacity) {
@@ -66,6 +70,7 @@ vector<BufferHandle> RowDataCollection::Build(idx_t added_count, data_ptr_t key_
 				auto handle = buffer_manager.Pin(last_block.block);
 				// now append to the block
 				idx_t append_count = AppendToBlock(last_block, handle, append_entries, remaining, entry_sizes);
+				count += append_count;
 				remaining -= append_count;
 				handles.push_back(std::move(handle));
 			}
@@ -80,6 +85,7 @@ vector<BufferHandle> RowDataCollection::Build(idx_t added_count, data_ptr_t key_
 
 			idx_t append_count = AppendToBlock(new_block, handle, append_entries, remaining, offset_entry_sizes);
 			D_ASSERT(new_block.count > 0);
+			count += append_count;
 			remaining -= append_count;
 
 			if (keep_pinned) {
@@ -88,7 +94,13 @@ vector<BufferHandle> RowDataCollection::Build(idx_t added_count, data_ptr_t key_
 				handles.push_back(std::move(handle));
 			}
 		}
+#ifdef DEBUG
+		// Verify that all entries are added
+		D_ASSERT(count == old_count + added_count);
+		D_ASSERT(remaining == 0);
+#endif
 	}
+
 	// now set up the key_locations based on the append entries
 	idx_t append_idx = 0;
 	for (auto &append_entry : append_entries) {

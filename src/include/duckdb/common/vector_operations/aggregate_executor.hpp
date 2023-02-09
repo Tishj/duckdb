@@ -355,8 +355,20 @@ public:
 	template <class STATE_TYPE, class OP>
 	static void Destroy(Vector &states, idx_t count) {
 		auto sdata = FlatVector::GetData<STATE_TYPE *>(states);
-		for (idx_t i = 0; i < count; i++) {
-			OP::template Destroy<STATE_TYPE>(sdata[i]);
+		auto &svalidity = FlatVector::Validity(states);
+		if (svalidity.AllValid()) {
+			for (idx_t i = 0; i < count; i++) {
+				OP::template Destroy<STATE_TYPE>(sdata[i]);
+			}
+		} else {
+			// If an exception was thrown between creation and initialization
+			// the aggregate state(s) could be left uninitialized, so we can't Destroy them
+			for (idx_t i = 0; i < count; i++) {
+				if (!svalidity.RowIsValid(i)) {
+					continue;
+				}
+				OP::template Destroy<STATE_TYPE>(sdata[i]);
+			}
 		}
 	}
 };

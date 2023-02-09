@@ -1,0 +1,8 @@
+# name: test/fuzzer/pedro/test_destroy_uninitialized_aggregate_state.test
+# group: [pedro]
+
+statement ok
+PRAGMA MEMORY_LIMIT='1.2MB';
+
+statement error
+SELECT first ('test'), 'test' group by 2;
