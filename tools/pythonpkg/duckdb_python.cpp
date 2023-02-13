@@ -10,6 +10,7 @@
 #include "duckdb_python/pyresult.hpp"
 #include "duckdb_python/exceptions.hpp"
 #include "duckdb_python/connection_wrapper.hpp"
+#include "duckdb_python/spark/duckdb_spark.hpp"
 
 #include "duckdb.hpp"
 
@@ -185,6 +186,7 @@ PYBIND11_MODULE(DUCKDB_PYTHON_LIB_NAME, m) {
 	DuckDBPyRelation::Initialize(m);
 	DuckDBPyConnection::Initialize(m);
 	PythonObject::Initialize();
+	spark::DuckDBSpark::Initialize(m);
 
 	InitializeConnectionMethods(m);
 
