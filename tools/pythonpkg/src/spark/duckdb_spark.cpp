@@ -1,6 +1,8 @@
 #include "duckdb_python/pybind_wrapper.hpp"
 #include "duckdb_python/spark/duckdb_spark.hpp"
+
 #include "duckdb_python/spark/session.hpp"
+#include "duckdb_python/spark/catalog.hpp"
 
 namespace py = pybind11;
 
@@ -11,6 +13,7 @@ void DuckDBSpark::Initialize(py::handle &m) {
 	auto spark_module = py::class_<DuckDBSpark, shared_ptr<DuckDBSpark>>(m, "spark", py::module_local());
 
 	SparkSession::Initialize(spark_module);
+	Catalog::Initialize(spark_module);
 }
 
 } // namespace spark
