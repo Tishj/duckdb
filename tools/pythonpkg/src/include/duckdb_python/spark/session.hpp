@@ -9,10 +9,12 @@
 #include <memory>
 
 namespace duckdb {
+
+class DuckDBPyConnection;
+
 namespace spark {
 
 class Catalog;
-class DuckDBPyConnection;
 
 class SparkSession {
 public:

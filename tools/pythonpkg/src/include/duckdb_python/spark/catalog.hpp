@@ -4,12 +4,17 @@
 #include "duckdb/common/common.hpp"
 
 namespace duckdb {
-namespace spark {
 
 class DuckDBPyConnection;
+
+namespace spark {
+
 class DataFrame;
 
 class Catalog {
+public:
+	Catalog(shared_ptr<DuckDBPyConnection> connection);
+
 public:
 	static void Initialize(py::handle &m);
 	//! -- Cache related methods --

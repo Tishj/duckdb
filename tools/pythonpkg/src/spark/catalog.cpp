@@ -14,11 +14,11 @@ void Catalog::Initialize(py::handle &m) {
 	auto catalog_module = py::class_<Catalog, shared_ptr<Catalog>>(m, "catalog", py::module_local());
 	catalog_module.def("cacheTable", &Catalog::CacheTable, "Caches the specified table in-memory.",
 	                   py::arg("tableName"));
-	catalog_module.def("clearCache", &Catalog::ClearCache, "Removes all cached tables from the in-memory cache.", );
-	DefineMethod([ "createExternalTable", "createTable" ], catalog_module, &Catalog::CreateTable,
+	catalog_module.def("clearCache", &Catalog::ClearCache, "Removes all cached tables from the in-memory cache.");
+	DefineMethod({"createExternalTable", "createTable"}, catalog_module, &Catalog::CreateTable,
 	             "Creates a table based on the dataset in a data source.", py::arg("tableName"),
 	             py::arg("path") = py::str(), py::arg("source") = py::str(), py::arg("schema") = py::none(),
-	             py::arg("description") = py::str(), );
+	             py::arg("description") = py::str());
 	catalog_module.def("currentDatabase", &Catalog::CurrentDatabase);
 	catalog_module.def("databaseExists", &Catalog::DatabaseExists, py::arg("dbName"));
 	catalog_module.def("dropGlobalTempView", &Catalog::DropGlobalTempView, py::arg("viewName"));
@@ -75,7 +75,7 @@ void Catalog::SetCurrentDatabase(const string &db_name) {
 	// TODO: implement this
 }
 
-bool Catalog::DatabaseExists() {
+bool Catalog::DatabaseExists(const string &db_name) {
 	// TODO: implement this
 	// https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.Catalog.databaseExists.html#pyspark.sql.Catalog.databaseExists
 	return false;
@@ -105,12 +105,12 @@ py::list Catalog::ListDatabases() {
 	return py::list();
 }
 
-py::list Catalog::ListTables() {
+py::list Catalog::ListTables(const string &db_name) {
 	// TODO: implement this
 	return py::list();
 }
 
-py::list Catalog::ListFunctions() {
+py::list Catalog::ListFunctions(const string &db_name) {
 	// TODO: implement this
 	return py::list();
 }
@@ -126,11 +126,6 @@ void Catalog::RefreshByPath(const string &path) {
 }
 
 void Catalog::RefreshTable(const string &table_name) {
-	// TODO: implement this
-	return;
-}
-
-void Catalog::SetCurrentDatabase(const string &db_name) {
 	// TODO: implement this
 	return;
 }

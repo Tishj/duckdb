@@ -1,5 +1,8 @@
 #include "duckdb_python/spark/session.hpp"
+
+#include "duckdb_python/spark/catalog.hpp"
 #include "duckdb_python/spark/session/builder.hpp"
+
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/string.hpp"
@@ -23,7 +26,7 @@ SparkSession::SparkSession(const string &name, const unordered_map<string, strin
                            bool hive_support_enabled, const string &cluster_url)
     : name(name), configuration(configuration), hive_support_enabled(hive_support_enabled), cluster_url(cluster_url) {
 	// TODO: Transform the configuration into a py::dict of config options
-	connection = DuckDBPyConnection::Connect(name, false, py::none());
+	connection = duckdb::DuckDBPyConnection::Connect(name, false, py::none());
 	catalog = make_shared<Catalog>(connection);
 }
 

@@ -10,6 +10,7 @@ namespace spark {
 // This is a wrapper/adapter for the DuckDBPyRelation class
 class DataFrame {
 public:
+	static void Initialize(py::handle &m);
 	DataFrame(shared_ptr<DuckDBPyRelation> relation);
 
 private:
