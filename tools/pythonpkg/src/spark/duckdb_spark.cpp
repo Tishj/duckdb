@@ -3,6 +3,7 @@
 
 #include "duckdb_python/spark/session.hpp"
 #include "duckdb_python/spark/conf.hpp"
+#include "duckdb_python/spark/context.hpp"
 #include "duckdb_python/spark/catalog.hpp"
 
 namespace py = pybind11;
@@ -16,6 +17,7 @@ void DuckDBSpark::Initialize(py::handle &m) {
 
 	SparkSession::Initialize(spark_module);
 	Catalog::Initialize(spark_module);
+	SparkContext::Initialize(spark_module);
 	SparkConf::Initialize(spark_module);
 }
 

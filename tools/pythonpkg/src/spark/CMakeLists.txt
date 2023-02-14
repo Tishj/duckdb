@@ -4,7 +4,7 @@ include_directories(${PYTHON_INCLUDE_DIRS})
 find_package(pybind11 REQUIRED)
 
 add_library(duckdb_spark OBJECT duckdb_spark.cpp session.cpp catalog.cpp,
-                                data_frame.cpp conf.cpp)
+                                data_frame.cpp conf.cpp, context.cpp)
 
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_spark>

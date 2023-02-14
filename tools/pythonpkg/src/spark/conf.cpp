@@ -12,32 +12,33 @@
 namespace duckdb {
 namespace spark {
 
-shared_ptr<SparkConf> SparkConf::CreateSparkConf(bool load_defaults, const py::object &jvm, const py::object &jconf) {
-	return make_shared<SparkConf>(load_defaults, jvm, jconf);
-}
-
 void SparkConf::Initialize(py::handle &m) {
 	auto spark_conf = py::class_<SparkConf, shared_ptr<SparkConf>>(m, "SparkConf", py::module_local());
 
 	// Constructor
 	spark_conf.def(py::init([](bool load_defaults, const py::object &jvm, const py::object &jconf) {
-		               return SparkConf::CreateSparkConf(load_defaults, jvm, jconf);
+		               return make_shared<SparkConf>(load_defaults, jvm, jconf);
 	               }),
 	               py::arg("loadDefaults") = true, py::arg("_jvm") = py::none(), py::arg("_jconf") = py::none());
 
-	spark_conf.def("contains", &SparkConf::Contains, py::arg("key"));
-	spark_conf.def("get", &SparkConf::Get, py::arg("key"), py::arg("default_value") = py::none());
-	spark_conf.def("getAll", &SparkConf::GetAll);
-	spark_conf.def("set", &SparkConf::Set, py::arg("key"), py::arg("value"));
-	spark_conf.def("setAll", &SparkConf::SetAll, py::arg("pairs"));
-	spark_conf.def("setAll", &SparkConf::SetAll, py::arg("pairs"));
-	spark_conf.def("setAppName", &SparkConf::SetAppName, py::arg("value"));
-	spark_conf.def("setExecutorEnv", &SparkConf::SetExecutorEnv, py::arg("key") = string(), py::arg("value") = string(),
-	               py::arg("pairs") = py::none());
-	spark_conf.def("setIfMissing", &SparkConf::SetIfMissing, py::arg("key"), py::arg("value"));
-	spark_conf.def("setMaster", &SparkConf::SetMaster, py::arg("value"));
-	spark_conf.def("setSparkHome", &SparkConf::SetSparkHome, py::arg("value"));
-	spark_conf.def("toDebugString", &SparkConf::ToDebugString);
+	spark_conf.def("contains", &SparkConf::Contains, "Does this configuration contain a given key?", py::arg("key"));
+	spark_conf.def("get", &SparkConf::Get, "Get the configured value for some key, or return a default otherwise.",
+	               py::arg("key"), py::arg("default_value") = py::none());
+	spark_conf.def("getAll", &SparkConf::GetAll, "Get all values as a list of key-value pairs.");
+	spark_conf.def("set", &SparkConf::Set, "Set a configuration property.", py::arg("key"), py::arg("value"));
+	spark_conf.def("setAll", &SparkConf::SetAll, "Set multiple parameters, passed as a list of key-value pairs.",
+	               py::arg("pairs"));
+	spark_conf.def("setAppName", &SparkConf::SetAppName, "Set application name.", py::arg("value"));
+	spark_conf.def("setExecutorEnv", &SparkConf::SetExecutorEnv,
+	               "Set an environment variable to be passed to executors.", py::arg("key") = string(),
+	               py::arg("value") = string(), py::arg("pairs") = py::none());
+	spark_conf.def("setIfMissing", &SparkConf::SetIfMissing, "Set a configuration property, if not already set.",
+	               py::arg("key"), py::arg("value"));
+	spark_conf.def("setMaster", &SparkConf::SetMaster, "Set master URL to connect to.", py::arg("value"));
+	spark_conf.def("setSparkHome", &SparkConf::SetSparkHome, "Set path where Spark is installed on worker nodes.",
+	               py::arg("value"));
+	spark_conf.def("toDebugString", &SparkConf::ToDebugString,
+	               "Returns a printable version of the configuration, as a list of key=value pairs, one per line.");
 }
 
 SparkConf::SparkConf(bool load_defaults, const py::object &jvm, const py::object &jconf)
