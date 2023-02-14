@@ -10,7 +10,8 @@ namespace duckdb {
 namespace spark {
 
 void DuckDBSpark::Initialize(py::handle &m) {
-	auto spark_module = py::class_<DuckDBSpark, shared_ptr<DuckDBSpark>>(m, "spark", py::module_local());
+	auto spark_module =
+	    ((py::module_ &)m).def_submodule("spark", "DuckDB.spark is a local staging testing ground for PySpark.");
 
 	SparkSession::Initialize(spark_module);
 	Catalog::Initialize(spark_module);
