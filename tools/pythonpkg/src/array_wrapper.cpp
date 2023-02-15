@@ -30,7 +30,7 @@ struct RegularConvert {
 struct TimestampConvert {
 	template <class DUCKDB_T, class NUMPY_T>
 	static int64_t ConvertValue(timestamp_t val) {
-		return Timestamp::GetEpochNanoSeconds(val);
+		return Timestamp::GetEpochMicroSeconds(val);
 	}
 
 	template <class NUMPY_T>
@@ -42,7 +42,7 @@ struct TimestampConvert {
 struct TimestampConvertSec {
 	template <class DUCKDB_T, class NUMPY_T>
 	static int64_t ConvertValue(timestamp_t val) {
-		return Timestamp::GetEpochNanoSeconds(Timestamp::FromEpochSeconds(val.value));
+		return Timestamp::GetEpochMicroSeconds(Timestamp::FromEpochSeconds(val.value));
 	}
 
 	template <class NUMPY_T>
@@ -54,7 +54,7 @@ struct TimestampConvertSec {
 struct TimestampConvertMilli {
 	template <class DUCKDB_T, class NUMPY_T>
 	static int64_t ConvertValue(timestamp_t val) {
-		return Timestamp::GetEpochNanoSeconds(Timestamp::FromEpochMs(val.value));
+		return Timestamp::GetEpochMicroSeconds(Timestamp::FromEpochMs(val.value));
 	}
 
 	template <class NUMPY_T>
@@ -78,7 +78,7 @@ struct TimestampConvertNano {
 struct DateConvert {
 	template <class DUCKDB_T, class NUMPY_T>
 	static int64_t ConvertValue(date_t val) {
-		return Date::EpochNanoseconds(val);
+		return Date::EpochMicroseconds(val);
 	}
 
 	template <class NUMPY_T>
@@ -579,7 +579,7 @@ void RawArrayWrapper::Initialize(idx_t capacity) {
 	case LogicalTypeId::TIMESTAMP_MS:
 	case LogicalTypeId::TIMESTAMP_SEC:
 	case LogicalTypeId::DATE:
-		dtype = "datetime64[ns]";
+		dtype = "datetime64[us]";
 		break;
 	case LogicalTypeId::INTERVAL:
 		dtype = "timedelta64[ns]";

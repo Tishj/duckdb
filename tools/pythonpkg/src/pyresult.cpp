@@ -216,8 +216,30 @@ void DuckDBPyResult::ChangeDateToDatetime(DataFrame &df) {
 	}
 }
 
+py::dict CreateDtypeDictionary(py::dict &arrays) {
+	auto masked_array = py::module::import("numpy.ma").attr("masked_array");
+
+	py::dict dtypes_mapping;
+	for (auto &item : arrays) {
+		if (py::isinstance(item.second, masked_array)) {
+			// Masked arrays contain missing values, which we might not be able to cast to a different dtype
+			// so we avoid it altogether
+			continue;
+		}
+		auto &name = item.first;
+		D_ASSERT(py::isinstance<py::array>(item.second));
+		auto &array = (py::array &)item.second;
+		dtypes_mapping[name] = array.dtype();
+	}
+	return dtypes_mapping;
+}
+
 DataFrame DuckDBPyResult::FrameFromNumpy(bool date_as_object, const py::handle &o) {
+	D_ASSERT(py::isinstance<py::dict>(o));
+	auto dtypes_dict = CreateDtypeDictionary((py::dict &)o);
 	auto df = py::cast<DataFrame>(py::module::import("pandas").attr("DataFrame").attr("from_dict")(o));
+	df = df.attr("astype")(dtypes_dict, py::arg("copy") = false);
+
 	// Unfortunately we have to do a type change here for timezones since these types are not supported by numpy
 	ChangeToTZType(df);
 	if (date_as_object) {
