@@ -72,7 +72,8 @@ public:
 	        const py::object &parallel = py::none(), const py::object &date_format = py::none(),
 	        const py::object &timestamp_format = py::none(), const py::object &sample_size = py::none(),
 	        const py::object &all_varchar = py::none(), const py::object &normalize_names = py::none(),
-	        const py::object &filename = py::none(), const py::object &names = py::none());
+	        const py::object &filename = py::none(), const py::object &names = py::none(),
+	        const py::object &usecols = py::none());
 
 	unique_ptr<DuckDBPyRelation> ReadJSON(const string &filename, const py::object &columns = py::none(),
 	                                      const py::object &sample_size = py::none(),

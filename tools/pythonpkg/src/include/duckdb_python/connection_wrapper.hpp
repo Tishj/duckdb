@@ -101,7 +101,7 @@ public:
 	        const py::object &date_format = py::none(), const py::object &timestamp_format = py::none(),
 	        const py::object &sample_size = py::none(), const py::object &all_varchar = py::none(),
 	        const py::object &normalize_names = py::none(), const py::object &filename = py::none(),
-	        const py::object &names = py::none());
+	        const py::object &names = py::none(), const py::object &usecols = py::none());
 
 	static py::list FetchAll(shared_ptr<DuckDBPyConnection> conn = nullptr);
 

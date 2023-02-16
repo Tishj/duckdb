@@ -159,7 +159,7 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	             py::arg("date_format") = py::none(), py::arg("timestamp_format") = py::none(),
 	             py::arg("sample_size") = py::none(), py::arg("all_varchar") = py::none(),
 	             py::arg("normalize_names") = py::none(), py::arg("filename") = py::none(),
-	             py::arg("names") = py::none());
+	             py::arg("names") = py::none(), py::arg("usecols") = py::none());
 
 	m.def("from_df", &DuckDBPyConnection::FromDF, "Create a relation object from the Data.Frame in df",
 	      py::arg("df") = py::none())
@@ -515,14 +515,13 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 	return make_unique<DuckDBPyRelation>(std::move(read_json_relation));
 }
 
-unique_ptr<DuckDBPyRelation>
-DuckDBPyConnection::ReadCSV(const string &name, const py::object &header, const py::object &compression,
-                            const py::object &sep, const py::object &delimiter, const py::object &dtype,
-                            const py::object &na_values, const py::object &skiprows, const py::object &quotechar,
-                            const py::object &escapechar, const py::object &encoding, const py::object &parallel,
-                            const py::object &date_format, const py::object &timestamp_format,
-                            const py::object &sample_size, const py::object &all_varchar,
-                            const py::object &normalize_names, const py::object &filename, const py::object &names) {
+unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
+    const string &name, const py::object &header, const py::object &compression, const py::object &sep,
+    const py::object &delimiter, const py::object &dtype, const py::object &na_values, const py::object &skiprows,
+    const py::object &quotechar, const py::object &escapechar, const py::object &encoding, const py::object &parallel,
+    const py::object &date_format, const py::object &timestamp_format, const py::object &sample_size,
+    const py::object &all_varchar, const py::object &normalize_names, const py::object &filename,
+    const py::object &names, const py::object &usecols) {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
 	}
@@ -693,7 +692,70 @@ DuckDBPyConnection::ReadCSV(const string &name, const py::object &header, const 
 		options["filename"] = Value::INTEGER(py::bool_(filename));
 	}
 
-	return make_unique<DuckDBPyRelation>(connection->ReadCSV(name, std::move(options))->Alias(name));
+	auto rel = make_unique<DuckDBPyRelation>(connection->ReadCSV(name, std::move(options))->Alias(name));
+	if (!py::none().is(usecols)) {
+		if (!py::isinstance<py::list>(usecols)) {
+			throw InvalidInputException("read_csv only accepts 'usecols' as a List[str|int]");
+		}
+		py::list use_columns = usecols;
+		auto list_type = LogicalTypeId::INVALID;
+		for (auto &elem : use_columns) {
+			auto current_type = LogicalTypeId::INVALID;
+			if (py::isinstance<py::str>(elem)) {
+				current_type = LogicalTypeId::VARCHAR;
+			} else if (py::isinstance<py::int_>(elem)) {
+				current_type = LogicalTypeId::INTEGER;
+			} else {
+				throw InvalidInputException("read_csv 'usecols' list can only consist of integers or strings");
+			}
+
+			if (list_type != LogicalTypeId::INVALID && current_type != list_type) {
+				throw InvalidInputException("read_csv 'usecols' list element types have to be consistent!");
+			}
+			list_type = current_type;
+		}
+		vector<string> column_names;
+		if (list_type == LogicalTypeId::VARCHAR) {
+			for (auto &elem : use_columns) {
+				column_names.emplace_back(py::str(elem));
+			}
+			auto &columns = rel->rel->Columns();
+			duckdb::case_insensitive_set_t existing_names;
+			for (auto &column : columns) {
+				existing_names.insert(column.Name());
+			}
+			// Verify that these column names exist in the relation
+			for (auto &name : column_names) {
+				if (!existing_names.count(name)) {
+					throw InvalidInputException("No column named '%s' found in the relation", name);
+				}
+			}
+		} else {
+			vector<idx_t> column_indices;
+			for (auto &elem : use_columns) {
+				int32_t value = elem.cast<int32_t>();
+				if (value < 0) {
+					throw InvalidInputException("Provided index has to be positive");
+				}
+				column_indices.push_back((idx_t)value);
+			}
+			// Use the 'columns' of the relation to map to column names
+			auto &columns = rel->rel->Columns();
+			for (auto &index : column_indices) {
+				if (index >= columns.size()) {
+					throw InvalidInputException(
+					    "Provided index %d is out of bounds of the columns (%d) of the relation", index,
+					    columns.size());
+				}
+				column_names.push_back(columns[index].Name());
+			}
+		}
+		// Construct an expression out of the column names
+
+		auto expression = StringUtil::Join(column_names, ", ");
+		rel = rel->Project(expression);
+	}
+	return rel;
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromQuery(const string &query, const string &alias) {

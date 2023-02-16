@@ -193,6 +193,21 @@ class TestReadCSV(object):
 		with pytest.raises(duckdb.BinderException):
 			rel = duckdb_cursor.read_csv(TestFile('category.csv'), names=['COL1','COL1', 'COL1'])
 
+	def test_usecols_int(self, duckdb_cursor):
+		rel = duckdb_cursor.read_csv(TestFile('category.csv'), usecols=[0,1,0])
+		print(rel.columns)
+		assert rel.columns == ['CATEGORY_ID', 'NAME', 'CATEGORY_ID']
+
+	def test_usecols_string(self, duckdb_cursor):
+		rel = duckdb_cursor.read_csv(TestFile('category.csv'), usecols=['CATEGORY_ID'])
+		print(rel.columns)
+		assert rel.columns == ['CATEGORY_ID']
+
+	def test_usecols_string_names(self, duckdb_cursor):
+		rel = duckdb_cursor.read_csv(TestFile('category.csv'), usecols=['COL1'], names=['COL1'])
+		print(rel.columns)
+		assert rel.columns == ['COL1']
+
 	def test_filename(self, duckdb_cursor):
 		rel = duckdb_cursor.read_csv(TestFile('category.csv'), filename=False)
 		df = rel.df()
