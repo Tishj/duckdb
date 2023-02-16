@@ -117,7 +117,8 @@ static void InitializeConnectionMethods(py::module_ &m) {
 	    py::arg("skiprows") = py::none(), py::arg("quotechar") = py::none(), py::arg("escapechar") = py::none(),
 	    py::arg("encoding") = py::none(), py::arg("parallel") = py::none(), py::arg("date_format") = py::none(),
 	    py::arg("timestamp_format") = py::none(), py::arg("sample_size") = py::none(),
-	    py::arg("all_varchar") = py::none(), py::arg("normalize_names") = py::none(), py::arg("filename") = py::none());
+	    py::arg("all_varchar") = py::none(), py::arg("normalize_names") = py::none(), py::arg("filename") = py::none(),
+	    py::arg("names") = py::none());
 
 	m.def("append", &PyConnectionWrapper::Append, "Append the passed DataFrame to the named table",
 	      py::arg("table_name"), py::arg("df"), py::arg("connection") = py::none())

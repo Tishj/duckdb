@@ -93,6 +93,7 @@ class DuckDBPyConnection:
         all_varchar: Optional[bool] = None,
         normalize_names: Optional[bool] = None,
         filename: Optional[bool] = None,
+        names: Optional[List[str]] = None,
     ) -> DuckDBPyRelation: ...
     def from_csv_auto(
         self,
@@ -114,6 +115,7 @@ class DuckDBPyConnection:
         all_varchar: Optional[bool] = None,
         normalize_names: Optional[bool] = None,
         filename: Optional[bool] = None,
+        names: Optional[List[str]] = None,
     ) -> DuckDBPyRelation: ...
     def from_df(self, df: pandas.DataFrame = ...) -> DuckDBPyRelation: ...
     @overload
@@ -379,6 +381,7 @@ def read_csv(
     all_varchar: Optional[bool] = None,
     normalize_names: Optional[bool] = None,
     filename: Optional[bool] = None,
+    names: Optional[List[str]] = None,
     connection: DuckDBPyConnection = ...
 ) -> DuckDBPyRelation: ...
 def from_csv_auto(
@@ -400,6 +403,7 @@ def from_csv_auto(
     all_varchar: Optional[bool] = None,
     normalize_names: Optional[bool] = None,
     filename: Optional[bool] = None,
+    names: Optional[List[str]] = None,
     connection: DuckDBPyConnection = ...
 ) -> DuckDBPyRelation: ...
 

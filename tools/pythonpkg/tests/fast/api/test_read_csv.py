@@ -174,6 +174,25 @@ class TestReadCSV(object):
 		# The capitalized names are normalized to lowercase instead
 		assert 'CATEGORY_ID' not in column_names
 
+	def test_names(self, duckdb_cursor):
+		rel = duckdb_cursor.read_csv(TestFile('category.csv'), names=['COL1','COL2','COL3'])
+		print(rel.columns)
+		assert rel.columns == ['COL1', 'COL2', 'COL3']
+
+	def test_names_partial(self, duckdb_cursor):
+		rel = duckdb_cursor.read_csv(TestFile('category.csv'), names=['COL1','COL2'])
+		print(rel.columns)
+		assert rel.columns == ['COL1', 'COL2', 'LAST_UPDATE']
+
+	def test_names_excessive(self, duckdb_cursor):
+		rel = duckdb_cursor.read_csv(TestFile('category.csv'), names=['COL1','COL2', 'COL3', 'COL4'])
+		print(rel.columns)
+		assert rel.columns == ['COL1', 'COL2', 'COL3']
+
+	def test_names_duplicate(self, duckdb_cursor):
+		with pytest.raises(duckdb.BinderException):
+			rel = duckdb_cursor.read_csv(TestFile('category.csv'), names=['COL1','COL1', 'COL1'])
+
 	def test_filename(self, duckdb_cursor):
 		rel = duckdb_cursor.read_csv(TestFile('category.csv'), filename=False)
 		df = rel.df()

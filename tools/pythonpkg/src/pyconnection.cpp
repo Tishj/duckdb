@@ -158,7 +158,8 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	             py::arg("escapechar") = py::none(), py::arg("encoding") = py::none(), py::arg("parallel") = py::none(),
 	             py::arg("date_format") = py::none(), py::arg("timestamp_format") = py::none(),
 	             py::arg("sample_size") = py::none(), py::arg("all_varchar") = py::none(),
-	             py::arg("normalize_names") = py::none(), py::arg("filename") = py::none());
+	             py::arg("normalize_names") = py::none(), py::arg("filename") = py::none(),
+	             py::arg("names") = py::none());
 
 	m.def("from_df", &DuckDBPyConnection::FromDF, "Create a relation object from the Data.Frame in df",
 	      py::arg("df") = py::none())
@@ -514,12 +515,14 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 	return make_unique<DuckDBPyRelation>(std::move(read_json_relation));
 }
 
-unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
-    const string &name, const py::object &header, const py::object &compression, const py::object &sep,
-    const py::object &delimiter, const py::object &dtype, const py::object &na_values, const py::object &skiprows,
-    const py::object &quotechar, const py::object &escapechar, const py::object &encoding, const py::object &parallel,
-    const py::object &date_format, const py::object &timestamp_format, const py::object &sample_size,
-    const py::object &all_varchar, const py::object &normalize_names, const py::object &filename) {
+unique_ptr<DuckDBPyRelation>
+DuckDBPyConnection::ReadCSV(const string &name, const py::object &header, const py::object &compression,
+                            const py::object &sep, const py::object &delimiter, const py::object &dtype,
+                            const py::object &na_values, const py::object &skiprows, const py::object &quotechar,
+                            const py::object &escapechar, const py::object &encoding, const py::object &parallel,
+                            const py::object &date_format, const py::object &timestamp_format,
+                            const py::object &sample_size, const py::object &all_varchar,
+                            const py::object &normalize_names, const py::object &filename, const py::object &names) {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
 	}
@@ -564,22 +567,21 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
 		options["delim"] = Value(py::str(delimiter));
 	}
 
-	// We don't support overriding the names of the header yet
-	// 'names'
-	// if (keywords.count("names")) {
-	//	if (!py::isinstance<py::list>(kwargs["names"])) {
-	//		throw InvalidInputException("read_csv only accepts 'names' as a list of strings");
-	//	}
-	//	vector<string> names;
-	//	py::list names_list = kwargs["names"];
-	//	for (auto& elem : names_list) {
-	//		if (!py::isinstance<py::str>(elem)) {
-	//			throw InvalidInputException("read_csv 'names' list has to consist of only strings");
-	//		}
-	//		names.push_back(py::str(elem));
-	//	}
-	//	// FIXME: Check for uniqueness of 'names' ?
-	//}
+	if (!py::none().is(names)) {
+		if (!py::isinstance<py::list>(names)) {
+			throw InvalidInputException("read_csv only accepts 'names' as a list of strings");
+		}
+		vector<Value> names_vec;
+		py::list names_list = names;
+		for (auto &elem : names_list) {
+			if (!py::isinstance<py::str>(elem)) {
+				throw InvalidInputException("read_csv 'names' list has to consist of only strings");
+			}
+			names_vec.emplace_back(py::str(elem));
+		}
+		// FIXME: Check for uniqueness of 'names' ?
+		options["names"] = Value::LIST(LogicalTypeId::VARCHAR, std::move(names_vec));
+	}
 
 	if (!py::none().is(dtype)) {
 		if (py::isinstance<py::dict>(dtype)) {
