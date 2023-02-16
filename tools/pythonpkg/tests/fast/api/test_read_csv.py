@@ -70,6 +70,9 @@ class TestReadCSV(object):
 	@pytest.mark.skip(reason="Issue #6011 needs to be fixed first, header=False doesn't work correctly")
 	def test_header_false(self, duckdb_cursor):
 		rel = duckdb_cursor.read_csv(TestFile('category.csv'), header=False)
+		res = rel.fetchone()
+		print(res)
+		assert res == ('CATEGORY_ID','NAME','LAST_UPDATE')
 
 	def test_na_values(self, duckdb_cursor):
 		rel = duckdb_cursor.read_csv(TestFile('category.csv'), na_values='Action')

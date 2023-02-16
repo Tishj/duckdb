@@ -130,9 +130,8 @@ public:
 	                                       const string &alias = "values");
 
 	//! Reads CSV file
-	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_file);
-	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_file, BufferedCSVReaderOptions &options);
 	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_file, const vector<string> &columns);
+	DUCKDB_API shared_ptr<Relation> ReadCSV(const string &csv_file, named_parameter_map_t options = {});
 
 	//! Reads Parquet file
 	DUCKDB_API shared_ptr<Relation> ReadParquet(const string &parquet_file, bool binary_as_string);
