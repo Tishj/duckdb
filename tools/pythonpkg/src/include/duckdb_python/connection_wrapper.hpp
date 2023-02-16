@@ -91,7 +91,8 @@ public:
 	static unique_ptr<DuckDBPyRelation> ReadJSON(const string &filename, shared_ptr<DuckDBPyConnection> conn = nullptr,
 	                                             const py::object &columns = py::none(),
 	                                             const py::object &sample_size = py::none(),
-	                                             const py::object &maximum_depth = py::none());
+	                                             const py::object &maximum_depth = py::none(),
+	                                             const py::object &orient = py::none());
 	static unique_ptr<DuckDBPyRelation>
 	ReadCSV(const string &name, shared_ptr<DuckDBPyConnection> conn, const py::object &header = py::none(),
 	        const py::object &compression = py::none(), const py::object &sep = py::none(),

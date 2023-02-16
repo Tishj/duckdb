@@ -223,12 +223,12 @@ Optional<py::tuple> PyConnectionWrapper::FetchOne(shared_ptr<DuckDBPyConnection>
 
 unique_ptr<DuckDBPyRelation> PyConnectionWrapper::ReadJSON(const string &filename, shared_ptr<DuckDBPyConnection> conn,
                                                            const py::object &columns, const py::object &sample_size,
-                                                           const py::object &maximum_depth) {
+                                                           const py::object &maximum_depth, const py::object &orient) {
 
 	if (!conn) {
 		conn = DuckDBPyConnection::DefaultConnection();
 	}
-	return conn->ReadJSON(filename, columns, sample_size, maximum_depth);
+	return conn->ReadJSON(filename, columns, sample_size, maximum_depth, orient);
 }
 
 unique_ptr<DuckDBPyRelation> PyConnectionWrapper::ReadCSV(

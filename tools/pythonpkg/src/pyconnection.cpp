@@ -143,7 +143,7 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	         py::arg("parameters") = py::none())
 	    .def("read_json", &DuckDBPyConnection::ReadJSON, "Create a relation object from the JSON file in 'name'",
 	         py::arg("name"), py::kw_only(), py::arg("columns") = py::none(), py::arg("sample_size") = py::none(),
-	         py::arg("maximum_depth") = py::none());
+	         py::arg("maximum_depth") = py::none(), py::arg("orient") = py::none());
 
 	DefineMethod({"sql", "query", "from_query"}, m, &DuckDBPyConnection::RunQuery,
 	             "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, "
@@ -454,7 +454,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterPythonObject(const st
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, const py::object &columns,
                                                           const py::object &sample_size,
-                                                          const py::object &maximum_depth) {
+                                                          const py::object &maximum_depth, const py::object &orient) {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
 	}
@@ -499,6 +499,18 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 			throw InvalidInputException("read_json only accepts 'maximum_depth' as an integer, not '%s'", actual_type);
 		}
 		options["maximum_depth"] = Value::INTEGER(py::int_(maximum_depth));
+	}
+
+	if (!py::none().is(orient)) {
+		if (!py::isinstance<py::str>(orient)) {
+			string actual_type = py::str(maximum_depth.get_type());
+			throw InvalidInputException("read_json only accepts 'orient' as a string, not '%s'", actual_type);
+		}
+		string orient_str = py::str(orient);
+		if (!StringUtil::CIEquals("records", orient_str)) {
+			throw InvalidInputException("The only accepted option for 'orient' is \"records\", not '%s'", orient_str);
+		}
+		options["format"] = Value("array_of_objects");
 	}
 
 	bool auto_detect = false;

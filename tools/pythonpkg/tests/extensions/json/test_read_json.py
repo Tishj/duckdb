@@ -33,3 +33,9 @@ class TestReadJSON(object):
         res = rel.fetchone()
         print(res)
         assert res == (1, 'O Brother, Where Art Thou?')
+
+    def test_read_json_orient(self):
+        rel = duckdb.read_json(TestFile('array_of_objects.json'), orient='records')
+        res = rel.fetchone()
+        print(res)
+        assert res == ('[{"conclusion":"cancelled"},{"conclusion":"cancelled"}]',)
