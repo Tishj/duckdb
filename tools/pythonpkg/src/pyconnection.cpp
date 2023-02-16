@@ -579,7 +579,6 @@ DuckDBPyConnection::ReadCSV(const string &name, const py::object &header, const 
 			}
 			names_vec.emplace_back(py::str(elem));
 		}
-		// FIXME: Check for uniqueness of 'names' ?
 		options["names"] = Value::LIST(LogicalTypeId::VARCHAR, std::move(names_vec));
 	}
 
