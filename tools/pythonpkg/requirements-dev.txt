@@ -3,7 +3,7 @@ pybind11>=2.6.0
 setuptools_scm>=6.3
 setuptools>=58
 pytest
-pandas[excel]>=1.5.3
+pandas[excel]>=0.24
 xlrd
 pyarrow
 mypy
