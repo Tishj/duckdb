@@ -47,7 +47,7 @@ RowGroup::RowGroup(AttachedDatabase &db, BlockManager &block_manager, DataTableI
 	// set up the statistics
 	for (auto &stats : pointer.statistics) {
 		auto stats_type = stats->type;
-		this->stats.push_back(make_shared<SegmentStatistics>(stats_type, std::move(stats)));
+		this->stats.push_back(duckdb::make_shared<SegmentStatistics>(stats_type, std::move(stats)));
 	}
 	this->version_info = std::move(pointer.versions);
 
@@ -88,7 +88,7 @@ void RowGroup::InitializeEmpty(const vector<LogicalType> &types) {
 	// set up the segment trees for the column segments
 	for (idx_t i = 0; i < types.size(); i++) {
 		auto column_data = ColumnData::CreateColumn(block_manager, GetTableInfo(), i, start, types[i]);
-		stats.push_back(make_shared<SegmentStatistics>(types[i]));
+		stats.push_back(duckdb::make_shared<SegmentStatistics>(types[i]));
 		columns.push_back(std::move(column_data));
 	}
 }
@@ -158,7 +158,7 @@ unique_ptr<RowGroup> RowGroup::AlterType(const LogicalType &target_type, idx_t c
 	InitializeScan(scan_state);
 
 	Vector append_vector(target_type);
-	auto altered_col_stats = make_shared<SegmentStatistics>(target_type);
+	auto altered_col_stats = duckdb::make_shared<SegmentStatistics>(target_type);
 	while (true) {
 		// scan the table
 		scan_chunk.Reset();
@@ -196,7 +196,7 @@ unique_ptr<RowGroup> RowGroup::AddColumn(ColumnDefinition &new_column, Expressio
 	// construct a new column data for the new column
 	auto added_column =
 	    ColumnData::CreateColumn(block_manager, GetTableInfo(), columns.size(), start, new_column.Type());
-	auto added_col_stats = make_shared<SegmentStatistics>(
+	auto added_col_stats = duckdb::make_shared<SegmentStatistics>(
 	    new_column.Type(), BaseStatistics::CreateEmpty(new_column.Type(), StatisticsType::LOCAL_STATS));
 
 	idx_t rows_to_write = this->count;
@@ -788,7 +788,7 @@ shared_ptr<VersionNode> RowGroup::DeserializeDeletes(Deserializer &source) {
 		// no deletes
 		return nullptr;
 	}
-	auto version_info = make_shared<VersionNode>();
+	auto version_info = duckdb::make_shared<VersionNode>();
 	for (idx_t i = 0; i < chunk_count; i++) {
 		idx_t vector_index = source.Read<idx_t>();
 		if (vector_index >= RowGroup::ROW_GROUP_VECTOR_COUNT) {

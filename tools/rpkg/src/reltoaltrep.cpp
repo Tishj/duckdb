@@ -220,7 +220,7 @@ static R_altrep_class_t LogicalTypeToAltrepType(const LogicalType &type) {
 
 	cpp11::writable::list data_frame(NEW_LIST(ncols));
 	data_frame.attr(R_ClassSymbol) = RStrings::get().dataframe_str;
-	auto relation_wrapper = make_shared<AltrepRelationWrapper>(drel);
+	auto relation_wrapper = duckdb::make_shared<AltrepRelationWrapper>(drel);
 	RProtector r_protector;
 
 	cpp11::external_pointer<AltrepRownamesWrapper> ptr(new AltrepRownamesWrapper(relation_wrapper));

@@ -114,8 +114,8 @@ void OptimisticDataWriter::Rollback() {
 LocalTableStorage::LocalTableStorage(DataTable &table)
     : table(&table), allocator(Allocator::Get(table.db)), deleted_rows(0), optimistic_writer(&table) {
 	auto types = table.GetTypes();
-	row_groups = make_shared<RowGroupCollection>(table.info, TableIOManager::Get(table).GetBlockManagerForRowData(),
-	                                             types, MAX_ROW_ID, 0);
+	row_groups = duckdb::make_shared<RowGroupCollection>(
+	    table.info, TableIOManager::Get(table).GetBlockManagerForRowData(), types, MAX_ROW_ID, 0);
 	row_groups->InitializeEmpty();
 	table.info->indexes.Scan([&](Index &index) {
 		D_ASSERT(index.type == IndexType::ART);
@@ -307,7 +307,7 @@ LocalTableStorage *LocalTableManager::GetOrCreateStorage(DataTable *table) {
 	lock_guard<mutex> l(table_storage_lock);
 	auto entry = table_storage.find(table);
 	if (entry == table_storage.end()) {
-		auto new_storage = make_shared<LocalTableStorage>(*table);
+		auto new_storage = duckdb::make_shared<LocalTableStorage>(*table);
 		auto storage = new_storage.get();
 		table_storage.insert(make_pair(table, std::move(new_storage)));
 		return storage;

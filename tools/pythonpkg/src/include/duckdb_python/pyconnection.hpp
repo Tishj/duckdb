@@ -35,7 +35,7 @@ public:
 	unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory;
 };
 
-struct DuckDBPyConnection : public std::enable_shared_from_this<DuckDBPyConnection> {
+struct DuckDBPyConnection : public enable_shared_from_this<DuckDBPyConnection> {
 public:
 	shared_ptr<DuckDB> database;
 	unique_ptr<Connection> connection;

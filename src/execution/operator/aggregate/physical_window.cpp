@@ -1671,7 +1671,7 @@ SinkFinalizeType PhysicalWindow::Finalize(Pipeline &pipeline, Event &event, Clie
 	}
 
 	// Schedule all the sorts for maximum thread utilisation
-	auto new_event = make_shared<WindowMergeEvent>(state, pipeline);
+	auto new_event = duckdb::make_shared<WindowMergeEvent>(state, pipeline);
 	event.InsertEvent(std::move(new_event));
 
 	return SinkFinalizeType::READY;

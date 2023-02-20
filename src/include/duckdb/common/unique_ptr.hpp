@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "duckdb/common/unique_ptr_single.hpp"
 #include "duckdb/common/unique_ptr_array.hpp"
 

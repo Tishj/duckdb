@@ -217,7 +217,7 @@ unique_ptr<GlobalSinkState> PhysicalCopyToFile::GetGlobalSinkState(ClientContext
 		auto state = make_unique<CopyToFunctionGlobalState>(nullptr);
 
 		if (partition_output) {
-			state->partition_state = make_shared<GlobalHivePartitionState>();
+			state->partition_state = duckdb::make_shared<GlobalHivePartitionState>();
 		}
 
 		return std::move(state);

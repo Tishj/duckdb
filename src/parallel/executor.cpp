@@ -65,10 +65,11 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 
 	// create events/stack for the base pipeline
 	auto base_pipeline = meta_pipeline->GetBasePipeline();
-	auto base_initialize_event = make_shared<PipelineInitializeEvent>(base_pipeline);
-	auto base_event = make_shared<PipelineEvent>(base_pipeline);
-	auto base_finish_event = make_shared<PipelineFinishEvent>(base_pipeline);
-	auto base_complete_event = make_shared<PipelineCompleteEvent>(base_pipeline->executor, event_data.initial_schedule);
+	auto base_initialize_event = duckdb::make_shared<PipelineInitializeEvent>(base_pipeline);
+	auto base_event = duckdb::make_shared<PipelineEvent>(base_pipeline);
+	auto base_finish_event = duckdb::make_shared<PipelineFinishEvent>(base_pipeline);
+	auto base_complete_event =
+	    duckdb::make_shared<PipelineCompleteEvent>(base_pipeline->executor, event_data.initial_schedule);
 	PipelineEventStack base_stack {base_initialize_event.get(), base_event.get(), base_finish_event.get(),
 	                               base_complete_event.get()};
 	events.push_back(std::move(base_initialize_event));
@@ -89,7 +90,7 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 		D_ASSERT(pipeline);
 
 		// create events/stack for this pipeline
-		auto pipeline_event = make_shared<PipelineEvent>(pipeline);
+		auto pipeline_event = duckdb::make_shared<PipelineEvent>(pipeline);
 		Event *pipeline_finish_event_ptr;
 		if (meta_pipeline->HasFinishEvent(pipeline.get())) {
 			// this pipeline has its own finish event (despite going into the same sink - Finalize twice!)
@@ -302,7 +303,7 @@ void Executor::InitializeInternal(PhysicalOperator *plan) {
 
 		// build and ready the pipelines
 		PipelineBuildState state;
-		auto root_pipeline = make_shared<MetaPipeline>(*this, state, nullptr);
+		auto root_pipeline = duckdb::make_shared<MetaPipeline>(*this, state, nullptr);
 		root_pipeline->Build(physical_plan);
 		root_pipeline->Ready();
 
@@ -446,7 +447,7 @@ shared_ptr<Pipeline> Executor::CreateChildPipeline(Pipeline *current, PhysicalOp
 	D_ASSERT(op->IsSource());
 	// found another operator that is a source, schedule a child pipeline
 	// 'op' is the source, and the sink is the same
-	auto child_pipeline = make_shared<Pipeline>(*this);
+	auto child_pipeline = duckdb::make_shared<Pipeline>(*this);
 	child_pipeline->sink = current->sink;
 	child_pipeline->source = op;
 

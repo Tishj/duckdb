@@ -902,7 +902,7 @@ protected:
 
 void LogicalType::SetAlias(string alias) {
 	if (!type_info_) {
-		type_info_ = make_shared<ExtraTypeInfo>(ExtraTypeInfoType::GENERIC_TYPE_INFO, std::move(alias));
+		type_info_ = duckdb::make_shared<ExtraTypeInfo>(ExtraTypeInfoType::GENERIC_TYPE_INFO, std::move(alias));
 	} else {
 		type_info_->alias = std::move(alias);
 	}
@@ -962,7 +962,7 @@ public:
 	static shared_ptr<ExtraTypeInfo> Deserialize(FieldReader &reader) {
 		auto width = reader.ReadRequired<uint8_t>();
 		auto scale = reader.ReadRequired<uint8_t>();
-		return make_shared<DecimalTypeInfo>(width, scale);
+		return duckdb::make_shared<DecimalTypeInfo>(width, scale);
 	}
 
 protected:
@@ -992,7 +992,7 @@ uint8_t DecimalType::MaxWidth() {
 
 LogicalType LogicalType::DECIMAL(int width, int scale) {
 	D_ASSERT(width >= scale);
-	auto type_info = make_shared<DecimalTypeInfo>(width, scale);
+	auto type_info = duckdb::make_shared<DecimalTypeInfo>(width, scale);
 	return LogicalType(LogicalTypeId::DECIMAL, std::move(type_info));
 }
 
@@ -1013,7 +1013,7 @@ public:
 
 	static shared_ptr<ExtraTypeInfo> Deserialize(FieldReader &reader) {
 		auto collation = reader.ReadRequired<string>();
-		return make_shared<StringTypeInfo>(std::move(collation));
+		return duckdb::make_shared<StringTypeInfo>(std::move(collation));
 	}
 
 protected:
@@ -1038,7 +1038,7 @@ string StringType::GetCollation(const LogicalType &type) {
 }
 
 LogicalType LogicalType::VARCHAR_COLLATION(string collation) { // NOLINT
-	auto string_info = make_shared<StringTypeInfo>(std::move(collation));
+	auto string_info = duckdb::make_shared<StringTypeInfo>(std::move(collation));
 	return LogicalType(LogicalTypeId::VARCHAR, std::move(string_info));
 }
 
@@ -1059,7 +1059,7 @@ public:
 
 	static shared_ptr<ExtraTypeInfo> Deserialize(FieldReader &reader) {
 		auto child_type = reader.ReadRequiredSerializable<LogicalType, LogicalType>();
-		return make_shared<ListTypeInfo>(std::move(child_type));
+		return duckdb::make_shared<ListTypeInfo>(std::move(child_type));
 	}
 
 protected:
@@ -1077,7 +1077,7 @@ const LogicalType &ListType::GetChildType(const LogicalType &type) {
 }
 
 LogicalType LogicalType::LIST(LogicalType child) {
-	auto info = make_shared<ListTypeInfo>(std::move(child));
+	auto info = duckdb::make_shared<ListTypeInfo>(std::move(child));
 	return LogicalType(LogicalTypeId::LIST, std::move(info));
 }
 
@@ -1110,7 +1110,7 @@ public:
 			auto type = LogicalType::Deserialize(source);
 			child_list.push_back(make_pair(std::move(name), std::move(type)));
 		}
-		return make_shared<StructTypeInfo>(std::move(child_list));
+		return duckdb::make_shared<StructTypeInfo>(std::move(child_list));
 	}
 
 protected:
@@ -1150,7 +1150,7 @@ public:
 			auto type = LogicalType::Deserialize(source);
 			bound_argument_types.push_back(std::move(type));
 		}
-		return make_shared<AggregateStateTypeInfo>(
+		return duckdb::make_shared<AggregateStateTypeInfo>(
 		    aggregate_state_t(std::move(function_name), std::move(return_type), std::move(bound_argument_types)));
 	}
 
@@ -1208,12 +1208,12 @@ idx_t StructType::GetChildCount(const LogicalType &type) {
 }
 
 LogicalType LogicalType::STRUCT(child_list_t<LogicalType> children) {
-	auto info = make_shared<StructTypeInfo>(std::move(children));
+	auto info = duckdb::make_shared<StructTypeInfo>(std::move(children));
 	return LogicalType(LogicalTypeId::STRUCT, std::move(info));
 }
 
 LogicalType LogicalType::AGGREGATE_STATE(aggregate_state_t state_type) { // NOLINT
-	auto info = make_shared<AggregateStateTypeInfo>(std::move(state_type));
+	auto info = duckdb::make_shared<AggregateStateTypeInfo>(std::move(state_type));
 	return LogicalType(LogicalTypeId::AGGREGATE_STATE, std::move(info));
 }
 
@@ -1221,7 +1221,7 @@ LogicalType LogicalType::AGGREGATE_STATE(aggregate_state_t state_type) { // NOLI
 // Map Type
 //===--------------------------------------------------------------------===//
 LogicalType LogicalType::MAP(LogicalType child) {
-	auto info = make_shared<ListTypeInfo>(std::move(child));
+	auto info = duckdb::make_shared<ListTypeInfo>(std::move(child));
 	return LogicalType(LogicalTypeId::MAP, std::move(info));
 }
 
@@ -1251,7 +1251,7 @@ LogicalType LogicalType::UNION(child_list_t<LogicalType> members) {
 	D_ASSERT(members.size() <= UnionType::MAX_UNION_MEMBERS);
 	// union types always have a hidden "tag" field in front
 	members.insert(members.begin(), {"", LogicalType::TINYINT});
-	auto info = make_shared<StructTypeInfo>(std::move(members));
+	auto info = duckdb::make_shared<StructTypeInfo>(std::move(members));
 	return LogicalType(LogicalTypeId::UNION, std::move(info));
 }
 
@@ -1296,7 +1296,7 @@ public:
 
 	static shared_ptr<ExtraTypeInfo> Deserialize(FieldReader &reader) {
 		auto enum_name = reader.ReadRequired<string>();
-		return make_shared<UserTypeInfo>(std::move(enum_name));
+		return duckdb::make_shared<UserTypeInfo>(std::move(enum_name));
 	}
 
 protected:
@@ -1314,7 +1314,7 @@ const string &UserType::GetTypeName(const LogicalType &type) {
 }
 
 LogicalType LogicalType::USER(const string &user_type_name) {
-	auto info = make_shared<UserTypeInfo>(user_type_name);
+	auto info = duckdb::make_shared<UserTypeInfo>(user_type_name);
 	return LogicalType(LogicalTypeId::USER, std::move(info));
 }
 
@@ -1395,7 +1395,7 @@ struct EnumTypeInfoTemplated : public EnumTypeInfo {
 		auto enum_name = reader.ReadRequired<string>();
 		Vector values_insert_order(LogicalType::VARCHAR, size);
 		values_insert_order.Deserialize(size, reader.GetSource());
-		return make_shared<EnumTypeInfoTemplated>(std::move(enum_name), values_insert_order, size);
+		return duckdb::make_shared<EnumTypeInfoTemplated>(std::move(enum_name), values_insert_order, size);
 	}
 
 	string_map_t<T> values;
@@ -1426,13 +1426,13 @@ LogicalType LogicalType::ENUM(const string &enum_name, Vector &ordered_data, idx
 	auto enum_internal_type = EnumVectorDictType(size);
 	switch (enum_internal_type) {
 	case PhysicalType::UINT8:
-		info = make_shared<EnumTypeInfoTemplated<uint8_t>>(enum_name, ordered_data, size);
+		info = duckdb::make_shared<EnumTypeInfoTemplated<uint8_t>>(enum_name, ordered_data, size);
 		break;
 	case PhysicalType::UINT16:
-		info = make_shared<EnumTypeInfoTemplated<uint16_t>>(enum_name, ordered_data, size);
+		info = duckdb::make_shared<EnumTypeInfoTemplated<uint16_t>>(enum_name, ordered_data, size);
 		break;
 	case PhysicalType::UINT32:
-		info = make_shared<EnumTypeInfoTemplated<uint32_t>>(enum_name, ordered_data, size);
+		info = duckdb::make_shared<EnumTypeInfoTemplated<uint32_t>>(enum_name, ordered_data, size);
 		break;
 	default:
 		throw InternalException("Invalid Physical Type for ENUMs");
@@ -1526,12 +1526,12 @@ shared_ptr<ExtraTypeInfo> ExtraTypeInfo::Deserialize(FieldReader &reader) {
 	case ExtraTypeInfoType::INVALID_TYPE_INFO: {
 		auto alias = reader.ReadField<string>(string());
 		if (!alias.empty()) {
-			return make_shared<ExtraTypeInfo>(type, alias);
+			return duckdb::make_shared<ExtraTypeInfo>(type, alias);
 		}
 		return nullptr;
 	}
 	case ExtraTypeInfoType::GENERIC_TYPE_INFO: {
-		extra_info = make_shared<ExtraTypeInfo>(type);
+		extra_info = duckdb::make_shared<ExtraTypeInfo>(type);
 	} break;
 	case ExtraTypeInfoType::DECIMAL_TYPE_INFO:
 		extra_info = DecimalTypeInfo::Deserialize(reader);

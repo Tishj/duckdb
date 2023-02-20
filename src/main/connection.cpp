@@ -19,7 +19,8 @@
 
 namespace duckdb {
 
-Connection::Connection(DatabaseInstance &database) : context(make_shared<ClientContext>(database.shared_from_this())) {
+Connection::Connection(DatabaseInstance &database)
+    : context(duckdb::make_shared<ClientContext>(database.shared_from_this())) {
 	ConnectionManager::Get(database).AddConnection(*context);
 #ifdef DEBUG
 	EnableProfiling();
@@ -173,7 +174,7 @@ shared_ptr<Relation> Connection::Table(const string &schema_name, const string &
 	if (!table_info) {
 		throw CatalogException("Table '%s' does not exist!", table_name);
 	}
-	return make_shared<TableRelation>(context, std::move(table_info));
+	return duckdb::make_shared<TableRelation>(context, std::move(table_info));
 }
 
 shared_ptr<Relation> Connection::View(const string &tname) {
@@ -181,7 +182,7 @@ shared_ptr<Relation> Connection::View(const string &tname) {
 }
 
 shared_ptr<Relation> Connection::View(const string &schema_name, const string &table_name) {
-	return make_shared<ViewRelation>(context, schema_name, table_name);
+	return duckdb::make_shared<ViewRelation>(context, schema_name, table_name);
 }
 
 shared_ptr<Relation> Connection::TableFunction(const string &fname) {
@@ -192,11 +193,11 @@ shared_ptr<Relation> Connection::TableFunction(const string &fname) {
 
 shared_ptr<Relation> Connection::TableFunction(const string &fname, const vector<Value> &values,
                                                const named_parameter_map_t &named_parameters) {
-	return make_shared<TableFunctionRelation>(context, fname, values, named_parameters);
+	return duckdb::make_shared<TableFunctionRelation>(context, fname, values, named_parameters);
 }
 
 shared_ptr<Relation> Connection::TableFunction(const string &fname, const vector<Value> &values) {
-	return make_shared<TableFunctionRelation>(context, fname, values);
+	return duckdb::make_shared<TableFunctionRelation>(context, fname, values);
 }
 
 shared_ptr<Relation> Connection::Values(const vector<vector<Value>> &values) {
@@ -206,7 +207,7 @@ shared_ptr<Relation> Connection::Values(const vector<vector<Value>> &values) {
 
 shared_ptr<Relation> Connection::Values(const vector<vector<Value>> &values, const vector<string> &column_names,
                                         const string &alias) {
-	return make_shared<ValueRelation>(context, values, column_names, alias);
+	return duckdb::make_shared<ValueRelation>(context, values, column_names, alias);
 }
 
 shared_ptr<Relation> Connection::Values(const string &values) {
@@ -215,7 +216,7 @@ shared_ptr<Relation> Connection::Values(const string &values) {
 }
 
 shared_ptr<Relation> Connection::Values(const string &values, const vector<string> &column_names, const string &alias) {
-	return make_shared<ValueRelation>(context, values, column_names, alias);
+	return duckdb::make_shared<ValueRelation>(context, values, column_names, alias);
 }
 
 shared_ptr<Relation> Connection::ReadCSV(const string &csv_file) {
@@ -226,7 +227,7 @@ shared_ptr<Relation> Connection::ReadCSV(const string &csv_file) {
 shared_ptr<Relation> Connection::ReadCSV(const string &csv_file, BufferedCSVReaderOptions &options) {
 	options.file_path = csv_file;
 	options.auto_detect = true;
-	return make_shared<ReadCSVRelation>(context, csv_file, options);
+	return duckdb::make_shared<ReadCSVRelation>(context, csv_file, options);
 }
 
 shared_ptr<Relation> Connection::ReadCSV(const string &csv_file, const vector<string> &columns) {
@@ -239,7 +240,7 @@ shared_ptr<Relation> Connection::ReadCSV(const string &csv_file, const vector<st
 		}
 		column_list.push_back(std::move(col_list.GetColumnMutable(LogicalIndex(0))));
 	}
-	return make_shared<ReadCSVRelation>(context, csv_file, std::move(column_list));
+	return duckdb::make_shared<ReadCSVRelation>(context, csv_file, std::move(column_list));
 }
 
 shared_ptr<Relation> Connection::ReadParquet(const string &parquet_file, bool binary_as_string) {
@@ -258,7 +259,7 @@ shared_ptr<Relation> Connection::RelationFromQuery(const string &query, const st
 }
 
 shared_ptr<Relation> Connection::RelationFromQuery(unique_ptr<SelectStatement> select_stmt, const string &alias) {
-	return make_shared<QueryRelation>(context, std::move(select_stmt), alias);
+	return duckdb::make_shared<QueryRelation>(context, std::move(select_stmt), alias);
 }
 
 void Connection::BeginTransaction() {

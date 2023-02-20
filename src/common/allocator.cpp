@@ -169,7 +169,7 @@ data_ptr_t Allocator::ReallocateData(data_ptr_t pointer, idx_t old_size, idx_t s
 }
 
 shared_ptr<Allocator> &Allocator::DefaultAllocatorReference() {
-	static shared_ptr<Allocator> DEFAULT_ALLOCATOR = make_shared<Allocator>();
+	static shared_ptr<Allocator> DEFAULT_ALLOCATOR = duckdb::make_shared<Allocator>();
 	return DEFAULT_ALLOCATOR;
 }
 

@@ -244,7 +244,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	scheduler->SetThreads(config.options.maximum_threads);
 }
 
-DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared<DatabaseInstance>()) {
+DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(duckdb::make_shared<DatabaseInstance>()) {
 	instance->Initialize(path, new_config);
 	if (instance->config.options.load_extensions) {
 		ExtensionHelper::LoadAllExtensions(*this);

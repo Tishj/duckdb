@@ -522,13 +522,13 @@ void BindContext::AddGenericBinding(idx_t index, const string &alias, const vect
 
 void BindContext::AddCTEBinding(idx_t index, const string &alias, const vector<string> &names,
                                 const vector<LogicalType> &types) {
-	auto binding = make_shared<Binding>(BindingType::BASE, alias, types, names, index);
+	auto binding = duckdb::make_shared<Binding>(BindingType::BASE, alias, types, names, index);
 
 	if (cte_bindings.find(alias) != cte_bindings.end()) {
 		throw BinderException("Duplicate alias \"%s\" in query!", alias);
 	}
 	cte_bindings[alias] = std::move(binding);
-	cte_references[alias] = std::make_shared<idx_t>(0);
+	cte_references[alias] = duckdb::make_shared<idx_t>(0);
 }
 
 void BindContext::AddContext(BindContext other) {

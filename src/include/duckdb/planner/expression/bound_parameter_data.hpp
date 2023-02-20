@@ -34,7 +34,7 @@ public:
 	static shared_ptr<BoundParameterData> Deserialize(Deserializer &source) {
 		FieldReader reader(source);
 		auto value = Value::Deserialize(reader.GetSource());
-		auto result = make_shared<BoundParameterData>(std::move(value));
+		auto result = duckdb::make_shared<BoundParameterData>(std::move(value));
 		result->return_type = reader.ReadRequiredSerializable<LogicalType, LogicalType>();
 		reader.Finalize();
 		return result;

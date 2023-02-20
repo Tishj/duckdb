@@ -664,7 +664,7 @@ public:
 
 	void FinishEvent() override {
 		//! Now that everything is added to the main ht, we can actually finalize
-		auto new_event = make_shared<HashAggregateFinalizeEvent>(op, gstate, pipeline.get(), context);
+		auto new_event = duckdb::make_shared<HashAggregateFinalizeEvent>(op, gstate, pipeline.get(), context);
 		this->InsertEvent(std::move(new_event));
 	}
 
@@ -734,7 +734,7 @@ public:
 
 	void FinishEvent() override {
 		//! Now that all tables are combined, it's time to do the distinct aggregations
-		auto new_event = make_shared<HashDistinctAggregateFinalizeEvent>(op, gstate, *pipeline, client);
+		auto new_event = duckdb::make_shared<HashDistinctAggregateFinalizeEvent>(op, gstate, *pipeline, client);
 		this->InsertEvent(std::move(new_event));
 	}
 };
@@ -766,12 +766,12 @@ SinkFinalizeType PhysicalHashAggregate::FinalizeDistinct(Pipeline &pipeline, Eve
 	}
 	if (any_partitioned) {
 		// If any of the groupings are partitioned then we first need to combine those, then aggregate
-		auto new_event = make_shared<HashDistinctCombineFinalizeEvent>(*this, gstate, pipeline, context);
+		auto new_event = duckdb::make_shared<HashDistinctCombineFinalizeEvent>(*this, gstate, pipeline, context);
 		event.InsertEvent(std::move(new_event));
 	} else {
 		// Hashtables aren't partitioned, they dont need to be joined first
 		// so we can already compute the aggregate
-		auto new_event = make_shared<HashDistinctAggregateFinalizeEvent>(*this, gstate, pipeline, context);
+		auto new_event = duckdb::make_shared<HashDistinctAggregateFinalizeEvent>(*this, gstate, pipeline, context);
 		event.InsertEvent(std::move(new_event));
 	}
 	return SinkFinalizeType::READY;
@@ -799,7 +799,7 @@ SinkFinalizeType PhysicalHashAggregate::FinalizeInternal(Pipeline &pipeline, Eve
 		}
 	}
 	if (any_partitioned) {
-		auto new_event = make_shared<HashAggregateMergeEvent>(*this, gstate, &pipeline);
+		auto new_event = duckdb::make_shared<HashAggregateMergeEvent>(*this, gstate, &pipeline);
 		event.InsertEvent(std::move(new_event));
 	}
 	return SinkFinalizeType::READY;

@@ -61,7 +61,7 @@ public:
 
 //! The ClientContext holds information relevant to the current client session
 //! during execution
-class ClientContext : public std::enable_shared_from_this<ClientContext> {
+class ClientContext : public enable_shared_from_this<ClientContext> {
 	friend class PendingQueryResult;
 	friend class StreamQueryResult;
 	friend class DuckTransactionManager;
@@ -289,7 +289,7 @@ public:
 	}
 
 private:
-	std::weak_ptr<ClientContext> client_context;
+	weak_ptr<ClientContext> client_context;
 };
 
 } // namespace duckdb

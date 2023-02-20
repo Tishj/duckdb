@@ -25,7 +25,7 @@ BindResult ExpressionBinder::BindExpression(ParameterExpression &expr, idx_t dep
 	auto entry = binder.parameters->parameters.find(parameter_idx);
 	if (entry == binder.parameters->parameters.end()) {
 		// no entry yet: create a new one
-		auto data = make_shared<BoundParameterData>();
+		auto data = duckdb::make_shared<BoundParameterData>();
 		data->return_type = binder.parameters->GetReturnType(parameter_idx - 1);
 		bound_parameter->return_type = data->return_type;
 		bound_parameter->parameter_data = data;

@@ -15,9 +15,9 @@ namespace duckdb {
 
 ClientData::ClientData(ClientContext &context) : catalog_search_path(make_unique<CatalogSearchPath>(context)) {
 	auto &db = DatabaseInstance::GetDatabase(context);
-	profiler = make_shared<QueryProfiler>(context);
+	profiler = duckdb::make_shared<QueryProfiler>(context);
 	query_profiler_history = make_unique<QueryProfilerHistory>();
-	temporary_objects = make_shared<AttachedDatabase>(db, AttachedDatabaseType::TEMP_DATABASE);
+	temporary_objects = duckdb::make_shared<AttachedDatabase>(db, AttachedDatabaseType::TEMP_DATABASE);
 	temporary_objects->oid = DatabaseManager::Get(db).ModifyCatalog();
 	random_engine = make_unique<RandomEngine>();
 	file_opener = make_unique<ClientContextFileOpener>(context);

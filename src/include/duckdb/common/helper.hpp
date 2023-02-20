@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/common/constants.hpp"
+#include "duckdb/common/shared_ptr.hpp"
 #include <string.h>
 
 #ifdef _MSC_VER
@@ -52,7 +53,7 @@ unique_ptr<S> unique_ptr_cast(unique_ptr<T> src) {
 struct SharedConstructor {
 	template <class T, typename... ARGS>
 	static shared_ptr<T> Create(ARGS &&...args) {
-		return make_shared<T>(std::forward<ARGS>(args)...);
+		return duckdb::make_shared<T>(std::forward<ARGS>(args)...);
 	}
 };
 

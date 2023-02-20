@@ -13,6 +13,7 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/winapi.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/shared_ptr.hpp"
 
 namespace duckdb {
 
@@ -40,10 +41,8 @@ namespace duckdb {
 using std::move;
 #endif
 
-using std::shared_ptr;
-using std::weak_ptr;
+using duckdb::enable_shared_from_this;
 using data_ptr = unique_ptr<char[]>;
-using std::make_shared;
 
 // NOTE: there is a copy of this in the Postgres' parser grammar (gram.y)
 #define DEFAULT_SCHEMA  "main"

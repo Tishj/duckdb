@@ -471,7 +471,7 @@ public:
 
 	void FinishEvent() override {
 		//! Now that all tables are combined, it's time to do the distinct aggregations
-		auto new_event = make_shared<UngroupedDistinctAggregateFinalizeEvent>(op, gstate, *pipeline, client);
+		auto new_event = duckdb::make_shared<UngroupedDistinctAggregateFinalizeEvent>(op, gstate, *pipeline, client);
 		this->InsertEvent(std::move(new_event));
 	}
 };
@@ -492,12 +492,12 @@ SinkFinalizeType PhysicalUngroupedAggregate::FinalizeDistinct(Pipeline &pipeline
 		}
 	}
 	if (any_partitioned) {
-		auto new_event = make_shared<UngroupedDistinctCombineFinalizeEvent>(*this, gstate, pipeline, context);
+		auto new_event = duckdb::make_shared<UngroupedDistinctCombineFinalizeEvent>(*this, gstate, pipeline, context);
 		event.InsertEvent(std::move(new_event));
 	} else {
 		//! Hashtables aren't partitioned, they dont need to be joined first
 		//! So we can compute the aggregate already
-		auto new_event = make_shared<UngroupedDistinctAggregateFinalizeEvent>(*this, gstate, pipeline, context);
+		auto new_event = duckdb::make_shared<UngroupedDistinctAggregateFinalizeEvent>(*this, gstate, pipeline, context);
 		event.InsertEvent(std::move(new_event));
 	}
 	return SinkFinalizeType::READY;

@@ -424,8 +424,8 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterPythonObject(const st
 
 		// keep a reference
 		vector<shared_ptr<ExternalDependency>> dependencies;
-		dependencies.push_back(make_shared<PythonDependencies>(make_unique<RegisteredObject>(python_object),
-		                                                       make_unique<RegisteredObject>(new_df)));
+		dependencies.push_back(duckdb::make_shared<PythonDependencies>(make_unique<RegisteredObject>(python_object),
+		                                                               make_unique<RegisteredObject>(new_df)));
 		connection->context->external_dependencies[name] = std::move(dependencies);
 	} else if (IsAcceptedArrowObject(python_object)) {
 		auto stream_factory =
@@ -442,8 +442,8 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterPythonObject(const st
 			        ->CreateView(name, true, true);
 		}
 		vector<shared_ptr<ExternalDependency>> dependencies;
-		dependencies.push_back(
-		    make_shared<PythonDependencies>(make_unique<RegisteredArrow>(std::move(stream_factory), python_object)));
+		dependencies.push_back(duckdb::make_shared<PythonDependencies>(
+		    make_unique<RegisteredArrow>(std::move(stream_factory), python_object)));
 		connection->context->external_dependencies[name] = std::move(dependencies);
 	} else {
 		auto py_object_type = string(py::str(python_object.get_type().attr("__name__")));
@@ -507,7 +507,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 		auto_detect = true;
 	}
 
-	auto read_json_relation = make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect);
+	auto read_json_relation =
+	    duckdb::make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect);
 	if (read_json_relation == nullptr) {
 		throw InvalidInputException("read_json can only be used when the JSON extension is (statically) loaded");
 	}
@@ -1021,7 +1022,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Cursor() {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
 	}
-	auto res = make_shared<DuckDBPyConnection>();
+	auto res = duckdb::make_shared<DuckDBPyConnection>();
 	res->database = database;
 	res->connection = make_unique<Connection>(*res->database);
 	cursors.push_back(res);
@@ -1234,7 +1235,7 @@ static void SetDefaultConfigArguments(ClientContext &context) {
 }
 
 static shared_ptr<DuckDBPyConnection> FetchOrCreateInstance(const string &database, DBConfig &config) {
-	auto res = make_shared<DuckDBPyConnection>();
+	auto res = duckdb::make_shared<DuckDBPyConnection>();
 	res->database = instance_cache.GetInstance(database, config);
 	if (!res->database) {
 		//! No cached database, we must create a new instance
@@ -1276,7 +1277,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::DefaultConnection() {
 
 PythonImportCache *DuckDBPyConnection::ImportCache() {
 	if (!import_cache) {
-		import_cache = make_shared<PythonImportCache>();
+		import_cache = duckdb::make_shared<PythonImportCache>();
 	}
 	return import_cache.get();
 }

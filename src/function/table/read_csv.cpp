@@ -261,7 +261,7 @@ public:
 		} else {
 			bytes_per_local_state = file_size / MaxThreads();
 		}
-		current_buffer = make_shared<CSVBuffer>(context, buffer_size, *file_handle, current_csv_position);
+		current_buffer = duckdb::make_shared<CSVBuffer>(context, buffer_size, *file_handle, current_csv_position);
 		next_buffer = current_buffer->Next(*file_handle, buffer_size, current_csv_position);
 		running_threads = MaxThreads();
 	}
@@ -410,7 +410,7 @@ unique_ptr<CSVBufferRead> ParallelCSVGlobalState::Next(ClientContext &context, R
 			current_file_path = bind_data.files[file_index++];
 			file_handle = ReadCSV::OpenCSV(current_file_path, bind_data.options.compression, context);
 			current_csv_position = 0;
-			current_buffer = make_shared<CSVBuffer>(context, buffer_size, *file_handle, current_csv_position);
+			current_buffer = duckdb::make_shared<CSVBuffer>(context, buffer_size, *file_handle, current_csv_position);
 			next_buffer = current_buffer->Next(*file_handle, buffer_size, current_csv_position);
 		} else {
 			// We are done scanning.

@@ -145,7 +145,7 @@ public:
 void PhysicalRangeJoin::GlobalSortedTable::ScheduleMergeTasks(Pipeline &pipeline, Event &event) {
 	// Initialize global sort state for a round of merging
 	global_sort_state.InitializeMergeRound();
-	auto new_event = make_shared<RangeJoinMergeEvent>(*this, pipeline);
+	auto new_event = duckdb::make_shared<RangeJoinMergeEvent>(*this, pipeline);
 	event.InsertEvent(std::move(new_event));
 }
 

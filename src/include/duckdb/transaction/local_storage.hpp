@@ -49,7 +49,7 @@ private:
 	unordered_set<block_id_t> written_blocks;
 };
 
-class LocalTableStorage : public std::enable_shared_from_this<LocalTableStorage> {
+class LocalTableStorage : public enable_shared_from_this<LocalTableStorage> {
 public:
 	// Create a new LocalTableStorage
 	explicit LocalTableStorage(DataTable &table);

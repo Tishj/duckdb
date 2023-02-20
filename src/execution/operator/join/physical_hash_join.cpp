@@ -311,7 +311,7 @@ void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event)
 		return;
 	}
 	hash_table->InitializePointerTable();
-	auto new_event = make_shared<HashJoinFinalizeEvent>(pipeline, *this);
+	auto new_event = duckdb::make_shared<HashJoinFinalizeEvent>(pipeline, *this);
 	event.InsertEvent(std::move(new_event));
 }
 
@@ -380,7 +380,7 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		// External join - partition HT
 		sink.perfect_join_executor.reset();
 		sink.hash_table->ComputePartitionSizes(context.config, sink.local_hash_tables, sink.max_ht_size);
-		auto new_event = make_shared<HashJoinPartitionEvent>(pipeline, sink, sink.local_hash_tables);
+		auto new_event = duckdb::make_shared<HashJoinPartitionEvent>(pipeline, sink, sink.local_hash_tables);
 		event.InsertEvent(std::move(new_event));
 		sink.finalized = true;
 		return SinkFinalizeType::READY;

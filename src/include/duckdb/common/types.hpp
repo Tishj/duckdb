@@ -12,6 +12,7 @@
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/single_thread_ptr.hpp"
 #include "duckdb/common/vector.hpp"
+#include "duckdb/common/helper.hpp"
 
 #include <limits>
 
@@ -87,7 +88,7 @@ using buffer_ptr = shared_ptr<T>;
 
 template <class T, typename... Args>
 buffer_ptr<T> make_buffer(Args &&...args) {
-	return make_shared<T>(std::forward<Args>(args)...);
+	return duckdb::make_shared<T>(std::forward<Args>(args)...);
 }
 
 struct list_entry_t {

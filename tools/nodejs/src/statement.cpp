@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <regex>
+#include "duckdb/common/shared_ptr.hpp"
 
 namespace node_duckdb {
 
@@ -314,10 +315,10 @@ struct RunPreparedTask : public Task {
 			Napi::Array result_arr(Napi::Array::New(env, materialized_result->RowCount() + 1));
 
 			auto deleter = [](Napi::Env, void *finalizeData, void *hint) {
-				delete static_cast<std::shared_ptr<duckdb::QueryResult> *>(hint);
+				delete static_cast<shared_ptr<duckdb::QueryResult> *>(hint);
 			};
 
-			std::shared_ptr<duckdb::QueryResult> result_ptr = std::move(result);
+			shared_ptr<duckdb::QueryResult> result_ptr = std::move(result);
 
 			duckdb::idx_t out_idx = 1;
 			while (true) {
@@ -337,7 +338,7 @@ struct RunPreparedTask : public Task {
 
 					// Create shared pointer to give (shared) ownership to ArrayBuffer, not that for these materialized
 					// query results, the string data is owned by the QueryResult
-					auto result_ref_ptr = new std::shared_ptr<duckdb::QueryResult>(result_ptr);
+					auto result_ref_ptr = new shared_ptr<duckdb::QueryResult>(result_ptr);
 
 					auto array_buffer = Napi::ArrayBuffer::New(env, (void *)blob.GetDataUnsafe(), blob.GetSize(),
 					                                           deleter, result_ref_ptr);

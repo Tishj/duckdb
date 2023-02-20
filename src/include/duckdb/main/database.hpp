@@ -25,7 +25,7 @@ class TaskScheduler;
 class ObjectCache;
 struct AttachInfo;
 
-class DatabaseInstance : public std::enable_shared_from_this<DatabaseInstance> {
+class DatabaseInstance : public enable_shared_from_this<DatabaseInstance> {
 	friend class DuckDB;
 
 public:

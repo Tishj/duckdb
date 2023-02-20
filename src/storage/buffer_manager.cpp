@@ -264,7 +264,7 @@ shared_ptr<BlockHandle> BlockManager::RegisterBlock(block_id_t block_id, bool is
 		}
 	}
 	// create a new block pointer for this block
-	auto result = make_shared<BlockHandle>(*this, block_id);
+	auto result = duckdb::make_shared<BlockHandle>(*this, block_id);
 	// for meta block, cache the handle in meta_blocks
 	if (is_meta_block) {
 		meta_blocks[block_id] = result;
@@ -334,8 +334,8 @@ shared_ptr<BlockHandle> BufferManager::RegisterSmallMemory(idx_t block_size) {
 	auto buffer = ConstructManagedBuffer(block_size, nullptr, FileBufferType::TINY_BUFFER);
 
 	// create a new block pointer for this block
-	return make_shared<BlockHandle>(*temp_block_manager, ++temporary_id, std::move(buffer), false, block_size,
-	                                std::move(res));
+	return duckdb::make_shared<BlockHandle>(*temp_block_manager, ++temporary_id, std::move(buffer), false, block_size,
+	                                        std::move(res));
 }
 
 shared_ptr<BlockHandle> BufferManager::RegisterMemory(idx_t block_size, bool can_destroy) {
@@ -350,8 +350,8 @@ shared_ptr<BlockHandle> BufferManager::RegisterMemory(idx_t block_size, bool can
 	auto buffer = ConstructManagedBuffer(block_size, std::move(reusable_buffer));
 
 	// create a new block pointer for this block
-	return make_shared<BlockHandle>(*temp_block_manager, ++temporary_id, std::move(buffer), can_destroy, alloc_size,
-	                                std::move(res));
+	return duckdb::make_shared<BlockHandle>(*temp_block_manager, ++temporary_id, std::move(buffer), can_destroy,
+	                                        alloc_size, std::move(res));
 }
 
 BufferHandle BufferManager::Allocate(idx_t block_size, bool can_destroy, shared_ptr<BlockHandle> *block) {

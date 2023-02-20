@@ -175,7 +175,7 @@ PreservedError ClientContext::EndQueryInternal(ClientContextLock &lock, bool suc
 			auto &prev_profilers = client_data->query_profiler_history->GetPrevProfilers();
 			prev_profilers.emplace_back(transaction.GetActiveQuery(), std::move(client_data->profiler));
 			// Reinitialize the query profiler
-			client_data->profiler = make_shared<QueryProfiler>(*this);
+			client_data->profiler = duckdb::make_shared<QueryProfiler>(*this);
 			// Propagate settings of the saved query into the new profiler.
 			client_data->profiler->Propagate(*prev_profilers.back().second);
 			if (prev_profilers.size() >= client_data->query_profiler_history->GetPrevProfilersSize()) {
@@ -311,7 +311,7 @@ shared_ptr<PreparedStatementData> ClientContext::CreatePreparedStatement(ClientC
                                                                          unique_ptr<SQLStatement> statement,
                                                                          vector<Value> *values) {
 	StatementType statement_type = statement->type;
-	auto result = make_shared<PreparedStatementData>(statement_type);
+	auto result = duckdb::make_shared<PreparedStatementData>(statement_type);
 
 	auto &profiler = QueryProfiler::Get(*this);
 	profiler.StartQuery(query, IsExplainAnalyze(statement.get()), true);

@@ -7,7 +7,7 @@ ColumnStatistics::ColumnStatistics(unique_ptr<BaseStatistics> stats_p) : stats(s
 
 shared_ptr<ColumnStatistics> ColumnStatistics::CreateEmptyStats(const LogicalType &type) {
 	auto col_stats = BaseStatistics::CreateEmpty(type, StatisticsType::GLOBAL_STATS);
-	return make_shared<ColumnStatistics>(std::move(col_stats));
+	return duckdb::make_shared<ColumnStatistics>(std::move(col_stats));
 }
 
 } // namespace duckdb
