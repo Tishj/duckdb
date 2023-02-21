@@ -14,3 +14,10 @@ query I
 select query_param('s3://test-bucket/data_0.parquet?partNumber=1&uploadId=1_X6JmBpcba6CpYIKsbeO9XbOK.eRfTJzXhMyx2OZKSQUJ.w2eFADSc8fyQec77c1tJK6bp381ESX__5lfAccVsUS.ovfQY0JzltvvsbFD.c5CBnP9zVr9xmhi.8pgOFMTYwOD6tDrpOBsK7WAsDKFTfW8rvMEZeIECWYc6wXXu._QutdzKs6AOEB.XAibGJ', 'uploadId');
 ----
 1_X6JmBpcba6CpYIKsbeO9XbOK.eRfTJzXhMyx2OZKSQUJ.w2eFADSc8fyQec77c1tJK6bp381ESX__5lfAccVsUS.ovfQY0JzltvvsbFD.c5CBnP9zVr9xmhi.8pgOFMTYwOD6tDrpOBsK7WAsDKFTfW8rvMEZeIECWYc6wXXu._QutdzKs6AOEB.XAibGJ
+
+
+# Glob pattern can also contain '?'
+query I
+select query_param('s3://test-bucket/s3_query_params/????.parquet?s3_access_key_id=test', 's3_access_key_id')
+----
+test
