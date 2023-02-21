@@ -2,6 +2,8 @@
 
 #include "duckdb.hpp"
 #include "httpfs-extension.hpp"
+#include "http_functions.hpp"
+#include "duckdb/parser/parsed_data/create_scalar_function_info.hpp"
 
 #include "s3fs.hpp"
 
@@ -55,8 +57,24 @@ static void LoadInternal(DatabaseInstance &instance) {
 }
 
 void HTTPFsExtension::Load(DuckDB &db) {
+	Connection con(db);
+	con.BeginTransaction();
+	auto &catalog = Catalog::GetSystemCatalog(*con.context);
+
+	// add the http filesystem
 	LoadInternal(*db.instance);
+
+	// add http functions
+	auto url_string = LogicalType::VARCHAR;
+	auto query_param_name = LogicalType::VARCHAR;
+	auto host_fun = ScalarFunction("query_param", {url_string, query_param_name}, LogicalType::VARCHAR,
+	                               HTTPFunctions::GetQueryParamFunction);
+	CreateScalarFunctionInfo host_info(host_fun);
+	catalog.CreateFunction(*con.context, &host_info);
+
+	con.Commit();
 }
+
 std::string HTTPFsExtension::Name() {
 	return "httpfs";
 }

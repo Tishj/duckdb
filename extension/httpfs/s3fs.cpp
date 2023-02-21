@@ -509,12 +509,14 @@ shared_ptr<S3WriteBuffer> S3FileHandle::GetBuffer(uint16_t write_buffer_idx) {
 	return new_write_buffer;
 }
 
-void S3FileSystem::GetQueryParam(const string &key, string &param, duckdb_httplib_openssl::Params &query_params) {
+bool S3FileSystem::GetQueryParam(const string &key, string &param, duckdb_httplib_openssl::Params &query_params) {
 	auto found_param = query_params.find(key);
 	if (found_param != query_params.end()) {
 		param = found_param->second;
 		query_params.erase(found_param);
+		return true;
 	}
+	return false;
 }
 
 void S3FileSystem::ReadQueryParams(const string &url_query_param, S3AuthParams &params) {
@@ -569,16 +571,17 @@ ParsedS3Url S3FileSystem::S3UrlParse(string url, S3AuthParams &params) {
 		path = "";
 	}
 
-	auto question_pos = url.find_last_of('?');
+	auto question_pos = url.find_first_of('?');
 	if (question_pos != string::npos) {
+		// everything behind the '?' is part of the query parameters
 		query_param = url.substr(question_pos + 1);
 	}
 
-	if (!query_param.empty() && query_param.find('.') == string::npos) {
-		path += url.substr(slash_pos, question_pos - slash_pos);
-	} else {
-		path += url.substr(slash_pos);
+	if (query_param.empty()) {
+		path += url.substr(slash_pos, question_pos);
 		query_param = "";
+	} else {
+		path += url.substr(slash_pos, question_pos - slash_pos);
 	}
 
 	if (path.empty()) {

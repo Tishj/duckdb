@@ -213,6 +213,9 @@ public:
 		return true;
 	}
 
+	// helper for ReadQueryParams
+	static bool GetQueryParam(const string &key, string &param, CPPHTTPLIB_NAMESPACE::Params &query_params);
+
 protected:
 	unique_ptr<HTTPFileHandle> CreateHandle(const string &path, const string &query_param, uint8_t flags,
 	                                        FileLockType lock, FileCompressionType compression,
@@ -220,9 +223,6 @@ protected:
 
 	void FlushBuffer(S3FileHandle &handle, shared_ptr<S3WriteBuffer> write_buffer);
 	string GetPayloadHash(char *buffer, idx_t buffer_len);
-
-	// helper for ReadQueryParams
-	void GetQueryParam(const string &key, string &param, CPPHTTPLIB_NAMESPACE::Params &query_params);
 };
 
 // Helper class to do s3 ListObjectV2 api call https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html
