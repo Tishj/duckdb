@@ -571,13 +571,15 @@ ParsedS3Url S3FileSystem::S3UrlParse(string url, S3AuthParams &params) {
 		path = "";
 	}
 
-	auto question_pos = url.find_first_of('?');
+	auto question_pos = url.find_last_of('?');
 	if (question_pos != string::npos) {
 		// everything behind the '?' is part of the query parameters
 		query_param = url.substr(question_pos + 1);
 	}
 
-	if (query_param.empty()) {
+	// '?' is also a valid part of a glob pattern, so we need to check
+	// if the query_param is of the form 'key=value'
+	if (query_param.empty() || query_param.find_first_of('=') == std::string::npos) {
 		path += url.substr(slash_pos, question_pos);
 		query_param = "";
 	} else {
