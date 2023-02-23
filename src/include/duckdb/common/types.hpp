@@ -275,12 +275,12 @@ enum class LogicalTypeId : uint8_t {
 	UNION = 107
 };
 
-struct ExtraTypeInfo;
-
+class ExtraTypeInfo;
 
 struct aggregate_state_t;
 
-struct LogicalType {
+class LogicalType {
+public:
 	DUCKDB_API LogicalType();
 	DUCKDB_API LogicalType(LogicalTypeId id); // NOLINT: Allow implicit conversion from `LogicalTypeId`
 	DUCKDB_API LogicalType(LogicalTypeId id, shared_ptr<ExtraTypeInfo> type_info);
@@ -360,7 +360,7 @@ struct LogicalType {
 private:
 	LogicalTypeId id_;
 	PhysicalType physical_type_;
-	shared_ptr<ExtraTypeInfo> type_info_;
+	shared_ptr<ExtraTypeInfo> type_info_ = nullptr;
 
 private:
 	PhysicalType GetInternalType();

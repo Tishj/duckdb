@@ -21,7 +21,7 @@
 #include <memory>
 
 namespace duckdb {
-struct BoundStatement;
+class BoundStatement;
 
 class ClientContextWrapper;
 class Binder;

@@ -16,7 +16,7 @@
 namespace duckdb {
 
 class Binder;
-struct BoundStatement;
+class BoundStatement;
 class ExecutionContext;
 
 struct LocalFunctionData {

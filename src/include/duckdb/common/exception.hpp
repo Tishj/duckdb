@@ -17,7 +17,7 @@
 
 namespace duckdb {
 enum class PhysicalType : uint8_t;
-struct LogicalType;
+class LogicalType;
 struct hugeint_t;
 
 inline void assert_restrict_function(void *left_start, void *left_end, void *right_start, void *right_end,

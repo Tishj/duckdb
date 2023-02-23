@@ -14,9 +14,10 @@
 namespace duckdb {
 
 class LogicalOperator;
-struct LogicalType;
+class LogicalType;
 
-struct BoundStatement {
+class BoundStatement {
+public:
 	unique_ptr<LogicalOperator> plan;
 	vector<LogicalType> types;
 	vector<string> names;

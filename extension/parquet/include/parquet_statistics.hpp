@@ -11,7 +11,7 @@ namespace duckdb {
 using duckdb_parquet::format::ColumnChunk;
 using duckdb_parquet::format::SchemaElement;
 
-struct LogicalType;
+class LogicalType;
 
 struct ParquetStatisticsUtils {
 

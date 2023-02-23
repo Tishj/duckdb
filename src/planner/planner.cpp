@@ -10,6 +10,8 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/common/serializer/buffered_deserializer.hpp"
 #include "duckdb/transaction/meta_transaction.hpp"
+#include "duckdb/common/types.hpp"
+#include "duckdb/planner/bound_statement.hpp"
 
 namespace duckdb {
 
@@ -36,12 +38,12 @@ void Planner::CreatePlan(SQLStatement &statement) {
 	try {
 		profiler.StartPhase("binder");
 		binder->parameters = &bound_parameters;
-		auto bound_statement = binder->Bind(statement);
+		auto bound_statement = make_unique<BoundStatement>(binder->Bind(statement));
 		profiler.EndPhase();
 
-		this->names = bound_statement.names;
-		this->types = bound_statement.types;
-		this->plan = std::move(bound_statement.plan);
+		this->names = bound_statement->names;
+		this->types = bound_statement->types;
+		this->plan = std::move(bound_statement->plan);
 
 		auto max_tree_depth = ClientConfig::GetConfig(context).max_expression_depth;
 		CheckTreeDepth(*plan, max_tree_depth);
