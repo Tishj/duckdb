@@ -1206,7 +1206,7 @@ void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig
 	auto &context = *res.connection->context;
 	PandasScanFunction scan_fun;
 	CreateTableFunctionInfo scan_info(scan_fun);
-	MapFunction map_fun;
+	PythonDFFunction map_fun;
 	CreateTableFunctionInfo map_info(map_fun);
 	auto &catalog = Catalog::GetSystemCatalog(context);
 	context.transaction.BeginTransaction();

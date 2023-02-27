@@ -15,16 +15,29 @@
 
 namespace duckdb {
 
-struct MapFunction : public TableFunction {
-
+struct PythonFunction : public TableFunction {
 public:
-	MapFunction();
+	PythonFunction(table_function_bind_t bind, table_in_out_function_t func);
+};
 
-	static unique_ptr<FunctionData> MapFunctionBind(ClientContext &context, TableFunctionBindInput &input,
-	                                                vector<LogicalType> &return_types, vector<string> &names);
+struct PythonDFFunction : public PythonFunction {
+public:
+	PythonDFFunction();
+	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
+	                                     vector<LogicalType> &return_types, vector<string> &names);
 
-	static OperatorResultType MapFunctionExec(ExecutionContext &context, TableFunctionInput &data, DataChunk &input,
-	                                          DataChunk &output);
+	static OperatorResultType Function(ExecutionContext &context, TableFunctionInput &data, DataChunk &input,
+	                                   DataChunk &output);
+};
+
+struct PythonNativeFunction : public PythonFunction {
+public:
+	PythonNativeFunction();
+	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
+	                                     vector<LogicalType> &return_types, vector<string> &names);
+
+	static OperatorResultType Function(ExecutionContext &context, TableFunctionInput &data, DataChunk &input,
+	                                   DataChunk &output);
 };
 
 } // namespace duckdb
