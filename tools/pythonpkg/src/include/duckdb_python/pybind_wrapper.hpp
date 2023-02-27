@@ -14,6 +14,36 @@
 #include <vector>
 #include "duckdb/common/assert.hpp"
 
+#define PYBIND11_DETAILED_ERROR_MESSAGES
+
+namespace py = pybind11;
+
+namespace PYBIND11_NAMESPACE {
+namespace detail {
+template <>
+struct type_caster<std::string> {
+public:
+	PYBIND11_TYPE_CASTER(std::string, const_name("string"));
+
+	bool load(handle src, bool implicit) {
+		if (pybind11::none().is(src)) {
+			return false;
+		}
+		if (!implicit && !pybind11::isinstance(src, pybind11::module_::import("pathlib").attr("Path")) &&
+		    !pybind11::isinstance<py::str>(src) && !pybind11::isinstance<py::bytes>(src)) {
+			return false;
+		}
+		value = py::str(src);
+		return true;
+	}
+
+	static handle cast(const std::string &src, return_value_policy policy, handle parent) {
+		return PyUnicode_FromStringAndSize(src.data(), src.size());
+	}
+};
+} // namespace detail
+} // namespace PYBIND11_NAMESPACE
+
 namespace pybind11 {
 
 bool gil_check();
