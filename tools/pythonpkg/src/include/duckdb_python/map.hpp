@@ -15,14 +15,37 @@
 
 namespace duckdb {
 
+struct PythonFunctionData : public TableFunctionData {
+	PythonFunctionData() : function(nullptr) {
+	}
+
+	//! The user-supplied python UDF
+	PyObject *function;
+	//! The types of the datachunk given as input to the function
+	vector<LogicalType> in_types;
+	//! The types of the datachunk received as output of the function
+	vector<LogicalType> out_types;
+
+	//! The column names of the input datachunk
+	vector<string> in_names;
+	//! The column names of the output datachunk
+	vector<string> out_names;
+};
+
 struct PythonFunction : public TableFunction {
 public:
 	PythonFunction(table_function_bind_t bind, table_in_out_function_t func);
+
+public:
+	static py::handle FunctionCall(const py::object &input, PyObject *function);
+	static string TypeVectorToString(vector<LogicalType> &types);
 };
 
 struct PythonDFFunction : public PythonFunction {
 public:
 	PythonDFFunction();
+
+public:
 	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
 	                                     vector<LogicalType> &return_types, vector<string> &names);
 

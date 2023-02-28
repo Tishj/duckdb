@@ -8,6 +8,7 @@ include_directories(${PYTHON_INCLUDE_DIRS})
 add_subdirectory(pyrelation)
 add_subdirectory(common)
 add_subdirectory(pandas)
+add_subdirectory(udf)
 
 add_library(
   python_src OBJECT
