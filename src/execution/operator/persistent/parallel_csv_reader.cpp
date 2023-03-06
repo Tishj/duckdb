@@ -15,6 +15,7 @@
 #include "utf8proc.hpp"
 #include "duckdb/parser/keyword_helper.hpp"
 #include "duckdb/function/table/read_csv.hpp"
+#include "duckdb/execution/operator/persistent/buffered_csv_reader.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -389,9 +390,7 @@ unquote : {
 		offset = 1;
 		goto final_state;
 	} else {
-		error_message = StringUtil::Format(
-		    "Error in file \"%s\" on line %s: quote should be followed by end of value, end of "
-		    "row or another quote. (%s). ",
+		error_message = BufferedCSVReader::QuoteError(
 		    options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(), options.ToString());
 		return false;
 	}

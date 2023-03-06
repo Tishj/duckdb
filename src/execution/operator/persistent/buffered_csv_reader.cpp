@@ -96,6 +96,12 @@ static bool StartsWithNumericDate(string &separator, const string &value) {
 	return true;
 }
 
+string BufferedCSVReader::QuoteError(const string &filename, const string &line, const string &options) {
+	return StringUtil::Format("Error in file \"%s\" on line %s: quote should be followed by end of value, end "
+	                          "of row or another quote. (%s)",
+	                          filename, line, options);
+}
+
 string GenerateDateFormat(const string &separator, const char *format_template) {
 	string format_specifier = format_template;
 	auto amount_of_dashes = std::count(format_specifier.begin(), format_specifier.end(), '-');
@@ -1095,10 +1101,8 @@ unquote:
 			delimiter_search.Match(delimiter_pos, buffer[position]);
 			count++;
 			if (count > delimiter_pos && count > quote_pos) {
-				error_message = StringUtil::Format(
-				    "Error in file \"%s\" on line %s: quote should be followed by end of value, end "
-				    "of row or another quote. (%s)",
-				    options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(), options.ToString());
+				error_message = QuoteError(options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(),
+				                           options.ToString());
 				return false;
 			}
 			if (delimiter_pos == options.delimiter.size()) {
@@ -1113,9 +1117,8 @@ unquote:
 			}
 		}
 	} while (ReadBuffer(start));
-	error_message = StringUtil::Format(
-	    "Error in file \"%s\" on line %s: quote should be followed by end of value, end of row or another quote. (%s)",
-	    options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(), options.ToString());
+	error_message =
+	    QuoteError(options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(), options.ToString());
 	return false;
 handle_escape:
 	escape_pos = 0;
@@ -1311,10 +1314,8 @@ unquote:
 		offset = 1;
 		goto add_row;
 	} else {
-		error_message = StringUtil::Format(
-		    "Error in file \"%s\" on line %s: quote should be followed by end of value, end of "
-		    "row or another quote. (%s)",
-		    options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(), options.ToString());
+		error_message =
+		    QuoteError(options.file_path, GetLineNumberStr(linenr, linenr_estimated).c_str(), options.ToString());
 		return false;
 	}
 handle_escape:
