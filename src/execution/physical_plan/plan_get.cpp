@@ -53,6 +53,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 	}
 	// create the table scan node
 	if (!op.function.projection_pushdown) {
+		// Verify that the function has a regular 'function' variable set to execute the table scan
+		D_ASSERT(op.function.function);
 		// function does not support projection pushdown
 		auto node = make_unique<PhysicalTableScan>(op.returned_types, op.function, std::move(op.bind_data),
 		                                           op.returned_types, op.column_ids, vector<column_t>(), op.names,
