@@ -1,82 +1,22 @@
-//===----------------------------------------------------------------------===//
-//                         DuckDB
-//
-// duckdb/function/table/range/range_inout_execution.hpp
-//
-//
-//===----------------------------------------------------------------------===//
-
 #pragma once
 
-#include "duckdb/function/table_function.hpp"
-#include "duckdb/function/built_in_functions.hpp"
-#include "duckdb/function/table_function.hpp"
-#include "duckdb/function/function_set.hpp"
-#include "duckdb/common/types/vector.hpp"
+#include "duckdb/function/table/range/range_executor.hpp"
+#include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/common/types/interval.hpp"
 
 namespace duckdb {
 
 namespace range {
 
-template <class START_TYPE, class END_TYPE, class INCREMENT_TYPE>
-struct RangeSettings {
-	START_TYPE start;
-	END_TYPE end;
-	INCREMENT_TYPE increment;
-	//! The size of the range for the current input
-	idx_t size;
-};
-
-template <class TYPE>
-struct SettingContainer {
-public:
-	SettingContainer(TYPE default_value) : initialized(false), default_value(std::move(default_value)) {
-	}
-	UnifiedVectorFormat format;
-	bool initialized = false;
-	TYPE default_value;
-
-public:
-	void Set(idx_t count, Vector &vec) {
-		vec.ToUnifiedFormat(count, format);
-		initialized = true;
-	}
-	TYPE Get(idx_t idx) {
-		if (initialized) {
-			idx = format.sel->get_index(idx);
-			return ((TYPE *)format.data)[idx];
-		}
-		return default_value;
-	}
-};
-
-class RangeExecutor {
-public:
-	RangeExecutor() : new_row(false), input_idx(0), range_idx(0) {
-	}
-	virtual ~RangeExecutor() {
-	}
-
-public:
-	virtual OperatorResultType Update(idx_t written_tuples, idx_t input_size) = 0;
-	virtual idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written) = 0;
-
-protected:
-	bool new_row;
-	idx_t input_idx;
-	idx_t range_idx;
-};
-
-template <class RANGE_TYPE>
-class RangeIntExecutor : public RangeExecutor {
-	using range_t = RANGE_TYPE;
-	using increment_t = RANGE_TYPE;
+class RangeTimestampExecutor : public RangeExecutor {
+	using range_t = timestamp_t;
+	using increment_t = interval_t;
 	using IntRange = RangeSettings<range_t, range_t, increment_t>;
 
 public:
-	RangeIntExecutor() : settings(), start_data(0), end_data(0), increment_data(1) {
+	RangeTimestampExecutor() : settings(), start_data(0), end_data(0), increment_data(1) {
 	}
-	virtual ~RangeIntExecutor() {
+	virtual ~RangeTimestampExecutor() {
 	}
 
 public:

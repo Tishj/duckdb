@@ -5,7 +5,9 @@
 #include "duckdb/common/algorithm.hpp"
 #include "duckdb/common/operator/add.hpp"
 #include "duckdb/common/types/timestamp.hpp"
-#include "duckdb/function/table/range/range_inout_execution.hpp"
+#include "duckdb/function/table/range/range_executor.hpp"
+#include "duckdb/function/table/range/range_int_executor.hpp"
+#include "duckdb/function/table/range/range_timestamp_executor.hpp"
 
 namespace duckdb {
 
@@ -24,8 +26,42 @@ struct RangeInOutFunctionState : public GlobalTableFunctionState {
 	}
 
 private:
+	unique_ptr<RangeExecutor> MakeNumericExecutor(const LogicalType &type) {
+		switch (type.id()) {
+		case LogicalTypeId::TINYINT:
+			return make_unique<RangeIntExecutor<int8_t>>();
+		case LogicalTypeId::SMALLINT:
+			return make_unique<RangeIntExecutor<int16_t>>();
+		case LogicalTypeId::INTEGER:
+			return make_unique<RangeIntExecutor<int32_t>>();
+		case LogicalTypeId::BIGINT:
+			return make_unique<RangeIntExecutor<int64_t>>();
+		case LogicalTypeId::FLOAT:
+			return make_unique<RangeIntExecutor<float>>();
+		case LogicalTypeId::DOUBLE:
+			return make_unique<RangeIntExecutor<double>>();
+		case LogicalTypeId::UTINYINT:
+			return make_unique<RangeIntExecutor<uint8_t>>();
+		case LogicalTypeId::USMALLINT:
+			return make_unique<RangeIntExecutor<uint16_t>>();
+		case LogicalTypeId::UINTEGER:
+			return make_unique<RangeIntExecutor<uint32_t>>();
+		case LogicalTypeId::UBIGINT:
+			return make_unique<RangeIntExecutor<uint64_t>>();
+		default:
+			// Explicitly ignored:
+			// hugeint
+			// decimal
+			throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
+			                              type.ToString());
+		}
+	}
+
 	unique_ptr<RangeExecutor> MakeExecutor(DataChunk &input) {
 		auto type = input.data[0].GetType();
+		if (input.ColumnCount() >= 3) {
+			throw InvalidInputException("Range takes up to 3 arguments, not %d", input.ColumnCount());
+		}
 		if (type.IsNumeric()) {
 			for (idx_t i = 1; i < input.ColumnCount(); i++) {
 				if (input.data[i].GetType() != type) {
@@ -33,36 +69,19 @@ private:
 					    "All of the arguments passed to the numeric RANGE function have to be of the same type");
 				}
 			}
-			switch (type.id()) {
-			case LogicalTypeId::TINYINT:
-				return make_unique<RangeIntExecutor<int8_t>>();
-			case LogicalTypeId::SMALLINT:
-				return make_unique<RangeIntExecutor<int16_t>>();
-			case LogicalTypeId::INTEGER:
-				return make_unique<RangeIntExecutor<int32_t>>();
-			case LogicalTypeId::BIGINT:
-				return make_unique<RangeIntExecutor<int64_t>>();
-			case LogicalTypeId::FLOAT:
-				return make_unique<RangeIntExecutor<float>>();
-			case LogicalTypeId::DOUBLE:
-				return make_unique<RangeIntExecutor<double>>();
-			case LogicalTypeId::UTINYINT:
-				return make_unique<RangeIntExecutor<uint8_t>>();
-			case LogicalTypeId::USMALLINT:
-				return make_unique<RangeIntExecutor<uint16_t>>();
-			case LogicalTypeId::UINTEGER:
-				return make_unique<RangeIntExecutor<uint32_t>>();
-			case LogicalTypeId::UBIGINT:
-				return make_unique<RangeIntExecutor<uint64_t>>();
-			default:
-				// Explicitly ignored:
-				// hugeint
-				// decimal
-				throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
-				                              type.ToString());
+			return MakeNumericExecutor(type);
+		} else if (type.id() == LogicalTypeId::TIMESTAMP) {
+			if (input.ColumnCount() >= 2 && input.data[1].GetType() != type) {
+				throw InvalidInputException("Provided start and end column types don't match!");
 			}
+			if (input.ColumnCount() == 3 && input.data[2].GetType() != LogicalTypeId::INTERVAL) {
+				throw InvalidInputException("Increment column has to be of type INTERVAL!");
+			}
+			return make_unique<RangeTimestampExecutor>();
+		} else {
+			throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
+			                              type.ToString());
 		}
-		throw NotImplementedException("Range is not implemented as a table in-out function for '%s'", type.ToString());
 	}
 };
 
