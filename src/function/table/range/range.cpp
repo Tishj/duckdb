@@ -10,6 +10,7 @@ namespace duckdb {
 
 struct RangeInOutFunctionState : public GlobalTableFunctionState {
 	using range_t = int32_t;
+	using increment_t = int32_t;
 
 	RangeInOutFunctionState() : new_row(true), input_idx(0), range_idx(0) {
 	}
@@ -17,7 +18,7 @@ struct RangeInOutFunctionState : public GlobalTableFunctionState {
 	struct RangeSettings {
 		range_t start;
 		range_t end;
-		range_t increment;
+		increment_t increment;
 		//! The size of the range for the current input
 		idx_t size;
 	};
@@ -26,7 +27,7 @@ struct RangeInOutFunctionState : public GlobalTableFunctionState {
 
 	RangeSettings settings;
 
-	template <SettingType SETTING>
+	template <SettingType SETTING, class TYPE>
 	struct SettingContainer {
 	public:
 		SettingContainer() : initialized(false) {
@@ -39,10 +40,10 @@ struct RangeInOutFunctionState : public GlobalTableFunctionState {
 			vec.ToUnifiedFormat(count, format);
 			initialized = true;
 		}
-		range_t Get(idx_t idx) {
+		TYPE Get(idx_t idx) {
 			if (initialized) {
 				idx = format.sel->get_index(idx);
-				return ((range_t *)format.data)[idx];
+				return ((TYPE *)format.data)[idx];
 			}
 			if (SETTING == SettingType::START) {
 				return 0;
@@ -54,9 +55,9 @@ struct RangeInOutFunctionState : public GlobalTableFunctionState {
 		}
 	};
 
-	SettingContainer<SettingType::START> start_data;
-	SettingContainer<SettingType::END> end_data;
-	SettingContainer<SettingType::INCREMENT> increment_data;
+	SettingContainer<SettingType::START, range_t> start_data;
+	SettingContainer<SettingType::END, range_t> end_data;
+	SettingContainer<SettingType::INCREMENT, increment_t> increment_data;
 
 public:
 	RangeSettings &GetCurrentSettings(DataChunk &chunk) {
