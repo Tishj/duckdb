@@ -59,7 +59,7 @@ private:
 
 	unique_ptr<RangeExecutor> MakeExecutor(DataChunk &input) {
 		auto type = input.data[0].GetType();
-		if (input.ColumnCount() >= 3) {
+		if (input.ColumnCount() > 3) {
 			throw InvalidInputException("Range takes up to 3 arguments, not %d", input.ColumnCount());
 		}
 		if (type.IsNumeric()) {
@@ -70,14 +70,14 @@ private:
 				}
 			}
 			return MakeNumericExecutor(type);
-		} else if (type.id() == LogicalTypeId::TIMESTAMP) {
-			if (input.ColumnCount() >= 2 && input.data[1].GetType() != type) {
+		} else if (input.ColumnCount() == 3 && type.id() == LogicalTypeId::TIMESTAMP) {
+			if (input.data[1].GetType() != type) {
 				throw InvalidInputException("Provided start and end column types don't match!");
 			}
-			if (input.ColumnCount() == 3 && input.data[2].GetType() != LogicalTypeId::INTERVAL) {
+			if (input.data[2].GetType() != LogicalTypeId::INTERVAL) {
 				throw InvalidInputException("Increment column has to be of type INTERVAL!");
 			}
-			return make_unique<RangeTimestampExecutor>();
+			return make_unique<RangeTimestampExecutor<false>>();
 		} else {
 			throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
 			                              type.ToString());

@@ -64,6 +64,17 @@ public:
 	}
 
 private:
+	void VerifySettings(IntRange &settings) {
+		if (settings.increment == 0) {
+			throw BinderException("interval cannot be 0!");
+		}
+		if (settings.start > settings.end && settings.increment > 0) {
+			throw BinderException("start is bigger than end, but increment is positive: cannot generate infinite series");
+		} else if (settings.start < settings.end && settings.increment < 0) {
+			throw BinderException("start is smaller than end, but increment is negative: cannot generate infinite series");
+		}
+	}
+
 	IntRange &GetCurrentSettings(DataChunk &chunk) {
 		if (input_idx == 0) {
 			// Initialize the vector formats for the entire chunk
@@ -85,6 +96,8 @@ private:
 			settings.start = start_data.Get(input_idx);
 			settings.end = end_data.Get(input_idx);
 			settings.increment = increment_data.Get(input_idx);
+
+			VerifySettings(settings);
 
 			int64_t offset = settings.increment < 0 ? 1 : -1;
 			settings.size = Hugeint::Cast<idx_t>((settings.end + (settings.increment + offset)) / settings.increment);

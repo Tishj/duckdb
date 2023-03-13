@@ -3,18 +3,28 @@
 #include "duckdb/function/table/range/range_executor.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/types/interval.hpp"
+#include "duckdb/common/operator/add.hpp"
 
 namespace duckdb {
 
 namespace range {
 
+struct TimeRange {
+	timestamp_t start;
+	timestamp_t end;
+	interval_t increment;
+	bool greater_than_check;
+	idx_t size;
+	timestamp_t current;
+};
+
+template <bool GENERATE_SERIES = false>
 class RangeTimestampExecutor : public RangeExecutor {
 	using range_t = timestamp_t;
 	using increment_t = interval_t;
-	using IntRange = RangeSettings<range_t, range_t, increment_t>;
 
 public:
-	RangeTimestampExecutor() : settings(), start_data(0), end_data(0), increment_data(1) {
+	RangeTimestampExecutor() : settings(), start_data(range_t()), end_data(range_t()), increment_data(increment_t()) {
 	}
 	virtual ~RangeTimestampExecutor() {
 	}
@@ -38,34 +48,77 @@ public:
 	idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written) {
 		auto &settings = GetCurrentSettings(input);
 		auto &increment = settings.increment;
-		auto &start = settings.start;
 
 		auto remaining = GetRemaining(settings, total_written);
 
-		range_t current_value = start + increment * range_idx;
-		int64_t current_value_i64;
-		if (!Hugeint::TryCast<int64_t>(current_value, current_value_i64)) {
-			throw InvalidInputException("Range value exceeds the capacity of BIGINT");
-		}
-		auto increment_i64 = Hugeint::Cast<int64_t>(increment);
-		if (remaining == STANDARD_VECTOR_SIZE) {
-			// We can write a sequence vector to be efficient, the entire output is populated by one range
-			output.data[0].Sequence(current_value_i64, Hugeint::Cast<int64_t>(increment), remaining);
-		} else {
-			// FIXME: might be faster to also return a sequence vector and just return HAVE MORE OUTPUT?
-			UnifiedVectorFormat output_data;
-			output.data[0].ToUnifiedFormat(remaining, output_data);
-			auto result_data = (int64_t *)(output_data.data);
-			for (idx_t i = 0; i < remaining; i++) {
-				auto idx = output_data.sel->get_index(i + total_written);
-				result_data[idx] = current_value_i64 + (increment_i64 * i);
-			}
+		auto data = FlatVector::GetData<timestamp_t>(output.data[0]);
+		auto current = settings.current;
+		for (idx_t i = 0; i < remaining; i++) {
+			data[i] = current;
+			current =
+				AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, increment);
 		}
 		return remaining;
 	}
 
 private:
-	IntRange &GetCurrentSettings(DataChunk &chunk) {
+	void VerifySettings(TimeRange &settings) {
+		// Infinities either cause errors or infinite loops, so just ban them
+		if (!Timestamp::IsFinite(settings.start) || !Timestamp::IsFinite(settings.end)) {
+			throw BinderException("RANGE with infinite bounds is not supported");
+		}
+
+		if (settings.increment.months == 0 && settings.increment.days == 0 && settings.increment.micros == 0) {
+			throw BinderException("interval cannot be 0!");
+		}
+		// all elements should point in the same direction
+		if (settings.increment.months > 0 || settings.increment.days > 0 || settings.increment.micros > 0) {
+			if (settings.increment.months < 0 || settings.increment.days < 0 || settings.increment.micros < 0) {
+				throw BinderException("RANGE with composite interval that has mixed signs is not supported");
+			}
+			settings.greater_than_check = true;
+			if (settings.start > settings.end) {
+				throw BinderException(
+					"start is bigger than end, but increment is positive: cannot generate infinite series");
+			}
+		} else {
+			settings.greater_than_check = false;
+			if (settings.start < settings.end) {
+				throw BinderException(
+					"start is smaller than end, but increment is negative: cannot generate infinite series");
+			}
+		}
+	}
+
+	template <bool GREATER_THAN>
+	inline bool Finished(const timestamp_t &current_value, const timestamp_t &end) const {
+		if (GREATER_THAN) {
+			if (GENERATE_SERIES) {
+				return current_value > end;
+			} else {
+				return current_value >= end;
+			}
+		} else {
+			if (!GENERATE_SERIES) {
+				return current_value < end;
+			} else {
+				return current_value <= end;
+			}
+		}
+	}
+
+	template <bool GREATER_THAN>
+	idx_t GetRangeSize(const TimeRange &settings) const {
+		timestamp_t current = settings.start;
+		idx_t size = 0;
+		for (; !size || !Finished<GREATER_THAN>(current, settings.end); size++) {
+			current =
+				AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, settings.increment);
+		}
+		return size;
+	}
+
+	TimeRange &GetCurrentSettings(DataChunk &chunk) {
 		if (input_idx == 0) {
 			// Initialize the vector formats for the entire chunk
 			if (chunk.ColumnCount() == 1) {
@@ -86,21 +139,27 @@ private:
 			settings.start = start_data.Get(input_idx);
 			settings.end = end_data.Get(input_idx);
 			settings.increment = increment_data.Get(input_idx);
+			settings.current = settings.start;
 
-			int64_t offset = settings.increment < 0 ? 1 : -1;
-			settings.size = Hugeint::Cast<idx_t>((settings.end + (settings.increment + offset)) / settings.increment);
+			VerifySettings(settings);
+
+			if (settings.greater_than_check) {
+				settings.size = GetRangeSize<true>(settings);
+			} else {
+				settings.size = GetRangeSize<false>(settings);
+			}
 		}
 		return settings;
 	}
 
-	idx_t GetRemaining(const IntRange &settings, idx_t written_tuples) {
+	idx_t GetRemaining(const TimeRange &settings, idx_t written_tuples) {
 		D_ASSERT(range_idx < settings.size);
 		D_ASSERT(STANDARD_VECTOR_SIZE > written_tuples);
 		return MinValue<idx_t>(settings.size - range_idx, STANDARD_VECTOR_SIZE - written_tuples);
 	}
 
 private:
-	IntRange settings;
+	TimeRange settings;
 	SettingContainer<range_t> start_data;
 	SettingContainer<range_t> end_data;
 	SettingContainer<increment_t> increment_data;
