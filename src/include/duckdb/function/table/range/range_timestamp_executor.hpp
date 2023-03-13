@@ -55,8 +55,7 @@ public:
 		auto current = settings.current;
 		for (idx_t i = 0; i < remaining; i++) {
 			data[i] = current;
-			current =
-				AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, increment);
+			current = AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, increment);
 		}
 		return remaining;
 	}
@@ -79,13 +78,13 @@ private:
 			settings.greater_than_check = true;
 			if (settings.start > settings.end) {
 				throw BinderException(
-					"start is bigger than end, but increment is positive: cannot generate infinite series");
+				    "start is bigger than end, but increment is positive: cannot generate infinite series");
 			}
 		} else {
 			settings.greater_than_check = false;
 			if (settings.start < settings.end) {
 				throw BinderException(
-					"start is smaller than end, but increment is negative: cannot generate infinite series");
+				    "start is smaller than end, but increment is negative: cannot generate infinite series");
 			}
 		}
 	}
@@ -112,8 +111,7 @@ private:
 		timestamp_t current = settings.start;
 		idx_t size = 0;
 		for (; !size || !Finished<GREATER_THAN>(current, settings.end); size++) {
-			current =
-				AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, settings.increment);
+			current = AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, settings.increment);
 		}
 		return size;
 	}

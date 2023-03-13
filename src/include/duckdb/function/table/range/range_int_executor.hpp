@@ -69,9 +69,11 @@ private:
 			throw BinderException("interval cannot be 0!");
 		}
 		if (settings.start > settings.end && settings.increment > 0) {
-			throw BinderException("start is bigger than end, but increment is positive: cannot generate infinite series");
+			throw BinderException(
+			    "start is bigger than end, but increment is positive: cannot generate infinite series");
 		} else if (settings.start < settings.end && settings.increment < 0) {
-			throw BinderException("start is smaller than end, but increment is negative: cannot generate infinite series");
+			throw BinderException(
+			    "start is smaller than end, but increment is negative: cannot generate infinite series");
 		}
 	}
 

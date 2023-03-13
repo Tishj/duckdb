@@ -190,6 +190,18 @@ unique_ptr<LogicalOperator> Binder::BindTableFunction(TableFunction &function, v
 	                                 nullptr);
 }
 
+static bool CanCastFromType(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::ANY:
+	case LogicalTypeId::TABLE:
+	case LogicalTypeId::POINTER:
+	case LogicalTypeId::LIST:
+		return false;
+	default:
+		return true;
+	}
+}
+
 unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	QueryErrorContext error_context(root_statement, ref.query_location);
 
@@ -250,9 +262,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 
 	// cast the parameters to the type of the function
 	for (idx_t i = 0; i < arguments.size(); i++) {
-		if (table_function.arguments[i] != LogicalType::ANY && table_function.arguments[i] != LogicalType::TABLE &&
-		    table_function.arguments[i] != LogicalType::POINTER &&
-		    table_function.arguments[i].id() != LogicalTypeId::LIST) {
+		if (CanCastFromType(table_function.arguments[i])) {
 			parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
 		}
 	}
