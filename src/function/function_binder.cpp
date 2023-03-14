@@ -65,6 +65,19 @@ int64_t FunctionBinder::BindFunctionCost(const SimpleFunction &func, const vecto
 }
 
 template <class T>
+bool ExcludeCandidate(const T &function, bool only_consider_table_in_out) {
+	return false;
+}
+
+template <>
+bool ExcludeCandidate(const TableFunction &function, bool only_consider_table_in_out) {
+	if (!only_consider_table_in_out) {
+		return true;
+	}
+	return function.in_out_function == nullptr;
+}
+
+template <class T>
 vector<idx_t> FunctionBinder::BindFunctionsFromArguments(const string &name, FunctionSet<T> &functions,
                                                          const vector<LogicalType> &arguments, string &error) {
 	idx_t best_function = DConstants::INVALID_INDEX;
@@ -72,6 +85,9 @@ vector<idx_t> FunctionBinder::BindFunctionsFromArguments(const string &name, Fun
 	vector<idx_t> candidate_functions;
 	for (idx_t f_idx = 0; f_idx < functions.functions.size(); f_idx++) {
 		auto &func = functions.functions[f_idx];
+		if (ExcludeCandidate(func, only_consider_table_in_out)) {
+			continue;
+		}
 		// check the arguments of the function
 		int64_t cost = BindFunctionCost(func, arguments);
 		if (cost < 0) {

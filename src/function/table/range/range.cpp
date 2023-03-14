@@ -90,15 +90,27 @@ static unique_ptr<GlobalTableFunctionState> RangeFunctionInit(ClientContext &con
 }
 
 template <bool GENERATE_SERIES>
-static unique_ptr<FunctionData> RangeFunctionBind(ClientContext &context, TableFunctionBindInput &input,
-                                                  vector<LogicalType> &return_types, vector<string> &names) {
+static unique_ptr<FunctionData> RangeFunctionBindInternal(LogicalType return_type, vector<LogicalType> &return_types,
+                                                          vector<string> &names) {
 	if (!GENERATE_SERIES) {
 		names.emplace_back("range");
 	} else {
 		names.emplace_back("generate_series");
 	}
-	return_types.emplace_back(LogicalType::BIGINT);
+	return_types.emplace_back(return_type);
 	return make_unique<TableFunctionData>();
+}
+
+template <bool GENERATE_SERIES>
+static unique_ptr<FunctionData> RangeIntFunctionBind(ClientContext &context, TableFunctionBindInput &input,
+                                                     vector<LogicalType> &return_types, vector<string> &names) {
+	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::BIGINT, return_types, names);
+}
+
+template <bool GENERATE_SERIES>
+static unique_ptr<FunctionData> RangeTimestampFunctionBind(ClientContext &context, TableFunctionBindInput &input,
+                                                           vector<LogicalType> &return_types, vector<string> &names) {
+	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::TIMESTAMP, return_types, names);
 }
 
 static OperatorResultType RangeFunction(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,
@@ -125,9 +137,24 @@ static OperatorResultType RangeFunction(ExecutionContext &context, TableFunction
 } // namespace range
 
 void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
-	TableFunction range_function({LogicalType::TABLE}, nullptr, range::RangeFunctionBind<false>,
+
+	// range(BIGINT);
+	TableFunction range_function({LogicalType::BIGINT}, nullptr, range::RangeIntFunctionBind<false>,
 	                             range::RangeFunctionInit);
 	range_function.in_out_function = range::RangeFunction;
+	set.AddFunction(range_function);
+
+	// range(BIGINT, BIGINT, BIGINT);
+	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
+	set.AddFunction(range_function);
+
+	// range(BIGINT, BIGINT, BIGINT);
+	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
+	set.AddFunction(range_function);
+
+	// range(TIMESTAMP, TIMESTAMP, INTERVAL);
+	range_function.arguments = {LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL};
+	range_function.bind = range::RangeTimestampFunctionBind<false>;
 	set.AddFunction(range_function);
 }
 

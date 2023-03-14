@@ -61,7 +61,8 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 		return BindTableInTableOutFunction(expressions, subquery, error);
 	}
 	bool seen_subquery = false;
-	for (auto &child : expressions) {
+	for (idx_t param_idx = 0; param_idx < expressions.size(); param_idx++) {
+		auto &child = expressions[param_idx];
 		string parameter_name;
 
 		// hack to make named parameters work
@@ -83,11 +84,37 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 			}
 			auto binder = Binder::CreateBinder(this->context, this, true);
 			auto &se = (SubqueryExpression &)*child;
-			auto node = binder->BindNode(*se.subquery->node);
+
+			unique_ptr<QueryNode> subquery_node;
+			if (param_idx + 1 < expressions.size()) {
+				// Subquery is not the only parameter, bundle the other parameters into the subquery
+				auto &select_list = se.subquery->node->GetSelectList();
+				vector<unique_ptr<ParsedExpression>> child_expressions;
+				for (idx_t i = 0; i < select_list.size(); i++) {
+					child_expressions.push_back(select_list[i]->Copy());
+				}
+				for (idx_t i = param_idx + 1; i < expressions.size(); i++) {
+					if (expressions[i]->type == ExpressionType::SUBQUERY) {
+						error = "Table function can have at most one subquery parameter ";
+						return false;
+					}
+					child_expressions.push_back(expressions[i]->Copy());
+				}
+				// FIXME: the original subquery isn't guaranteed to be a SELECT?
+				auto select_node = make_unique<SelectNode>();
+				select_node->select_list = std::move(child_expressions);
+				// FIXME: the original subquery isn't guaranteed to be without a FROM table
+				select_node->from_table = make_unique<EmptyTableRef>();
+				subquery_node = std::move(select_node);
+			}
+
+			auto node = subquery_node ? binder->BindNode(*subquery_node) : binder->BindNode(*se.subquery->node);
 			subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
 			seen_subquery = true;
-			arguments.emplace_back(LogicalTypeId::TABLE);
-			continue;
+			for (auto &column_type : subquery->subquery->types) {
+				arguments.emplace_back(column_type);
+			}
+			break;
 		}
 
 		TableFunctionBinder binder(*this, context);
@@ -251,6 +278,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 
 	// select the function based on the input parameters
 	FunctionBinder function_binder(context);
+	function_binder.only_consider_table_in_out = subquery != nullptr;
 	idx_t best_function_idx = function_binder.BindFunction(function->name, function->functions, arguments, error);
 	if (best_function_idx == DConstants::INVALID_INDEX) {
 		throw BinderException(FormatError(ref, error));
@@ -260,11 +288,17 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	// now check the named parameters
 	BindNamedParameters(table_function.named_parameters, named_parameters, error_context, table_function.name);
 
-	// cast the parameters to the type of the function
-	for (idx_t i = 0; i < arguments.size(); i++) {
-		if (CanCastFromType(table_function.arguments[i])) {
-			parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
+	if (!subquery) {
+		// cast the parameters to the type of the function
+		D_ASSERT(parameters.size() >= arguments.size());
+		for (idx_t i = 0; i < arguments.size(); i++) {
+			if (CanCastFromType(table_function.arguments[i])) {
+				parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
+			}
 		}
+	} else {
+		// We have converted all parameters to projections
+		D_ASSERT(parameters.empty());
 	}
 
 	vector<LogicalType> input_table_types;
