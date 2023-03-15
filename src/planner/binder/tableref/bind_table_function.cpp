@@ -8,6 +8,7 @@
 #include "duckdb/parser/expression/subquery_expression.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/tableref/emptytableref.hpp"
+#include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
@@ -19,48 +20,50 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/parser/expression/cast_expression.hpp"
 
 namespace duckdb {
 
 static bool IsTableInTableOutFunction(TableFunctionCatalogEntry &table_function) {
-	auto fun = table_function.functions.GetFunctionByOffset(0);
-	return table_function.functions.Size() == 1 && fun.arguments.size() == 1 &&
-	       fun.arguments[0].id() == LogicalTypeId::TABLE;
+	// If any of the functions is a table in-out function
+	for (auto &fun : table_function.functions.functions) {
+		if (fun.in_out_function) {
+			return true;
+		}
+	}
+	return false;
 }
 
-bool Binder::BindTableInTableOutFunction(vector<unique_ptr<ParsedExpression>> &expressions,
-                                         unique_ptr<BoundSubqueryRef> &subquery, string &error) {
-	auto binder = Binder::CreateBinder(this->context, this, true);
-	unique_ptr<QueryNode> subquery_node;
-	if (expressions.size() == 1 && expressions[0]->type == ExpressionType::SUBQUERY) {
-		// general case: argument is a subquery, bind it as part of the node
-		auto &se = (SubqueryExpression &)*expressions[0];
-		subquery_node = std::move(se.subquery->node);
-	} else {
-		// special case: non-subquery parameter to table-in table-out function
-		// generate a subquery and bind that (i.e. UNNEST([1,2,3]) becomes UNNEST((SELECT [1,2,3]))
-		auto select_node = make_unique<SelectNode>();
-		select_node->select_list = std::move(expressions);
-		select_node->from_table = make_unique<EmptyTableRef>();
-		subquery_node = std::move(select_node);
-	}
-	auto node = binder->BindNode(*subquery_node);
-	subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
-	MoveCorrelatedExpressions(*subquery->binder);
-	return true;
-}
+// bool Binder::BindTableInTableOutFunction(vector<unique_ptr<ParsedExpression>> &expressions,
+//                                          unique_ptr<BoundSubqueryRef> &subquery, string &error) {
+//	auto binder = Binder::CreateBinder(this->context, this, true);
+//	unique_ptr<QueryNode> subquery_node;
+//	if (expressions.size() == 1 && expressions[0]->type == ExpressionType::SUBQUERY) {
+//		// general case: argument is a subquery, bind it as part of the node
+//		auto &se = (SubqueryExpression &)*expressions[0];
+//		subquery_node = std::move(se.subquery->node);
+//	} else {
+//		// special case: non-subquery parameter to table-in table-out function
+//		// generate a subquery and bind that (i.e. UNNEST([1,2,3]) becomes UNNEST((SELECT [1,2,3]))
+//		auto select_node = make_unique<SelectNode>();
+//		select_node->select_list = std::move(expressions);
+//		select_node->from_table = make_unique<EmptyTableRef>();
+//		subquery_node = std::move(select_node);
+//	}
+//	auto node = binder->BindNode(*subquery_node);
+//	subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
+//	MoveCorrelatedExpressions(*subquery->binder);
+//	return true;
+// }
 
 bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_function,
                                          vector<unique_ptr<ParsedExpression>> &expressions,
                                          vector<LogicalType> &arguments, vector<Value> &parameters,
                                          named_parameter_map_t &named_parameters,
-                                         unique_ptr<BoundSubqueryRef> &subquery, string &error) {
-	if (IsTableInTableOutFunction(table_function)) {
-		// special case binding for table-in table-out function
-		arguments.emplace_back(LogicalTypeId::TABLE);
-		return BindTableInTableOutFunction(expressions, subquery, error);
-	}
-	bool seen_subquery = false;
+                                         unique_ptr<BoundSubqueryRef> &subquery,
+                                         unique_ptr<QueryNode> &unbound_query_node, string &error) {
+	bool is_table_in_out = IsTableInTableOutFunction(table_function);
+	unique_ptr<ParsedExpression> subquery_expression;
 	for (idx_t param_idx = 0; param_idx < expressions.size(); param_idx++) {
 		auto &child = expressions[param_idx];
 		string parameter_name;
@@ -78,43 +81,17 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 			}
 		}
 		if (child->type == ExpressionType::SUBQUERY) {
-			if (seen_subquery) {
+			if (!is_table_in_out) {
+				error = "This table function is not a table in-out function, it can't take a subquery";
+				return false;
+			}
+			if (subquery) {
 				error = "Table function can have at most one subquery parameter ";
 				return false;
 			}
-			auto binder = Binder::CreateBinder(this->context, this, true);
-			auto &se = (SubqueryExpression &)*child;
-
-			unique_ptr<QueryNode> subquery_node;
-			if (param_idx + 1 < expressions.size()) {
-				// Subquery is not the only parameter, bundle the other parameters into the subquery
-				auto &select_list = se.subquery->node->GetSelectList();
-				vector<unique_ptr<ParsedExpression>> child_expressions;
-				for (idx_t i = 0; i < select_list.size(); i++) {
-					child_expressions.push_back(select_list[i]->Copy());
-				}
-				for (idx_t i = param_idx + 1; i < expressions.size(); i++) {
-					if (expressions[i]->type == ExpressionType::SUBQUERY) {
-						error = "Table function can have at most one subquery parameter ";
-						return false;
-					}
-					child_expressions.push_back(expressions[i]->Copy());
-				}
-				// FIXME: the original subquery isn't guaranteed to be a SELECT?
-				auto select_node = make_unique<SelectNode>();
-				select_node->select_list = std::move(child_expressions);
-				// FIXME: the original subquery isn't guaranteed to be without a FROM table
-				select_node->from_table = make_unique<EmptyTableRef>();
-				subquery_node = std::move(select_node);
-			}
-
-			auto node = subquery_node ? binder->BindNode(*subquery_node) : binder->BindNode(*se.subquery->node);
-			subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
-			seen_subquery = true;
-			for (auto &column_type : subquery->subquery->types) {
-				arguments.emplace_back(column_type);
-			}
-			break;
+			subquery_expression = std::move(child);
+			child = nullptr;
+			continue;
 		}
 
 		TableFunctionBinder binder(*this, context);
@@ -138,6 +115,50 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 			parameters.emplace_back(std::move(constant));
 		} else {
 			named_parameters[parameter_name] = std::move(constant);
+		}
+	}
+
+	if (subquery_expression) {
+		auto binder = Binder::CreateBinder(this->context, this, true);
+		auto &se = (SubqueryExpression &)*subquery_expression;
+		unique_ptr<BoundQueryNode> node;
+		if (expressions.size() > 1) {
+			// There are other expressions, bundle them together with the existing subquery
+			vector<unique_ptr<ParsedExpression>> child_expressions;
+			for (idx_t i = 0; i < expressions.size(); i++) {
+				auto &child = expressions[i];
+				if (!child) {
+					// this was the subquery
+					for (auto &expr : se.subquery->node->GetSelectList()) {
+						child_expressions.push_back(expr->Copy());
+					}
+				} else {
+					child_expressions.push_back(std::move(child));
+				}
+			}
+			// FIXME: the original subquery isn't guaranteed to be a SELECT statement
+			auto select_node = make_unique<SelectNode>();
+			select_node->select_list = std::move(child_expressions);
+
+			auto select_statement = make_unique<SelectStatement>();
+			select_statement->node = std::move(se.subquery->node);
+			select_node->from_table = make_unique<SubqueryRef>(std::move(select_statement));
+
+			auto subquery_node = std::move(select_node);
+			unbound_query_node = select_node->Copy();
+			node = binder->BindNode(*subquery_node);
+		} else {
+			// Create a copy of the unbound subquery node, we might need it later when we need to add casts
+			unbound_query_node = se.subquery->node->Copy();
+			// Only one parameter - the subquery, just bind it
+			node = binder->BindNode(*se.subquery->node);
+		}
+		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
+		MoveCorrelatedExpressions(*subquery->binder);
+		parameters.clear();
+		arguments.clear();
+		for (auto &type : subquery->subquery->types) {
+			arguments.push_back(type);
 		}
 	}
 	return true;
@@ -229,6 +250,16 @@ static bool CanCastFromType(const LogicalType &type) {
 	}
 }
 
+bool SubqueryRequiresCast(const vector<LogicalType> &function_args, const vector<LogicalType> &subquery_types) {
+	D_ASSERT(function_args.size() == subquery_types.size());
+	for (idx_t i = 0; i < function_args.size(); i++) {
+		if (function_args[i] != subquery_types[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
 unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	QueryErrorContext error_context(root_statement, ref.query_location);
 
@@ -270,9 +301,10 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	vector<Value> parameters;
 	named_parameter_map_t named_parameters;
 	unique_ptr<BoundSubqueryRef> subquery;
+	unique_ptr<QueryNode> unbound_query_node;
 	string error;
 	if (!BindTableFunctionParameters(*function, fexpr->children, arguments, parameters, named_parameters, subquery,
-	                                 error)) {
+	                                 unbound_query_node, error)) {
 		throw BinderException(FormatError(ref, error));
 	}
 
@@ -296,9 +328,31 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 				parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
 			}
 		}
-	} else {
-		// We have converted all parameters to projections
-		D_ASSERT(parameters.empty());
+	} else if (SubqueryRequiresCast(table_function.arguments, subquery->subquery->types)) {
+		// We need to rebind the subquery with cast expressions applied
+		auto &select_list = unbound_query_node->GetSelectList();
+		// All arguments are bundled into the subquery
+		D_ASSERT(select_list.size() == arguments.size());
+		vector<unique_ptr<ParsedExpression>> subquery_expressions;
+		for (idx_t i = 0; i < select_list.size(); i++) {
+			auto &source_expr = select_list[i];
+			auto &target_type = table_function.arguments[i];
+			auto cast_expression = make_unique<CastExpression>(target_type, source_expr->Copy(), false);
+			subquery_expressions.push_back(std::move(cast_expression));
+		}
+		// Rebind the subquery
+		auto binder = Binder::CreateBinder(this->context, this, true);
+		// FIXME: the original subquery isn't guaranteed to be a SELECT statement
+		auto select_node = make_unique<SelectNode>();
+		select_node->select_list = std::move(subquery_expressions);
+
+		auto select_statement = make_unique<SelectStatement>();
+		select_statement->node = std::move(unbound_query_node);
+		select_node->from_table = make_unique<SubqueryRef>(std::move(select_statement));
+
+		auto subquery_node = std::move(select_node);
+		auto node = binder->BindNode(*subquery_node);
+		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
 	}
 
 	vector<LogicalType> input_table_types;
