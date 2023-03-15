@@ -21,6 +21,7 @@
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/parser/expression/cast_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 
 namespace duckdb {
 
@@ -137,22 +138,14 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 				}
 			}
 			// FIXME: the original subquery isn't guaranteed to be a SELECT statement
-			auto select_node = make_unique<SelectNode>();
-			select_node->select_list = std::move(child_expressions);
-
-			auto select_statement = make_unique<SelectStatement>();
-			select_statement->node = std::move(se.subquery->node);
-			select_node->from_table = make_unique<SubqueryRef>(std::move(select_statement));
-
-			auto subquery_node = std::move(select_node);
-			unbound_query_node = select_node->Copy();
-			node = binder->BindNode(*subquery_node);
-		} else {
-			// Create a copy of the unbound subquery node, we might need it later when we need to add casts
-			unbound_query_node = se.subquery->node->Copy();
-			// Only one parameter - the subquery, just bind it
-			node = binder->BindNode(*se.subquery->node);
+			D_ASSERT(se.subquery->node->type == QueryNodeType::SELECT_NODE);
+			auto &existing_select_node = (SelectNode &)*se.subquery->node;
+			existing_select_node.select_list = std::move(child_expressions);
 		}
+		// Create a copy of the unbound subquery node, we might need it later when we need to add casts
+		unbound_query_node = se.subquery->node->Copy();
+		// Only one parameter - the subquery, just bind it
+		node = binder->BindNode(*se.subquery->node);
 		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
 		MoveCorrelatedExpressions(*subquery->binder);
 		parameters.clear();
@@ -310,7 +303,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 
 	// select the function based on the input parameters
 	FunctionBinder function_binder(context);
-	function_binder.only_consider_table_in_out = subquery != nullptr;
+	// function_binder.only_consider_table_in_out = subquery != nullptr;
 	idx_t best_function_idx = function_binder.BindFunction(function->name, function->functions, arguments, error);
 	if (best_function_idx == DConstants::INVALID_INDEX) {
 		throw BinderException(FormatError(ref, error));
@@ -330,29 +323,16 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 		}
 	} else if (SubqueryRequiresCast(table_function.arguments, subquery->subquery->types)) {
 		// We need to rebind the subquery with cast expressions applied
-		auto &select_list = unbound_query_node->GetSelectList();
+		D_ASSERT(subquery->subquery->type == QueryNodeType::SELECT_NODE);
+		auto &select_node = (BoundSelectNode &)*subquery->subquery;
+		auto &select_list = select_node.select_list;
 		// All arguments are bundled into the subquery
 		D_ASSERT(select_list.size() == arguments.size());
-		vector<unique_ptr<ParsedExpression>> subquery_expressions;
 		for (idx_t i = 0; i < select_list.size(); i++) {
 			auto &source_expr = select_list[i];
 			auto &target_type = table_function.arguments[i];
-			auto cast_expression = make_unique<CastExpression>(target_type, source_expr->Copy(), false);
-			subquery_expressions.push_back(std::move(cast_expression));
+			source_expr = BoundCastExpression::AddCastToType(context, std::move(source_expr), target_type, false);
 		}
-		// Rebind the subquery
-		auto binder = Binder::CreateBinder(this->context, this, true);
-		// FIXME: the original subquery isn't guaranteed to be a SELECT statement
-		auto select_node = make_unique<SelectNode>();
-		select_node->select_list = std::move(subquery_expressions);
-
-		auto select_statement = make_unique<SelectStatement>();
-		select_statement->node = std::move(unbound_query_node);
-		select_node->from_table = make_unique<SubqueryRef>(std::move(select_statement));
-
-		auto subquery_node = std::move(select_node);
-		auto node = binder->BindNode(*subquery_node);
-		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
 	}
 
 	vector<LogicalType> input_table_types;

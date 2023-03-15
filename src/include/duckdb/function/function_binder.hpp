@@ -22,8 +22,6 @@ public:
 	DUCKDB_API explicit FunctionBinder(ClientContext &context);
 
 	ClientContext &context;
-	// Whether or not only table_in-out functions should be considered
-	bool only_consider_table_in_out;
 
 public:
 	//! Bind a scalar function from the set of functions and input arguments. Returns the index of the chosen function,
