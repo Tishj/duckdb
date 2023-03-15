@@ -23,7 +23,8 @@ public:
 		if (written_tuples == 0) {
 			return OperatorResultType::HAVE_MORE_OUTPUT;
 		}
-		if (range_idx + written_tuples == settings.size) {
+		range_idx += written_tuples;
+		if (range_idx == settings.size) {
 			input_idx++;
 			range_idx = 0;
 		}

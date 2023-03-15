@@ -123,9 +123,10 @@ static OperatorResultType RangeFunction(ExecutionContext &context, TableFunction
 	OperatorResultType result;
 
 	// Either we reach the end of the input chunk, or we have written an entire chunk of output
-	while ((result = executor.Update(written_tuples, input.size())) != OperatorResultType::NEED_MORE_INPUT &&
-	       total_written_tuples < STANDARD_VECTOR_SIZE) {
-
+	while ((result = executor.Update(written_tuples, input.size())) != OperatorResultType::NEED_MORE_INPUT) {
+		if (total_written_tuples == STANDARD_VECTOR_SIZE) {
+			break;
+		}
 		written_tuples = executor.Execute(context, input, output, total_written_tuples);
 		total_written_tuples += written_tuples;
 	}
