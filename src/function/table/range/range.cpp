@@ -138,24 +138,24 @@ static OperatorResultType RangeFunction(ExecutionContext &context, TableFunction
 
 void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
 
-	//// range(BIGINT);
-	// TableFunction range_function({LogicalType::BIGINT}, nullptr, range::RangeIntFunctionBind<false>,
-	//                              range::RangeFunctionInit);
-	// range_function.in_out_function = range::RangeFunction;
-	// set.AddFunction(range_function);
+	// range(BIGINT);
+	TableFunction range_function({LogicalType::BIGINT}, nullptr, range::RangeIntFunctionBind<false>,
+	                             range::RangeFunctionInit);
+	range_function.in_out_function = range::RangeFunction;
+	set.AddFunction(range_function);
 
-	//// range(BIGINT, BIGINT, BIGINT);
-	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
-	// set.AddFunction(range_function);
+	// range(BIGINT, BIGINT, BIGINT);
+	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
+	set.AddFunction(range_function);
 
-	//// range(BIGINT, BIGINT, BIGINT);
-	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
-	// set.AddFunction(range_function);
+	// range(BIGINT, BIGINT, BIGINT);
+	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
+	set.AddFunction(range_function);
 
-	//// range(TIMESTAMP, TIMESTAMP, INTERVAL);
-	// range_function.arguments = {LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL};
-	// range_function.bind = range::RangeTimestampFunctionBind<false>;
-	// set.AddFunction(range_function);
+	// range(TIMESTAMP, TIMESTAMP, INTERVAL);
+	range_function.arguments = {LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL};
+	range_function.bind = range::RangeTimestampFunctionBind<false>;
+	set.AddFunction(range_function);
 }
 
 } // namespace duckdb

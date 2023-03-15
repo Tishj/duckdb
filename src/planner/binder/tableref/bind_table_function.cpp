@@ -97,7 +97,8 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 
 		TableFunctionBinder binder(*this, context);
 		LogicalType sql_type;
-		auto expr = binder.Bind(child, &sql_type);
+		auto copied_expr = child->Copy();
+		auto expr = binder.Bind(copied_expr, &sql_type);
 		if (expr->HasParameter()) {
 			throw ParameterNotResolvedException();
 		}
@@ -321,7 +322,22 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 				parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
 			}
 		}
-	} else if (SubqueryRequiresCast(table_function.arguments, subquery->subquery->types)) {
+	}
+
+	if (table_function.in_out_function && !subquery) {
+		// The selected function needs to take a subquery, so we need to bundle all the expressions
+		// into a subquery
+		// We do this
+		auto binder = Binder::CreateBinder(this->context, this, true);
+		auto select_node = make_unique<SelectNode>();
+		select_node->select_list = std::move(fexpr->children);
+		select_node->from_table = make_unique<EmptyTableRef>();
+		auto node = binder->BindNode(*select_node);
+		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
+		MoveCorrelatedExpressions(*subquery->binder);
+	}
+
+	if (subquery && SubqueryRequiresCast(table_function.arguments, subquery->subquery->types)) {
 		// We need to rebind the subquery with cast expressions applied
 		D_ASSERT(subquery->subquery->type == QueryNodeType::SELECT_NODE);
 		auto &select_node = (BoundSelectNode &)*subquery->subquery;

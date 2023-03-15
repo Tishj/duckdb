@@ -239,20 +239,18 @@ void RangeTableFunction::RegisterFunction(BuiltinFunctions &set) {
 	TableFunctionSet range("range");
 
 	TableFunction range_function({LogicalType::BIGINT}, RangeFunction, RangeFunctionBind<false>, RangeFunctionInit);
-	range_function.cardinality = RangeCardinality;
+	// range_function.cardinality = RangeCardinality;
 
-	range.AddFunction(range_function);
-
-	// single argument range: (end) - implicit start = 0 and increment = 1
-	range.AddFunction(range_function);
-	// two arguments range: (start, end) - implicit increment = 1
-	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
-	range.AddFunction(range_function);
-	// three arguments range: (start, end, increment)
-	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
-	range.AddFunction(range_function);
-	range.AddFunction(TableFunction({LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL},
-	                                RangeDateTimeFunction, RangeDateTimeBind<false>, RangeDateTimeInit));
+	//// single argument range: (end) - implicit start = 0 and increment = 1
+	// range.AddFunction(range_function);
+	//// two arguments range: (start, end) - implicit increment = 1
+	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
+	// range.AddFunction(range_function);
+	//// three arguments range: (start, end, increment)
+	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
+	// range.AddFunction(range_function);
+	// range.AddFunction(TableFunction({LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL},
+	//                                 RangeDateTimeFunction, RangeDateTimeBind<false>, RangeDateTimeInit));
 	RangeInOutTableFunction::RegisterFunction(range);
 	set.AddFunction(range);
 
