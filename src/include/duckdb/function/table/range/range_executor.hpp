@@ -25,6 +25,8 @@ struct RangeSettings {
 	INCREMENT_TYPE increment;
 	//! The size of the range for the current input
 	idx_t size;
+	//! Whether the input was NULL
+	bool null;
 };
 
 template <class TYPE>
@@ -41,9 +43,13 @@ public:
 		vec.ToUnifiedFormat(count, format);
 		initialized = true;
 	}
-	TYPE Get(idx_t idx) {
+	TYPE Get(idx_t idx, bool &null) {
 		if (initialized) {
 			idx = format.sel->get_index(idx);
+			if (!format.validity.RowIsValid(idx)) {
+				null = true;
+				return default_value;
+			}
 			return ((TYPE *)format.data)[idx];
 		}
 		return default_value;
@@ -58,8 +64,10 @@ public:
 	}
 
 public:
+	virtual OperatorResultType ForwardInput(idx_t input_size) = 0;
 	virtual OperatorResultType Update(idx_t written_tuples, idx_t input_size) = 0;
-	virtual idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written) = 0;
+	virtual idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written,
+	                      bool &is_null) = 0;
 
 protected:
 	bool new_row;

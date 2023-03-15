@@ -19,15 +19,10 @@ public:
 	}
 
 public:
-	OperatorResultType Update(idx_t written_tuples, idx_t input_size) {
-		if (written_tuples == 0) {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
-		range_idx += written_tuples;
-		if (range_idx == settings.size) {
-			input_idx++;
-			range_idx = 0;
-		}
+	OperatorResultType ForwardInput(idx_t input_size) {
+		D_ASSERT(input_idx != input_size);
+		input_idx++;
+		range_idx = 0;
 		if (input_idx == input_size) {
 			input_idx = 0;
 			return OperatorResultType::NEED_MORE_INPUT;
@@ -35,8 +30,23 @@ public:
 		return OperatorResultType::HAVE_MORE_OUTPUT;
 	}
 
-	idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written) {
+	OperatorResultType Update(idx_t written_tuples, idx_t input_size) {
+		if (written_tuples == 0) {
+			return OperatorResultType::HAVE_MORE_OUTPUT;
+		}
+		range_idx += written_tuples;
+		if (range_idx != settings.size) {
+			return OperatorResultType::HAVE_MORE_OUTPUT;
+		}
+		return ForwardInput(input_size);
+	}
+
+	idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written, bool &is_null) {
 		auto &settings = GetCurrentSettings(input);
+		if (settings.null) {
+			is_null = true;
+			return 0;
+		}
 		auto &increment = settings.increment;
 		auto &start = settings.start;
 
@@ -66,6 +76,9 @@ public:
 
 private:
 	void VerifySettings(IntRange &settings) {
+		if (settings.null) {
+			return;
+		}
 		if (settings.increment == 0) {
 			throw BinderException("interval cannot be 0!");
 		}
@@ -96,11 +109,15 @@ private:
 		}
 		if (range_idx == 0) {
 			// New range starts, need to refresh the current settings
-			settings.start = start_data.Get(input_idx);
-			settings.end = end_data.Get(input_idx);
-			settings.increment = increment_data.Get(input_idx);
+			settings.null = false;
+			settings.start = start_data.Get(input_idx, settings.null);
+			settings.end = end_data.Get(input_idx, settings.null);
+			settings.increment = increment_data.Get(input_idx, settings.null);
 
 			VerifySettings(settings);
+			if (settings.null) {
+				return settings;
+			}
 
 			int64_t offset = settings.increment < 0 ? 1 : -1;
 			settings.size = Hugeint::Cast<idx_t>((settings.end + (settings.increment + offset)) / settings.increment);

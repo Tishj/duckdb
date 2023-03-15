@@ -16,6 +16,7 @@ struct TimeRange {
 	bool greater_than_check;
 	idx_t size;
 	timestamp_t current;
+	bool null;
 };
 
 template <bool GENERATE_SERIES = false>
@@ -30,14 +31,10 @@ public:
 	}
 
 public:
-	OperatorResultType Update(idx_t written_tuples, idx_t input_size) {
-		if (written_tuples == 0) {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
-		if (range_idx + written_tuples == settings.size) {
-			input_idx++;
-			range_idx = 0;
-		}
+	OperatorResultType ForwardInput(idx_t input_size) {
+		D_ASSERT(input_idx != input_size);
+		input_idx++;
+		range_idx = 0;
 		if (input_idx == input_size) {
 			input_idx = 0;
 			return OperatorResultType::NEED_MORE_INPUT;
@@ -45,7 +42,18 @@ public:
 		return OperatorResultType::HAVE_MORE_OUTPUT;
 	}
 
-	idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written) {
+	OperatorResultType Update(idx_t written_tuples, idx_t input_size) {
+		if (written_tuples == 0) {
+			return OperatorResultType::HAVE_MORE_OUTPUT;
+		}
+		range_idx += written_tuples;
+		if (range_idx != settings.size) {
+			return OperatorResultType::HAVE_MORE_OUTPUT;
+		}
+		return ForwardInput(input_size);
+	}
+
+	idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written, bool &is_null) {
 		auto &settings = GetCurrentSettings(input);
 		auto &increment = settings.increment;
 
@@ -62,6 +70,9 @@ public:
 
 private:
 	void VerifySettings(TimeRange &settings) {
+		if (settings.null) {
+			return;
+		}
 		// Infinities either cause errors or infinite loops, so just ban them
 		if (!Timestamp::IsFinite(settings.start) || !Timestamp::IsFinite(settings.end)) {
 			throw BinderException("RANGE with infinite bounds is not supported");
@@ -134,12 +145,16 @@ private:
 		}
 		if (range_idx == 0) {
 			// New range starts, need to refresh the current settings
-			settings.start = start_data.Get(input_idx);
-			settings.end = end_data.Get(input_idx);
-			settings.increment = increment_data.Get(input_idx);
+			settings.null = false;
+			settings.start = start_data.Get(input_idx, settings.null);
+			settings.end = end_data.Get(input_idx, settings.null);
+			settings.increment = increment_data.Get(input_idx, settings.null);
 			settings.current = settings.start;
 
 			VerifySettings(settings);
+			if (settings.null) {
+				return settings;
+			}
 
 			if (settings.greater_than_check) {
 				settings.size = GetRangeSize<true>(settings);
