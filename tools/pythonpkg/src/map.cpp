@@ -5,8 +5,8 @@
 
 namespace duckdb {
 
-MapFunction::MapFunction()
-    : TableFunction("python_map_function", {LogicalType::TABLE, LogicalType::POINTER}, nullptr, MapFunctionBind) {
+MapFunction::MapFunction() : TableFunction("python_map_function", {}, nullptr, MapFunctionBind) {
+	varargs = LogicalType::ANY;
 	in_out_function = MapFunctionExec;
 }
 
@@ -109,6 +109,9 @@ static string TypeVectorToString(vector<LogicalType> &types) {
 OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,
                                                 DataChunk &output) {
 	py::gil_scoped_acquire acquire;
+
+	// Last input column contains the pointer to the UDF
+	D_ASSERT(input.data.rbegin()->GetType() == LogicalType::POINTER);
 
 	if (input.size() == 0) {
 		return OperatorResultType::NEED_MORE_INPUT;

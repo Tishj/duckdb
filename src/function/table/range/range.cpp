@@ -124,7 +124,7 @@ static OperatorResultType RangeFunction(ExecutionContext &context, TableFunction
 
 	bool is_null = false;
 	// Either we reach the end of the input chunk, or we have written an entire chunk of output
-	while ((result = executor.Update(written_tuples, input.size())) != OperatorResultType::NEED_MORE_INPUT) {
+	do {
 		if (total_written_tuples == STANDARD_VECTOR_SIZE) {
 			break;
 		}
@@ -133,7 +133,7 @@ static OperatorResultType RangeFunction(ExecutionContext &context, TableFunction
 			return OperatorResultType::NEED_MORE_INPUT;
 		}
 		total_written_tuples += written_tuples;
-	}
+	} while ((result = executor.Update(written_tuples, input.size())) != OperatorResultType::NEED_MORE_INPUT);
 
 	output.SetCardinality(total_written_tuples);
 	return result;

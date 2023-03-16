@@ -245,6 +245,10 @@ static bool CanCastFromType(const LogicalType &type) {
 }
 
 bool SubqueryRequiresCast(const vector<LogicalType> &function_args, const vector<LogicalType> &subquery_types) {
+	if (function_args.empty()) {
+		// This function takes varargs, no need to cast anything
+		return false;
+	}
 	D_ASSERT(function_args.size() == subquery_types.size());
 	for (idx_t i = 0; i < function_args.size(); i++) {
 		if (function_args[i] != subquery_types[i]) {
@@ -317,7 +321,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	if (!subquery) {
 		// cast the parameters to the type of the function
 		D_ASSERT(parameters.size() >= arguments.size());
-		for (idx_t i = 0; i < arguments.size(); i++) {
+		for (idx_t i = 0; i < arguments.size() && i < table_function.arguments.size(); i++) {
 			if (CanCastFromType(table_function.arguments[i])) {
 				parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
 			}

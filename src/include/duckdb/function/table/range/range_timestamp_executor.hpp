@@ -43,9 +43,6 @@ public:
 	}
 
 	OperatorResultType Update(idx_t written_tuples, idx_t input_size) {
-		if (written_tuples == 0) {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
 		range_idx += written_tuples;
 		if (range_idx != settings.size) {
 			return OperatorResultType::HAVE_MORE_OUTPUT;
@@ -55,6 +52,10 @@ public:
 
 	idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written, bool &is_null) {
 		auto &settings = GetCurrentSettings(input);
+		if (settings.null) {
+			is_null = true;
+			return 0;
+		}
 		auto &increment = settings.increment;
 
 		auto remaining = GetRemaining(settings, total_written);
@@ -65,6 +66,7 @@ public:
 			data[i] = current;
 			current = AddOperator::Operation<timestamp_t, interval_t, timestamp_t>(current, increment);
 		}
+		settings.current = current;
 		return remaining;
 	}
 

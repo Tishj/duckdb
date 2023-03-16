@@ -31,9 +31,6 @@ public:
 	}
 
 	OperatorResultType Update(idx_t written_tuples, idx_t input_size) {
-		if (written_tuples == 0) {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
 		range_idx += written_tuples;
 		if (range_idx != settings.size) {
 			return OperatorResultType::HAVE_MORE_OUTPUT;
@@ -120,13 +117,14 @@ private:
 			}
 
 			int64_t offset = settings.increment < 0 ? 1 : -1;
-			settings.size = Hugeint::Cast<idx_t>((settings.end + (settings.increment + offset)) / settings.increment);
+			settings.size = Hugeint::Cast<idx_t>((settings.end - settings.start + (settings.increment + offset)) /
+			                                     settings.increment);
 		}
 		return settings;
 	}
 
 	idx_t GetRemaining(const IntRange &settings, idx_t written_tuples) {
-		D_ASSERT(range_idx < settings.size);
+		D_ASSERT(range_idx <= settings.size);
 		D_ASSERT(STANDARD_VECTOR_SIZE > written_tuples);
 		return MinValue<idx_t>(settings.size - range_idx, STANDARD_VECTOR_SIZE - written_tuples);
 	}
