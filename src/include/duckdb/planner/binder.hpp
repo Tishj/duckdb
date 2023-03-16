@@ -285,8 +285,7 @@ private:
 	bool BindTableFunctionParameters(TableFunctionCatalogEntry &table_function,
 	                                 vector<unique_ptr<ParsedExpression>> &expressions, vector<LogicalType> &arguments,
 	                                 vector<Value> &parameters, named_parameter_map_t &named_parameters,
-	                                 unique_ptr<BoundSubqueryRef> &subquery, unique_ptr<QueryNode> &unbound_query_node,
-	                                 string &error);
+	                                 unique_ptr<BoundSubqueryRef> &subquery, string &error);
 	// bool BindTableInTableOutFunction(vector<unique_ptr<ParsedExpression>> &expressions,
 	//                                  unique_ptr<BoundSubqueryRef> &subquery, string &error);
 	unique_ptr<LogicalOperator> BindTableFunction(TableFunction &function, vector<Value> parameters);

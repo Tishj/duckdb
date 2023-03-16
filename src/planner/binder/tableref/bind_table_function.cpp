@@ -61,8 +61,7 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
                                          vector<unique_ptr<ParsedExpression>> &expressions,
                                          vector<LogicalType> &arguments, vector<Value> &parameters,
                                          named_parameter_map_t &named_parameters,
-                                         unique_ptr<BoundSubqueryRef> &subquery,
-                                         unique_ptr<QueryNode> &unbound_query_node, string &error) {
+                                         unique_ptr<BoundSubqueryRef> &subquery, string &error) {
 	bool is_table_in_out = IsTableInTableOutFunction(table_function);
 	unique_ptr<ParsedExpression> subquery_expression;
 	for (idx_t param_idx = 0; param_idx < expressions.size(); param_idx++) {
@@ -143,8 +142,6 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 			auto &existing_select_node = (SelectNode &)*se.subquery->node;
 			existing_select_node.select_list = std::move(child_expressions);
 		}
-		// Create a copy of the unbound subquery node, we might need it later when we need to add casts
-		unbound_query_node = se.subquery->node->Copy();
 		// Only one parameter - the subquery, just bind it
 		node = binder->BindNode(*se.subquery->node);
 		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
@@ -301,7 +298,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	unique_ptr<QueryNode> unbound_query_node;
 	string error;
 	if (!BindTableFunctionParameters(*function, fexpr->children, arguments, parameters, named_parameters, subquery,
-	                                 unbound_query_node, error)) {
+	                                 error)) {
 		throw BinderException(FormatError(ref, error));
 	}
 
