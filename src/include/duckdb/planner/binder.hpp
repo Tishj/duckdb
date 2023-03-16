@@ -72,6 +72,7 @@ struct CorrelatedColumnInfo {
   all expressions.
 */
 class Binder : public std::enable_shared_from_this<Binder> {
+	friend class TableFunctionBinder;
 	friend class ExpressionBinder;
 	friend class SelectBinder;
 	friend class RecursiveSubqueryPlanner;
@@ -282,11 +283,6 @@ private:
 	                                   vector<unique_ptr<ParsedExpression>> all_columns,
 	                                   unique_ptr<ParsedExpression> &where_clause);
 
-	bool BindTableFunctionParameters(TableFunctionCatalogEntry &table_function,
-	                                 vector<unique_ptr<ParsedExpression>> &expressions, vector<LogicalType> &arguments,
-	                                 vector<Value> &parameters, named_parameter_map_t &named_parameters,
-	                                 unique_ptr<BoundSubqueryRef> &subquery, unique_ptr<QueryNode> &unbound_query_node,
-	                                 string &error);
 	// bool BindTableInTableOutFunction(vector<unique_ptr<ParsedExpression>> &expressions,
 	//                                  unique_ptr<BoundSubqueryRef> &subquery, string &error);
 	unique_ptr<LogicalOperator> BindTableFunction(TableFunction &function, vector<Value> parameters);
