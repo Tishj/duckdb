@@ -86,8 +86,12 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 	auto data_uptr = make_unique<MapFunctionData>();
 	auto &data = *data_uptr;
 	data.function = (PyObject *)input.inputs[0].GetPointer();
-	data.in_names = input.input_table_names;
-	data.in_types = input.input_table_types;
+	// Skip the POINTER column
+	idx_t user_input = input.input_table_types.size() - 1;
+	for (idx_t i = 0; i < user_input; i++) {
+		data.in_types.push_back(input.input_table_types[i]);
+		data.in_names.push_back(input.input_table_names[i]);
+	}
 
 	NumpyResultConversion conversion(data.in_types, 0);
 	auto df = FunctionCall(conversion, data.in_names, data.function);
@@ -119,9 +123,8 @@ OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, Table
 
 	auto &data = (MapFunctionData &)*data_p.bind_data;
 
-	D_ASSERT(input.GetTypes() == data.in_types);
 	NumpyResultConversion conversion(data.in_types, input.size());
-	conversion.Append(input);
+	conversion.Append(input, data.in_types.size());
 
 	auto df = FunctionCall(conversion, data.in_names, data.function);
 

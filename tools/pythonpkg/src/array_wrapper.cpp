@@ -796,11 +796,13 @@ void NumpyResultConversion::Resize(idx_t new_capacity) {
 	capacity = new_capacity;
 }
 
-void NumpyResultConversion::Append(DataChunk &chunk) {
+void NumpyResultConversion::Append(DataChunk &chunk, idx_t column_count) {
+	if (column_count == DConstants::INVALID_INDEX) {
+		column_count = chunk.ColumnCount();
+	}
 	if (count + chunk.size() > capacity) {
 		Resize(capacity * 2);
 	}
-	auto chunk_types = chunk.GetTypes();
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
 		owned_data[col_idx].Append(count, chunk.data[col_idx], chunk.size());
 	}

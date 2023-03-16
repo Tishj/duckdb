@@ -149,7 +149,6 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 		node = binder->BindNode(*se.subquery->node);
 		subquery = make_unique<BoundSubqueryRef>(std::move(binder), std::move(node));
 		MoveCorrelatedExpressions(*subquery->binder);
-		parameters.clear();
 		arguments.clear();
 		for (auto &type : subquery->subquery->types) {
 			arguments.push_back(type);
