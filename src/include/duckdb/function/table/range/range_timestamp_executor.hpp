@@ -111,7 +111,7 @@ private:
 				return current_value >= end;
 			}
 		} else {
-			if (!GENERATE_SERIES) {
+			if (GENERATE_SERIES) {
 				return current_value < end;
 			} else {
 				return current_value <= end;
