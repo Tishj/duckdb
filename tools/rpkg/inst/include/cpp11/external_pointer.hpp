@@ -62,7 +62,7 @@ public:
 	}
 
 	external_pointer(pointer p, bool use_deleter = true, bool finalize_on_exit = true, SEXP prot = R_NilValue)
-	    : data_(safe[R_MakeExternalPtr]((void *)p, R_NilValue, prot)) {
+		: data_(safe[R_MakeExternalPtr]((void *)p, R_NilValue, prot)) {
 		if (use_deleter) {
 			R_RegisterCFinalizerEx(data_, r_deleter, static_cast<r_bool>(finalize_on_exit));
 		}
@@ -72,12 +72,14 @@ public:
 		data_ = safe[Rf_shallow_duplicate](rhs.data_);
 	}
 
-	external_pointer(external_pointer &&rhs) {
-		reset(rhs.release());
+	external_pointer(external_pointer&& rhs) {
+		data_ = rhs.data_;
+		rhs.data_ = R_NilValue;
 	}
 
-	external_pointer &operator=(external_pointer &&rhs) noexcept {
-		reset(rhs.release());
+	external_pointer& operator=(external_pointer&& rhs) noexcept {
+		data_ = rhs.data_;
+		rhs.data_ = R_NilValue;
 	}
 
 	external_pointer &operator=(std::nullptr_t) noexcept {
