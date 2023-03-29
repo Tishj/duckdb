@@ -4,13 +4,14 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/function/cast/bound_cast_data.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
 template <class T>
 bool StringEnumCastLoop(string_t *source_data, ValidityMask &source_mask, const LogicalType &source_type,
                         T *result_data, ValidityMask &result_mask, const LogicalType &result_type, idx_t count,
-                        string *error_message, const SelectionVector *sel) {
+                        string *error_message, const SelectionVector *sel, bool is_select) {
 	bool all_converted = true;
 	for (idx_t i = 0; i < count; i++) {
 		idx_t source_idx = i;
@@ -20,9 +21,12 @@ bool StringEnumCastLoop(string_t *source_data, ValidityMask &source_mask, const 
 		if (source_mask.RowIsValid(source_idx)) {
 			auto pos = EnumType::GetPos(result_type, source_data[source_idx]);
 			if (pos == -1) {
-				result_data[i] =
-				    HandleVectorCastError::Operation<T>(CastExceptionText<string_t, T>(source_data[source_idx]),
-				                                        result_mask, i, error_message, all_converted);
+				if (is_select) {
+					// Use the max of the internal ENUM value to indicate invalid
+					result_data[i] = (T)-1;
+				} else {
+					result_data[i] = HandleVectorCastError::Operation<T>(CastExceptionText<string_t, T>(source_data[source_idx]), result_mask, i, error_message, all_converted);
+				}
 			} else {
 				result_data[i] = pos;
 			}
@@ -33,8 +37,32 @@ bool StringEnumCastLoop(string_t *source_data, ValidityMask &source_mask, const 
 	return all_converted;
 }
 
+struct ToEnumCastData : public BoundCastData {
+public:
+	ToEnumCastData(bool in_select) : in_select(in_select) {}
+	//! Whether the cast is being performed in a select or not
+	bool in_select;
+public:
+	unique_ptr<BoundCastData> Copy() const override {
+		return make_unique<ToEnumCastData>(in_select);
+	}
+public:
+	static unique_ptr<BoundCastData> Bind(const BindCastInput &input) {
+		if (!input.context) {
+			//FIXME: when we don't have a context, we can't determine this
+			return make_unique<ToEnumCastData>(false);
+		}
+		auto& context = *input.context;
+		auto& current_statement = context.GetCurrentStatement();
+		bool in_select = current_statement.type == StatementType::SELECT_STATEMENT;
+		return make_unique<ToEnumCastData>(in_select);
+	}
+};
+
 template <class T>
 bool StringEnumCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
+	auto& bind_data = (ToEnumCastData&)*parameters.cast_data;
+
 	D_ASSERT(source.GetType().id() == LogicalTypeId::VARCHAR);
 	auto enum_name = EnumType::GetTypeName(result.GetType());
 	switch (source.GetVectorType()) {
@@ -47,7 +75,7 @@ bool StringEnumCast(Vector &source, Vector &result, idx_t count, CastParameters 
 		auto &result_mask = ConstantVector::Validity(result);
 
 		return StringEnumCastLoop(source_data, source_mask, source.GetType(), result_data, result_mask,
-		                          result.GetType(), 1, parameters.error_message, nullptr);
+		                          result.GetType(), 1, parameters.error_message, nullptr, bind_data.in_select);
 	}
 	default: {
 		UnifiedVectorFormat vdata;
@@ -62,7 +90,7 @@ bool StringEnumCast(Vector &source, Vector &result, idx_t count, CastParameters 
 		auto &result_mask = FlatVector::Validity(result);
 
 		return StringEnumCastLoop(source_data, source_mask, source.GetType(), result_data, result_mask,
-		                          result.GetType(), count, parameters.error_message, source_sel);
+		                          result.GetType(), count, parameters.error_message, source_sel, bind_data.in_select);
 	}
 	}
 }
@@ -74,11 +102,11 @@ static BoundCastInfo VectorStringCastNumericSwitch(BindCastInput &input, const L
 	case LogicalTypeId::ENUM: {
 		switch (target.InternalType()) {
 		case PhysicalType::UINT8:
-			return StringEnumCast<uint8_t>;
+			return BoundCastInfo(StringEnumCast<uint8_t>, ToEnumCastData::Bind(input));
 		case PhysicalType::UINT16:
-			return StringEnumCast<uint16_t>;
+			return BoundCastInfo(StringEnumCast<uint16_t>, ToEnumCastData::Bind(input));
 		case PhysicalType::UINT32:
-			return StringEnumCast<uint32_t>;
+			return BoundCastInfo(StringEnumCast<uint32_t>, ToEnumCastData::Bind(input));
 		default:
 			throw InternalException("ENUM can only have unsigned integers (except UINT64) as physical types");
 		}

@@ -25,13 +25,13 @@ public:
 	operator bool() const {
 		return ptr;
 	}
-	T &operator*() {
+	T &operator*() const {
 		if (!ptr) {
 			throw InternalException("Attempting to dereference an optional pointer that is not set");
 		}
 		return *ptr;
 	}
-	T *operator->() {
+	T *operator->() const {
 		if (!ptr) {
 			throw InternalException("Attempting to call a method on an optional pointer that is not set");
 		}

@@ -1459,11 +1459,13 @@ const string &EnumType::GetTypeName(const LogicalType &type) {
 }
 
 static PhysicalType EnumVectorDictType(idx_t size) {
-	if (size <= NumericLimits<uint8_t>::Maximum()) {
+	// Note: we explicitly leave the maximum value empty, to be able to represent the "invalid" type
+	// used for comparisons
+	if (size < NumericLimits<uint8_t>::Maximum()) {
 		return PhysicalType::UINT8;
-	} else if (size <= NumericLimits<uint16_t>::Maximum()) {
+	} else if (size < NumericLimits<uint16_t>::Maximum()) {
 		return PhysicalType::UINT16;
-	} else if (size <= NumericLimits<uint32_t>::Maximum()) {
+	} else if (size < NumericLimits<uint32_t>::Maximum()) {
 		return PhysicalType::UINT32;
 	} else {
 		throw InternalException("Enum size must be lower than " + std::to_string(NumericLimits<uint32_t>::Maximum()));

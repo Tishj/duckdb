@@ -242,6 +242,11 @@ const string &ClientContext::GetCurrentQuery() {
 	return active_query->query;
 }
 
+SQLStatement &ClientContext::GetCurrentStatement() {
+	D_ASSERT(current_statement);
+	return *current_statement;
+}
+
 unique_ptr<QueryResult> ClientContext::FetchResultInternal(ClientContextLock &lock, PendingQueryResult &pending) {
 	D_ASSERT(active_query);
 	D_ASSERT(active_query->open_result == &pending);
@@ -323,8 +328,10 @@ shared_ptr<PreparedStatementData> ClientContext::CreatePreparedStatement(ClientC
 			planner.parameter_data.emplace_back(value);
 		}
 	}
+	this->current_statement = statement->Copy();
 	planner.CreatePlan(std::move(statement));
 	D_ASSERT(planner.plan || !planner.properties.bound_all_parameters);
+	this->current_statement = nullptr;
 	profiler.EndPhase();
 
 	auto plan = std::move(planner.plan);

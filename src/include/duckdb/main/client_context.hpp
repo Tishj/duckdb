@@ -182,6 +182,8 @@ public:
 
 	//! Returns the current query string (if any)
 	const string &GetCurrentQuery();
+	//! Returns the current statement
+	SQLStatement &GetCurrentStatement();
 
 	//! Fetch a list of table names that are required for a given query
 	DUCKDB_API unordered_set<string> GetTableNames(const string &query);
@@ -258,6 +260,8 @@ private:
 	mutex context_lock;
 	//! The currently active query context
 	unique_ptr<ActiveQueryContext> active_query;
+	//! The statement that is currently being planned
+	unique_ptr<SQLStatement> current_statement;
 	//! The current query progress
 	atomic<double> query_progress;
 };
