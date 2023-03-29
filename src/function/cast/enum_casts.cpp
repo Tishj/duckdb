@@ -9,27 +9,30 @@ namespace duckdb {
 
 struct EnumEnumBindData : public BoundCastData {
 public:
-	EnumEnumBindData(bool in_select) : in_select(in_select) {}
+	EnumEnumBindData(bool in_select) : in_select(in_select) {
+	}
 	//! Whether the cast is being performed in a select or not
 	bool in_select;
+
 public:
 	unique_ptr<BoundCastData> Copy() const override {
 		return make_unique<EnumEnumBindData>(in_select);
 	}
+
 public:
 	static unique_ptr<BoundCastData> Bind(const BindCastInput &input) {
 		if (!input.context) {
-			//When we don't have a context, we can't do an INSERT, so it's safe to assume this is not an insert
+			// When we don't have a context, we can't do an INSERT, so it's safe to assume this is not an insert
 			return make_unique<EnumEnumBindData>(true);
 		}
-		auto& context = *input.context;
+		auto &context = *input.context;
 		auto current_statement = context.GetCurrentStatement();
 		if (!current_statement) {
 			return make_unique<EnumEnumBindData>(true);
 		}
 		bool in_select = false;
 		if (current_statement->type == StatementType::RELATION_STATEMENT) {
-			auto& relation_statement = (RelationStatement&)*current_statement;
+			auto &relation_statement = (RelationStatement &)*current_statement;
 			in_select = relation_statement.relation->type == RelationType::QUERY_RELATION;
 		} else {
 			in_select = current_statement->type == StatementType::SELECT_STATEMENT;
@@ -42,7 +45,7 @@ template <class SRC_TYPE, class RES_TYPE>
 bool EnumEnumCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
 	bool all_converted = true;
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto& bind_data = (EnumEnumBindData&)*parameters.cast_data;
+	auto &bind_data = (EnumEnumBindData &)*parameters.cast_data;
 
 	auto &str_vec = EnumType::GetValuesInsertOrder(source.GetType());
 	auto str_vec_ptr = FlatVector::GetData<string_t>(str_vec);
@@ -73,8 +76,8 @@ bool EnumEnumCast(Vector &source, Vector &result, idx_t count, CastParameters &p
 			} else {
 				if (!parameters.error_message) {
 					result_data[i] = HandleVectorCastError::Operation<RES_TYPE>(
-						CastExceptionText<SRC_TYPE, RES_TYPE>(source_data[src_idx]), result_mask, i,
-						parameters.error_message, all_converted);
+					    CastExceptionText<SRC_TYPE, RES_TYPE>(source_data[src_idx]), result_mask, i,
+					    parameters.error_message, all_converted);
 				} else {
 					result_mask.SetInvalid(i);
 				}
@@ -113,7 +116,7 @@ static bool EnumToVarcharCast(Vector &source, Vector &result, idx_t count, CastP
 	auto source_data = (SRC *)vdata.data;
 	for (idx_t i = 0; i < count; i++) {
 		auto source_idx = vdata.sel->get_index(i);
-		if (!vdata.validity.RowIsValid(source_idx) || source_idx) {
+		if (!vdata.validity.RowIsValid(source_idx)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}

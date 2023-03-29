@@ -169,10 +169,14 @@ SELECT * FROM person_pet_den WHERE (person_mood == pet_mood) IS NULL
 ----
 Tim	Chorizo	ok	NULL
 
-# Explicit casts from one enum to another
-statement error
+# Explicit casts from one enum to another, becomes INVALID when it cant be cast
+query I
 SELECT person_mood::pet_mood FROM person_pet_den
-
+----
+happy
+quackity-quack
+INVALID
+INVALID
 
 # Use enums as normal strings (testing e.g. substr, LIKE, REGEXP_MATCHES).
 query T

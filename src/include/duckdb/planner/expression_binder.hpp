@@ -141,6 +141,7 @@ protected:
 
 	virtual string UnsupportedAggregateMessage();
 	virtual string UnsupportedUnnestMessage();
+
 protected:
 	LogicalType ResolveNotType(OperatorExpression &op, vector<BoundExpression *> &children);
 	LogicalType ResolveInType(OperatorExpression &op, vector<BoundExpression *> &children);

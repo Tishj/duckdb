@@ -215,8 +215,10 @@ SELECT TRY_CAST ('ok' as mood)
 ----
 ok
 
-statement error
+query I
 SELECT CAST ('bla' as mood)
+----
+INVALID
 
 query I
 SELECT TRY_CAST ('bla' as mood)

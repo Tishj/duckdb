@@ -242,7 +242,7 @@ const string &ClientContext::GetCurrentQuery() {
 	return active_query->query;
 }
 
-const SQLStatement *ClientContext::GetCurrentStatement() const{
+const SQLStatement *ClientContext::GetCurrentStatement() const {
 	return current_statement.get();
 }
 

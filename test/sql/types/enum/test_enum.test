@@ -15,8 +15,10 @@ select 'happy'::mood;
 happy
 
 # Casts should fail if not in the enum
-statement error
+query I
 select 'awesome-bro'::mood;
+----
+INVALID
 
 # Non-String keys should fail
 statement error

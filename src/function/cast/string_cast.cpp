@@ -27,7 +27,9 @@ bool StringEnumCastLoop(string_t *source_data, ValidityMask &source_mask, const 
 					// Use the max of the internal ENUM value to indicate invalid
 					result_data[i] = (T)-1;
 				} else {
-					result_data[i] = HandleVectorCastError::Operation<T>(CastExceptionText<string_t, T>(source_data[source_idx]), result_mask, i, error_message, all_converted);
+					result_data[i] =
+					    HandleVectorCastError::Operation<T>(CastExceptionText<string_t, T>(source_data[source_idx]),
+					                                        result_mask, i, error_message, all_converted);
 				}
 			} else {
 				result_data[i] = pos;
@@ -41,27 +43,30 @@ bool StringEnumCastLoop(string_t *source_data, ValidityMask &source_mask, const 
 
 struct ToEnumCastData : public BoundCastData {
 public:
-	ToEnumCastData(bool in_select) : in_select(in_select) {}
+	ToEnumCastData(bool in_select) : in_select(in_select) {
+	}
 	//! Whether the cast is being performed in a select or not
 	bool in_select;
+
 public:
 	unique_ptr<BoundCastData> Copy() const override {
 		return make_unique<ToEnumCastData>(in_select);
 	}
+
 public:
 	static unique_ptr<BoundCastData> Bind(const BindCastInput &input) {
 		if (!input.context) {
-			//When we don't have a context, we can't do an INSERT, so it's safe to assume this is not an insert
+			// When we don't have a context, we can't do an INSERT, so it's safe to assume this is not an insert
 			return make_unique<ToEnumCastData>(true);
 		}
-		auto& context = *input.context;
+		auto &context = *input.context;
 		auto current_statement = context.GetCurrentStatement();
 		if (!current_statement) {
 			return make_unique<ToEnumCastData>(true);
 		}
 		bool in_select = false;
 		if (current_statement->type == StatementType::RELATION_STATEMENT) {
-			auto& relation_statement = (RelationStatement&)*current_statement;
+			auto &relation_statement = (RelationStatement &)*current_statement;
 			in_select = relation_statement.relation->type == RelationType::QUERY_RELATION;
 		} else {
 			in_select = current_statement->type == StatementType::SELECT_STATEMENT;
@@ -72,7 +77,7 @@ public:
 
 template <class T>
 bool StringEnumCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
-	auto& bind_data = (ToEnumCastData&)*parameters.cast_data;
+	auto &bind_data = (ToEnumCastData &)*parameters.cast_data;
 
 	D_ASSERT(source.GetType().id() == LogicalTypeId::VARCHAR);
 	auto enum_name = EnumType::GetTypeName(result.GetType());
