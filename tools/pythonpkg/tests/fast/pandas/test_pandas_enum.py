@@ -46,11 +46,11 @@ class TestPandasEnum(object):
             "col1" : pd.Categorical(pd.Series(["a", "b", "c"]))
         })
         con.execute("""
-	        create table tbl as select * from df
+            create table tbl as select * from df
         """)
-
-        res = con.table('tbl')
-        print(res)
+        con.execute("""
+            insert into tbl values(NULL)
+        """)
 
         # Can not insert an invalid value into an ENUM column
         with pytest.raises(duckdb.ConversionException):
@@ -66,5 +66,12 @@ class TestPandasEnum(object):
 
         res = con.sql(
             "select * from tbl where col1 NOT IN ('test')"
+        ).fetchall()
+        assert res == [('a',), ('b',), ('c',)]
+
+        res = con.sql(
+            """
+                select * from tbl where col1 != ''
+            """
         ).fetchall()
         assert res == [('a',), ('b',), ('c',)]
