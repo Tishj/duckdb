@@ -8,14 +8,14 @@
 
 namespace duckdb {
 
-static LogicalType ResolveNotType(OperatorExpression &op, vector<BoundExpression *> &children) {
+LogicalType ExpressionBinder::ResolveNotType(OperatorExpression &op, vector<BoundExpression *> &children) {
 	// NOT expression, cast child to BOOLEAN
 	D_ASSERT(children.size() == 1);
-	children[0]->expr = BoundCastExpression::AddDefaultCastToType(std::move(children[0]->expr), LogicalType::BOOLEAN);
+	children[0]->expr = BoundCastExpression::AddCastToType(context, std::move(children[0]->expr), LogicalType::BOOLEAN);
 	return LogicalType(LogicalTypeId::BOOLEAN);
 }
 
-static LogicalType ResolveInType(OperatorExpression &op, vector<BoundExpression *> &children) {
+LogicalType ExpressionBinder::ResolveInType(OperatorExpression &op, vector<BoundExpression *> &children) {
 	if (children.empty()) {
 		throw InternalException("IN requires at least a single child node");
 	}
@@ -27,13 +27,13 @@ static LogicalType ResolveInType(OperatorExpression &op, vector<BoundExpression 
 
 	// cast all children to the same type
 	for (idx_t i = 0; i < children.size(); i++) {
-		children[i]->expr = BoundCastExpression::AddDefaultCastToType(std::move(children[i]->expr), max_type);
+		children[i]->expr = BoundCastExpression::AddCastToType(context, std::move(children[i]->expr), max_type);
 	}
 	// (NOT) IN always returns a boolean
 	return LogicalType::BOOLEAN;
 }
 
-static LogicalType ResolveOperatorType(OperatorExpression &op, vector<BoundExpression *> &children) {
+LogicalType ExpressionBinder::ResolveOperatorType(OperatorExpression &op, vector<BoundExpression *> &children) {
 	switch (op.type) {
 	case ExpressionType::OPERATOR_IS_NULL:
 	case ExpressionType::OPERATOR_IS_NOT_NULL:

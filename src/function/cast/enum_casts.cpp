@@ -1,13 +1,48 @@
 #include "duckdb/function/cast/default_casts.hpp"
 #include "duckdb/function/cast/vector_cast_helpers.hpp"
 #include "duckdb/function/cast/cast_function_set.hpp"
+#include "duckdb/main/client_context.hpp"
+#include "duckdb/parser/sql_statement.hpp"
+#include "duckdb/parser/statement/relation_statement.hpp"
 
 namespace duckdb {
+
+struct EnumEnumBindData : public BoundCastData {
+public:
+	EnumEnumBindData(bool in_select) : in_select(in_select) {}
+	//! Whether the cast is being performed in a select or not
+	bool in_select;
+public:
+	unique_ptr<BoundCastData> Copy() const override {
+		return make_unique<EnumEnumBindData>(in_select);
+	}
+public:
+	static unique_ptr<BoundCastData> Bind(const BindCastInput &input) {
+		if (!input.context) {
+			//When we don't have a context, we can't do an INSERT, so it's safe to assume this is not an insert
+			return make_unique<EnumEnumBindData>(true);
+		}
+		auto& context = *input.context;
+		auto current_statement = context.GetCurrentStatement();
+		if (!current_statement) {
+			return make_unique<EnumEnumBindData>(true);
+		}
+		bool in_select = false;
+		if (current_statement->type == StatementType::RELATION_STATEMENT) {
+			auto& relation_statement = (RelationStatement&)*current_statement;
+			in_select = relation_statement.relation->type == RelationType::QUERY_RELATION;
+		} else {
+			in_select = current_statement->type == StatementType::SELECT_STATEMENT;
+		}
+		return make_unique<EnumEnumBindData>(in_select);
+	}
+};
 
 template <class SRC_TYPE, class RES_TYPE>
 bool EnumEnumCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
 	bool all_converted = true;
 	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto& bind_data = (EnumEnumBindData&)*parameters.cast_data;
 
 	auto &str_vec = EnumType::GetValuesInsertOrder(source.GetType());
 	auto str_vec_ptr = FlatVector::GetData<string_t>(str_vec);
@@ -33,12 +68,16 @@ bool EnumEnumCast(Vector &source, Vector &result, idx_t count, CastParameters &p
 		auto key = EnumType::GetPos(res_enum_type, str_vec_ptr[source_data[src_idx]]);
 		if (key == -1) {
 			// key doesn't exist on result enum
-			if (!parameters.error_message) {
-				result_data[i] = HandleVectorCastError::Operation<RES_TYPE>(
-				    CastExceptionText<SRC_TYPE, RES_TYPE>(source_data[src_idx]), result_mask, i,
-				    parameters.error_message, all_converted);
+			if (bind_data.in_select) {
+				result_data[i] = (RES_TYPE)-1;
 			} else {
-				result_mask.SetInvalid(i);
+				if (!parameters.error_message) {
+					result_data[i] = HandleVectorCastError::Operation<RES_TYPE>(
+						CastExceptionText<SRC_TYPE, RES_TYPE>(source_data[src_idx]), result_mask, i,
+						parameters.error_message, all_converted);
+				} else {
+					result_mask.SetInvalid(i);
+				}
 			}
 			continue;
 		}
@@ -51,11 +90,11 @@ template <class SRC_TYPE>
 BoundCastInfo EnumEnumCastSwitch(BindCastInput &input, const LogicalType &source, const LogicalType &target) {
 	switch (target.InternalType()) {
 	case PhysicalType::UINT8:
-		return EnumEnumCast<SRC_TYPE, uint8_t>;
+		return BoundCastInfo(EnumEnumCast<SRC_TYPE, uint8_t>, EnumEnumBindData::Bind(input));
 	case PhysicalType::UINT16:
-		return EnumEnumCast<SRC_TYPE, uint16_t>;
+		return BoundCastInfo(EnumEnumCast<SRC_TYPE, uint16_t>, EnumEnumBindData::Bind(input));
 	case PhysicalType::UINT32:
-		return EnumEnumCast<SRC_TYPE, uint32_t>;
+		return BoundCastInfo(EnumEnumCast<SRC_TYPE, uint32_t>, EnumEnumBindData::Bind(input));
 	default:
 		throw InternalException("ENUM can only have unsigned integers (except UINT64) as physical types");
 	}
@@ -74,12 +113,16 @@ static bool EnumToVarcharCast(Vector &source, Vector &result, idx_t count, CastP
 	auto source_data = (SRC *)vdata.data;
 	for (idx_t i = 0; i < count; i++) {
 		auto source_idx = vdata.sel->get_index(i);
-		if (!vdata.validity.RowIsValid(source_idx)) {
+		if (!vdata.validity.RowIsValid(source_idx) || source_idx) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
 		auto enum_idx = source_data[source_idx];
-		result_data[i] = dictionary_data[enum_idx];
+		if (enum_idx == (SRC)-1) {
+			result_data[i] = string_t("INVALID");
+		} else {
+			result_data[i] = dictionary_data[enum_idx];
+		}
 	}
 	if (source.GetVectorType() == VectorType::CONSTANT_VECTOR) {
 		result.SetVectorType(VectorType::CONSTANT_VECTOR);

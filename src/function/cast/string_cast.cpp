@@ -5,6 +5,8 @@
 #include "duckdb/function/scalar/nested_functions.hpp"
 #include "duckdb/function/cast/bound_cast_data.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/relation.hpp"
+#include "duckdb/parser/statement/relation_statement.hpp"
 
 namespace duckdb {
 
@@ -49,12 +51,21 @@ public:
 public:
 	static unique_ptr<BoundCastData> Bind(const BindCastInput &input) {
 		if (!input.context) {
-			//FIXME: when we don't have a context, we can't determine this
-			return make_unique<ToEnumCastData>(false);
+			//When we don't have a context, we can't do an INSERT, so it's safe to assume this is not an insert
+			return make_unique<ToEnumCastData>(true);
 		}
 		auto& context = *input.context;
-		auto& current_statement = context.GetCurrentStatement();
-		bool in_select = current_statement.type == StatementType::SELECT_STATEMENT;
+		auto current_statement = context.GetCurrentStatement();
+		if (!current_statement) {
+			return make_unique<ToEnumCastData>(true);
+		}
+		bool in_select = false;
+		if (current_statement->type == StatementType::RELATION_STATEMENT) {
+			auto& relation_statement = (RelationStatement&)*current_statement;
+			in_select = relation_statement.relation->type == RelationType::QUERY_RELATION;
+		} else {
+			in_select = current_statement->type == StatementType::SELECT_STATEMENT;
+		}
 		return make_unique<ToEnumCastData>(in_select);
 	}
 };
