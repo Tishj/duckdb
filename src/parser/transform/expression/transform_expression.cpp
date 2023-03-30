@@ -80,7 +80,7 @@ unique_ptr<ParsedExpression> Transformer::TransformExpression(duckdb_libpgquery:
 	case duckdb_libpgquery::T_PGAStar:
 		return TransformStarExpression(node);
 	default:
-		throw NotImplementedException("Expr of type %d not implemented\n", (int)node->type);
+		throw NotImplementedException("Expr of type '%s' not implemented\n", NodetypeToString(node->type));
 	}
 }
 
