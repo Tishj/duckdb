@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/glob/read_csv_glob_crawl.test
+# name: test/sql/copy/csv/glob/read_csv_glob_crawl.test_slow
 # description: Test crawling CSVs
 # group: [glob]
 
