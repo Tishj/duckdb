@@ -11,8 +11,8 @@ namespace duckdb {
 LikeOptimizationRule::LikeOptimizationRule(ExpressionRewriter &rewriter) : Rule(rewriter) {
 	// match on a FunctionExpression that has a foldable ConstantExpression
 	auto func = make_uniq<FunctionExpressionMatcher>();
-	func->matchers.push_back(make_uniq<ExpressionMatcher>());
-	func->matchers.push_back(make_uniq<ConstantExpressionMatcher>());
+	func->matchers.emplace_back(make_uniq<ExpressionMatcher>());
+	func->matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
 	func->policy = SetMatcher::Policy::ORDERED;
 	// we match on LIKE ("~~") and NOT LIKE ("!~~")
 	func->function = make_uniq<ManyFunctionMatcher>(unordered_set<string> {"!~~", "~~"});

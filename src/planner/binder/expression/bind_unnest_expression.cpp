@@ -18,8 +18,8 @@ namespace duckdb {
 
 unique_ptr<Expression> CreateBoundStructExtract(ClientContext &context, unique_ptr<Expression> expr, string key) {
 	vector<unique_ptr<Expression>> arguments;
-	arguments.push_back(std::move(expr));
-	arguments.push_back(make_uniq<BoundConstantExpression>(Value(key)));
+	arguments.emplace_back(std::move(expr));
+	arguments.emplace_back(make_uniq<BoundConstantExpression>(Value(key)));
 	auto extract_function = StructExtractFun::GetFunction();
 	auto bind_info = extract_function.bind(context, extract_function, arguments);
 	auto return_type = extract_function.return_type;
@@ -156,14 +156,14 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 		if (entry == node.unnests.end()) {
 			BoundUnnestNode unnest_node;
 			unnest_node.index = binder.GenerateTableIndex();
-			unnest_node.expressions.push_back(std::move(result));
+			unnest_node.expressions.emplace_back(std::move(result));
 			unnest_table_index = unnest_node.index;
 			unnest_column_index = 0;
 			node.unnests.insert(make_pair(current_level, std::move(unnest_node)));
 		} else {
 			unnest_table_index = entry->second.index;
 			unnest_column_index = entry->second.expressions.size();
-			entry->second.expressions.push_back(std::move(result));
+			entry->second.expressions.emplace_back(std::move(result));
 		}
 		// now create a column reference referring to the unnest
 		unnest_expr = make_uniq<BoundColumnRefExpression>(
@@ -172,7 +172,7 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 	// now perform struct unnests, if any
 	if (struct_unnests > 0) {
 		vector<unique_ptr<Expression>> struct_expressions;
-		struct_expressions.push_back(std::move(unnest_expr));
+		struct_expressions.emplace_back(std::move(unnest_expr));
 
 		for (idx_t i = 0; i < struct_unnests; i++) {
 			vector<unique_ptr<Expression>> new_expressions;
@@ -183,12 +183,12 @@ BindResult SelectBinder::BindUnnest(FunctionExpression &function, idx_t depth, b
 					// struct! push a struct_extract
 					auto &child_types = StructType::GetChildTypes(expr->return_type);
 					for (auto &entry : child_types) {
-						new_expressions.push_back(CreateBoundStructExtract(context, expr->Copy(), entry.first));
+						new_expressions.emplace_back(CreateBoundStructExtract(context, expr->Copy(), entry.first));
 					}
 					has_structs = true;
 				} else {
 					// not a struct - push as-is
-					new_expressions.push_back(std::move(expr));
+					new_expressions.emplace_back(std::move(expr));
 				}
 			}
 			struct_expressions = std::move(new_expressions);

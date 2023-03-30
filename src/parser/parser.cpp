@@ -162,7 +162,7 @@ void Parser::ParseQuery(const string &query) {
 					auto statement = make_uniq<ExtensionStatement>(ext, std::move(result.parse_data));
 					statement->stmt_length = query.size();
 					statement->stmt_location = 0;
-					statements.push_back(std::move(statement));
+					statements.emplace_back(std::move(statement));
 					return;
 				}
 				if (result.type == ParserExtensionResultType::DISPLAY_EXTENSION_ERROR) {

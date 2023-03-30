@@ -44,9 +44,9 @@ static void BindExtraColumns(TableCatalogEntry &table, LogicalGet &get, LogicalP
 			}
 			// column is not projected yet: project it by adding the clause "i=i" to the set of updated columns
 			auto &column = table.GetColumns().GetColumn(check_column_id);
-			update.expressions.push_back(make_uniq<BoundColumnRefExpression>(
+			update.expressions.emplace_back(make_uniq<BoundColumnRefExpression>(
 			    column.Type(), ColumnBinding(proj.table_index, proj.expressions.size())));
-			proj.expressions.push_back(make_uniq<BoundColumnRefExpression>(
+			proj.expressions.emplace_back(make_uniq<BoundColumnRefExpression>(
 			    column.Type(), ColumnBinding(get.table_index, get.column_ids.size())));
 			get.column_ids.push_back(check_column_id.index);
 			update.columns.push_back(check_column_id);
@@ -157,16 +157,16 @@ unique_ptr<LogicalOperator> Binder::BindUpdateSet(LogicalOperator *op, unique_pt
 		}
 		columns.push_back(column.Physical());
 		if (expr->type == ExpressionType::VALUE_DEFAULT) {
-			op->expressions.push_back(make_uniq<BoundDefaultExpression>(column.Type()));
+			op->expressions.emplace_back(make_uniq<BoundDefaultExpression>(column.Type()));
 		} else {
 			UpdateBinder binder(*this, context);
 			binder.target_type = column.Type();
 			auto bound_expr = binder.Bind(expr);
 			PlanSubqueries(&bound_expr, &root);
 
-			op->expressions.push_back(make_uniq<BoundColumnRefExpression>(
+			op->expressions.emplace_back(make_uniq<BoundColumnRefExpression>(
 			    bound_expr->return_type, ColumnBinding(proj_index, projection_expressions.size())));
-			projection_expressions.push_back(std::move(bound_expr));
+			projection_expressions.emplace_back(std::move(bound_expr));
 		}
 	}
 	if (op->type != LogicalOperatorType::LOGICAL_UPDATE && projection_expressions.empty()) {
@@ -241,7 +241,7 @@ BoundStatement Binder::Bind(UpdateStatement &stmt) {
 	// bind any extra columns necessary for CHECK constraints or indexes
 	BindUpdateConstraints(*table, *get, *proj, *update);
 	// finally add the row id column to the projection list
-	proj->expressions.push_back(make_uniq<BoundColumnRefExpression>(
+	proj->expressions.emplace_back(make_uniq<BoundColumnRefExpression>(
 	    LogicalType::ROW_TYPE, ColumnBinding(get->table_index, get->column_ids.size())));
 	get->column_ids.push_back(COLUMN_IDENTIFIER_ROW_ID);
 

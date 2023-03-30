@@ -11,7 +11,7 @@ namespace duckdb {
 
 MoveConstantsRule::MoveConstantsRule(ExpressionRewriter &rewriter) : Rule(rewriter) {
 	auto op = make_uniq<ComparisonExpressionMatcher>();
-	op->matchers.push_back(make_uniq<ConstantExpressionMatcher>());
+	op->matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
 	op->policy = SetMatcher::Policy::UNORDERED;
 
 	auto arithmetic = make_uniq<FunctionExpressionMatcher>();
@@ -21,10 +21,10 @@ MoveConstantsRule::MoveConstantsRule(ExpressionRewriter &rewriter) : Rule(rewrit
 	arithmetic->function = make_uniq<ManyFunctionMatcher>(unordered_set<string> {"+", "-", "*"});
 	// we match only on integral numeric types
 	arithmetic->type = make_uniq<IntegerTypeMatcher>();
-	arithmetic->matchers.push_back(make_uniq<ConstantExpressionMatcher>());
-	arithmetic->matchers.push_back(make_uniq<ExpressionMatcher>());
+	arithmetic->matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
+	arithmetic->matchers.emplace_back(make_uniq<ExpressionMatcher>());
 	arithmetic->policy = SetMatcher::Policy::SOME;
-	op->matchers.push_back(std::move(arithmetic));
+	op->matchers.emplace_back(std::move(arithmetic));
 	root = std::move(op);
 }
 

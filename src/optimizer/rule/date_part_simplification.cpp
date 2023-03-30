@@ -14,8 +14,8 @@ namespace duckdb {
 DatePartSimplificationRule::DatePartSimplificationRule(ExpressionRewriter &rewriter) : Rule(rewriter) {
 	auto func = make_uniq<FunctionExpressionMatcher>();
 	func->function = make_uniq<SpecificFunctionMatcher>("date_part");
-	func->matchers.push_back(make_uniq<ConstantExpressionMatcher>());
-	func->matchers.push_back(make_uniq<ExpressionMatcher>());
+	func->matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
+	func->matchers.emplace_back(make_uniq<ExpressionMatcher>());
 	func->policy = SetMatcher::Policy::ORDERED;
 	root = std::move(func);
 }

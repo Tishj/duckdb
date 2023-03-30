@@ -178,7 +178,7 @@ unique_ptr<UpdateSetInfo> CreateSetInfoForReplace(TableCatalogEntry &table, Inse
 
 	// Create 'excluded' qualified column references of these columns
 	for (auto &column : columns) {
-		set_info->expressions.push_back(make_uniq<ColumnRefExpression>(column, "excluded"));
+		set_info->expressions.emplace_back(make_uniq<ColumnRefExpression>(column, "excluded"));
 	}
 
 	return set_info;

@@ -221,7 +221,7 @@ static unique_ptr<FunctionData> BindAggregateState(ClientContext &context, Scala
 		vector<unique_ptr<Expression>> args;
 		args.reserve(state_type.bound_argument_types.size());
 		for (auto &arg_type : state_type.bound_argument_types) {
-			args.push_back(make_uniq<BoundConstantExpression>(Value(arg_type)));
+			args.emplace_back(make_uniq<BoundConstantExpression>(Value(arg_type)));
 		}
 		auto bind_info = bound_aggr.bind(context, bound_aggr, args);
 		if (bind_info) {

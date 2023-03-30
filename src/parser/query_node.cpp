@@ -150,7 +150,7 @@ bool QueryNode::Equals(const QueryNode *other) const {
 
 void QueryNode::CopyProperties(QueryNode &other) const {
 	for (auto &modifier : modifiers) {
-		other.modifiers.push_back(modifier->Copy());
+		other.modifiers.emplace_back(modifier->Copy());
 	}
 	for (auto &kv : cte_map.map) {
 		auto kv_info = make_uniq<CommonTableExpressionInfo>();
@@ -269,7 +269,7 @@ void QueryNode::AddDistinct() {
 			break;
 		}
 	}
-	modifiers.push_back(make_uniq<DistinctModifier>());
+	modifiers.emplace_back(make_uniq<DistinctModifier>());
 }
 
 } // namespace duckdb

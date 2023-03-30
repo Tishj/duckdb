@@ -10,8 +10,8 @@ namespace duckdb {
 ArithmeticSimplificationRule::ArithmeticSimplificationRule(ExpressionRewriter &rewriter) : Rule(rewriter) {
 	// match on an OperatorExpression that has a ConstantExpression as child
 	auto op = make_uniq<FunctionExpressionMatcher>();
-	op->matchers.push_back(make_uniq<ConstantExpressionMatcher>());
-	op->matchers.push_back(make_uniq<ExpressionMatcher>());
+	op->matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
+	op->matchers.emplace_back(make_uniq<ExpressionMatcher>());
 	op->policy = SetMatcher::Policy::SOME;
 	// we only match on simple arithmetic expressions (+, -, *, /)
 	op->function = make_uniq<ManyFunctionMatcher>(unordered_set<string> {"+", "-", "*", "/"});

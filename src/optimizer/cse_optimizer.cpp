@@ -83,7 +83,7 @@ void CommonSubExpressionOptimizer::PerformCSEReplacement(unique_ptr<Expression> 
 			// not there yet: push the expression
 			idx_t new_column_index = state.expressions.size();
 			state.column_map[bound_column_ref.binding] = new_column_index;
-			state.expressions.push_back(make_uniq<BoundColumnRefExpression>(
+			state.expressions.emplace_back(make_uniq<BoundColumnRefExpression>(
 			    bound_column_ref.alias, bound_column_ref.return_type, bound_column_ref.binding));
 			bound_column_ref.binding = ColumnBinding(state.projection_index, new_column_index);
 		} else {

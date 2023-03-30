@@ -184,7 +184,7 @@ BindResult BaseSelectBinder::BindWindow(WindowExpression &window, idx_t depth) {
 			break;
 		}
 		types.push_back(bound.expr->return_type);
-		children.push_back(std::move(bound.expr));
+		children.emplace_back(std::move(bound.expr));
 	}
 	//  Determine the function type.
 	LogicalType sql_type;
@@ -218,7 +218,7 @@ BindResult BaseSelectBinder::BindWindow(WindowExpression &window, idx_t depth) {
 	auto result = make_uniq<BoundWindowExpression>(window.type, sql_type, std::move(aggregate), std::move(bind_info));
 	result->children = std::move(children);
 	for (auto &child : window.partitions) {
-		result->partitions.push_back(GetExpression(child));
+		result->partitions.emplace_back(GetExpression(child));
 	}
 	result->ignore_nulls = window.ignore_nulls;
 
@@ -295,7 +295,7 @@ BindResult BaseSelectBinder::BindWindow(WindowExpression &window, idx_t depth) {
 	auto colref = make_uniq<BoundColumnRefExpression>(std::move(name), result->return_type,
 	                                                  ColumnBinding(node.window_index, node.windows.size()), depth);
 	// move the WINDOW expression into the set of bound windows
-	node.windows.push_back(std::move(result));
+	node.windows.emplace_back(std::move(result));
 	return BindResult(std::move(colref));
 }
 

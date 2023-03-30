@@ -92,7 +92,7 @@ unique_ptr<GlobalTableFunctionState> TableScanInitGlobal(ClientContext &context,
 			if (col_idx == COLUMN_IDENTIFIER_ROW_ID) {
 				result->scanned_types.emplace_back(LogicalType::ROW_TYPE);
 			} else {
-				result->scanned_types.push_back(columns.GetColumn(LogicalIndex(col_idx)).Type());
+				result->scanned_types.emplace_back(columns.GetColumn(LogicalIndex(col_idx)).Type());
 			}
 		}
 	}
@@ -309,8 +309,8 @@ void TableScanPushdownComplexFilter(ClientContext &context, LogicalGet &get, Fun
 			// match on a comparison type
 			matcher.expr_type = make_uniq<ComparisonExpressionTypeMatcher>();
 			// match on a constant comparison with the indexed expression
-			matcher.matchers.push_back(make_uniq<ExpressionEqualityMatcher>(index_expression.get()));
-			matcher.matchers.push_back(make_uniq<ConstantExpressionMatcher>());
+			matcher.matchers.emplace_back(make_uniq<ExpressionEqualityMatcher>(index_expression.get()));
+			matcher.matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
 
 			matcher.policy = SetMatcher::Policy::UNORDERED;
 

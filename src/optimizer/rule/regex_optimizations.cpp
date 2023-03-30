@@ -13,8 +13,8 @@ RegexOptimizationRule::RegexOptimizationRule(ExpressionRewriter &rewriter) : Rul
 	auto func = make_uniq<FunctionExpressionMatcher>();
 	func->function = make_uniq<SpecificFunctionMatcher>("regexp_matches");
 	func->policy = SetMatcher::Policy::ORDERED;
-	func->matchers.push_back(make_uniq<ExpressionMatcher>());
-	func->matchers.push_back(make_uniq<ConstantExpressionMatcher>());
+	func->matchers.emplace_back(make_uniq<ExpressionMatcher>());
+	func->matchers.emplace_back(make_uniq<ConstantExpressionMatcher>());
 	root = std::move(func);
 }
 

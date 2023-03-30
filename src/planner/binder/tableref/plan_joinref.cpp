@@ -38,7 +38,7 @@ static bool CreateJoinCondition(Expression &expr, const unordered_set<idx_t> &le
 		}
 		condition.left = std::move(left);
 		condition.right = std::move(right);
-		conditions.push_back(std::move(condition));
+		conditions.emplace_back(std::move(condition));
 		return true;
 	}
 	return false;
@@ -65,7 +65,7 @@ void LogicalComparisonJoin::ExtractJoinConditions(JoinType type, unique_ptr<Logi
 				}
 				// push the expression into the filter
 				auto &filter = (LogicalFilter &)*right_child;
-				filter.expressions.push_back(std::move(expr));
+				filter.expressions.emplace_back(std::move(expr));
 				continue;
 			}
 		} else if ((expr->type >= ExpressionType::COMPARE_EQUAL &&
@@ -78,7 +78,7 @@ void LogicalComparisonJoin::ExtractJoinConditions(JoinType type, unique_ptr<Logi
 				continue;
 			}
 		}
-		arbitrary_expressions.push_back(std::move(expr));
+		arbitrary_expressions.emplace_back(std::move(expr));
 	}
 }
 
@@ -100,7 +100,7 @@ void LogicalComparisonJoin::ExtractJoinConditions(JoinType type, unique_ptr<Logi
                                                   vector<unique_ptr<Expression>> &arbitrary_expressions) {
 	// split the expressions by the AND clause
 	vector<unique_ptr<Expression>> expressions;
-	expressions.push_back(std::move(condition));
+	expressions.emplace_back(std::move(condition));
 	LogicalFilter::SplitPredicates(expressions);
 	return ExtractJoinConditions(type, left_child, right_child, expressions, conditions, arbitrary_expressions);
 }
@@ -154,17 +154,17 @@ unique_ptr<LogicalOperator> LogicalComparisonJoin::CreateJoin(JoinType type, Joi
 	if ((need_to_consider_arbitrary_expressions && !arbitrary_expressions.empty()) || conditions.empty()) {
 		if (arbitrary_expressions.empty()) {
 			// all conditions were pushed down, add TRUE predicate
-			arbitrary_expressions.push_back(make_uniq<BoundConstantExpression>(Value::BOOLEAN(true)));
+			arbitrary_expressions.emplace_back(make_uniq<BoundConstantExpression>(Value::BOOLEAN(true)));
 		}
 		for (auto &condition : conditions) {
-			arbitrary_expressions.push_back(JoinCondition::CreateExpression(std::move(condition)));
+			arbitrary_expressions.emplace_back(JoinCondition::CreateExpression(std::move(condition)));
 		}
 		// if we get here we could not create any JoinConditions
 		// turn this into an arbitrary expression join
 		auto any_join = make_uniq<LogicalAnyJoin>(type);
 		// create the condition
-		any_join->children.push_back(std::move(left_child));
-		any_join->children.push_back(std::move(right_child));
+		any_join->children.emplace_back(std::move(left_child));
+		any_join->children.emplace_back(std::move(right_child));
 		// AND all the arbitrary expressions together
 		// do the same with any remaining conditions
 		any_join->condition = std::move(arbitrary_expressions[0]);
@@ -183,17 +183,17 @@ unique_ptr<LogicalOperator> LogicalComparisonJoin::CreateJoin(JoinType type, Joi
 			comp_join = make_uniq<LogicalComparisonJoin>(type);
 		}
 		comp_join->conditions = std::move(conditions);
-		comp_join->children.push_back(std::move(left_child));
-		comp_join->children.push_back(std::move(right_child));
+		comp_join->children.emplace_back(std::move(left_child));
+		comp_join->children.emplace_back(std::move(right_child));
 		if (!arbitrary_expressions.empty()) {
 			// we have some arbitrary expressions as well
 			// add them to a filter
 			auto filter = make_uniq<LogicalFilter>();
 			for (auto &expr : arbitrary_expressions) {
-				filter->expressions.push_back(std::move(expr));
+				filter->expressions.emplace_back(std::move(expr));
 			}
 			LogicalFilter::SplitPredicates(filter->expressions);
-			filter->children.push_back(std::move(comp_join));
+			filter->children.emplace_back(std::move(comp_join));
 			return std::move(filter);
 		}
 		return std::move(comp_join);

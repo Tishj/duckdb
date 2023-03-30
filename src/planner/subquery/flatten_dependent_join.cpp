@@ -20,7 +20,7 @@ FlattenDependentJoins::FlattenDependentJoins(Binder &binder, const vector<Correl
 	for (idx_t i = 0; i < correlated_columns.size(); i++) {
 		auto &col = correlated_columns[i];
 		correlated_map[col.binding] = i;
-		delim_types.push_back(col.type);
+		delim_types.emplace_back(col.type);
 	}
 }
 
@@ -119,7 +119,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			auto &col = correlated_columns[i];
 			auto colref = make_uniq<BoundColumnRefExpression>(
 			    col.name, col.type, ColumnBinding(base_binding.table_index, base_binding.column_index + i));
-			plan->expressions.push_back(std::move(colref));
+			plan->expressions.emplace_back(std::move(colref));
 		}
 
 		base_binding.table_index = proj->table_index;
@@ -150,7 +150,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			for (auto &set : aggr.grouping_sets) {
 				set.insert(aggr.groups.size());
 			}
-			aggr.groups.push_back(std::move(colref));
+			aggr.groups.emplace_back(std::move(colref));
 		}
 		if (!perform_delim) {
 			// if we are not performing the duplicate elimination, we have only added the row_id column to the grouping
@@ -164,11 +164,11 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 				auto colref = make_uniq<BoundColumnRefExpression>(
 				    col.name, col.type, ColumnBinding(base_binding.table_index, base_binding.column_index + i));
 				vector<unique_ptr<Expression>> aggr_children;
-				aggr_children.push_back(std::move(colref));
+				aggr_children.emplace_back(std::move(colref));
 				auto first_fun =
 				    make_uniq<BoundAggregateExpression>(std::move(first_aggregate), std::move(aggr_children), nullptr,
 				                                        nullptr, AggregateType::NON_DISTINCT);
-				aggr.expressions.push_back(std::move(first_fun));
+				aggr.expressions.emplace_back(std::move(first_fun));
 			}
 		} else {
 			delim_table_index = aggr.group_index;
@@ -189,8 +189,8 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			}
 			auto left_index = binder.GenerateTableIndex();
 			auto delim_scan = make_uniq<LogicalDelimGet>(left_index, delim_types);
-			join->children.push_back(std::move(delim_scan));
-			join->children.push_back(std::move(plan));
+			join->children.emplace_back(std::move(delim_scan));
+			join->children.emplace_back(std::move(plan));
 			for (idx_t i = 0; i < new_group_count; i++) {
 				auto &col = correlated_columns[i];
 				JoinCondition cond;
@@ -198,7 +198,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 				cond.right = make_uniq<BoundColumnRefExpression>(
 				    correlated_columns[i].type, ColumnBinding(delim_table_index, delim_column_offset + i));
 				cond.comparison = ExpressionType::COMPARE_NOT_DISTINCT_FROM;
-				join->conditions.push_back(std::move(cond));
+				join->conditions.emplace_back(std::move(cond));
 			}
 			// for any COUNT aggregate we replace references to the column with: CASE WHEN COUNT(*) IS NULL THEN 0
 			// ELSE COUNT(*) END
@@ -255,10 +255,10 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			cond.right = make_uniq<BoundColumnRefExpression>(
 			    correlated_columns[i].type, ColumnBinding(base_binding.table_index, base_binding.column_index + i));
 			cond.comparison = ExpressionType::COMPARE_NOT_DISTINCT_FROM;
-			join->conditions.push_back(std::move(cond));
+			join->conditions.emplace_back(std::move(cond));
 		}
-		join->children.push_back(std::move(plan->children[0]));
-		join->children.push_back(std::move(plan->children[1]));
+		join->children.emplace_back(std::move(plan->children[0]));
+		join->children.emplace_back(std::move(plan->children[1]));
 		return std::move(join);
 	}
 	case LogicalOperatorType::LOGICAL_ANY_JOIN:
@@ -343,7 +343,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 				cond.comparison = ExpressionType::COMPARE_NOT_DISTINCT_FROM;
 
 				auto &comparison_join = (LogicalComparisonJoin &)join;
-				comparison_join.conditions.push_back(std::move(cond));
+				comparison_join.conditions.emplace_back(std::move(cond));
 			} else {
 				auto &any_join = (LogicalAnyJoin &)join;
 				auto comparison = make_uniq<BoundComparisonExpression>(ExpressionType::COMPARE_NOT_DISTINCT_FROM,
@@ -386,7 +386,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			auto &col = correlated_columns[i];
 			auto colref = make_uniq<BoundColumnRefExpression>(
 			    col.name, col.type, ColumnBinding(base_binding.table_index, base_binding.column_index + i));
-			row_number->partitions.push_back(std::move(colref));
+			row_number->partitions.emplace_back(std::move(colref));
 		}
 		if (order_by) {
 			// optimization: if there is an ORDER BY node followed by a LIMIT
@@ -396,8 +396,8 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 		}
 		row_number->start = WindowBoundary::UNBOUNDED_PRECEDING;
 		row_number->end = WindowBoundary::CURRENT_ROW_ROWS;
-		window->expressions.push_back(std::move(row_number));
-		window->children.push_back(std::move(child));
+		window->expressions.emplace_back(std::move(row_number));
+		window->children.emplace_back(std::move(child));
 
 		// add a filter based on the row_number
 		// the filter we add is "row_number > offset AND row_number <= offset + limit"
@@ -420,11 +420,11 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			                                                  std::move(condition));
 			condition = std::move(conj);
 		}
-		filter->expressions.push_back(std::move(condition));
-		filter->children.push_back(std::move(window));
+		filter->expressions.emplace_back(std::move(condition));
+		filter->children.emplace_back(std::move(window));
 		// we prune away the row_number after the filter clause using the projection map
 		for (idx_t i = 0; i < child_column_count; i++) {
-			filter->projection_map.push_back(i);
+			filter->projection_map.emplace_back(i);
 		}
 		return std::move(filter);
 	}
@@ -443,7 +443,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			D_ASSERT(expr->GetExpressionClass() == ExpressionClass::BOUND_WINDOW);
 			auto &w = (BoundWindowExpression &)*expr;
 			for (idx_t i = 0; i < correlated_columns.size(); i++) {
-				w.partitions.push_back(make_uniq<BoundColumnRefExpression>(
+				w.partitions.emplace_back(make_uniq<BoundColumnRefExpression>(
 				    correlated_columns[i].type,
 				    ColumnBinding(base_binding.table_index, base_binding.column_index + i)));
 			}
@@ -480,7 +480,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 		distinct.children[0] = PushDownDependentJoin(std::move(distinct.children[0]));
 		// add all correlated columns to the distinct targets
 		for (idx_t i = 0; i < correlated_columns.size(); i++) {
-			distinct.distinct_targets.push_back(make_uniq<BoundColumnRefExpression>(
+			distinct.distinct_targets.emplace_back(make_uniq<BoundColumnRefExpression>(
 			    correlated_columns[i].type, ColumnBinding(base_binding.table_index, base_binding.column_index + i)));
 		}
 		return plan;
@@ -498,9 +498,9 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 			for (auto &expr_list : expr_get->expressions) {
 				auto colref = make_uniq<BoundColumnRefExpression>(
 				    correlated_columns[i].type, ColumnBinding(base_binding.table_index, base_binding.column_index + i));
-				expr_list.push_back(std::move(colref));
+				expr_list.emplace_back(std::move(colref));
 			}
-			expr_get->expr_types.push_back(correlated_columns[i].type);
+			expr_get->expr_types.emplace_back(correlated_columns[i].type);
 		}
 
 		base_binding.table_index = expr_get->table_index;
@@ -518,7 +518,7 @@ unique_ptr<LogicalOperator> FlattenDependentJoins::PushDownDependentJoinInternal
 		}
 		plan->children[0] = PushDownDependentJoin(std::move(plan->children[0]));
 		for (idx_t i = 0; i < (perform_delim ? correlated_columns.size() : 1); i++) {
-			get.projected_input.push_back(this->delim_offset + i);
+			get.projected_input.emplace_back(this->delim_offset + i);
 		}
 		this->delim_offset = get.returned_types.size();
 		this->data_offset = 0;

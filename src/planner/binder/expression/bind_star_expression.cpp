@@ -80,7 +80,7 @@ void Binder::ExpandStarExpression(unique_ptr<ParsedExpression> expr,
 	if (!FindStarExpression(expr, &star, true, false)) {
 		// no star expression: add it as-is
 		D_ASSERT(!star);
-		new_select_list.push_back(std::move(expr));
+		new_select_list.emplace_back(std::move(expr));
 		return;
 	}
 	D_ASSERT(star);
@@ -122,7 +122,7 @@ void Binder::ExpandStarExpression(unique_ptr<ParsedExpression> expr,
 				if (!RE2::PartialMatch(colref.GetColumnName(), regex)) {
 					continue;
 				}
-				new_list.push_back(std::move(star_list[i]));
+				new_list.emplace_back(std::move(star_list[i]));
 			}
 			if (new_list.empty()) {
 				auto err = StringUtil::Format("No matching columns found that match regex \"%s\"", regex_str);
@@ -149,7 +149,7 @@ void Binder::ExpandStarExpression(unique_ptr<ParsedExpression> expr,
 					names.push_back(qname.schema);
 				}
 				names.push_back(qname.name);
-				new_list.push_back(make_uniq<ColumnRefExpression>(std::move(names)));
+				new_list.emplace_back(make_uniq<ColumnRefExpression>(std::move(names)));
 			}
 			star_list = std::move(new_list);
 		} else {
@@ -162,7 +162,7 @@ void Binder::ExpandStarExpression(unique_ptr<ParsedExpression> expr,
 	for (idx_t i = 0; i < star_list.size(); i++) {
 		auto new_expr = expr->Copy();
 		ReplaceStarExpression(new_expr, star_list[i]);
-		new_select_list.push_back(std::move(new_expr));
+		new_select_list.emplace_back(std::move(new_expr));
 	}
 }
 

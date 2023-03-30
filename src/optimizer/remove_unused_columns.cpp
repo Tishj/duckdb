@@ -60,7 +60,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				// removed all expressions from the aggregate: push a COUNT(*)
 				auto count_star_fun = CountStarFun::GetFunction();
 				FunctionBinder function_binder(context);
-				aggr.expressions.push_back(
+				aggr.expressions.emplace_back(
 				    function_binder.BindAggregateFunction(count_star_fun, {}, nullptr, AggregateType::NON_DISTINCT));
 			}
 		}
@@ -138,12 +138,12 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 					vector<unique_ptr<Expression>> expressions;
 					expressions.reserve(entries.size());
 					for (auto &column_idx : entries) {
-						expressions.push_back(
+						expressions.emplace_back(
 						    make_uniq<BoundColumnRefExpression>(child->types[column_idx], bindings[column_idx]));
 					}
 					auto new_projection =
 					    make_uniq<LogicalProjection>(binder.GenerateTableIndex(), std::move(expressions));
-					new_projection->children.push_back(std::move(child));
+					new_projection->children.emplace_back(std::move(child));
 					op.children[child_idx] = std::move(new_projection);
 
 					remove.VisitOperator(*op.children[child_idx]);
@@ -190,7 +190,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				// nothing references the projected expressions
 				// this happens in the case of e.g. EXISTS(SELECT * FROM ...)
 				// in this case we only need to project a single constant
-				proj.expressions.push_back(make_uniq<BoundConstantExpression>(Value::INTEGER(42)));
+				proj.expressions.emplace_back(make_uniq<BoundConstantExpression>(Value::INTEGER(42)));
 			}
 		}
 		// then recurse into the children of this projection

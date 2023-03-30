@@ -54,7 +54,7 @@ unique_ptr<Expression> InClauseRewriter::VisitReplace(BoundOperatorExpression &e
 		auto conjunction = make_uniq<BoundConjunctionExpression>(is_regular_in ? ExpressionType::CONJUNCTION_OR
 		                                                                       : ExpressionType::CONJUNCTION_AND);
 		for (idx_t i = 1; i < expr.children.size(); i++) {
-			conjunction->children.push_back(make_uniq<BoundComparisonExpression>(
+			conjunction->children.emplace_back(make_uniq<BoundComparisonExpression>(
 			    is_regular_in ? ExpressionType::COMPARE_EQUAL : ExpressionType::COMPARE_NOTEQUAL,
 			    expr.children[0]->Copy(), std::move(expr.children[i])));
 		}

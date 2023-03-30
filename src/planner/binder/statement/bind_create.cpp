@@ -445,7 +445,7 @@ unique_ptr<LogicalOperator> DuckCatalog::BindCreateIndex(Binder &binder, CreateS
 	vector<unique_ptr<Expression>> expressions;
 	expressions.reserve(base.expressions.size());
 	for (auto &expr : base.expressions) {
-		expressions.push_back(index_binder.Bind(expr));
+		expressions.emplace_back(index_binder.Bind(expr));
 	}
 
 	auto create_index_info = unique_ptr_cast<CreateInfo, CreateIndexInfo>(std::move(stmt.info));
@@ -582,7 +582,7 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 		if (root) {
 			// CREATE TABLE AS
 			properties.return_type = StatementReturnType::CHANGED_ROWS;
-			create_table->children.push_back(std::move(root));
+			create_table->children.emplace_back(std::move(root));
 		}
 		result.plan = std::move(create_table);
 		break;
@@ -605,7 +605,7 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 					// When we push into a constant expression
 					// => CREATE TYPE mood AS ENUM (SELECT DISTINCT ON(x, x) x FROM test);
 					auto &distinct_modifier = (DistinctModifier &)*query_node.modifiers[0];
-					distinct_modifier.distinct_on_targets.push_back(make_uniq<ConstantExpression>(Value::INTEGER(1)));
+					distinct_modifier.distinct_on_targets.emplace_back(make_uniq<ConstantExpression>(Value::INTEGER(1)));
 					need_to_add = false;
 				}
 			}
@@ -613,7 +613,7 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 			// Add distinct modifier
 			if (need_to_add) {
 				auto distinct_modifier = make_uniq<DistinctModifier>();
-				distinct_modifier->distinct_on_targets.push_back(make_uniq<ConstantExpression>(Value::INTEGER(1)));
+				distinct_modifier->distinct_on_targets.emplace_back(make_uniq<ConstantExpression>(Value::INTEGER(1)));
 				query_node.modifiers.emplace(query_node.modifiers.begin(), std::move(distinct_modifier));
 			}
 

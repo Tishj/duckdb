@@ -95,16 +95,16 @@ unique_ptr<Expression> BoundWindowExpression::Copy() {
 		new_window->bind_info = bind_info->Copy();
 	}
 	for (auto &child : children) {
-		new_window->children.push_back(child->Copy());
+		new_window->children.emplace_back(child->Copy());
 	}
 	for (auto &e : partitions) {
-		new_window->partitions.push_back(e->Copy());
+		new_window->partitions.emplace_back(e->Copy());
 	}
 	for (auto &ps : partitions_stats) {
 		if (ps) {
-			new_window->partitions_stats.push_back(ps->ToUnique());
+			new_window->partitions_stats.emplace_back(ps->ToUnique());
 		} else {
-			new_window->partitions_stats.push_back(nullptr);
+			new_window->partitions_stats.emplace_back(nullptr);
 		}
 	}
 	for (auto &o : orders) {

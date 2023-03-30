@@ -16,7 +16,7 @@ namespace duckdb {
 
 unique_ptr<ParsedExpression> Transformer::TransformUnaryOperator(const string &op, unique_ptr<ParsedExpression> child) {
 	vector<unique_ptr<ParsedExpression>> children;
-	children.push_back(std::move(child));
+	children.emplace_back(std::move(child));
 
 	// built-in operator function
 	auto result = make_uniq<FunctionExpression>(op, std::move(children));
@@ -27,8 +27,8 @@ unique_ptr<ParsedExpression> Transformer::TransformUnaryOperator(const string &o
 unique_ptr<ParsedExpression> Transformer::TransformBinaryOperator(const string &op, unique_ptr<ParsedExpression> left,
                                                                   unique_ptr<ParsedExpression> right) {
 	vector<unique_ptr<ParsedExpression>> children;
-	children.push_back(std::move(left));
-	children.push_back(std::move(right));
+	children.emplace_back(std::move(left));
+	children.emplace_back(std::move(right));
 
 	if (op == "~" || op == "!~") {
 		// rewrite 'asdf' SIMILAR TO '.*sd.*' into regexp_full_match('asdf', '.*sd.*')
@@ -69,9 +69,9 @@ unique_ptr<ParsedExpression> Transformer::TransformAExprInternal(duckdb_libpgque
 		auto select_statement = make_uniq<SelectStatement>();
 		auto select_node = make_uniq<SelectNode>();
 		vector<unique_ptr<ParsedExpression>> children;
-		children.push_back(std::move(right_expr));
+		children.emplace_back(std::move(right_expr));
 
-		select_node->select_list.push_back(make_uniq<FunctionExpression>("UNNEST", std::move(children)));
+		select_node->select_list.emplace_back(make_uniq<FunctionExpression>("UNNEST", std::move(children)));
 		select_node->from_table = make_uniq<EmptyTableRef>();
 		select_statement->node = std::move(select_node);
 		subquery_expr->subquery = std::move(select_statement);
@@ -108,8 +108,8 @@ unique_ptr<ParsedExpression> Transformer::TransformAExprInternal(duckdb_libpgque
 	// rewrite NULLIF(a, b) into CASE WHEN a=b THEN NULL ELSE a END
 	case duckdb_libpgquery::PG_AEXPR_NULLIF: {
 		vector<unique_ptr<ParsedExpression>> children;
-		children.push_back(TransformExpression(root->lexpr));
-		children.push_back(TransformExpression(root->rexpr));
+		children.emplace_back(TransformExpression(root->lexpr));
+		children.emplace_back(TransformExpression(root->rexpr));
 		return make_uniq<FunctionExpression>("nullif", std::move(children));
 	}
 	// rewrite (NOT) X BETWEEN A AND B into (NOT) AND(GREATERTHANOREQUALTO(X,
@@ -141,7 +141,7 @@ unique_ptr<ParsedExpression> Transformer::TransformAExprInternal(duckdb_libpgque
 		auto right_expr = TransformExpression(root->rexpr);
 
 		vector<unique_ptr<ParsedExpression>> children;
-		children.push_back(std::move(left_expr));
+		children.emplace_back(std::move(left_expr));
 
 		auto &similar_func = reinterpret_cast<FunctionExpression &>(*right_expr);
 		D_ASSERT(similar_func.function_name == "similar_escape");
@@ -154,7 +154,7 @@ unique_ptr<ParsedExpression> Transformer::TransformAExprInternal(duckdb_libpgque
 			throw NotImplementedException("Custom escape in SIMILAR TO");
 		}
 		// take the child of the similar_func
-		children.push_back(std::move(similar_func.children[0]));
+		children.emplace_back(std::move(similar_func.children[0]));
 
 		// this looks very odd, but seems to be the way to find out its NOT IN
 		bool invert_similar = false;

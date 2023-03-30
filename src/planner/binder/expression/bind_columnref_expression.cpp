@@ -31,7 +31,7 @@ unique_ptr<ParsedExpression> ExpressionBinder::QualifyColumnName(const string &c
 			auto coalesce = make_uniq<OperatorExpression>(ExpressionType::OPERATOR_COALESCE);
 			coalesce->children.reserve(using_binding->bindings.size());
 			for (auto &entry : using_binding->bindings) {
-				coalesce->children.push_back(make_uniq<ColumnRefExpression>(column_name, entry));
+				coalesce->children.emplace_back(make_uniq<ColumnRefExpression>(column_name, entry));
 			}
 			return std::move(coalesce);
 		}
@@ -136,8 +136,8 @@ unique_ptr<ParsedExpression> ExpressionBinder::CreateStructExtract(unique_ptr<Pa
 	}
 
 	vector<unique_ptr<ParsedExpression>> children;
-	children.push_back(std::move(base));
-	children.push_back(make_uniq_base<ParsedExpression, ConstantExpression>(Value(std::move(field_name))));
+	children.emplace_back(std::move(base));
+	children.emplace_back(make_uniq_base<ParsedExpression, ConstantExpression>(Value(std::move(field_name))));
 	auto extract_fun = make_uniq<OperatorExpression>(ExpressionType::STRUCT_EXTRACT, std::move(children));
 	return std::move(extract_fun);
 }
@@ -178,7 +178,7 @@ unique_ptr<ParsedExpression> ExpressionBinder::CreateStructPack(ColumnRefExpress
 	vector<unique_ptr<ParsedExpression>> child_expressions;
 	child_expressions.reserve(binding->names.size());
 	for (const auto &column_name : binding->names) {
-		child_expressions.push_back(make_uniq<ColumnRefExpression>(column_name, table_name));
+		child_expressions.emplace_back(make_uniq<ColumnRefExpression>(column_name, table_name));
 	}
 	return make_uniq<FunctionExpression>("struct_pack", std::move(child_expressions));
 }
@@ -338,7 +338,7 @@ BindResult ExpressionBinder::BindExpression(ColumnRefExpression &colref_p, idx_t
 		BoundColumnReferenceInfo ref;
 		ref.name = colref.column_names.back();
 		ref.query_location = colref.query_location;
-		bound_columns.push_back(std::move(ref));
+		bound_columns.emplace_back(std::move(ref));
 	} else {
 		result.error = binder.FormatError(colref_p, result.error);
 	}

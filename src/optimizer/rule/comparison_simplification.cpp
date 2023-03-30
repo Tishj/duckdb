@@ -9,7 +9,7 @@ namespace duckdb {
 ComparisonSimplificationRule::ComparisonSimplificationRule(ExpressionRewriter &rewriter) : Rule(rewriter) {
 	// match on a ComparisonExpression that has a ConstantExpression as a check
 	auto op = make_uniq<ComparisonExpressionMatcher>();
-	op->matchers.push_back(make_uniq<FoldableConstantMatcher>());
+	op->matchers.emplace_back(make_uniq<FoldableConstantMatcher>());
 	op->policy = SetMatcher::Policy::SOME;
 	root = std::move(op);
 }

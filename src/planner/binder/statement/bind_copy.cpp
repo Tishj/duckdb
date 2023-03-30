@@ -207,7 +207,7 @@ BoundStatement Binder::BindCopyFrom(CopyStatement &stmt) {
 	for (idx_t i = 0; i < bound_insert.expected_types.size(); i++) {
 		get->column_ids.push_back(i);
 	}
-	insert_statement.plan->children.push_back(std::move(get));
+	insert_statement.plan->children.emplace_back(std::move(get));
 	result.plan = std::move(insert_statement.plan);
 	return result;
 }
@@ -225,10 +225,10 @@ BoundStatement Binder::Bind(CopyStatement &stmt) {
 		statement->from_table = std::move(ref);
 		if (!stmt.info->select_list.empty()) {
 			for (auto &name : stmt.info->select_list) {
-				statement->select_list.push_back(make_uniq<ColumnRefExpression>(name));
+				statement->select_list.emplace_back(make_uniq<ColumnRefExpression>(name));
 			}
 		} else {
-			statement->select_list.push_back(make_uniq<StarExpression>());
+			statement->select_list.emplace_back(make_uniq<StarExpression>());
 		}
 		stmt.select_statement = std::move(statement);
 	}

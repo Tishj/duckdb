@@ -33,11 +33,11 @@ vector<unique_ptr<ParsedExpression>> Transformer::TransformIndexParameters(duckd
 
 		if (index_element->name) {
 			// create a column reference expression
-			expressions.push_back(make_uniq<ColumnRefExpression>(index_element->name, relation_name));
+			expressions.emplace_back(make_uniq<ColumnRefExpression>(index_element->name, relation_name));
 		} else {
 			// parse the index expression
 			D_ASSERT(index_element->expr);
-			expressions.push_back(TransformExpression(index_element->expr));
+			expressions.emplace_back(TransformExpression(index_element->expr));
 		}
 	}
 	return expressions;

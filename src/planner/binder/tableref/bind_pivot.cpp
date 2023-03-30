@@ -62,7 +62,7 @@ static void ConstructPivots(PivotRef &ref, idx_t pivot_idx, vector<unique_ptr<Pa
 				} else {
 					function.alias = name;
 				}
-				pivot_expressions.push_back(std::move(copy));
+				pivot_expressions.emplace_back(std::move(copy));
 			}
 		} else {
 			// need to recurse
@@ -121,7 +121,7 @@ unique_ptr<SelectNode> Binder::BindPivot(PivotRef &ref, vector<unique_ptr<Parsed
 				PivotColumnEntry entry;
 				entry.values.emplace_back(enum_value);
 				entry.alias = std::move(enum_value);
-				pivot.entries.push_back(std::move(entry));
+				pivot.entries.emplace_back(std::move(entry));
 			}
 		}
 		total_pivots *= pivot.entries.size();
@@ -168,22 +168,22 @@ unique_ptr<SelectNode> Binder::BindPivot(PivotRef &ref, vector<unique_ptr<Parsed
 			auto &columnref = (ColumnRefExpression &)*entry;
 			if (handled_columns.find(columnref.GetColumnName()) == handled_columns.end()) {
 				// not handled - add to grouping set
-				select_node->groups.group_expressions.push_back(
+				select_node->groups.group_expressions.emplace_back(
 				    make_uniq<ConstantExpression>(Value::INTEGER(select_node->select_list.size() + 1)));
-				select_node->select_list.push_back(std::move(entry));
+				select_node->select_list.emplace_back(std::move(entry));
 			}
 		}
 	} else {
 		// if rows are specified only the columns mentioned in rows are added as groups
 		for (auto &row : ref.groups) {
-			select_node->groups.group_expressions.push_back(
+			select_node->groups.group_expressions.emplace_back(
 			    make_uniq<ConstantExpression>(Value::INTEGER(select_node->select_list.size() + 1)));
-			select_node->select_list.push_back(make_uniq<ColumnRefExpression>(row));
+			select_node->select_list.emplace_back(make_uniq<ColumnRefExpression>(row));
 		}
 	}
 	// add the pivot expressions to the select list
 	for (auto &pivot_expr : pivot_expressions) {
-		select_node->select_list.push_back(std::move(pivot_expr));
+		select_node->select_list.emplace_back(std::move(pivot_expr));
 	}
 	return select_node;
 }
@@ -216,10 +216,10 @@ unique_ptr<SelectNode> Binder::BindUnpivot(Binder &child_binder, PivotRef &ref,
 				PivotColumnEntry new_entry;
 				new_entry.values.emplace_back(columnref.GetColumnName());
 				new_entry.alias = columnref.GetColumnName();
-				new_entries.push_back(std::move(new_entry));
+				new_entries.emplace_back(std::move(new_entry));
 			}
 		} else {
-			new_entries.push_back(std::move(entry));
+			new_entries.emplace_back(std::move(entry));
 		}
 	}
 	unpivot.entries = std::move(new_entries);
@@ -241,7 +241,7 @@ unique_ptr<SelectNode> Binder::BindUnpivot(Binder &child_binder, PivotRef &ref,
 		auto entry = handled_columns.find(column_name);
 		if (entry == handled_columns.end()) {
 			// not handled - add to the set of regularly selected columns
-			select_node->select_list.push_back(std::move(col_expr));
+			select_node->select_list.emplace_back(std::move(col_expr));
 		} else {
 			name_map[column_name] = column_name;
 			handled_columns.erase(entry);
@@ -273,19 +273,19 @@ unique_ptr<SelectNode> Binder::BindUnpivot(Binder &child_binder, PivotRef &ref,
 		vector<unique_ptr<ParsedExpression>> expressions;
 		expressions.reserve(unpivot.entries.size());
 		for (auto &entry : unpivot.entries) {
-			expressions.push_back(make_uniq<ColumnRefExpression>(entry.values[v_idx].ToString()));
+			expressions.emplace_back(make_uniq<ColumnRefExpression>(entry.values[v_idx].ToString()));
 		}
-		unpivot_expressions.push_back(std::move(expressions));
+		unpivot_expressions.emplace_back(std::move(expressions));
 	}
 
 	// construct the UNNEST expression for the set of names (constant)
 	auto unpivot_list = Value::LIST(LogicalType::VARCHAR, std::move(unpivot_names));
 	auto unpivot_name_expr = make_uniq<ConstantExpression>(std::move(unpivot_list));
 	vector<unique_ptr<ParsedExpression>> unnest_name_children;
-	unnest_name_children.push_back(std::move(unpivot_name_expr));
+	unnest_name_children.emplace_back(std::move(unpivot_name_expr));
 	auto unnest_name_expr = make_uniq<FunctionExpression>("unnest", std::move(unnest_name_children));
 	unnest_name_expr->alias = unpivot.unpivot_names[0];
-	select_node->select_list.push_back(std::move(unnest_name_expr));
+	select_node->select_list.emplace_back(std::move(unnest_name_expr));
 
 	// construct the UNNEST expression for the set of unpivoted columns
 	if (ref.unpivot_names.size() != unpivot_expressions.size()) {
@@ -295,11 +295,11 @@ unique_ptr<SelectNode> Binder::BindUnpivot(Binder &child_binder, PivotRef &ref,
 	for (idx_t i = 0; i < unpivot_expressions.size(); i++) {
 		auto list_expr = make_uniq<FunctionExpression>("list_value", std::move(unpivot_expressions[i]));
 		vector<unique_ptr<ParsedExpression>> unnest_val_children;
-		unnest_val_children.push_back(std::move(list_expr));
+		unnest_val_children.emplace_back(std::move(list_expr));
 		auto unnest_val_expr = make_uniq<FunctionExpression>("unnest", std::move(unnest_val_children));
 		auto unnest_name = i < ref.column_name_alias.size() ? ref.column_name_alias[i] : ref.unpivot_names[i];
 		unnest_val_expr->alias = unnest_name;
-		select_node->select_list.push_back(std::move(unnest_val_expr));
+		select_node->select_list.emplace_back(std::move(unnest_val_expr));
 		if (!ref.include_nulls) {
 			// if we are running with EXCLUDE NULLS we need to add an IS NOT NULL filter
 			auto colref = make_uniq<ColumnRefExpression>(unnest_name);
@@ -352,7 +352,7 @@ unique_ptr<BoundTableRef> Binder::Bind(PivotRef &ref) {
 		child_binder = Binder::CreateBinder(context, this);
 		child_binder->bind_context.AddSubquery(root_index, subquery_ref.alias, subquery_ref, *bound_select_ptr);
 		auto where_query = make_uniq<SelectNode>();
-		where_query->select_list.push_back(make_uniq<StarExpression>());
+		where_query->select_list.emplace_back(make_uniq<StarExpression>());
 		where_query->where_clause = std::move(where_clause);
 		bound_select_node = child_binder->BindSelectNode(*where_query, std::move(result));
 		bound_select_ptr = bound_select_node.get();

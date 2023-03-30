@@ -91,43 +91,43 @@ BoundStatement Binder::BindSummarize(ShowStatement &stmt) {
 	auto select = make_uniq<SelectStatement>();
 	select->node = std::move(query_copy);
 	for (idx_t i = 0; i < plan.names.size(); i++) {
-		name_children.push_back(make_uniq<ConstantExpression>(Value(plan.names[i])));
-		type_children.push_back(make_uniq<ConstantExpression>(Value(plan.types[i].ToString())));
-		min_children.push_back(SummarizeCreateAggregate("min", plan.names[i]));
-		max_children.push_back(SummarizeCreateAggregate("max", plan.names[i]));
-		unique_children.push_back(SummarizeCreateAggregate("approx_count_distinct", plan.names[i]));
+		name_children.emplace_back(make_uniq<ConstantExpression>(Value(plan.names[i])));
+		type_children.emplace_back(make_uniq<ConstantExpression>(Value(plan.types[i].ToString())));
+		min_children.emplace_back(SummarizeCreateAggregate("min", plan.names[i]));
+		max_children.emplace_back(SummarizeCreateAggregate("max", plan.names[i]));
+		unique_children.emplace_back(SummarizeCreateAggregate("approx_count_distinct", plan.names[i]));
 		if (plan.types[i].IsNumeric()) {
-			avg_children.push_back(SummarizeCreateAggregate("avg", plan.names[i]));
-			std_children.push_back(SummarizeCreateAggregate("stddev", plan.names[i]));
-			q25_children.push_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.25)));
-			q50_children.push_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.50)));
-			q75_children.push_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.75)));
+			avg_children.emplace_back(SummarizeCreateAggregate("avg", plan.names[i]));
+			std_children.emplace_back(SummarizeCreateAggregate("stddev", plan.names[i]));
+			q25_children.emplace_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.25)));
+			q50_children.emplace_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.50)));
+			q75_children.emplace_back(SummarizeCreateAggregate("approx_quantile", plan.names[i], Value::FLOAT(0.75)));
 		} else {
-			avg_children.push_back(make_uniq<ConstantExpression>(Value()));
-			std_children.push_back(make_uniq<ConstantExpression>(Value()));
-			q25_children.push_back(make_uniq<ConstantExpression>(Value()));
-			q50_children.push_back(make_uniq<ConstantExpression>(Value()));
-			q75_children.push_back(make_uniq<ConstantExpression>(Value()));
+			avg_children.emplace_back(make_uniq<ConstantExpression>(Value()));
+			std_children.emplace_back(make_uniq<ConstantExpression>(Value()));
+			q25_children.emplace_back(make_uniq<ConstantExpression>(Value()));
+			q50_children.emplace_back(make_uniq<ConstantExpression>(Value()));
+			q75_children.emplace_back(make_uniq<ConstantExpression>(Value()));
 		}
-		count_children.push_back(SummarizeCreateCountStar());
-		null_percentage_children.push_back(SummarizeCreateNullPercentage(plan.names[i]));
+		count_children.emplace_back(SummarizeCreateCountStar());
+		null_percentage_children.emplace_back(SummarizeCreateNullPercentage(plan.names[i]));
 	}
 	auto subquery_ref = make_uniq<SubqueryRef>(std::move(select), "summarize_tbl");
 	subquery_ref->column_name_alias = plan.names;
 
 	auto select_node = make_uniq<SelectNode>();
-	select_node->select_list.push_back(SummarizeWrapUnnest(name_children, "column_name"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(type_children, "column_type"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(min_children, "min"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(max_children, "max"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(unique_children, "approx_unique"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(avg_children, "avg"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(std_children, "std"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(q25_children, "q25"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(q50_children, "q50"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(q75_children, "q75"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(count_children, "count"));
-	select_node->select_list.push_back(SummarizeWrapUnnest(null_percentage_children, "null_percentage"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(name_children, "column_name"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(type_children, "column_type"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(min_children, "min"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(max_children, "max"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(unique_children, "approx_unique"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(avg_children, "avg"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(std_children, "std"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(q25_children, "q25"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(q50_children, "q50"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(q75_children, "q75"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(count_children, "count"));
+	select_node->select_list.emplace_back(SummarizeWrapUnnest(null_percentage_children, "null_percentage"));
 	select_node->from_table = std::move(subquery_ref);
 
 	properties.return_type = StatementReturnType::QUERY_RESULT;

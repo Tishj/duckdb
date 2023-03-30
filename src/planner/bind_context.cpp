@@ -349,19 +349,19 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 						// no primary binding: output a coalesce
 						auto coalesce = make_uniq<OperatorExpression>(ExpressionType::OPERATOR_COALESCE);
 						for (auto &child_binding : using_binding->bindings) {
-							coalesce->children.push_back(make_uniq<ColumnRefExpression>(column_name, child_binding));
+							coalesce->children.emplace_back(make_uniq<ColumnRefExpression>(column_name, child_binding));
 						}
 						coalesce->alias = column_name;
-						new_select_list.push_back(std::move(coalesce));
+						new_select_list.emplace_back(std::move(coalesce));
 					} else {
 						// primary binding: output the qualified column ref
-						new_select_list.push_back(
+						new_select_list.emplace_back(
 						    make_uniq<ColumnRefExpression>(column_name, using_binding->primary_binding));
 					}
 					handled_using_columns.insert(using_binding);
 					continue;
 				}
-				new_select_list.push_back(make_uniq<ColumnRefExpression>(column_name, binding->alias));
+				new_select_list.emplace_back(make_uniq<ColumnRefExpression>(column_name, binding->alias));
 			}
 		}
 	} else {

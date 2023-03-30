@@ -45,7 +45,7 @@ static void BindCheckConstraint(Binder &binder, BoundCreateTableInfo &info, cons
 	auto unbound_expression = check.expression->Copy();
 	// now bind the constraint and create a new BoundCheckConstraint
 	bound_constraint->expression = check_binder.Bind(check.expression);
-	info.bound_constraints.push_back(std::move(bound_constraint));
+	info.bound_constraints.emplace_back(std::move(bound_constraint));
 	// move the unbound constraint back into the original check expression
 	check.expression = std::move(unbound_expression);
 }
@@ -66,7 +66,7 @@ static void BindConstraints(Binder &binder, BoundCreateTableInfo &info) {
 		case ConstraintType::NOT_NULL: {
 			auto &not_null = (NotNullConstraint &)*cond;
 			auto &col = base.columns.GetColumn(LogicalIndex(not_null.index));
-			info.bound_constraints.push_back(make_uniq<BoundNotNullConstraint>(PhysicalIndex(col.StorageOid())));
+			info.bound_constraints.emplace_back(make_uniq<BoundNotNullConstraint>(PhysicalIndex(col.StorageOid())));
 			not_null_columns.insert(not_null.index);
 			break;
 		}
@@ -109,7 +109,7 @@ static void BindConstraints(Binder &binder, BoundCreateTableInfo &info) {
 				has_primary_key = true;
 				primary_keys = keys;
 			}
-			info.bound_constraints.push_back(
+			info.bound_constraints.emplace_back(
 			    make_uniq<BoundUniqueConstraint>(std::move(keys), std::move(key_set), unique.is_primary_key));
 			break;
 		}
@@ -131,7 +131,7 @@ static void BindConstraints(Binder &binder, BoundCreateTableInfo &info) {
 				}
 				fk_key_set.insert(fk.info.fk_keys[i]);
 			}
-			info.bound_constraints.push_back(
+			info.bound_constraints.emplace_back(
 			    make_uniq<BoundForeignKeyConstraint>(fk.info, std::move(pk_key_set), std::move(fk_key_set)));
 			break;
 		}
@@ -147,8 +147,8 @@ static void BindConstraints(Binder &binder, BoundCreateTableInfo &info) {
 				continue;
 			}
 			auto physical_index = base.columns.LogicalToPhysical(column_index);
-			base.constraints.push_back(make_uniq<NotNullConstraint>(column_index));
-			info.bound_constraints.push_back(make_uniq<BoundNotNullConstraint>(physical_index));
+			base.constraints.emplace_back(make_uniq<NotNullConstraint>(column_index));
+			info.bound_constraints.emplace_back(make_uniq<BoundNotNullConstraint>(physical_index));
 		}
 	}
 }
@@ -222,7 +222,7 @@ void Binder::BindDefaultValues(const ColumnList &columns, vector<unique_ptr<Expr
 			// no default value specified: push a default value of constant null
 			bound_default = make_uniq<BoundConstantExpression>(Value(column.Type()));
 		}
-		bound_defaults.push_back(std::move(bound_default));
+		bound_defaults.emplace_back(std::move(bound_default));
 	}
 }
 
@@ -316,7 +316,7 @@ vector<unique_ptr<Expression>> Binder::BindCreateIndexExpressions(TableCatalogEn
 	vector<unique_ptr<Expression>> expressions;
 	expressions.reserve(info->expressions.size());
 	for (auto &expr : info->expressions) {
-		expressions.push_back(index_binder.Bind(expr));
+		expressions.emplace_back(index_binder.Bind(expr));
 	}
 
 	return expressions;

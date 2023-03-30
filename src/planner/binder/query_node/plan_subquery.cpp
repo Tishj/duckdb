@@ -37,7 +37,7 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 		    function_binder.BindAggregateFunction(count_star_fun, {}, nullptr, AggregateType::NON_DISTINCT);
 		auto idx_type = count_star->return_type;
 		vector<unique_ptr<Expression>> aggregate_list;
-		aggregate_list.push_back(std::move(count_star));
+		aggregate_list.emplace_back(std::move(count_star));
 		auto aggregate_index = binder.GenerateTableIndex();
 		auto aggregate =
 		    make_uniq<LogicalAggregate>(binder.GenerateTableIndex(), aggregate_index, std::move(aggregate_list));
@@ -51,7 +51,7 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 		                                                       std::move(right_child));
 
 		vector<unique_ptr<Expression>> projection_list;
-		projection_list.push_back(std::move(comparison));
+		projection_list.emplace_back(std::move(comparison));
 		auto projection_index = binder.GenerateTableIndex();
 		auto projection = make_uniq<LogicalProjection>(projection_index, std::move(projection_list));
 		projection->AddChild(std::move(plan));
@@ -83,13 +83,13 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 		vector<unique_ptr<Expression>> expressions;
 		auto bound = make_uniq<BoundColumnRefExpression>(expr.return_type, ColumnBinding(table_idx, 0));
 		vector<unique_ptr<Expression>> first_children;
-		first_children.push_back(std::move(bound));
+		first_children.emplace_back(std::move(bound));
 
 		FunctionBinder function_binder(binder.context);
 		auto first_agg = function_binder.BindAggregateFunction(
 		    FirstFun::GetFunction(expr.return_type), std::move(first_children), nullptr, AggregateType::NON_DISTINCT);
 
-		expressions.push_back(std::move(first_agg));
+		expressions.emplace_back(std::move(first_agg));
 		auto aggr_index = binder.GenerateTableIndex();
 		auto aggr = make_uniq<LogicalAggregate>(binder.GenerateTableIndex(), aggr_index, std::move(expressions));
 		aggr->AddChild(std::move(plan));
@@ -125,7 +125,7 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 		cond.right = BoundCastExpression::AddDefaultCastToType(
 		    make_uniq<BoundColumnRefExpression>(expr.child_type, plan_columns[0]), expr.child_target);
 		cond.comparison = expr.comparison_type;
-		join->conditions.push_back(std::move(cond));
+		join->conditions.emplace_back(std::move(cond));
 		root = std::move(join);
 
 		// we replace the original subquery with a BoundColumnRefExpression referring to the mark column
@@ -148,14 +148,14 @@ CreateDuplicateEliminatedJoin(const vector<CorrelatedColumnInfo> &correlated_col
 		row_number->start = WindowBoundary::UNBOUNDED_PRECEDING;
 		row_number->end = WindowBoundary::CURRENT_ROW_ROWS;
 		row_number->alias = "delim_index";
-		window->expressions.push_back(std::move(row_number));
+		window->expressions.emplace_back(std::move(row_number));
 		window->AddChild(std::move(original_plan));
 		original_plan = std::move(window);
 	}
 	delim_join->AddChild(std::move(original_plan));
 	for (idx_t i = 0; i < correlated_columns.size(); i++) {
 		auto &col = correlated_columns[i];
-		delim_join->duplicate_eliminated_columns.push_back(make_uniq<BoundColumnRefExpression>(col.type, col.binding));
+		delim_join->duplicate_eliminated_columns.emplace_back(make_uniq<BoundColumnRefExpression>(col.type, col.binding));
 		delim_join->delim_types.push_back(col.type);
 	}
 	return delim_join;
@@ -175,7 +175,7 @@ static void CreateDelimJoinConditions(LogicalDelimJoin &delim_join,
 		cond.left = make_uniq<BoundColumnRefExpression>(col.name, col.type, col.binding);
 		cond.right = make_uniq<BoundColumnRefExpression>(col.name, col.type, bindings[binding_idx]);
 		cond.comparison = ExpressionType::COMPARE_NOT_DISTINCT_FROM;
-		delim_join.conditions.push_back(std::move(cond));
+		delim_join.conditions.emplace_back(std::move(cond));
 	}
 }
 
@@ -317,7 +317,7 @@ static unique_ptr<Expression> PlanCorrelatedSubquery(Binder &binder, BoundSubque
 		compare_cond.right = BoundCastExpression::AddDefaultCastToType(
 		    make_uniq<BoundColumnRefExpression>(expr.child_type, plan_columns[0]), expr.child_target);
 		compare_cond.comparison = expr.comparison_type;
-		delim_join->conditions.push_back(std::move(compare_cond));
+		delim_join->conditions.emplace_back(std::move(compare_cond));
 
 		delim_join->AddChild(std::move(dependent_join));
 		root = std::move(delim_join);

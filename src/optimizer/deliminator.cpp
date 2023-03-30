@@ -277,7 +277,7 @@ bool Deliminator::RemoveCandidate(unique_ptr<LogicalOperator> *plan, unique_ptr<
 				auto is_not_null_expr =
 				    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, LogicalType::BOOLEAN);
 				is_not_null_expr->children.push_back(expr->Copy());
-				filter_op->expressions.push_back(std::move(is_not_null_expr));
+				filter_op->expressions.emplace_back(std::move(is_not_null_expr));
 			}
 		}
 		if (filter != nullptr) {

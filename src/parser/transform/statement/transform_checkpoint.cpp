@@ -14,7 +14,7 @@ unique_ptr<SQLStatement> Transformer::TransformCheckpoint(duckdb_libpgquery::PGN
 	auto result = make_uniq<CallStatement>();
 	auto function = make_uniq<FunctionExpression>(checkpoint_name, std::move(children));
 	if (checkpoint->name) {
-		function->children.push_back(make_uniq<ConstantExpression>(Value(checkpoint->name)));
+		function->children.emplace_back(make_uniq<ConstantExpression>(Value(checkpoint->name)));
 	}
 	result->function = std::move(function);
 	return std::move(result);

@@ -110,7 +110,7 @@ BindResult ExpressionBinder::BindFunction(FunctionExpression &function, ScalarFu
 	for (idx_t i = 0; i < function.children.size(); i++) {
 		auto &child = (BoundExpression &)*function.children[i];
 		D_ASSERT(child.expr);
-		children.push_back(std::move(child.expr));
+		children.emplace_back(std::move(child.expr));
 	}
 
 	FunctionBinder function_binder(context);
@@ -185,7 +185,7 @@ BindResult ExpressionBinder::BindLambdaFunction(FunctionExpression &function, Sc
 	for (idx_t i = 0; i < function.children.size(); i++) {
 		auto &child = (BoundExpression &)*function.children[i];
 		D_ASSERT(child.expr);
-		children.push_back(std::move(child.expr));
+		children.emplace_back(std::move(child.expr));
 	}
 
 	// capture the (lambda) columns
@@ -221,14 +221,14 @@ BindResult ExpressionBinder::BindLambdaFunction(FunctionExpression &function, Sc
 			bound_function_expr.function.arguments.push_back(binding.types[0]);
 			auto bound_lambda_param =
 			    make_uniq<BoundReferenceExpression>(binding.names[0], binding.types[0], lambda_index);
-			bound_function_expr.children.push_back(std::move(bound_lambda_param));
+			bound_function_expr.children.emplace_back(std::move(bound_lambda_param));
 		}
 	}
 
 	// push back the captures into the children vector and the correct return types into the bound_function arguments
 	for (auto &capture : bound_lambda.captures) {
 		bound_function_expr.function.arguments.push_back(capture->return_type);
-		bound_function_expr.children.push_back(std::move(capture));
+		bound_function_expr.children.emplace_back(std::move(capture));
 	}
 
 	return BindResult(std::move(result));

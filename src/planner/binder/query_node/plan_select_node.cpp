@@ -123,7 +123,7 @@ unique_ptr<LogicalOperator> Binder::CreatePlan(BoundSelectNode &statement) {
 		D_ASSERT(root);
 		vector<unique_ptr<Expression>> prune_expressions;
 		for (idx_t i = 0; i < statement.column_count; i++) {
-			prune_expressions.push_back(make_uniq<BoundColumnRefExpression>(
+			prune_expressions.emplace_back(make_uniq<BoundColumnRefExpression>(
 			    projection.expressions[i]->return_type, ColumnBinding(statement.projection_index, i)));
 		}
 		auto prune = make_uniq<LogicalProjection>(statement.prune_index, std::move(prune_expressions));

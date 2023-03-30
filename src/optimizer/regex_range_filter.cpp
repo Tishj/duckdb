@@ -48,14 +48,14 @@ unique_ptr<LogicalOperator> RegexRangeFilter::Rewrite(unique_ptr<LogicalOperator
 			auto filter_expr = make_uniq<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND,
 			                                                         std::move(filter_left), std::move(filter_right));
 
-			new_filter->expressions.push_back(std::move(filter_expr));
+			new_filter->expressions.emplace_back(std::move(filter_expr));
 		}
 	}
 
 	if (!new_filter->expressions.empty()) {
 		new_filter->children = std::move(op->children);
 		op->children.clear();
-		op->children.push_back(std::move(new_filter));
+		op->children.emplace_back(std::move(new_filter));
 	}
 
 	return op;

@@ -367,11 +367,11 @@ ListAggregatesBindFunction(ClientContext &context, ScalarFunction &bound_functio
 	// create the child expression and its type
 	vector<unique_ptr<Expression>> children;
 	auto expr = make_uniq<BoundConstantExpression>(Value(list_child_type));
-	children.push_back(std::move(expr));
+	children.emplace_back(std::move(expr));
 	// push any extra arguments into the list aggregate bind
 	if (arguments.size() > 2) {
 		for (idx_t i = 2; i < arguments.size(); i++) {
-			children.push_back(std::move(arguments[i]));
+			children.emplace_back(std::move(arguments[i]));
 		}
 		arguments.resize(2);
 	}
@@ -431,10 +431,10 @@ static unique_ptr<FunctionData> ListAggregatesBind(ClientContext &context, Scala
 	// find a matching aggregate function
 	string error;
 	vector<LogicalType> types;
-	types.push_back(list_child_type);
+	types.emplace_back(list_child_type);
 	// push any extra arguments into the type list
 	for (idx_t i = 2; i < arguments.size(); i++) {
-		types.push_back(arguments[i]->return_type);
+		types.emplace_back(arguments[i]->return_type);
 	}
 
 	FunctionBinder function_binder(context);

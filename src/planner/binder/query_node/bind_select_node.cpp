@@ -117,7 +117,7 @@ void Binder::BindModifiers(OrderBinder &order_binder, QueryNode &statement, Boun
 			auto bound_distinct = make_uniq<BoundDistinctModifier>();
 			if (distinct.distinct_on_targets.empty()) {
 				for (idx_t i = 0; i < result.names.size(); i++) {
-					distinct.distinct_on_targets.push_back(make_uniq<ConstantExpression>(Value::INTEGER(1 + i)));
+					distinct.distinct_on_targets.emplace_back(make_uniq<ConstantExpression>(Value::INTEGER(1 + i)));
 				}
 			}
 			for (auto &distinct_on_target : distinct.distinct_on_targets) {
@@ -125,7 +125,7 @@ void Binder::BindModifiers(OrderBinder &order_binder, QueryNode &statement, Boun
 				if (!expr) {
 					continue;
 				}
-				bound_distinct->target_distincts.push_back(std::move(expr));
+				bound_distinct->target_distincts.emplace_back(std::move(expr));
 			}
 			bound_modifier = std::move(bound_distinct);
 			break;
@@ -184,7 +184,7 @@ void Binder::BindModifiers(OrderBinder &order_binder, QueryNode &statement, Boun
 			throw Exception("Unsupported result modifier");
 		}
 		if (bound_modifier) {
-			result.modifiers.push_back(std::move(bound_modifier));
+			result.modifiers.emplace_back(std::move(bound_modifier));
 		}
 	}
 }
@@ -209,7 +209,7 @@ void Binder::BindModifierTypes(BoundQueryNode &result, const vector<LogicalType>
 			if (distinct.target_distincts.empty()) {
 				// DISTINCT without a target: push references to the standard select list
 				for (idx_t i = 0; i < sql_types.size(); i++) {
-					distinct.target_distincts.push_back(
+					distinct.target_distincts.emplace_back(
 					    make_uniq<BoundColumnRefExpression>(sql_types[i], ColumnBinding(projection_index, i)));
 				}
 			} else {
@@ -345,7 +345,7 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 			result->names[i] = expr->alias;
 		}
 		projection_map[expr.get()] = i;
-		result->original_expressions.push_back(expr->Copy());
+		result->original_expressions.emplace_back(expr->Copy());
 	}
 	result->column_count = statement.select_list.size();
 
@@ -389,7 +389,7 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 			// push a potential collation, if necessary
 			bound_expr = ExpressionBinder::PushCollation(context, std::move(bound_expr),
 			                                             StringType::GetCollation(group_type), true);
-			result->groups.group_expressions.push_back(std::move(bound_expr));
+			result->groups.group_expressions.emplace_back(std::move(bound_expr));
 
 			// in the unbound expression we DO bind the table names of any ColumnRefs
 			// we do this to make sure that "table.a" and "a" are treated the same
@@ -447,7 +447,7 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 			for (auto &struct_expr : struct_expressions) {
 				new_names.push_back(struct_expr->GetName());
 				result->types.push_back(struct_expr->return_type);
-				result->select_list.push_back(std::move(struct_expr));
+				result->select_list.emplace_back(std::move(struct_expr));
 			}
 			struct_expressions.clear();
 			continue;
@@ -466,7 +466,7 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 			// this entry becomes a group
 			group_by_all_indexes.push_back(i);
 		}
-		result->select_list.push_back(std::move(expr));
+		result->select_list.emplace_back(std::move(expr));
 		if (is_original_column) {
 			new_names.push_back(std::move(result->names[i]));
 			result->types.push_back(result_type);
@@ -481,7 +481,7 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 		auto &expr = result->select_list[group_by_all_index];
 		auto group_ref = make_uniq<BoundColumnRefExpression>(
 		    expr->return_type, ColumnBinding(result->group_index, result->groups.group_expressions.size()));
-		result->groups.group_expressions.push_back(std::move(expr));
+		result->groups.group_expressions.emplace_back(std::move(expr));
 		expr = std::move(group_ref);
 	}
 	result->column_count = new_names.size();

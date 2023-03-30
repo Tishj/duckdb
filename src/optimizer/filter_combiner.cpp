@@ -843,7 +843,7 @@ FilterResult FilterCombiner::AddTransitiveFilters(BoundComparisonExpression &com
 				// Add the filter j >= i in the remaing filters
 				auto filter = make_uniq<BoundComparisonExpression>(comparison.type, comparison.left->Copy(),
 				                                                   comparison.right->Copy());
-				remaining_filters.push_back(std::move(filter));
+				remaining_filters.emplace_back(std::move(filter));
 				is_inserted = true;
 			}
 		} else if ((comparison.type == ExpressionType::COMPARE_GREATERTHAN &&
@@ -858,7 +858,7 @@ FilterResult FilterCombiner::AddTransitiveFilters(BoundComparisonExpression &com
 				// Add the filter j [>, <] i
 				auto filter = make_uniq<BoundComparisonExpression>(comparison.type, comparison.left->Copy(),
 				                                                   comparison.right->Copy());
-				remaining_filters.push_back(std::move(filter));
+				remaining_filters.emplace_back(std::move(filter));
 				is_inserted = true;
 			}
 		} else {

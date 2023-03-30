@@ -123,7 +123,7 @@ unique_ptr<Expression> DistributivityRule::Apply(LogicalOperator &op, vector<Exp
 		for (auto &child : initial_or->children) {
 			new_or->children.push_back(std::move(child));
 		}
-		new_root->children.push_back(std::move(new_or));
+		new_root->children.emplace_back(std::move(new_or));
 	}
 	// finally return the new root
 	if (new_root->children.size() == 1) {

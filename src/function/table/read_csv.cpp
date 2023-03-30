@@ -92,11 +92,11 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 			if (val.IsNull()) {
 				throw ParserException("CSV reader cannot take NULL input as parameter");
 			}
-			patterns.push_back(StringValue::Get(val));
+			patterns.emplace_back(StringValue::Get(val));
 		}
 	} else {
 		// single glob pattern
-		patterns.push_back(StringValue::Get(input.inputs[0]));
+		patterns.emplace_back(StringValue::Get(input.inputs[0]));
 	}
 
 	result->InitializeFiles(context, patterns);
@@ -115,7 +115,7 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 			for (idx_t i = 0; i < struct_children.size(); i++) {
 				auto &name = StructType::GetChildName(child_type, i);
 				auto &val = struct_children[i];
-				names.push_back(name);
+				names.emplace_back(name);
 				if (val.type().id() != LogicalTypeId::VARCHAR) {
 					throw BinderException("read_csv requires a type specification as string");
 				}
@@ -159,7 +159,7 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 			}
 			auto &children = ListValue::GetChildren(kv.second);
 			for (auto &child : children) {
-				options.name_list.push_back(StringValue::Get(child));
+				options.name_list.emplace_back(StringValue::Get(child));
 			}
 		} else if (loption == "column_types" || loption == "types" || loption == "dtypes") {
 			auto &child_type = kv.second.type();
@@ -179,7 +179,7 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 					if (val.type().id() != LogicalTypeId::VARCHAR) {
 						throw BinderException("read_csv_auto %s requires a type specification as string", kv.first);
 					}
-					sql_type_names.push_back(StringValue::Get(val));
+					sql_type_names.emplace_back(StringValue::Get(val));
 					options.sql_types_per_column[name] = i;
 				}
 			} else {
@@ -189,7 +189,7 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 				}
 				auto &children = ListValue::GetChildren(kv.second);
 				for (auto &child : children) {
-					sql_type_names.push_back(StringValue::Get(child));
+					sql_type_names.emplace_back(StringValue::Get(child));
 				}
 			}
 			options.sql_type_list.reserve(sql_type_names.size());
@@ -199,7 +199,7 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 					throw BinderException("Unrecognized type \"%s\" for read_csv_auto %s definition", sql_type,
 					                      kv.first);
 				}
-				options.sql_type_list.push_back(std::move(def_type));
+				options.sql_type_list.emplace_back(std::move(def_type));
 			}
 		} else if (loption == "all_varchar") {
 			options.all_varchar = BooleanValue::Get(kv.second);
@@ -507,7 +507,7 @@ void ParallelCSVGlobalState::UpdateVerification(VerificationPositions positions)
 			max_tuple_end = positions.end_of_last_line;
 		}
 		tuple_start.insert(positions.beginning_of_first_line);
-		tuple_end.push_back(positions.end_of_last_line);
+		tuple_end.emplace_back(positions.end_of_last_line);
 	}
 }
 
@@ -1064,7 +1064,7 @@ unique_ptr<TableRef> ReadCSVReplacement(ClientContext &context, const string &ta
 	}
 	auto table_function = make_uniq<TableFunctionRef>();
 	vector<unique_ptr<ParsedExpression>> children;
-	children.push_back(make_uniq<ConstantExpression>(Value(table_name)));
+	children.emplace_back(make_uniq<ConstantExpression>(Value(table_name)));
 	table_function->function = make_uniq<FunctionExpression>("read_csv_auto", std::move(children));
 	return std::move(table_function);
 }

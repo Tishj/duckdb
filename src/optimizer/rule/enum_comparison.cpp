@@ -19,7 +19,7 @@ EnumComparisonRule::EnumComparisonRule(ExpressionRewriter &rewriter) : Rule(rewr
 		child->type = make_uniq<TypeMatcherId>(LogicalTypeId::VARCHAR);
 		child->matcher = make_uniq<ExpressionMatcher>();
 		child->matcher->type = make_uniq<TypeMatcherId>(LogicalTypeId::ENUM);
-		op->matchers.push_back(std::move(child));
+		op->matchers.emplace_back(std::move(child));
 	}
 	root = std::move(op);
 }
@@ -53,8 +53,8 @@ unique_ptr<Expression> EnumComparisonRule::Apply(LogicalOperator &op, vector<Exp
 
 	if (!AreMatchesPossible(left_child->child->return_type, right_child->child->return_type)) {
 		vector<unique_ptr<Expression>> children;
-		children.push_back(std::move(root->left));
-		children.push_back(std::move(root->right));
+		children.emplace_back(std::move(root->left));
+		children.emplace_back(std::move(root->right));
 		return ExpressionRewriter::ConstantOrNull(std::move(children), Value::BOOLEAN(false));
 	}
 

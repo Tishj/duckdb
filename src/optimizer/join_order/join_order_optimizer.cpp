@@ -957,7 +957,7 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 				    make_uniq<BoundComparisonExpression>(cond.comparison, std::move(cond.left), std::move(cond.right));
 				if (filter_set.find(comparison.get()) == filter_set.end()) {
 					filter_set.insert(comparison.get());
-					filters.push_back(std::move(comparison));
+					filters.emplace_back(std::move(comparison));
 				}
 			}
 			join.conditions.clear();
@@ -965,7 +965,7 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 			for (auto &expression : f_op->expressions) {
 				if (filter_set.find(expression.get()) == filter_set.end()) {
 					filter_set.insert(expression.get());
-					filters.push_back(std::move(expression));
+					filters.emplace_back(std::move(expression));
 				}
 			}
 			f_op->expressions.clear();

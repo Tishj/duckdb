@@ -191,7 +191,7 @@ unique_ptr<ParsedExpression> Transformer::TransformFuncCall(duckdb_libpgquery::P
 			expr->children = std::move(children);
 		} else {
 			if (!children.empty()) {
-				expr->children.push_back(std::move(children[0]));
+				expr->children.emplace_back(std::move(children[0]));
 			}
 			if (win_fun_type == ExpressionType::WINDOW_LEAD || win_fun_type == ExpressionType::WINDOW_LAG) {
 				if (children.size() > 1) {
@@ -205,7 +205,7 @@ unique_ptr<ParsedExpression> Transformer::TransformFuncCall(duckdb_libpgquery::P
 				}
 			} else if (win_fun_type == ExpressionType::WINDOW_NTH_VALUE) {
 				if (children.size() > 1) {
-					expr->children.push_back(std::move(children[1]));
+					expr->children.emplace_back(std::move(children[1]));
 				}
 				if (children.size() > 2) {
 					throw ParserException("Incorrect number of parameters for function %s", lowercase_name);
@@ -295,7 +295,7 @@ unique_ptr<ParsedExpression> Transformer::TransformFuncCall(duckdb_libpgquery::P
 		CaseCheck check;
 		check.when_expr = std::move(children[0]);
 		check.then_expr = std::move(children[1]);
-		expr->case_checks.push_back(std::move(check));
+		expr->case_checks.emplace_back(std::move(check));
 		expr->else_expr = std::move(children[2]);
 		return std::move(expr);
 	} else if (lowercase_name == "construct_array") {
@@ -309,8 +309,8 @@ unique_ptr<ParsedExpression> Transformer::TransformFuncCall(duckdb_libpgquery::P
 
 		//  Two-argument COALESCE
 		auto coalesce_op = make_uniq<OperatorExpression>(ExpressionType::OPERATOR_COALESCE);
-		coalesce_op->children.push_back(std::move(children[0]));
-		coalesce_op->children.push_back(std::move(children[1]));
+		coalesce_op->children.emplace_back(std::move(children[0]));
+		coalesce_op->children.emplace_back(std::move(children[1]));
 		return std::move(coalesce_op);
 	} else if (lowercase_name == "list" && order_bys->orders.size() == 1) {
 		// list(expr ORDER BY expr <sense> <nulls>) => list_sort(list(expr), <sense>, <nulls>)

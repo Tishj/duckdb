@@ -16,7 +16,7 @@ EqualOrNullSimplification::EqualOrNullSimplification(ExpressionRewriter &rewrite
 	auto equal_child = make_uniq<ComparisonExpressionMatcher>();
 	equal_child->expr_type = make_uniq<SpecificExpressionTypeMatcher>(ExpressionType::COMPARE_EQUAL);
 	equal_child->policy = SetMatcher::Policy::SOME;
-	op->matchers.push_back(std::move(equal_child));
+	op->matchers.emplace_back(std::move(equal_child));
 
 	// AND conjuction on the other
 	auto and_child = make_uniq<ConjunctionExpressionMatcher>();
@@ -29,10 +29,10 @@ EqualOrNullSimplification::EqualOrNullSimplification(ExpressionRewriter &rewrite
 	// I could try to use std::make_uniq for a copy, but it's available from C++14 only
 	auto isnull_child2 = make_uniq<ExpressionMatcher>();
 	isnull_child2->expr_type = make_uniq<SpecificExpressionTypeMatcher>(ExpressionType::OPERATOR_IS_NULL);
-	and_child->matchers.push_back(std::move(isnull_child));
-	and_child->matchers.push_back(std::move(isnull_child2));
+	and_child->matchers.emplace_back(std::move(isnull_child));
+	and_child->matchers.emplace_back(std::move(isnull_child2));
 
-	op->matchers.push_back(std::move(and_child));
+	op->matchers.emplace_back(std::move(and_child));
 	root = std::move(op);
 }
 

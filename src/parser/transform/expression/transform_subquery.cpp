@@ -65,7 +65,7 @@ unique_ptr<ParsedExpression> Transformer::TransformSubquery(duckdb_libpgquery::P
 
 		// ARRAY_AGG(i)
 		vector<unique_ptr<ParsedExpression>> children;
-		children.push_back(
+		children.emplace_back(
 		    make_uniq_base<ParsedExpression, ColumnRefExpression>(subquery_column_alias, subquery_table_alias));
 		auto aggr = make_uniq<FunctionExpression>("array_agg", std::move(children));
 		// ARRAY_AGG(i) IS NULL
@@ -78,10 +78,10 @@ unique_ptr<ParsedExpression> Transformer::TransformSubquery(duckdb_libpgquery::P
 		CaseCheck check;
 		check.when_expr = std::move(agg_is_null);
 		check.then_expr = std::move(empty_list);
-		case_expr->case_checks.push_back(std::move(check));
+		case_expr->case_checks.emplace_back(std::move(check));
 		case_expr->else_expr = std::move(aggr);
 
-		select_node->select_list.push_back(std::move(case_expr));
+		select_node->select_list.emplace_back(std::move(case_expr));
 
 		// FROM (...) tbl(i)
 		auto child_subquery = make_uniq<SubqueryRef>(std::move(subquery_expr->subquery), subquery_table_alias);
