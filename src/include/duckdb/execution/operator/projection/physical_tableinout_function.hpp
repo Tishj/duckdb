@@ -17,6 +17,7 @@ namespace duckdb {
 class TableInOutLocalState;
 class TableInOutGlobalState;
 
+//! PhysicalWindow implements window functions
 class PhysicalTableInOutFunction : public PhysicalOperator {
 public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::INOUT_FUNCTION;
