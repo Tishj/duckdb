@@ -29,25 +29,25 @@ private:
 	unique_ptr<RangeExecutor> MakeNumericExecutor(const LogicalType &type) {
 		switch (type.id()) {
 		case LogicalTypeId::TINYINT:
-			return make_unique<RangeIntExecutor<int8_t>>();
+			return make_uniq<RangeIntExecutor<int8_t>>();
 		case LogicalTypeId::SMALLINT:
-			return make_unique<RangeIntExecutor<int16_t>>();
+			return make_uniq<RangeIntExecutor<int16_t>>();
 		case LogicalTypeId::INTEGER:
-			return make_unique<RangeIntExecutor<int32_t>>();
+			return make_uniq<RangeIntExecutor<int32_t>>();
 		case LogicalTypeId::BIGINT:
-			return make_unique<RangeIntExecutor<int64_t>>();
+			return make_uniq<RangeIntExecutor<int64_t>>();
 		case LogicalTypeId::FLOAT:
-			return make_unique<RangeIntExecutor<float>>();
+			return make_uniq<RangeIntExecutor<float>>();
 		case LogicalTypeId::DOUBLE:
-			return make_unique<RangeIntExecutor<double>>();
+			return make_uniq<RangeIntExecutor<double>>();
 		case LogicalTypeId::UTINYINT:
-			return make_unique<RangeIntExecutor<uint8_t>>();
+			return make_uniq<RangeIntExecutor<uint8_t>>();
 		case LogicalTypeId::USMALLINT:
-			return make_unique<RangeIntExecutor<uint16_t>>();
+			return make_uniq<RangeIntExecutor<uint16_t>>();
 		case LogicalTypeId::UINTEGER:
-			return make_unique<RangeIntExecutor<uint32_t>>();
+			return make_uniq<RangeIntExecutor<uint32_t>>();
 		case LogicalTypeId::UBIGINT:
-			return make_unique<RangeIntExecutor<uint64_t>>();
+			return make_uniq<RangeIntExecutor<uint64_t>>();
 		default:
 			// Explicitly ignored:
 			// hugeint
@@ -77,7 +77,7 @@ private:
 			if (input.data[2].GetType() != LogicalTypeId::INTERVAL) {
 				throw InvalidInputException("Increment column has to be of type INTERVAL!");
 			}
-			return make_unique<RangeTimestampExecutor<false>>();
+			return make_uniq<RangeTimestampExecutor<false>>();
 		} else {
 			throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
 			                              type.ToString());
@@ -86,7 +86,7 @@ private:
 };
 
 static unique_ptr<GlobalTableFunctionState> RangeFunctionInit(ClientContext &context, TableFunctionInitInput &input) {
-	return make_unique<RangeInOutFunctionState>();
+	return make_uniq<RangeInOutFunctionState>();
 }
 
 template <bool GENERATE_SERIES>
@@ -98,7 +98,7 @@ static unique_ptr<FunctionData> RangeFunctionBindInternal(LogicalType return_typ
 		names.emplace_back("generate_series");
 	}
 	return_types.emplace_back(return_type);
-	return make_unique<TableFunctionData>();
+	return make_uniq<TableFunctionData>();
 }
 
 template <bool GENERATE_SERIES>
