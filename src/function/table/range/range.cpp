@@ -13,80 +13,25 @@ namespace duckdb {
 
 namespace range {
 
-struct RangeInOutFunctionState : public GlobalTableFunctionState {
-	//! The executor created for the given input types
-	//! can only be set once we have entered execution
-	unique_ptr<RangeExecutor> executor;
-
-	RangeExecutor &GetExecutor(DataChunk &input) {
-		if (!executor) {
-			executor = MakeExecutor(input);
-		}
-		return *executor;
-	}
-
-private:
-	unique_ptr<RangeExecutor> MakeNumericExecutor(const LogicalType &type) {
-		switch (type.id()) {
-		case LogicalTypeId::TINYINT:
-			return make_uniq<RangeIntExecutor<int8_t>>();
-		case LogicalTypeId::SMALLINT:
-			return make_uniq<RangeIntExecutor<int16_t>>();
-		case LogicalTypeId::INTEGER:
-			return make_uniq<RangeIntExecutor<int32_t>>();
-		case LogicalTypeId::BIGINT:
-			return make_uniq<RangeIntExecutor<int64_t>>();
-		case LogicalTypeId::FLOAT:
-			return make_uniq<RangeIntExecutor<float>>();
-		case LogicalTypeId::DOUBLE:
-			return make_uniq<RangeIntExecutor<double>>();
-		case LogicalTypeId::UTINYINT:
-			return make_uniq<RangeIntExecutor<uint8_t>>();
-		case LogicalTypeId::USMALLINT:
-			return make_uniq<RangeIntExecutor<uint16_t>>();
-		case LogicalTypeId::UINTEGER:
-			return make_uniq<RangeIntExecutor<uint32_t>>();
-		case LogicalTypeId::UBIGINT:
-			return make_uniq<RangeIntExecutor<uint64_t>>();
-		default:
-			// Explicitly ignored:
-			// hugeint
-			// decimal
-			throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
-			                              type.ToString());
-		}
-	}
-
-	unique_ptr<RangeExecutor> MakeExecutor(DataChunk &input) {
-		auto type = input.data[0].GetType();
-		if (input.ColumnCount() > 3) {
-			throw InvalidInputException("Range takes up to 3 arguments, not %d", input.ColumnCount());
-		}
-		if (type.IsNumeric()) {
-			for (idx_t i = 1; i < input.ColumnCount(); i++) {
-				if (input.data[i].GetType() != type) {
-					throw InvalidInputException(
-					    "All of the arguments passed to the numeric RANGE function have to be of the same type");
-				}
-			}
-			return MakeNumericExecutor(type);
-		} else if (input.ColumnCount() == 3 && type.id() == LogicalTypeId::TIMESTAMP) {
-			if (input.data[1].GetType() != type) {
-				throw InvalidInputException("Provided start and end column types don't match!");
-			}
-			if (input.data[2].GetType() != LogicalTypeId::INTERVAL) {
-				throw InvalidInputException("Increment column has to be of type INTERVAL!");
-			}
-			return make_uniq<RangeTimestampExecutor<false>>();
-		} else {
-			throw NotImplementedException("Range is not implemented as a table in-out function for '%s'",
-			                              type.ToString());
-		}
-	}
+template <bool GENERATE_SERIES>
+struct RangeInOutTimestampFunctionState : public GlobalTableFunctionState {
+	RangeTimestampExecutor<GENERATE_SERIES> executor;
 };
 
-static unique_ptr<GlobalTableFunctionState> RangeFunctionInit(ClientContext &context, TableFunctionInitInput &input) {
-	return make_uniq<RangeInOutFunctionState>();
+template <bool GENERATE_SERIES>
+struct RangeInOutNumericFunctionState : public GlobalTableFunctionState {
+	RangeIntExecutor<int64_t, GENERATE_SERIES> executor;
+};
+
+template <bool GENERATE_SERIES>
+static unique_ptr<GlobalTableFunctionState> RangeFunctionNumericInit(ClientContext &context,
+                                                                     TableFunctionInitInput &input) {
+	return make_uniq<RangeInOutNumericFunctionState<GENERATE_SERIES>>();
+}
+template <bool GENERATE_SERIES>
+static unique_ptr<GlobalTableFunctionState> RangeFunctionTimestampInit(ClientContext &context,
+                                                                       TableFunctionInitInput &input) {
+	return make_uniq<RangeInOutTimestampFunctionState<GENERATE_SERIES>>();
 }
 
 template <bool GENERATE_SERIES>
@@ -113,11 +58,9 @@ static unique_ptr<FunctionData> RangeTimestampFunctionBind(ClientContext &contex
 	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::TIMESTAMP, return_types, names);
 }
 
-static OperatorResultType RangeFunction(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,
-                                        DataChunk &output) {
-	auto &state = (RangeInOutFunctionState &)*data_p.global_state;
-
-	auto &executor = state.GetExecutor(input);
+template <class EXECUTOR>
+static OperatorResultType RangeFunctionInternal(ExecutionContext &context, EXECUTOR &executor, DataChunk &input,
+                                                DataChunk &output) {
 	idx_t total_written_tuples = 0;
 	idx_t written_tuples = 0;
 	OperatorResultType result;
@@ -139,17 +82,36 @@ static OperatorResultType RangeFunction(ExecutionContext &context, TableFunction
 	return result;
 }
 
+template <bool GENERATE_SERIES>
+static OperatorResultType RangeFunctionNumeric(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,
+                                               DataChunk &output) {
+
+	auto &state = (RangeInOutNumericFunctionState<GENERATE_SERIES> &)*data_p.global_state;
+
+	auto &executor = state.executor;
+	return RangeFunctionInternal<RangeIntExecutor<int64_t, GENERATE_SERIES>>(context, executor, input, output);
+}
+
+template <bool GENERATE_SERIES>
+static OperatorResultType RangeFunctionTimestamp(ExecutionContext &context, TableFunctionInput &data_p,
+                                                 DataChunk &input, DataChunk &output) {
+	auto &state = (RangeInOutTimestampFunctionState<GENERATE_SERIES> &)*data_p.global_state;
+
+	auto &executor = state.executor;
+	return RangeFunctionInternal<RangeTimestampExecutor<GENERATE_SERIES>>(context, executor, input, output);
+}
+
 } // namespace range
 
 void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
 
 	// range(BIGINT);
 	TableFunction range_function({LogicalType::BIGINT}, nullptr, range::RangeIntFunctionBind<false>,
-	                             range::RangeFunctionInit);
-	range_function.in_out_function = range::RangeFunction;
+	                             range::RangeFunctionNumericInit<false>);
+	range_function.in_out_function = range::RangeFunctionNumeric<false>;
 	set.AddFunction(range_function);
 
-	// range(BIGINT, BIGINT, BIGINT);
+	// range(BIGINT, BIGINT);
 	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
 	set.AddFunction(range_function);
 
@@ -159,7 +121,9 @@ void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
 
 	// range(TIMESTAMP, TIMESTAMP, INTERVAL);
 	range_function.arguments = {LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL};
+	range_function.init_global = range::RangeFunctionTimestampInit<false>;
 	range_function.bind = range::RangeTimestampFunctionBind<false>;
+	range_function.in_out_function = range::RangeFunctionTimestamp<false>;
 	set.AddFunction(range_function);
 }
 

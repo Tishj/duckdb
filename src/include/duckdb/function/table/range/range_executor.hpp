@@ -57,17 +57,11 @@ public:
 };
 
 class RangeExecutor {
-public:
+protected:
 	RangeExecutor() : new_row(false), input_idx(0), range_idx(0) {
 	}
-	virtual ~RangeExecutor() {
+	~RangeExecutor() {
 	}
-
-public:
-	virtual OperatorResultType ForwardInput(idx_t input_size) = 0;
-	virtual OperatorResultType Update(idx_t written_tuples, idx_t input_size) = 0;
-	virtual idx_t Execute(ExecutionContext &context, DataChunk &input, DataChunk &output, idx_t total_written,
-	                      bool &is_null) = 0;
 
 protected:
 	bool new_row;

@@ -6,7 +6,7 @@ namespace duckdb {
 
 namespace range {
 
-template <class RANGE_TYPE>
+template <class RANGE_TYPE, bool GENERATE_SERIES>
 class RangeIntExecutor : public RangeExecutor {
 	using range_t = RANGE_TYPE;
 	using increment_t = RANGE_TYPE;
@@ -15,7 +15,7 @@ class RangeIntExecutor : public RangeExecutor {
 public:
 	RangeIntExecutor() : settings(), start_data(0), end_data(0), increment_data(1) {
 	}
-	virtual ~RangeIntExecutor() {
+	~RangeIntExecutor() {
 	}
 
 public:
