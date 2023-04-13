@@ -44,6 +44,8 @@ public:
 	vector<LogicalType> expected_set_types;
 	// The (distinct) column ids to apply the ON CONFLICT on
 	unordered_set<column_t> on_conflict_filter;
+	//! The expressions of the target
+	vector<unique_ptr<Expression>> target_expressions;
 	// The WHERE clause of the conflict_target (ON CONFLICT .. WHERE <condition>)
 	unique_ptr<Expression> on_conflict_condition;
 	// The WHERE clause of the DO UPDATE clause

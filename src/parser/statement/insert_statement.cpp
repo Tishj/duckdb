@@ -8,13 +8,15 @@ namespace duckdb {
 OnConflictInfo::OnConflictInfo() : action_type(OnConflictAction::THROW) {
 }
 
-OnConflictInfo::OnConflictInfo(const OnConflictInfo &other)
-    : action_type(other.action_type), indexed_columns(other.indexed_columns) {
+OnConflictInfo::OnConflictInfo(const OnConflictInfo &other) : action_type(other.action_type) {
 	if (other.set_info) {
 		set_info = other.set_info->Copy();
 	}
 	if (other.condition) {
 		condition = other.condition->Copy();
+	}
+	for (auto &expr : other.indexed_columns) {
+		indexed_columns.push_back(expr->Copy());
 	}
 }
 
@@ -106,7 +108,7 @@ string InsertStatement::ToString() const {
 			result += "(";
 			auto &columns = conflict_info.indexed_columns;
 			for (auto it = columns.begin(); it != columns.end();) {
-				result += StringUtil::Lower(*it);
+				result += (*it)->ToString();
 				if (++it != columns.end()) {
 					result += ", ";
 				}

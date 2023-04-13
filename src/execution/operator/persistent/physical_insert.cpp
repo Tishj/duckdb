@@ -17,6 +17,7 @@
 #include "duckdb/execution/index/art/art.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/planner/expression.hpp"
 
 namespace duckdb {
 
@@ -28,14 +29,14 @@ PhysicalInsert::PhysicalInsert(vector<LogicalType> types_p, TableCatalogEntry *t
                                bool parallel, OnConflictAction action_type,
                                unique_ptr<Expression> on_conflict_condition_p,
                                unique_ptr<Expression> do_update_condition_p, unordered_set<column_t> conflict_target_p,
-                               vector<column_t> columns_to_fetch_p)
+                               vector<unique_ptr<Expression>> target_expressions_p, vector<column_t> columns_to_fetch_p)
     : PhysicalOperator(PhysicalOperatorType::INSERT, std::move(types_p), estimated_cardinality),
       column_index_map(std::move(column_index_map)), insert_table(table), insert_types(table->GetTypes()),
       bound_defaults(std::move(bound_defaults)), return_chunk(return_chunk), parallel(parallel),
       action_type(action_type), set_expressions(std::move(set_expressions)), set_columns(std::move(set_columns)),
       set_types(std::move(set_types)), on_conflict_condition(std::move(on_conflict_condition_p)),
       do_update_condition(std::move(do_update_condition_p)), conflict_target(std::move(conflict_target_p)),
-      columns_to_fetch(std::move(columns_to_fetch_p)) {
+      target_expressions(std::move(target_expressions_p)), columns_to_fetch(std::move(columns_to_fetch_p)) {
 
 	if (action_type == OnConflictAction::THROW) {
 		return;
@@ -285,7 +286,11 @@ void PhysicalInsert::OnConflictHandling(TableCatalogEntry *table, ExecutionConte
 	// If that's not the case - We throw the first error
 
 	// We either want to do nothing, or perform an update when conflicts arise
-	ConflictInfo conflict_info(conflict_target);
+	vector<unique_ptr<Expression>> copied_expressions;
+	for (auto &expr : target_expressions) {
+		copied_expressions.push_back(expr->Copy());
+	}
+	ConflictInfo conflict_info(conflict_target, std::move(copied_expressions));
 	ConflictManager conflict_manager(VerifyExistenceType::APPEND, lstate.insert_chunk.size(), &conflict_info);
 	data_table.VerifyAppendConstraints(*table, context.client, lstate.insert_chunk, &conflict_manager);
 	conflict_manager.Finalize();

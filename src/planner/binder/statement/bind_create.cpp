@@ -444,9 +444,11 @@ unique_ptr<LogicalOperator> DuckCatalog::BindCreateIndex(Binder &binder, CreateS
 	IndexBinder index_binder(binder, binder.context);
 	vector<unique_ptr<Expression>> expressions;
 	expressions.reserve(base.expressions.size());
+	D_ASSERT(get.column_ids.empty());
 	for (auto &expr : base.expressions) {
 		expressions.push_back(index_binder.Bind(expr));
 	}
+	// If the expression(s) reference column(s) of the table, the 'get.column_ids' will be populated now
 
 	auto create_index_info = unique_ptr_cast<CreateInfo, CreateIndexInfo>(std::move(stmt.info));
 	for (auto &column_id : get.column_ids) {
@@ -501,18 +503,17 @@ BoundStatement Binder::Bind(CreateStatement &stmt) {
 	case CatalogType::INDEX_ENTRY: {
 		auto &base = (CreateIndexInfo &)*stmt.info;
 
-		// visit the table reference
+		// visit the table reference, this registers it in the binder
 		auto bound_table = Bind(*base.table);
 		if (bound_table->type != TableReferenceType::BASE_TABLE) {
 			throw BinderException("Can only create an index over a base table!");
 		}
 		auto &table_binding = bound_table->Cast<BoundBaseTableRef>();
-		;
 		auto table = table_binding.table;
 		if (table->temporary) {
 			stmt.info->temporary = true;
 		}
-		// create a plan over the bound table
+		// create a plan over the bound table, this gets the internal binding
 		auto plan = CreatePlan(*bound_table);
 		if (plan->type != LogicalOperatorType::LOGICAL_GET) {
 			throw BinderException("Cannot create index on a view!");

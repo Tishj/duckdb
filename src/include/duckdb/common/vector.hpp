@@ -14,6 +14,12 @@
 
 namespace duckdb {
 
+#if 0
+
+using std::vector;
+
+#else
+
 // TODO: inline this, needs changes to 'exception.hpp' and other headers to avoid circular dependency
 void AssertIndexInBounds(idx_t index, idx_t size);
 
@@ -54,5 +60,7 @@ public:
 		return original::operator[](__n);
 	}
 };
+
+#endif
 
 } // namespace duckdb

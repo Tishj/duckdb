@@ -34,7 +34,7 @@ public:
 public:
 	OnConflictAction action_type;
 
-	vector<string> indexed_columns;
+	vector<unique_ptr<ParsedExpression>> indexed_columns;
 	//! The SET information (if action_type == UPDATE)
 	unique_ptr<UpdateSetInfo> set_info;
 	//! The condition determining whether we apply the DO .. for conflicts that arise

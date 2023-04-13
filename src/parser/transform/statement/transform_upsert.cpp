@@ -1,6 +1,7 @@
 #include "duckdb/parser/statement/insert_statement.hpp"
 #include "duckdb/parser/statement/update_statement.hpp"
 #include "duckdb/parser/tableref/expressionlistref.hpp"
+#include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/transformer.hpp"
 
 namespace duckdb {
@@ -21,8 +22,9 @@ OnConflictAction TransformOnConflictAction(duckdb_libpgquery::PGOnConflictClause
 	}
 }
 
-vector<string> TransformConflictTarget(duckdb_libpgquery::PGList *list) {
-	vector<string> columns;
+vector<unique_ptr<ParsedExpression>> Transformer::TransformConflictTarget(duckdb_libpgquery::PGList *list,
+                                                                          const string &relation_name) {
+	vector<unique_ptr<ParsedExpression>> expressions;
 	for (auto cell = list->head; cell != nullptr; cell = cell->next) {
 		auto index_element = (duckdb_libpgquery::PGIndexElem *)cell->data.ptr_value;
 		if (index_element->collation) {
@@ -31,18 +33,22 @@ vector<string> TransformConflictTarget(duckdb_libpgquery::PGList *list) {
 		if (index_element->opclass) {
 			throw NotImplementedException("Index with opclass not supported yet!");
 		}
-		if (!index_element->name) {
-			throw NotImplementedException("Non-column index element not supported yet!");
-		}
 		if (index_element->nulls_ordering) {
 			throw NotImplementedException("Index with null_ordering not supported yet!");
 		}
 		if (index_element->ordering) {
 			throw NotImplementedException("Index with ordering not supported yet!");
 		}
-		columns.emplace_back(index_element->name);
+		if (index_element->name) {
+			// create a column reference expression
+			expressions.push_back(make_uniq<ColumnRefExpression>(index_element->name, relation_name));
+		} else {
+			// parse the index expression
+			D_ASSERT(index_element->expr);
+			expressions.push_back(TransformExpression(index_element->expr));
+		}
 	}
-	return columns;
+	return expressions;
 }
 
 unique_ptr<OnConflictInfo> Transformer::DummyOnConflictClause(duckdb_libpgquery::PGOnConflictActionAlias type,
@@ -77,7 +83,7 @@ unique_ptr<OnConflictInfo> Transformer::TransformOnConflictClause(duckdb_libpgqu
 		// A filter for the ON CONFLICT ... is specified
 		if (stmt->infer->indexElems) {
 			// Columns are specified
-			result->indexed_columns = TransformConflictTarget(stmt->infer->indexElems);
+			result->indexed_columns = TransformConflictTarget(stmt->infer->indexElems, relname);
 			if (stmt->infer->whereClause) {
 				result->condition = TransformExpression(stmt->infer->whereClause);
 			}

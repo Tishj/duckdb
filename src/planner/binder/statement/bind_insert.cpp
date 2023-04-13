@@ -24,6 +24,7 @@
 #include "duckdb/planner/tableref/bound_basetableref.hpp"
 #include "duckdb/planner/tableref/bound_dummytableref.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
+#include "duckdb/planner/expression_binder/index_binder.hpp"
 
 namespace duckdb {
 
@@ -184,6 +185,53 @@ unique_ptr<UpdateSetInfo> CreateSetInfoForReplace(TableCatalogEntry &table, Inse
 	return set_info;
 }
 
+static ConflictInfo BindOnConflictTarget(TableRef &base_table, ClientContext &context,
+                                         vector<unique_ptr<ParsedExpression>> &index_expressions) {
+	auto standalone_binder = Binder::CreateBinder(context, nullptr);
+
+	auto bound_table = standalone_binder->Bind(base_table);
+	auto &bound_basetable = bound_table->Cast<BoundBaseTableRef>();
+	D_ASSERT(bound_table->type == TableReferenceType::BASE_TABLE);
+
+	// create a plan over the bound table, this gets the internal binding
+	auto plan = standalone_binder->CreatePlan(*bound_table);
+	if (plan->type != LogicalOperatorType::LOGICAL_GET) {
+		throw BinderException("Cannot create index on a view!");
+	}
+
+	auto &get = plan->Cast<LogicalGet>();
+	// bind the index expressions
+	IndexBinder index_binder(*standalone_binder, standalone_binder->context);
+
+	vector<unique_ptr<Expression>> bound_expressions;
+	bound_expressions.reserve(index_expressions.size());
+	D_ASSERT(get.column_ids.empty());
+	for (auto &expr : index_expressions) {
+		bound_expressions.push_back(index_binder.Bind(expr));
+	}
+
+	for (auto &column_id : get.column_ids) {
+		if (column_id == COLUMN_IDENTIFIER_ROW_ID) {
+			throw BinderException("Cannot create an index on the rowid!");
+		}
+	}
+
+	auto table_entry = bound_basetable.table;
+	auto &columns = table_entry->GetColumns();
+
+	unordered_set<column_t> column_ids;
+
+	// FIXME: the bound expression's 'column_index' aren't guaranteed to match those of the indexes
+	// so the Equals call will return false.
+	// If we just compare the column_ids then we might match a different set of expressions
+	// because they reference the same columns ...
+	for (auto &id : get.column_ids) {
+		auto &column = columns.GetColumn(LogicalIndex(id));
+		column_ids.insert(column.Physical().index);
+	}
+	return ConflictInfo(column_ids, std::move(bound_expressions));
+}
+
 void Binder::BindOnConflictClause(LogicalInsert &insert, TableCatalogEntry &table, InsertStatement &stmt) {
 	if (!stmt.on_conflict_info) {
 		insert.action_type = OnConflictAction::THROW;
@@ -209,35 +257,14 @@ void Binder::BindOnConflictClause(LogicalInsert &insert, TableCatalogEntry &tabl
 
 	auto &columns = table.GetColumns();
 	if (!on_conflict.indexed_columns.empty()) {
-		// Bind the ON CONFLICT (<columns>)
-
-		// create a mapping of (list index) -> (column index)
-		case_insensitive_map_t<idx_t> specified_columns;
-		for (idx_t i = 0; i < on_conflict.indexed_columns.size(); i++) {
-			specified_columns[on_conflict.indexed_columns[i]] = i;
-			auto column_index = table.GetColumnIndex(on_conflict.indexed_columns[i]);
-			if (column_index.index == COLUMN_IDENTIFIER_ROW_ID) {
-				throw BinderException("Cannot specify ROWID as ON CONFLICT target");
-			}
-			auto &col = columns.GetColumn(column_index);
-			if (col.Generated()) {
-				throw BinderException("Cannot specify a generated column as ON CONFLICT target");
-			}
-		}
-		for (auto &col : columns.Physical()) {
-			auto entry = specified_columns.find(col.Name());
-			if (entry != specified_columns.end()) {
-				// column was specified, set to the index
-				insert.on_conflict_filter.insert(col.Oid());
-			}
-		}
+		ConflictInfo target = BindOnConflictTarget(*stmt.table_ref, context, on_conflict.indexed_columns);
 		auto &indexes = table.GetStorage().info->indexes;
-		bool index_references_columns = false;
+		idx_t index_references_columns = false;
 		indexes.Scan([&](Index &index) {
 			if (!index.IsUnique()) {
 				return false;
 			}
-			bool index_matches = insert.on_conflict_filter == index.column_id_set;
+			bool index_matches = target.ConflictTargetMatches(index);
 			if (index_matches) {
 				index_references_columns = true;
 			}
@@ -249,6 +276,8 @@ void Binder::BindOnConflictClause(LogicalInsert &insert, TableCatalogEntry &tabl
 			throw BinderException(
 			    "The specified columns as conflict target are not referenced by a UNIQUE/PRIMARY KEY CONSTRAINT");
 		}
+		insert.target_expressions = std::move(target.expressions);
+		insert.on_conflict_filter = std::move(target.column_ids);
 	} else {
 		// When omitting the conflict target, the ON CONFLICT applies to every UNIQUE/PRIMARY KEY on the table
 

@@ -30,7 +30,8 @@ public:
 	               vector<PhysicalIndex> set_columns, vector<LogicalType> set_types, idx_t estimated_cardinality,
 	               bool return_chunk, bool parallel, OnConflictAction action_type,
 	               unique_ptr<Expression> on_conflict_condition, unique_ptr<Expression> do_update_condition,
-	               unordered_set<column_t> on_conflict_filter, vector<column_t> columns_to_fetch);
+	               unordered_set<column_t> on_conflict_filter, vector<unique_ptr<Expression>> target_expressions,
+	               vector<column_t> columns_to_fetch);
 	//! CREATE TABLE AS
 	PhysicalInsert(LogicalOperator &op, SchemaCatalogEntry *schema, unique_ptr<BoundCreateTableInfo> info,
 	               idx_t estimated_cardinality, bool parallel);
@@ -68,6 +69,8 @@ public:
 	unique_ptr<Expression> do_update_condition;
 	// The column ids to apply the ON CONFLICT on
 	unordered_set<column_t> conflict_target;
+	//! The expressions that are targeted on
+	vector<unique_ptr<Expression>> target_expressions;
 
 	// Column ids from the original table to fetch
 	vector<column_t> columns_to_fetch;

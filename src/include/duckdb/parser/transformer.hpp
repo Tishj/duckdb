@@ -154,6 +154,8 @@ private:
 	//! Transform a Postgres duckdb_libpgquery::T_PGInsertStmt node into a InsertStatement
 	unique_ptr<InsertStatement> TransformInsert(duckdb_libpgquery::PGNode *node);
 
+	vector<unique_ptr<ParsedExpression>> TransformConflictTarget(duckdb_libpgquery::PGList *list,
+	                                                             const string &relation_name);
 	//! Transform a Postgres duckdb_libpgquery::T_PGOnConflictClause node into a OnConflictInfo
 	unique_ptr<OnConflictInfo> TransformOnConflictClause(duckdb_libpgquery::PGOnConflictClause *node,
 	                                                     const string &relname);

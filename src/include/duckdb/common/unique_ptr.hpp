@@ -8,6 +8,12 @@
 
 namespace duckdb {
 
+#if 0
+
+using std::unique_ptr;
+
+#else
+
 namespace {
 struct __unique_ptr_utils {
 	static inline void AssertNotNull(void *ptr) {
@@ -57,5 +63,7 @@ public:
 		return (original::get())[__i];
 	}
 };
+
+#endif
 
 } // namespace duckdb

@@ -1,0 +1,134 @@
+# name: test/sql/upsert/postgres/test_explicit_index.test
+# group: [postgres]
+
+statement ok
+create table insertconflicttest(key int4, fruit text);
+
+statement ok
+create unique index op_index_key on insertconflicttest(key, fruit);
+
+## This should fail because the expression doesn't match that of the index
+#statement error
+#insert into insertconflicttest values (0, 'Banana') on conflict ((key + 5), fruit) do nothing;
+
+statement ok
+create unique index collation_index_key on insertconflicttest(key, fruit);
+
+statement ok
+create unique index both_index_key on insertconflicttest(key, fruit);
+
+statement ok
+create unique index both_index_expr_key on insertconflicttest(key, lower(fruit));
+
+statement error
+insert into insertconflicttest values(0, 'Crowberry') on conflict (key) do nothing;
+
+statement error
+insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit) do nothing;
+
+statement ok
+insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit) do nothing;
+
+statement ok
+insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit, key, fruit, key) do nothing;
+
+statement ok
+insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit), key, lower(fruit), key) do nothing;
+
+## Missing features:
+## 1. allow subquery in upsert update WHERE clause
+## 2. allow updating a column that is indexed on
+#statement ok
+#insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit) do update set fruit = excluded.fruit where exists (select 1 from insertconflicttest ii where ii.key = excluded.key);
+
+statement ok
+insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit, key, fruit, key) do nothing;
+
+statement ok
+insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit), key, key) do nothing;
+
+statement ok
+drop index op_index_key;
+
+statement ok
+drop index collation_index_key;
+
+statement ok
+drop index both_index_key;
+
+statement ok
+drop index both_index_expr_key;
+
+statement ok
+create unique index key_index on insertconflicttest(key);
+
+statement ok
+insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit;
+
+statement ok
+insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit where insertconflicttest.fruit != 'Cawesh';
+
+statement ok
+insert into insertconflicttest values(0, 'Crowberry') on conflict (key) do update set fruit = excluded.fruit where excluded.fruit != 'Elderberry';
+
+statement ok
+insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit where insertconflicttest.fruit != 'Lime' returning *;
+
+statement ok
+insert into insertconflicttest values (1, 'Apple') on conflict do update set fruit = excluded.fruit;
+
+statement ok
+insert into insertconflicttest values (1, 'Apple') on conflict (key) do update set fruit = excluded.fruit;
+
+statement ok
+insert into insertconflicttest values (2, 'Orange') on conflict (key, key, key) do update set fruit = excluded.fruit;
+
+## Missing features:
+## 1. updating column(s) that are indexed on
+#statement ok
+#insert into insertconflicttest values (1, 'Apple'), (2, 'Orange') on conflict (key) do update set fruit = excluded.fruit, key = excluded.key;
+
+statement error
+insert into insertconflicttest values (1, 'Apple') on conflict (key) do update set fruit = excluded.fruit RETURNING excluded.fruit;
+----
+Not implemented Error: 'excluded' qualified columns are not supported in the RETURNING clause yet
+
+statement error
+insert into insertconflicttest values (1, 'Apple') on conflict (keyy) do update set fruit = excluded.fruit;
+----
+Binder Error: Referenced column "keyy" not found in FROM clause!
+Candidate bindings: "insertconflicttest.key"
+
+statement ok
+insert into insertconflicttest AS ict values (6, 'Passionfruit') on conflict (key) do update set fruit = excluded.fruit; -- ok, no reference to target table
+
+statement ok
+insert into insertconflicttest AS ict values (6, 'Passionfruit') on conflict (key) do update set fruit = ict.fruit; -- ok, alias
+
+statement error
+insert into insertconflicttest AS ict values (6, 'Passionfruit') on conflict (key) do update set fruit = insertconflicttest.fruit; -- error, references aliased away name
+
+statement ok
+drop index key_index;
+
+statement ok
+create unique index expr_key_index on insertconflicttest(lower(fruit));
+
+## Missing features:
+## 1. updating columns that are indexed on
+#statement ok
+#insert into insertconflicttest values (20, 'Quince') on conflict (lower(fruit)) do update set fruit = excluded.fruit;
+
+## Missing features:
+## 1. updating columns that are indexed on
+#statement ok
+#insert into insertconflicttest values (21, 'Pomegranate') on conflict (lower(fruit), lower(fruit)) do update set fruit = excluded.fruit;
+
+statement error
+insert into insertconflicttest values (22, 'Apricot') on conflict (upper(fruit)) do update set fruit = excluded.fruit;
+
+statement error
+insert into insertconflicttest values (23, 'Blackberry') on conflict (fruit) do update set fruit = excluded.fruit;
+
+statement ok
+drop index expr_key_index;
