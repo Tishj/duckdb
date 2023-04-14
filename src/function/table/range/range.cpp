@@ -35,7 +35,7 @@ static unique_ptr<GlobalTableFunctionState> RangeFunctionTimestampInit(ClientCon
 }
 
 template <bool GENERATE_SERIES>
-static unique_ptr<FunctionData> RangeFunctionBindInternal(LogicalType return_type, vector<LogicalType> &return_types,
+static unique_ptr<FunctionData> RangeFunctionBindInternal(const LogicalType &return_type, vector<LogicalType> &return_types,
                                                           vector<string> &names) {
 	if (!GENERATE_SERIES) {
 		names.emplace_back("range");
