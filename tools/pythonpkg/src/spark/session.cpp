@@ -16,6 +16,7 @@ void SparkSession::Initialize(py::handle &m) {
 	auto spark_session = py::class_<SparkSession, shared_ptr<SparkSession>>(m, "SparkSession", py::module_local());
 	SessionBuilder::Initialize(spark_session);
 
+	spark_session.attr("builder") = make_shared<SessionBuilder>();
 	spark_session.def("catalog", &SparkSession::GetCatalog,
 	                  "Interface through which the user may create, drop, alter or query underlying databases, tables, "
 	                  "functions, etc.");
@@ -26,7 +27,8 @@ SparkSession::SparkSession(const string &name, const unordered_map<string, strin
                            bool hive_support_enabled, const string &cluster_url)
     : name(name), configuration(configuration), hive_support_enabled(hive_support_enabled), cluster_url(cluster_url) {
 	// TODO: Transform the configuration into a py::dict of config options
-	connection = duckdb::DuckDBPyConnection::Connect(name, false, py::none());
+	py::dict empty_dict;
+	connection = duckdb::DuckDBPyConnection::Connect(name, false, empty_dict);
 	catalog = make_shared<Catalog>(connection);
 }
 

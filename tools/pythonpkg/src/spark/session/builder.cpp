@@ -8,7 +8,7 @@ namespace duckdb {
 namespace spark {
 
 void SessionBuilder::Initialize(py::handle &m) {
-	auto builder_module = py::class_<SessionBuilder, shared_ptr<SessionBuilder>>(m, "builder", py::module_local());
+	auto builder_module = py::class_<SessionBuilder, shared_ptr<SessionBuilder>>(m, "Builder", py::module_local());
 
 	// constructor
 	builder_module.def(py::init([]() { return make_shared<SessionBuilder>(); }));

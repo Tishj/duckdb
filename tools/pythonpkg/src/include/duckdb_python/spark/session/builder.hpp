@@ -18,8 +18,8 @@ public:
 	shared_ptr<SessionBuilder> AddConfigOption(const py::object &key, const py::object &value,
 	                                           const py::object &config);
 	shared_ptr<SessionBuilder> EnableHiveSupport();
-	shared_ptr<SessionBuilder> Master(const string &name);
 	shared_ptr<SparkSession> GetOrCreate();
+	shared_ptr<SessionBuilder> Master(const string &name);
 
 private:
 private:
