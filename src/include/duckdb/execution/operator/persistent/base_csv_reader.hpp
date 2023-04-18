@@ -16,7 +16,7 @@
 #include "duckdb/common/map.hpp"
 #include "duckdb/common/queue.hpp"
 #include "duckdb/execution/operator/persistent/csv_reader_options.hpp"
-
+#include "duckdb/common/multi_file_reader.hpp"
 #include <sstream>
 
 namespace duckdb {
@@ -35,24 +35,16 @@ class BaseCSVReader {
 public:
 	BaseCSVReader(ClientContext &context, BufferedCSVReaderOptions options,
 	              const vector<LogicalType> &requested_types = vector<LogicalType>());
-
-	BaseCSVReader(FileSystem &fs, Allocator &allocator, FileOpener *opener, BufferedCSVReaderOptions options,
-	              const vector<LogicalType> &requested_types = vector<LogicalType>());
 	~BaseCSVReader();
 
+	ClientContext &context;
 	FileSystem &fs;
 	Allocator &allocator;
 	FileOpener *opener;
 	BufferedCSVReaderOptions options;
 	vector<LogicalType> return_types;
 	vector<string> names;
-
-	//! remap parse_chunk col to insert_chunk col, because when
-	//! union_by_name option on insert_chunk may have more cols
-	vector<idx_t> insert_cols_idx;
-	vector<idx_t> union_idx_map;
-	vector<bool> union_null_cols;
-	vector<LogicalType> union_col_types;
+	MultiFileReaderData reader_data;
 
 	idx_t linenr = 0;
 	bool linenr_estimated = false;
@@ -72,11 +64,22 @@ public:
 
 	ParserMode mode;
 
+public:
+	const string &GetFileName() {
+		return options.file_path;
+	}
+	const vector<string> &GetNames() {
+		return names;
+	}
+	const vector<LogicalType> &GetTypes() {
+		return return_types;
+	}
+	//! Initialize projection indices to select all columns
+	void InitializeProjection();
+
 protected:
 	//! Initializes the parse_chunk with varchar columns and aligns info with new number of cols
 	void InitParseChunk(idx_t num_cols);
-	//! Initializes the insert_chunk idx for mapping parse_chunk cols to insert_chunk cols
-	void InitInsertChunkIdx(idx_t num_cols);
 	//! Change the date format for the type to the string
 	void SetDateFormat(const string &format_specifier, const LogicalTypeId &sql_type);
 	//! Try to cast a string value to the specified sql type

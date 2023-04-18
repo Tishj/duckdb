@@ -6,17 +6,17 @@ namespace duckdb {
 
 struct JSONCreateFunctionData : public FunctionData {
 public:
-	explicit JSONCreateFunctionData(unordered_map<string, unique_ptr<Vector>> const_struct_names)
+	explicit JSONCreateFunctionData(unordered_map<string, duckdb::unique_ptr<Vector>> const_struct_names)
 	    : const_struct_names(std::move(const_struct_names)) {
 	}
-	unique_ptr<FunctionData> Copy() const override {
+	duckdb::unique_ptr<FunctionData> Copy() const override {
 		// Have to do this because we can't implicitly copy Vector
-		unordered_map<string, unique_ptr<Vector>> map_copy;
+		unordered_map<string, duckdb::unique_ptr<Vector>> map_copy;
 		for (const auto &kv : const_struct_names) {
 			// The vectors are const vectors of the key value
-			map_copy[kv.first] = make_unique<Vector>(Value(kv.first));
+			map_copy[kv.first] = make_uniq<Vector>(Value(kv.first));
 		}
-		return make_unique<JSONCreateFunctionData>(std::move(map_copy));
+		return make_uniq<JSONCreateFunctionData>(std::move(map_copy));
 	}
 	bool Equals(const FunctionData &other_p) const override {
 		return true;
@@ -24,10 +24,11 @@ public:
 
 public:
 	// Const struct name vectors live here so they don't have to be re-initialized for every DataChunk
-	unordered_map<string, unique_ptr<Vector>> const_struct_names;
+	unordered_map<string, duckdb::unique_ptr<Vector>> const_struct_names;
 };
 
-static LogicalType GetJSONType(unordered_map<string, unique_ptr<Vector>> &const_struct_names, const LogicalType &type) {
+static LogicalType GetJSONType(unordered_map<string, duckdb::unique_ptr<Vector>> &const_struct_names,
+                               const LogicalType &type) {
 	if (JSONCommon::LogicalTypeIsJSON(type)) {
 		return type;
 	}
@@ -56,11 +57,11 @@ static LogicalType GetJSONType(unordered_map<string, unique_ptr<Vector>> &const_
 	// The nested types need to conform as well
 	case LogicalTypeId::LIST:
 		return LogicalType::LIST(GetJSONType(const_struct_names, ListType::GetChildType(type)));
-	// Struct and MAP are treated as JSON objects
+	// Struct and MAP are treated as JSON values
 	case LogicalTypeId::STRUCT: {
 		child_list_t<LogicalType> child_types;
 		for (const auto &child_type : StructType::GetChildTypes(type)) {
-			const_struct_names[child_type.first] = make_unique<Vector>(Value(child_type.first));
+			const_struct_names[child_type.first] = make_uniq<Vector>(Value(child_type.first));
 			child_types.emplace_back(child_type.first, GetJSONType(const_struct_names, child_type.second));
 		}
 		return LogicalType::STRUCT(child_types);
@@ -74,7 +75,7 @@ static LogicalType GetJSONType(unordered_map<string, unique_ptr<Vector>> &const_
 			auto &member_name = UnionType::GetMemberName(type, member_idx);
 			auto &member_type = UnionType::GetMemberType(type, member_idx);
 
-			const_struct_names[member_name] = make_unique<Vector>(Value(member_name));
+			const_struct_names[member_name] = make_uniq<Vector>(Value(member_name));
 			member_types.emplace_back(member_name, GetJSONType(const_struct_names, member_type));
 		}
 		return LogicalType::UNION(member_types);
@@ -85,9 +86,9 @@ static LogicalType GetJSONType(unordered_map<string, unique_ptr<Vector>> &const_
 	}
 }
 
-static unique_ptr<FunctionData> JSONCreateBindParams(ScalarFunction &bound_function,
-                                                     vector<unique_ptr<Expression>> &arguments, bool object) {
-	unordered_map<string, unique_ptr<Vector>> const_struct_names;
+static duckdb::unique_ptr<FunctionData>
+JSONCreateBindParams(ScalarFunction &bound_function, vector<duckdb::unique_ptr<Expression>> &arguments, bool object) {
+	unordered_map<string, duckdb::unique_ptr<Vector>> const_struct_names;
 	for (idx_t i = 0; i < arguments.size(); i++) {
 		auto &type = arguments[i]->return_type;
 		if (arguments[i]->HasParameter()) {
@@ -103,32 +104,32 @@ static unique_ptr<FunctionData> JSONCreateBindParams(ScalarFunction &bound_funct
 			bound_function.arguments.push_back(GetJSONType(const_struct_names, type));
 		}
 	}
-	return make_unique<JSONCreateFunctionData>(std::move(const_struct_names));
+	return make_uniq<JSONCreateFunctionData>(std::move(const_struct_names));
 }
 
-static unique_ptr<FunctionData> JSONObjectBind(ClientContext &context, ScalarFunction &bound_function,
-                                               vector<unique_ptr<Expression>> &arguments) {
+static duckdb::unique_ptr<FunctionData> JSONObjectBind(ClientContext &context, ScalarFunction &bound_function,
+                                                       vector<duckdb::unique_ptr<Expression>> &arguments) {
 	if (arguments.size() % 2 != 0) {
 		throw InvalidInputException("json_object() requires an even number of arguments");
 	}
 	return JSONCreateBindParams(bound_function, arguments, true);
 }
 
-static unique_ptr<FunctionData> JSONArrayBind(ClientContext &context, ScalarFunction &bound_function,
-                                              vector<unique_ptr<Expression>> &arguments) {
+static duckdb::unique_ptr<FunctionData> JSONArrayBind(ClientContext &context, ScalarFunction &bound_function,
+                                                      vector<duckdb::unique_ptr<Expression>> &arguments) {
 	return JSONCreateBindParams(bound_function, arguments, false);
 }
 
-static unique_ptr<FunctionData> ToJSONBind(ClientContext &context, ScalarFunction &bound_function,
-                                           vector<unique_ptr<Expression>> &arguments) {
+static duckdb::unique_ptr<FunctionData> ToJSONBind(ClientContext &context, ScalarFunction &bound_function,
+                                                   vector<duckdb::unique_ptr<Expression>> &arguments) {
 	if (arguments.size() != 1) {
 		throw InvalidInputException("to_json() takes exactly one argument");
 	}
 	return JSONCreateBindParams(bound_function, arguments, false);
 }
 
-static unique_ptr<FunctionData> ArrayToJSONBind(ClientContext &context, ScalarFunction &bound_function,
-                                                vector<unique_ptr<Expression>> &arguments) {
+static duckdb::unique_ptr<FunctionData> ArrayToJSONBind(ClientContext &context, ScalarFunction &bound_function,
+                                                        vector<duckdb::unique_ptr<Expression>> &arguments) {
 	if (arguments.size() != 1) {
 		throw InvalidInputException("array_to_json() takes exactly one argument");
 	}
@@ -142,8 +143,8 @@ static unique_ptr<FunctionData> ArrayToJSONBind(ClientContext &context, ScalarFu
 	return JSONCreateBindParams(bound_function, arguments, false);
 }
 
-static unique_ptr<FunctionData> RowToJSONBind(ClientContext &context, ScalarFunction &bound_function,
-                                              vector<unique_ptr<Expression>> &arguments) {
+static duckdb::unique_ptr<FunctionData> RowToJSONBind(ClientContext &context, ScalarFunction &bound_function,
+                                                      vector<duckdb::unique_ptr<Expression>> &arguments) {
 	if (arguments.size() != 1) {
 		throw InvalidInputException("row_to_json() takes exactly one argument");
 	}
@@ -247,14 +248,14 @@ static void TemplatedCreateValues(yyjson_mut_doc *doc, yyjson_mut_val *vals[], V
 
 static void CreateValuesStruct(const JSONCreateFunctionData &info, yyjson_mut_doc *doc, yyjson_mut_val *vals[],
                                Vector &value_v, idx_t count) {
-	// Structs become objects, therefore we initialize vals to JSON objects
+	// Structs become values, therefore we initialize vals to JSON values
 	for (idx_t i = 0; i < count; i++) {
 		vals[i] = yyjson_mut_obj(doc);
 	}
 	// Initialize re-usable array for the nested values
 	auto nested_vals = (yyjson_mut_val **)doc->alc.malloc(doc->alc.ctx, sizeof(yyjson_mut_val *) * count);
 
-	// Add the key/value pairs to the objects
+	// Add the key/value pairs to the values
 	auto &entries = StructVector::GetEntries(value_v);
 	for (idx_t entry_i = 0; entry_i < entries.size(); entry_i++) {
 		auto &struct_key_v = *info.const_struct_names.at(StructType::GetChildName(value_v.GetType(), entry_i));
@@ -284,7 +285,7 @@ static void CreateValuesMap(const JSONCreateFunctionData &info, yyjson_mut_doc *
 	auto map_val_count = ListVector::GetListSize(value_v);
 	auto nested_vals = (yyjson_mut_val **)doc->alc.malloc(doc->alc.ctx, sizeof(yyjson_mut_val *) * map_val_count);
 	CreateValues(info, doc, nested_vals, map_val_v, map_val_count);
-	// Add the key/value pairs to the objects
+	// Add the key/value pairs to the values
 	UnifiedVectorFormat map_data;
 	value_v.ToUnifiedFormat(count, map_data);
 	auto map_key_list_entries = (list_entry_t *)map_data.data;
@@ -308,7 +309,7 @@ static void CreateValuesMap(const JSONCreateFunctionData &info, yyjson_mut_doc *
 
 static void CreateValuesUnion(const JSONCreateFunctionData &info, yyjson_mut_doc *doc, yyjson_mut_val *vals[],
                               Vector &value_v, idx_t count) {
-	// Structs become objects, therefore we initialize vals to JSON objects
+	// Structs become values, therefore we initialize vals to JSON values
 	for (idx_t i = 0; i < count; i++) {
 		vals[i] = yyjson_mut_obj(doc);
 	}
@@ -320,7 +321,7 @@ static void CreateValuesUnion(const JSONCreateFunctionData &info, yyjson_mut_doc
 	UnifiedVectorFormat tag_data;
 	tag_v.ToUnifiedFormat(count, tag_data);
 
-	// Add the key/value pairs to the objects
+	// Add the key/value pairs to the values
 	for (idx_t member_idx = 0; member_idx < UnionType::GetMemberCount(value_v.GetType()); member_idx++) {
 		auto &member_val_v = UnionVector::GetMember(value_v, member_idx);
 		auto &member_key_v = *info.const_struct_names.at(UnionType::GetMemberName(value_v.GetType(), member_idx));
@@ -420,12 +421,12 @@ static void CreateValues(const JSONCreateFunctionData &info, yyjson_mut_doc *doc
 }
 
 static void ObjectFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &func_expr = (BoundFunctionExpression &)state.expr;
+	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
 	const auto &info = (JSONCreateFunctionData &)*func_expr.bind_info;
 	auto &lstate = JSONFunctionLocalState::ResetAndGet(state);
 	auto alc = lstate.json_allocator.GetYYJSONAllocator();
 
-	// Initialize objects
+	// Initialize values
 	const idx_t count = args.size();
 	auto doc = JSONCommon::CreateDocument(alc);
 	yyjson_mut_val *objs[STANDARD_VECTOR_SIZE];
@@ -440,7 +441,7 @@ static void ObjectFunction(DataChunk &args, ExpressionState &state, Vector &resu
 		Vector &value_v = args.data[pair_idx * 2 + 1];
 		CreateKeyValuePairs(info, doc, objs, vals, key_v, value_v, count);
 	}
-	// Write JSON objects to string
+	// Write JSON values to string
 	auto objects = FlatVector::GetData<string_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		objects[i] = JSONCommon::WriteVal<yyjson_mut_val>(objs[i], alc);
@@ -452,7 +453,7 @@ static void ObjectFunction(DataChunk &args, ExpressionState &state, Vector &resu
 }
 
 static void ArrayFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &func_expr = (BoundFunctionExpression &)state.expr;
+	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
 	const auto &info = (JSONCreateFunctionData &)*func_expr.bind_info;
 	auto &lstate = JSONFunctionLocalState::ResetAndGet(state);
 	auto alc = lstate.json_allocator.GetYYJSONAllocator();
@@ -485,7 +486,7 @@ static void ArrayFunction(DataChunk &args, ExpressionState &state, Vector &resul
 }
 
 static void ToJSONFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &func_expr = (BoundFunctionExpression &)state.expr;
+	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
 	const auto &info = (JSONCreateFunctionData &)*func_expr.bind_info;
 	auto &lstate = JSONFunctionLocalState::ResetAndGet(state);
 	auto alc = lstate.json_allocator.GetYYJSONAllocator();

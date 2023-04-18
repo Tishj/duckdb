@@ -6,7 +6,7 @@ namespace duckdb {
 
 unique_ptr<CreateInfo> CreateIndexInfo::Copy() const {
 
-	auto result = make_unique<CreateIndexInfo>();
+	auto result = make_uniq<CreateIndexInfo>();
 	CopyProperties(*result);
 
 	result->index_type = index_type;
@@ -15,6 +15,9 @@ unique_ptr<CreateInfo> CreateIndexInfo::Copy() const {
 	result->table = unique_ptr_cast<TableRef, BaseTableRef>(table->Copy());
 	for (auto &expr : expressions) {
 		result->expressions.push_back(expr->Copy());
+	}
+	for (auto &expr : parsed_expressions) {
+		result->parsed_expressions.push_back(expr->Copy());
 	}
 
 	result->scan_types = scan_types;
@@ -42,7 +45,7 @@ void CreateIndexInfo::SerializeInternal(Serializer &serializer) const {
 
 unique_ptr<CreateIndexInfo> CreateIndexInfo::Deserialize(Deserializer &deserializer) {
 
-	auto result = make_unique<CreateIndexInfo>();
+	auto result = make_uniq<CreateIndexInfo>();
 	result->DeserializeBase(deserializer);
 
 	FieldReader reader(deserializer);

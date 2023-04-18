@@ -65,6 +65,15 @@ struct DebugForceNoCrossProduct {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct OrderedAggregateThreshold {
+	static constexpr const char *Name = "ordered_aggregate_threshold";
+	static constexpr const char *Description = "the number of rows to accumulate before sorting, used for tuning";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::UBIGINT;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(ClientContext &context);
+};
+
 struct DebugWindowMode {
 	static constexpr const char *Name = "debug_window_mode";
 	static constexpr const char *Description = "DEBUG SETTING: switch window mode to use";
@@ -216,6 +225,15 @@ struct ExplainOutputSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct ExtensionDirectorySetting {
+	static constexpr const char *Name = "extension_directory";
+	static constexpr const char *Description = "Set the directory to store extensions in";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(ClientContext &context);
+};
+
 struct ExternalThreadsSetting {
 	static constexpr const char *Name = "external_threads";
 	static constexpr const char *Description = "The number of external threads that work on DuckDB tasks.";
@@ -256,6 +274,16 @@ struct HomeDirectorySetting {
 	static constexpr const char *Name = "home_directory";
 	static constexpr const char *Description = "Sets the home directory used by the system";
 	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(ClientContext &context);
+};
+
+struct IntegerDivisionSetting {
+	static constexpr const char *Name = "integer_division";
+	static constexpr const char *Description =
+	    "Whether or not the / operator defaults to integer division, or to floating point division";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
 	static Value GetSetting(ClientContext &context);
@@ -313,6 +341,16 @@ struct PasswordSetting {
 struct PerfectHashThresholdSetting {
 	static constexpr const char *Name = "perfect_ht_threshold";
 	static constexpr const char *Description = "Threshold in bytes for when to use a perfect hash table (default: 12)";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BIGINT;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(ClientContext &context);
+};
+
+struct PivotLimitSetting {
+	static constexpr const char *Name = "pivot_limit";
+	static constexpr const char *Description =
+	    "The maximum numer of pivot columns in a pivot statement (default: 100000)";
 	static constexpr const LogicalTypeId InputType = LogicalTypeId::BIGINT;
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);

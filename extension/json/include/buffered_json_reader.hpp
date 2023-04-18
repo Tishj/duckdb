@@ -21,7 +21,7 @@ enum class JSONFormat : uint8_t {
 	AUTO_DETECT = 0,
 	//! One object after another, newlines can be anywhere
 	UNSTRUCTURED = 1,
-	//! Objects are separated by newlines, newlines do not occur within objects (NDJSON)
+	//! Objects are separated by newlines, newlines do not occur within values (NDJSON)
 	NEWLINE_DELIMITED = 2,
 };
 
@@ -57,12 +57,12 @@ public:
 
 struct JSONFileHandle {
 public:
-	JSONFileHandle(unique_ptr<FileHandle> file_handle, Allocator &allocator);
+	JSONFileHandle(duckdb::unique_ptr<FileHandle> file_handle, Allocator &allocator);
+	void Close();
 
 	idx_t FileSize() const;
 	idx_t Remaining() const;
 
-	bool PlainFileSource() const;
 	bool CanSeek() const;
 	void Seek(idx_t position);
 
@@ -71,13 +71,15 @@ public:
 	idx_t Read(const char *pointer, idx_t requested_size, bool sample_run);
 
 	void Reset();
+	bool RequestedReadsComplete();
 
 private:
 	idx_t ReadFromCache(const char *&pointer, idx_t &size, idx_t &position);
+	idx_t ReadInternal(const char *pointer, const idx_t requested_size);
 
 private:
 	//! The JSON file handle
-	unique_ptr<FileHandle> file_handle;
+	duckdb::unique_ptr<FileHandle> file_handle;
 	Allocator &allocator;
 
 	//! File properties
@@ -87,6 +89,8 @@ private:
 
 	//! Read properties
 	idx_t read_position;
+	idx_t requested_reads;
+	atomic<idx_t> actual_reads;
 
 	//! Cached buffers for resetting when reading stream
 	vector<AllocatedData> cached_buffers;
@@ -98,13 +102,14 @@ public:
 	BufferedJSONReader(ClientContext &context, BufferedJSONReaderOptions options, string file_path);
 
 	void OpenJSONFile();
+	void CloseJSONFile();
 	bool IsOpen();
 
 	BufferedJSONReaderOptions &GetOptions();
 	JSONFileHandle &GetFileHandle() const;
 
 	//! Insert/get/remove buffer (grabs the lock)
-	void InsertBuffer(idx_t buffer_idx, unique_ptr<JSONBufferHandle> &&buffer);
+	void InsertBuffer(idx_t buffer_idx, duckdb::unique_ptr<JSONBufferHandle> &&buffer);
 	JSONBufferHandle *GetBuffer(idx_t buffer_idx);
 	AllocatedData RemoveBuffer(idx_t buffer_idx);
 
@@ -134,12 +139,12 @@ private:
 	BufferedJSONReaderOptions options;
 
 	//! File handle
-	unique_ptr<JSONFileHandle> file_handle;
+	duckdb::unique_ptr<JSONFileHandle> file_handle;
 
 	//! Next buffer index within the file
 	idx_t buffer_index;
 	//! Mapping from batch index to currently held buffers
-	unordered_map<idx_t, unique_ptr<JSONBufferHandle>> buffer_map;
+	unordered_map<idx_t, duckdb::unique_ptr<JSONBufferHandle>> buffer_map;
 
 	//! Line count per buffer
 	vector<int64_t> buffer_line_or_object_counts;

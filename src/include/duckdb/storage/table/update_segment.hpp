@@ -23,6 +23,8 @@ struct UpdateNode;
 class UpdateSegment {
 public:
 	UpdateSegment(ColumnData &column_data);
+	// Construct a duplicate of 'other' with 'new_owner' as it's column data
+	UpdateSegment(UpdateSegment &other, ColumnData &new_owner);
 	~UpdateSegment();
 
 	ColumnData &column_data;
@@ -32,7 +34,6 @@ public:
 	bool HasUncommittedUpdates(idx_t vector_index);
 	bool HasUpdates(idx_t vector_index) const;
 	bool HasUpdates(idx_t start_row_idx, idx_t end_row_idx);
-	void ClearUpdates();
 
 	void FetchUpdates(TransactionData transaction, idx_t vector_index, Vector &result);
 	void FetchCommitted(idx_t vector_index, Vector &result);

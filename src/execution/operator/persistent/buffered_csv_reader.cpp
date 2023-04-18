@@ -23,25 +23,16 @@
 
 namespace duckdb {
 
-BufferedCSVReader::BufferedCSVReader(FileSystem &fs_p, Allocator &allocator, FileOpener *opener_p,
-                                     BufferedCSVReaderOptions options_p, const vector<LogicalType> &requested_types)
-    : BaseCSVReader(fs_p, allocator, opener_p, std::move(options_p), requested_types), buffer_size(0), position(0),
-      start(0) {
+BufferedCSVReader::BufferedCSVReader(ClientContext &context, BufferedCSVReaderOptions options_p,
+                                     const vector<LogicalType> &requested_types)
+    : BaseCSVReader(context, std::move(options_p), requested_types), buffer_size(0), position(0), start(0) {
 	file_handle = OpenCSV(options);
 	Initialize(requested_types);
 }
 
-BufferedCSVReader::BufferedCSVReader(ClientContext &context, BufferedCSVReaderOptions options_p,
-                                     const vector<LogicalType> &requested_types)
-    : BufferedCSVReader(FileSystem::GetFileSystem(context), Allocator::Get(context), FileSystem::GetFileOpener(context),
-                        std::move(options_p), requested_types) {
-}
-
 BufferedCSVReader::BufferedCSVReader(ClientContext &context, string filename, BufferedCSVReaderOptions options_p,
                                      const vector<LogicalType> &requested_types)
-    : BaseCSVReader(FileSystem::GetFileSystem(context), Allocator::Get(context), FileSystem::GetFileOpener(context),
-                    std::move(options_p), requested_types),
-      buffer_size(0), position(0), start(0) {
+    : BaseCSVReader(context, std::move(options_p), requested_types), buffer_size(0), position(0), start(0) {
 	options.file_path = std::move(filename);
 	file_handle = OpenCSV(options);
 	Initialize(requested_types);
@@ -259,7 +250,6 @@ void BufferedCSVReader::Initialize(const vector<LogicalType> &requested_types) {
 		SkipRowsAndReadHeader(options.skip_rows, options.header);
 	}
 	InitParseChunk(return_types.size());
-	InitInsertChunkIdx(return_types.size());
 	// we only need reset support during the automatic CSV type detection
 	// since reset support might require caching (in the case of streams), we disable it for the remainder
 	file_handle->DisableReset();
@@ -428,6 +418,7 @@ void BufferedCSVReader::DetectDialect(const vector<LogicalType> &requested_types
 	}
 
 	idx_t best_consistent_rows = 0;
+	idx_t prev_padding_count = 0;
 	for (auto quoterule : quoterule_candidates) {
 		const auto &quote_candidates = quote_candidates_map[static_cast<uint8_t>(quoterule)];
 		for (const auto &quote : quote_candidates) {
@@ -450,20 +441,29 @@ void BufferedCSVReader::DetectDialect(const vector<LogicalType> &requested_types
 
 					idx_t start_row = original_options.skip_rows;
 					idx_t consistent_rows = 0;
-					idx_t num_cols = 0;
-
+					idx_t num_cols = sniffed_column_counts.empty() ? 0 : sniffed_column_counts[0];
+					idx_t padding_count = 0;
+					bool allow_padding = original_options.null_padding;
 					for (idx_t row = 0; row < sniffed_column_counts.size(); row++) {
 						if (sniffed_column_counts[row] == num_cols) {
 							consistent_rows++;
-						} else {
+						} else if (num_cols < sniffed_column_counts[row] && !original_options.skip_rows_set) {
+							// we use the maximum amount of num_cols that we find
 							num_cols = sniffed_column_counts[row];
 							start_row = row + original_options.skip_rows;
 							consistent_rows = 1;
+							padding_count = 0;
+						} else if (num_cols >= sniffed_column_counts[row] && allow_padding) {
+							// we are missing some columns, we can parse this as long as we add padding
+							padding_count++;
 						}
 					}
 
 					// some logic
+					consistent_rows += padding_count;
 					bool more_values = (consistent_rows > best_consistent_rows && num_cols >= best_num_cols);
+					bool require_more_padding = padding_count > prev_padding_count;
+					bool require_less_padding = padding_count < prev_padding_count;
 					bool single_column_before = best_num_cols < 2 && num_cols > best_num_cols;
 					bool rows_consistent =
 					    start_row + consistent_rows - original_options.skip_rows == sniffed_column_counts.size();
@@ -473,16 +473,19 @@ void BufferedCSVReader::DetectDialect(const vector<LogicalType> &requested_types
 
 					if (!requested_types.empty() && requested_types.size() != num_cols) {
 						continue;
-					} else if ((more_values || single_column_before) && rows_consistent) {
+					} else if (rows_consistent && (single_column_before || (more_values && !require_more_padding) ||
+					                               (more_than_one_column && require_less_padding))) {
 						sniff_info.skip_rows = start_row;
 						sniff_info.num_cols = num_cols;
 						sniff_info.new_line = options.new_line;
 						best_consistent_rows = consistent_rows;
 						best_num_cols = num_cols;
+						prev_padding_count = padding_count;
 
 						info_candidates.clear();
 						info_candidates.push_back(sniff_info);
-					} else if (more_than_one_row && more_than_one_column && start_good && rows_consistent) {
+					} else if (more_than_one_row && more_than_one_column && start_good && rows_consistent &&
+					           !require_more_padding) {
 						bool same_quote_is_candidate = false;
 						for (auto &info_candidate : info_candidates) {
 							if (quote.compare(info_candidate.quote) == 0) {
@@ -564,7 +567,7 @@ void BufferedCSVReader::DetectCandidateTypes(const vector<LogicalType> &type_can
 					// try formatting for date types if the user did not specify one and it starts with numeric values.
 					string separator;
 					if (has_format_candidates.count(sql_type.id()) && !original_options.has_format[sql_type.id()] &&
-					    StartsWithNumericDate(separator, StringValue::Get(dummy_val))) {
+					    !dummy_val.IsNull() && StartsWithNumericDate(separator, StringValue::Get(dummy_val))) {
 						// generate date format candidates the first time through
 						auto &type_format_candidates = format_candidates[sql_type.id()];
 						const auto had_format_candidates = has_format_candidates[sql_type.id()];
@@ -730,6 +733,9 @@ void BufferedCSVReader::DetectHeader(const vector<vector<LogicalType>> &best_sql
 			names.push_back(column_name);
 		}
 	}
+	for (idx_t i = 0; i < MinValue<idx_t>(names.size(), options.name_list.size()); i++) {
+		names[i] = options.name_list[i];
+	}
 }
 
 vector<LogicalType> BufferedCSVReader::RefineTypeDetection(const vector<LogicalType> &type_candidates,
@@ -803,7 +809,7 @@ vector<LogicalType> BufferedCSVReader::RefineTypeDetection(const vector<LogicalT
 				if ((sample_chunk_idx)*options.sample_chunk_size <= options.buffer_size) {
 					// cache parse chunk
 					// create a new chunk and fill it with the remainder
-					auto chunk = make_unique<DataChunk>();
+					auto chunk = make_uniq<DataChunk>();
 					auto parse_chunk_types = parse_chunk.GetTypes();
 					chunk->Move(parse_chunk);
 					cached_chunks.push(std::move(chunk));
@@ -876,16 +882,7 @@ vector<LogicalType> BufferedCSVReader::SniffCSV(const vector<LogicalType> &reque
 	// #######
 	// ### type detection (initial)
 	// #######
-	// type candidates, ordered by descending specificity (~ from high to low)
-	vector<LogicalType> type_candidates = {
-	    LogicalType::VARCHAR,
-	    LogicalType::TIMESTAMP,
-	    LogicalType::DATE,
-	    LogicalType::TIME,
-	    LogicalType::DOUBLE,
-	    /* LogicalType::FLOAT,*/ LogicalType::BIGINT,
-	    /*LogicalType::INTEGER,*/ /*LogicalType::SMALLINT, LogicalType::TINYINT,*/ LogicalType::BOOLEAN,
-	    LogicalType::SQLNULL};
+
 	// format template candidates, ordered by descending specificity (~ from high to low)
 	std::map<LogicalTypeId, vector<const char *>> format_template_candidates = {
 	    {LogicalTypeId::DATE, {"%m-%d-%Y", "%m-%d-%y", "%d-%m-%Y", "%d-%m-%y", "%Y-%m-%d", "%y-%m-%d"}},
@@ -896,8 +893,14 @@ vector<LogicalType> BufferedCSVReader::SniffCSV(const vector<LogicalType> &reque
 	vector<vector<LogicalType>> best_sql_types_candidates;
 	map<LogicalTypeId, vector<string>> best_format_candidates;
 	DataChunk best_header_row;
-	DetectCandidateTypes(type_candidates, format_template_candidates, info_candidates, original_options, best_num_cols,
-	                     best_sql_types_candidates, best_format_candidates, best_header_row);
+	DetectCandidateTypes(options.auto_type_candidates, format_template_candidates, info_candidates, original_options,
+	                     best_num_cols, best_sql_types_candidates, best_format_candidates, best_header_row);
+
+	if (best_format_candidates.empty() || best_header_row.size() == 0) {
+		throw InvalidInputException(
+		    "Error in file \"%s\": CSV options could not be auto-detected. Consider setting parser options manually.",
+		    original_options.file_path);
+	}
 
 	// #######
 	// ### header detection
@@ -918,7 +921,7 @@ vector<LogicalType> BufferedCSVReader::SniffCSV(const vector<LogicalType> &reque
 					continue;
 				}
 			}
-			if (!options.union_by_name && found < options.sql_types_per_column.size()) {
+			if (!options.file_options.union_by_name && found < options.sql_types_per_column.size()) {
 				string exception = ColumnTypesError(options.sql_types_per_column, names);
 				if (!exception.empty()) {
 					throw BinderException(exception);
@@ -939,7 +942,8 @@ vector<LogicalType> BufferedCSVReader::SniffCSV(const vector<LogicalType> &reque
 	// #######
 	// ### type detection (refining)
 	// #######
-	return RefineTypeDetection(type_candidates, requested_types, best_sql_types_candidates, best_format_candidates);
+	return RefineTypeDetection(options.auto_type_candidates, requested_types, best_sql_types_candidates,
+	                           best_format_candidates);
 }
 
 bool BufferedCSVReader::TryParseComplexCSV(DataChunk &insert_chunk, string &error_message) {

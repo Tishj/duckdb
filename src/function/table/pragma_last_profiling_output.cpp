@@ -1,12 +1,12 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/common/limits.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/function/table/system_functions.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "duckdb/planner/constraints/bound_not_null_constraint.hpp"
 #include "duckdb/main/query_profiler.hpp"
-#include "duckdb/common/types/column_data_collection.hpp"
+#include "duckdb/planner/constraints/bound_not_null_constraint.hpp"
 
 namespace duckdb {
 
@@ -43,7 +43,7 @@ static unique_ptr<FunctionData> PragmaLastProfilingOutputBind(ClientContext &con
 	names.emplace_back("DESCRIPTION");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
-	return make_unique<PragmaLastProfilingOutputData>(return_types);
+	return make_uniq<PragmaLastProfilingOutputData>(return_types);
 }
 
 static void SetValue(DataChunk &output, int index, int op_id, string name, double time, int64_t car,
@@ -57,15 +57,15 @@ static void SetValue(DataChunk &output, int index, int op_id, string name, doubl
 
 unique_ptr<GlobalTableFunctionState> PragmaLastProfilingOutputInit(ClientContext &context,
                                                                    TableFunctionInitInput &input) {
-	return make_unique<PragmaLastProfilingOutputOperatorData>();
+	return make_uniq<PragmaLastProfilingOutputOperatorData>();
 }
 
 static void PragmaLastProfilingOutputFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-	auto &state = (PragmaLastProfilingOutputOperatorData &)*data_p.global_state;
+	auto &state = data_p.global_state->Cast<PragmaLastProfilingOutputOperatorData>();
 	auto &data = (PragmaLastProfilingOutputData &)*data_p.bind_data;
 	if (!state.initialized) {
 		// create a ColumnDataCollection
-		auto collection = make_unique<ColumnDataCollection>(context, data.types);
+		auto collection = make_uniq<ColumnDataCollection>(context, data.types);
 
 		DataChunk chunk;
 		chunk.Initialize(context, data.types);

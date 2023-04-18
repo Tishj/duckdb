@@ -59,8 +59,8 @@ public:
 	//! be added. Defaults to INVALID.
 	LogicalType target_type;
 
-	DummyBinding *macro_binding;
-	vector<DummyBinding> *lambda_bindings = nullptr;
+	optional_ptr<DummyBinding> macro_binding;
+	optional_ptr<vector<DummyBinding>> lambda_bindings;
 
 public:
 	unique_ptr<Expression> Bind(unique_ptr<ParsedExpression> &expr, LogicalType *result_type = nullptr,
@@ -130,12 +130,14 @@ protected:
 	void CaptureLambdaColumns(vector<unique_ptr<Expression>> &captures, LogicalType &list_child_type,
 	                          unique_ptr<Expression> &expr);
 
+	static unique_ptr<ParsedExpression> GetSQLValueFunction(const string &column_name);
+
 protected:
 	virtual BindResult BindGroupingFunction(OperatorExpression &op, idx_t depth);
 	virtual BindResult BindFunction(FunctionExpression &expr, ScalarFunctionCatalogEntry *function, idx_t depth);
 	virtual BindResult BindLambdaFunction(FunctionExpression &expr, ScalarFunctionCatalogEntry *function, idx_t depth);
 	virtual BindResult BindAggregate(FunctionExpression &expr, AggregateFunctionCatalogEntry *function, idx_t depth);
-	virtual BindResult BindUnnest(FunctionExpression &expr, idx_t depth);
+	virtual BindResult BindUnnest(FunctionExpression &expr, idx_t depth, bool root_expression);
 	virtual BindResult BindMacro(FunctionExpression &expr, ScalarMacroCatalogEntry *macro, idx_t depth,
 	                             unique_ptr<ParsedExpression> *expr_ptr);
 
@@ -144,7 +146,7 @@ protected:
 
 	Binder &binder;
 	ClientContext &context;
-	ExpressionBinder *stored_binder;
+	optional_ptr<ExpressionBinder> stored_binder;
 	vector<BoundColumnReferenceInfo> bound_columns;
 };
 

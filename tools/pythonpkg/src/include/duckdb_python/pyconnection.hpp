@@ -7,9 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-
-#include <utility>
-
 #include "arrow_array_stream.hpp"
 #include "duckdb.hpp"
 #include "duckdb_python/pybind_wrapper.hpp"
@@ -18,6 +15,8 @@
 #include "duckdb_python/registered_py_object.hpp"
 #include "duckdb_python/pandas_type.hpp"
 #include "duckdb_python/pyrelation.hpp"
+#include "duckdb_python/pytype.hpp"
+#include "duckdb_python/path_like.hpp"
 #include "duckdb/execution/operator/persistent/csv_reader_options.hpp"
 #include "duckdb_python/pyfilesystem.hpp"
 
@@ -43,6 +42,8 @@ public:
 	vector<shared_ptr<DuckDBPyConnection>> cursors;
 	unordered_map<string, shared_ptr<Relation>> temporary_views;
 	std::mutex py_connection_lock;
+	//! MemoryFileSystem used to temporarily store file-like objects for reading
+	shared_ptr<ModifiedMemoryFileSystem> internal_object_filesystem;
 
 public:
 	explicit DuckDBPyConnection() {
@@ -64,7 +65,7 @@ public:
 	static bool IsInteractive();
 
 	unique_ptr<DuckDBPyRelation>
-	ReadCSV(const string &name, const py::object &header = py::none(), const py::object &compression = py::none(),
+	ReadCSV(const py::object &name, const py::object &header = py::none(), const py::object &compression = py::none(),
 	        const py::object &sep = py::none(), const py::object &delimiter = py::none(),
 	        const py::object &dtype = py::none(), const py::object &na_values = py::none(),
 	        const py::object &skiprows = py::none(), const py::object &quotechar = py::none(),
@@ -78,15 +79,26 @@ public:
 	                                      const py::object &sample_size = py::none(),
 	                                      const py::object &maximum_depth = py::none());
 
+	shared_ptr<DuckDBPyType> MapType(const shared_ptr<DuckDBPyType> &key_type,
+	                                 const shared_ptr<DuckDBPyType> &value_type);
+	shared_ptr<DuckDBPyType> StructType(const py::object &fields);
+	shared_ptr<DuckDBPyType> ArrayType(const shared_ptr<DuckDBPyType> &type);
+	shared_ptr<DuckDBPyType> UnionType(const py::object &members);
+	shared_ptr<DuckDBPyType> EnumType(const string &name, const shared_ptr<DuckDBPyType> &type,
+	                                  const py::list &values_p);
+	shared_ptr<DuckDBPyType> DecimalType(int width, int scale);
+	shared_ptr<DuckDBPyType> StringType(const string &collation = string());
+	shared_ptr<DuckDBPyType> Type(const string &type_str);
+
 	shared_ptr<DuckDBPyConnection> ExecuteMany(const string &query, py::object params = py::list());
 
 	unique_ptr<QueryResult> ExecuteInternal(const string &query, py::object params = py::list(), bool many = false);
 
 	shared_ptr<DuckDBPyConnection> Execute(const string &query, py::object params = py::list(), bool many = false);
 
-	shared_ptr<DuckDBPyConnection> Append(const string &name, DataFrame value);
+	shared_ptr<DuckDBPyConnection> Append(const string &name, const DataFrame &value);
 
-	shared_ptr<DuckDBPyConnection> RegisterPythonObject(const string &name, py::object python_object);
+	shared_ptr<DuckDBPyConnection> RegisterPythonObject(const string &name, const py::object &python_object);
 
 	void InstallExtension(const string &extension, bool force_install = false);
 
@@ -117,9 +129,9 @@ public:
 
 	unique_ptr<DuckDBPyRelation> FromSubstrait(py::bytes &proto);
 
-	unique_ptr<DuckDBPyRelation> GetSubstrait(const string &query);
+	unique_ptr<DuckDBPyRelation> GetSubstrait(const string &query, bool enable_optimizer = true);
 
-	unique_ptr<DuckDBPyRelation> GetSubstraitJSON(const string &query);
+	unique_ptr<DuckDBPyRelation> GetSubstraitJSON(const string &query, bool enable_optimizer = true);
 
 	unique_ptr<DuckDBPyRelation> FromSubstraitJSON(const string &json);
 
@@ -135,13 +147,15 @@ public:
 
 	void Close();
 
+	ModifiedMemoryFileSystem &GetObjectFileSystem();
+
 	// cursor() is stupid
 	shared_ptr<DuckDBPyConnection> Cursor();
 
-	py::object GetDescription();
+	Optional<py::list> GetDescription();
 
 	// these should be functions on the result but well
-	py::object FetchOne();
+	Optional<py::tuple> FetchOne();
 
 	py::list FetchMany(idx_t size);
 
@@ -151,18 +165,23 @@ public:
 	DataFrame FetchDF(bool date_as_object);
 	DataFrame FetchDFChunk(const idx_t vectors_per_chunk = 1, bool date_as_object = false) const;
 
-	duckdb::pyarrow::Table FetchArrow(idx_t chunk_size);
-	PolarsDataFrame FetchPolars(idx_t chunk_size);
+	duckdb::pyarrow::Table FetchArrow(idx_t rows_per_batch);
+	PolarsDataFrame FetchPolars(idx_t rows_per_batch);
 
-	duckdb::pyarrow::RecordBatchReader FetchRecordBatchReader(const idx_t chunk_size) const;
+	py::dict FetchPyTorch();
 
-	static shared_ptr<DuckDBPyConnection> Connect(const string &database, bool read_only, py::object config);
+	py::dict FetchTF();
+
+	duckdb::pyarrow::RecordBatchReader FetchRecordBatchReader(const idx_t rows_per_batch) const;
+
+	static shared_ptr<DuckDBPyConnection> Connect(const string &database, bool read_only, const py::dict &config);
 
 	static vector<Value> TransformPythonParamList(const py::handle &params);
 
 	void RegisterFilesystem(AbstractFileSystem filesystem);
 	void UnregisterFilesystem(const py::str &name);
 	py::list ListFilesystems();
+	bool FileSystemIsRegistered(const string &name);
 
 	//! Default connection to an in-memory database
 	static shared_ptr<DuckDBPyConnection> default_connection;
@@ -170,14 +189,24 @@ public:
 	static shared_ptr<PythonImportCache> import_cache;
 
 	static bool IsPandasDataframe(const py::object &object);
+	static bool IsPolarsDataframe(const py::object &object);
 	static bool IsAcceptedArrowObject(const py::object &object);
+	static NumpyObjectType IsAcceptedNumpyObject(const py::object &object);
 
 	static unique_ptr<QueryResult> CompletePendingQuery(PendingQueryResult &pending_query);
 
 private:
+	PathLike GetPathLike(const py::object &object);
 	unique_lock<std::mutex> AcquireConnectionLock();
+
 	static PythonEnvironmentType environment;
 	static void DetectEnvironment();
 };
+
+template <class T>
+static bool ModuleIsLoaded() {
+	auto dict = pybind11::module_::import("sys").attr("modules");
+	return dict.contains(py::str(T::Name));
+}
 
 } // namespace duckdb

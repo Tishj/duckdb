@@ -10719,6 +10719,7 @@ struct ShellState {
   int nWidth;            /* Number of slots in colWidth[] and actualWidth[] */
   char nullValue[20];    /* The text to print when a NULL comes back from
                          ** the database */
+  int columns;           /* Column-wise DuckBox rendering */
   char outfile[FILENAME_MAX]; /* Filename for *out */
   const char *zDbFilename;    /* name of the database file */
   char *zFreeOnClose;         /* Filename to free when closing */
@@ -10729,7 +10730,8 @@ struct ShellState {
   int nIndent;           /* Size of array aiIndent[] */
   int iIndent;           /* Index of current op in aiIndent[] */
   EQPGraph sGraph;       /* Information for the graphical EXPLAIN QUERY PLAN */
-  size_t max_rows;       /* The maximum number of rows to render */
+  size_t max_rows;       /* The maximum number of rows to render in DuckBox mode */
+  size_t max_width;      /* The maximum number of characters to render horizontally in DuckBox mode */
 #if defined(SQLITE_ENABLE_SESSION)
   int nSession;             /* Number of active sessions */
   OpenSession aSession[4];  /* Array of sessions.  [0] is in focus. */
@@ -12880,7 +12882,7 @@ columnar_end:
   sqlite3_free(azData);
 }
 
-extern char *sqlite3_print_duckbox(sqlite3_stmt *pStmt, size_t max_rows, char *null_value);
+extern char *sqlite3_print_duckbox(sqlite3_stmt *pStmt, size_t max_rows, size_t max_width, char *null_value, int columns);
 
 /*
 ** Run a prepared statement
@@ -12892,7 +12894,8 @@ static void exec_prepared_stmt(
   int rc;
   if (pArg->cMode == MODE_DuckBox) {
 	  size_t max_rows = pArg->outfile[0] == '\0' || pArg->outfile[0] == '|' ? pArg->max_rows : (size_t) -1;
-	  char *str = sqlite3_print_duckbox(pStmt, max_rows, pArg->nullValue);
+	  size_t max_width = pArg->outfile[0] == '\0' || pArg->outfile[0] == '|' ? pArg->max_width : (size_t) -1;
+	  char *str = sqlite3_print_duckbox(pStmt, max_rows, max_width, pArg->nullValue, pArg->columns);
 	  if (str) {
 		  utf8_printf(pArg->out, "%s", str);
 		  sqlite3_free(str);
@@ -13588,6 +13591,7 @@ static const char *(azHelp[]) = {
   ".changes on|off          Show number of rows changed by SQL",
   ".check GLOB              Fail if output since .testcase does not match",
   ".clone NEWDB             Clone data into NEWDB from the existing database",
+  ".columns                 Column-wise rendering of query results",
   ".constant ?COLOR?        Sets the syntax highlighting color used for constant values",
   "   COLOR is one of:",
   "     red|green|yellow|blue|magenta|cyan|white|brightblack|brightred|brightgreen",
@@ -13658,15 +13662,19 @@ static const char *(azHelp[]) = {
 #endif
   ".log FILE|off            Turn logging on or off.  FILE can be stderr/stdout",
   ".maxrows COUNT           Sets the maximum number of rows for display. Only for duckbox mode.",
+  ".maxwidth COUNT          Sets the maximum width in characters. 0 defaults to terminal width. Only for duckbox mode.",
   ".mode MODE ?TABLE?       Set output mode",
   "   MODE is one of:",
   "     ascii     Columns/rows delimited by 0x1F and 0x1E",
   "     box       Tables using unicode box-drawing characters",
   "     csv       Comma-separated values",
   "     column    Output in columns.  (See .width)",
+  "     duckbox   Tables with extensive features",
   "     html      HTML <table> code",
   "     insert    SQL insert statements for TABLE",
   "     json      Results in a JSON array",
+  "     jsonlines Results in a NDJSON",
+  "     latex     LaTeX tabular environment code",
   "     line      One value per line",
   "     list      Values delimited by \"|\"",
   "     markdown  Markdown table format",
@@ -13674,6 +13682,7 @@ static const char *(azHelp[]) = {
   "     table     ASCII-art table",
   "     tabs      Tab-separated values",
   "     tcl       TCL list elements",
+  "     trash     No output",
   ".nullvalue STRING        Use STRING in place of NULL values",
   ".once ?OPTIONS? ?FILE?   Output for the next SQL command only to FILE",
   "     If FILE begins with '|' then open as a pipe",
@@ -13728,6 +13737,7 @@ static const char *(azHelp[]) = {
   "                            that are not also INTEGER PRIMARY KEYs",
 #endif
   ".restore ?DB? FILE       Restore content of DB (default \"main\") from FILE",
+  ".rows                    Row-wise rendering of query results (default)",
   ".save FILE               Write in-memory database into FILE",
   ".scanstats on|off        Turn sqlite3_stmt_scanstatus() metrics on or off",
   ".schema ?PATTERN?        Show the CREATE statements matching PATTERN",
@@ -18256,6 +18266,21 @@ static int do_meta_command(char *zLine, ShellState *p){
 	  p->max_rows = (size_t)integerValue(azArg[1]);
 	}
   }else
+  if( c=='m' && strncmp(azArg[0], "maxwidth", n)==0 ){
+	if( nArg==1 ){
+      raw_printf(p->out, "current max maxwidth: %zu\n", p->max_width);
+	}else
+    if( nArg!=2 ){
+		raw_printf(stderr, "Usage: .maxwidth COUNT\n");
+		rc = 1;
+	}else{
+	  p->max_width = (size_t)integerValue(azArg[1]);
+	}
+  }else if( c=='c' && strncmp(azArg[0],"columns",n)==0 ){
+    p->columns = 1;
+  }else if( c=='r' && strncmp(azArg[0],"rows",n)==0 ){
+    p->columns = 0;
+  }else
   if( c=='m' && strncmp(azArg[0], "mode", n)==0 ){
     const char *zMode = nArg>=2 ? azArg[1] : "";
     int n2 = strlen30(zMode);
@@ -18317,8 +18342,8 @@ static int do_meta_command(char *zLine, ShellState *p){
       raw_printf(p->out, "current output mode: %s\n", modeDescr[p->mode]);
     }else{
       raw_printf(stderr, "Error: mode should be one of: "
-         "ascii duckbox box column csv html insert json line list markdown "
-         "quote table tabs tcl latex trash \n");
+         "ascii box column csv duckbox html insert json jsonlines latex line "
+         "list markdown quote table tabs tcl trash \n");
       rc = 1;
     }
     p->cMode = p->mode;

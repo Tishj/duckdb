@@ -20,12 +20,12 @@ public:
 };
 
 unique_ptr<GlobalSourceState> PhysicalDrop::GetGlobalSourceState(ClientContext &context) const {
-	return make_unique<DropSourceState>();
+	return make_uniq<DropSourceState>();
 }
 
 void PhysicalDrop::GetData(ExecutionContext &context, DataChunk &chunk, GlobalSourceState &gstate,
                            LocalSourceState &lstate) const {
-	auto &state = (DropSourceState &)gstate;
+	auto &state = gstate.Cast<DropSourceState>();
 	if (state.finished) {
 		return;
 	}
@@ -36,11 +36,6 @@ void PhysicalDrop::GetData(ExecutionContext &context, DataChunk &chunk, GlobalSo
 		if (statements.find(info->name) != statements.end()) {
 			statements.erase(info->name);
 		}
-		break;
-	}
-	case CatalogType::DATABASE_ENTRY: {
-		auto &db_manager = DatabaseManager::Get(context.client);
-		db_manager.DetachDatabase(context.client, info->name, info->if_exists);
 		break;
 	}
 	case CatalogType::SCHEMA_ENTRY: {

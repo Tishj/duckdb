@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/catalog/catalog_entry/dindex_catalog_entry.hpp
+// duckdb/catalog/catalog_entry/duck_index_entry.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -22,8 +22,8 @@ public:
 	shared_ptr<DataTableInfo> info;
 
 public:
-	string GetSchemaName() override;
-	string GetTableName() override;
+	string GetSchemaName() const override;
+	string GetTableName() const override;
 };
 
 } // namespace duckdb

@@ -100,6 +100,7 @@ public:
 	static constexpr auto READ_FLAG = YYJSON_READ_ALLOW_INF_AND_NAN | YYJSON_READ_ALLOW_TRAILING_COMMAS;
 	static constexpr auto STOP_READ_FLAG = READ_FLAG | YYJSON_READ_STOP_WHEN_DONE | YYJSON_READ_INSITU;
 	static constexpr auto WRITE_FLAG = YYJSON_WRITE_ALLOW_INF_AND_NAN;
+	static constexpr auto WRITE_PRETTY_FLAG = YYJSON_WRITE_ALLOW_INF_AND_NAN | YYJSON_WRITE_PRETTY;
 
 public:
 	//! Constant JSON type strings
@@ -113,7 +114,7 @@ public:
 	static constexpr char const *TYPE_STRING_OBJECT = "OBJECT";
 
 	template <class YYJSON_VAL_T>
-	static inline const char *const ValTypeToString(YYJSON_VAL_T *val) {
+	static inline const char *ValTypeToString(YYJSON_VAL_T *val) {
 		switch (GetTag<YYJSON_VAL_T>(val)) {
 		case YYJSON_TYPE_NULL | YYJSON_SUBTYPE_NONE:
 			return JSONCommon::TYPE_STRING_NULL;
@@ -143,7 +144,7 @@ public:
 	}
 
 	template <class YYJSON_VAL_T>
-	static inline const LogicalTypeId ValTypeToLogicalTypeId(YYJSON_VAL_T *val) {
+	static inline LogicalTypeId ValTypeToLogicalTypeId(YYJSON_VAL_T *val) {
 		switch (GetTag<YYJSON_VAL_T>(val)) {
 		case YYJSON_TYPE_NULL | YYJSON_SUBTYPE_NONE:
 			return LogicalTypeId::SQLNULL;

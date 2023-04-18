@@ -4,7 +4,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/execution/expression_executor.hpp"
-
+#include "duckdb/catalog/catalog.hpp"
 namespace duckdb {
 
 struct CurrentSettingBindData : public FunctionData {
@@ -15,7 +15,7 @@ struct CurrentSettingBindData : public FunctionData {
 
 public:
 	unique_ptr<FunctionData> Copy() const override {
-		return make_unique<CurrentSettingBindData>(value);
+		return make_uniq<CurrentSettingBindData>(value);
 	}
 
 	bool Equals(const FunctionData &other_p) const override {
@@ -25,8 +25,8 @@ public:
 };
 
 static void CurrentSettingFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &func_expr = (BoundFunctionExpression &)state.expr;
-	auto &info = (CurrentSettingBindData &)*func_expr.bind_info;
+	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
+	auto &info = func_expr.bind_info->Cast<CurrentSettingBindData>();
 	result.Reference(info.value);
 }
 
@@ -51,11 +51,11 @@ unique_ptr<FunctionData> CurrentSettingBind(ClientContext &context, ScalarFuncti
 	auto key = StringUtil::Lower(key_str);
 	Value val;
 	if (!context.TryGetCurrentSetting(key, val)) {
-		throw InvalidInputException("unrecognized configuration parameter \"%s\"", key_str);
+		throw Catalog::UnrecognizedConfigurationError(context, key);
 	}
 
 	bound_function.return_type = val.type();
-	return make_unique<CurrentSettingBindData>(val);
+	return make_uniq<CurrentSettingBindData>(val);
 }
 
 void CurrentSettingFun::RegisterFunction(BuiltinFunctions &set) {

@@ -16,6 +16,8 @@ project(DuckDB)
 
 find_package(Threads REQUIRED)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if (CMAKE_VERSION VERSION_LESS "3.1")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 else ()
@@ -118,6 +120,7 @@ endif()
 
 option(FORCE_WARN_UNUSED "Unused code objects lead to compiler warnings." FALSE)
 
+option(WASM_LOADABLE_EXTENSIONS "WebAssembly build with loadable extensions." FALSE)
 option(ENABLE_SANITIZER "Enable address sanitizer." TRUE)
 option(ENABLE_THREAD_SANITIZER "Enable thread sanitizer." FALSE)
 option(ENABLE_UBSAN "Enable undefined behavior sanitizer." TRUE)
@@ -276,6 +279,9 @@ option(EXTENSION_STATIC_BUILD
         "Extension build linking statically with DuckDB. Required for building linux loadable extensions."
         FALSE)
 
+if(WIN32)
+  set(EXTENSION_STATIC_BUILD TRUE)
+endif()
 
 set(JEMALLOC_DEFAULT_BUILD FALSE)
 if(NOT CLANG_TIDY AND OS_NAME STREQUAL "linux")
@@ -297,6 +303,7 @@ option(BUILD_INET_EXTENSION "Build the inet extension." FALSE)
 option(BUILD_BENCHMARKS "Enable building of the benchmark suite." FALSE)
 option(BUILD_SQLSMITH_EXTENSION "Enable building of the SQLSmith extension." FALSE)
 option(BUILD_TPCE "Enable building of the TPC-E tool." FALSE)
+option(BUILD_AUTOCOMPLETE_EXTENSION "Enable building of the autocomplete extension" FALSE)
 option(DISABLE_BUILTIN_EXTENSIONS "Disable linking extensions." FALSE)
 option(JDBC_DRIVER "Build the DuckDB JDBC driver" FALSE)
 option(BUILD_ODBC_DRIVER "Build the DuckDB ODBC driver" FALSE)
@@ -307,7 +314,9 @@ option(FORCE_QUERY_LOG "If enabled, all queries will be logged to the specified 
 option(BUILD_SHELL "Build the DuckDB Shell and SQLite API Wrappers" TRUE)
 option(DISABLE_THREADS "Disable support for multi-threading" FALSE)
 option(DISABLE_STR_INLINE "Debug setting: disable inlining of strings" FALSE)
+option(ALTERNATIVE_VERIFY "Debug setting: use alternative verify mode" FALSE)
 option(DESTROY_UNPINNED_BLOCKS "Debug setting: destroy unpinned buffer-managed blocks" FALSE)
+option(DEBUG_STACKTRACE "Debug setting: print a stracktrace on asserts and when testing crashes" FALSE)
 option(DEBUG_MOVE "Debug setting: Ensure std::move is being used" FALSE)
 option(CLANG_TIDY "Enable build for clang-tidy, this disables all source files excluding the core database. This does not produce a working build." FALSE)
 option(BUILD_UNITTESTS "Build the C++ Unit Tests." TRUE)
@@ -374,8 +383,21 @@ if(DESTROY_UNPINNED_BLOCKS)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_DEBUG_DESTROY_BLOCKS")
 endif()
 
+
+if(ALTERNATIVE_VERIFY)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_ALTERNATIVE_VERIFY")
+endif()
+
+if(DEBUG_STACKTRACE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_DEBUG_STACKTRACE")
+endif()
+
 if(DEBUG_MOVE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_DEBUG_MOVE")
+endif()
+
+if (CLANG_TIDY)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDUCKDB_CLANG_TIDY")
 endif()
 
 if(FORCE_ASSERT)
@@ -608,6 +630,11 @@ function(add_extension_definitions)
     add_definitions(-DBUILD_INET_EXTENSION=${BUILD_INET_EXTENSION})
   endif()
 
+  if(${BUILD_AUTOCOMPLETE_EXTENSION})
+    include_directories(${PROJECT_SOURCE_DIR}/extension/autocomplete/include)
+    add_definitions(-DBUILD_AUTOCOMPLETE_EXTENSION=${BUILD_AUTOCOMPLETE_EXTENSION})
+  endif()
+
   # Include paths for any registered out-of-tree extensions
   foreach(OOTE_NAME IN LISTS DUCKDB_OOT_EXTENSION_NAMES)
     string(TOUPPER ${OOTE_NAME} OOTE_NAME_UPPERCASE)
@@ -730,6 +757,10 @@ function(link_extension_libraries LIBRARY)
     target_link_libraries(${LIBRARY} inet_extension)
   endif()
 
+  if(${BUILD_AUTOCOMPLETE_EXTENSION})
+    target_link_libraries(${LIBRARY} autocomplete_extension)
+  endif()
+
   # Now link against any registered out-of-tree extensions
   foreach(OOTE_NAME IN LISTS DUCKDB_OOT_EXTENSION_NAMES)
     string(TOUPPER ${OOTE_NAME} OOTE_NAME_UPPERCASE)
@@ -754,7 +785,6 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY PARAMETERS)
   if(WIN32 AND NOT MSVC)
     return()
   endif()
-
   set(TARGET_NAME ${NAME}_loadable_extension)
   # all parameters after output_directory
   set(FILES ${ARGV})
@@ -768,13 +798,12 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY PARAMETERS)
   # parse parameters
   string(FIND "${PARAMETERS}" "-no-warnings" IGNORE_WARNINGS)
 
-
   add_library(${TARGET_NAME} SHARED ${FILES})
   # this disables the -Dsome_target_EXPORTS define being added by cmake which otherwise trips clang-tidy (yay)
   set_target_properties(${TARGET_NAME} PROPERTIES DEFINE_SYMBOL "")
   set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME ${NAME})
   set_target_properties(${TARGET_NAME} PROPERTIES PREFIX "")
-  if(${IGNORE_WARNINGS} GREATER_EQUAL 0)
+  if(${IGNORE_WARNINGS} GREATER -1)
     disable_target_warnings(${TARGET_NAME})
   endif()
   # loadable extension binaries can be built two ways:
@@ -786,12 +815,14 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY PARAMETERS)
   #    The DuckDB symbols required by the loadable extensions are left unresolved. This will reduce the size of the binaries
   #    and works well when running the DuckDB cli directly. For windows this uses delay loading. For MacOS and linux the
   #    dynamic loader will look up the missing symbols when the extension is dlopen-ed.
-  if (EXTENSION_STATIC_BUILD)
+  if(WASM_LOADABLE_EXTENSIONS)
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -sSIDE_MODULE=1 -DWASM_LOADABLE_EXTENSIONS")
+  elseif (EXTENSION_STATIC_BUILD)
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
       if (APPLE)
         set_target_properties(${TARGET_NAME} PROPERTIES CXX_VISIBILITY_PRESET hidden)
         # Note that on MacOS we need to use the -exported_symbol whitelist feature due to a lack of -exclude-libs flag in mac's ld variant
-        set(WHITELIST "-Wl,-exported_symbol,_${NAME}_init -Wl,-exported_symbol,_${NAME}_version -Wl,-exported_symbol,_${NAME}_replacement_open_*")
+        set(WHITELIST "-Wl,-exported_symbol,_${NAME}_init -Wl,-exported_symbol,_${NAME}_version -Wl,-exported_symbol,_${NAME}_storage_ini*")
         target_link_libraries(${TARGET_NAME} duckdb_static ${DUCKDB_EXTRA_LINK_FLAGS} -Wl,-dead_strip ${WHITELIST})
       else()
         # For GNU we rely on fvisibility=hidden to hide the extension symbols and use -exclude-libs to hide the duckdb symbols
@@ -819,10 +850,6 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY PARAMETERS)
           ".duckdb_extension")
 
   if(MSVC)
-    if (NOT EXTENSION_STATIC_BUILD)
-      target_link_libraries(${TARGET_NAME} delayimp)
-    endif()
-
     set_target_properties(
             ${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
             "${CMAKE_BINARY_DIR}/${OUTPUT_DIRECTORY}")
@@ -830,21 +857,6 @@ function(build_loadable_extension_directory NAME OUTPUT_DIRECTORY PARAMETERS)
             ${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
             "${CMAKE_BINARY_DIR}/${OUTPUT_DIRECTORY}")
   endif()
-
-  if(WIN32 AND NOT EXTENSION_STATIC_BUILD)
-    set_target_properties(${TARGET_NAME}
-            PROPERTIES LINK_FLAGS_DEBUG "/DELAYLOAD:duckdb.dll")
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG
-            "${CMAKE_EXE_LINKER_FLAGS_DEBUG}  /DELAYLOAD:duckdb.dll")
-    set_target_properties(${TARGET_NAME}
-            PROPERTIES LINK_FLAGS_RELEASE "/DELAYLOAD:duckdb.dll")
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE
-            "${CMAKE_EXE_LINKER_FLAGS_RELEASE}  /DELAYLOAD:duckdb.dll")
-    # This is only strictly required in non-Visual-Studio builds like Ninja:
-    target_link_libraries(${TARGET_NAME}
-            delayimp)
-endif()
-
 endfunction()
 
 function(build_loadable_extension NAME PARAMETERS)

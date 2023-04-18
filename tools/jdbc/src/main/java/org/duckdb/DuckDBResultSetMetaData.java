@@ -54,8 +54,13 @@ public class DuckDBResultSetMetaData implements ResultSetMetaData {
 			return DuckDBColumnType.STRUCT;
 		} else if (type_name.startsWith("MAP")) {
 			return DuckDBColumnType.MAP;
-		} else {
+		} else if (type_name.startsWith("UNION")) {
+			return DuckDBColumnType.UNION;
+		}
+		try {
 			return DuckDBColumnType.valueOf(type_name);
+		} catch (IllegalArgumentException e) {
+			return DuckDBColumnType.UNKNOWN;
 		}
 	}
 
@@ -101,18 +106,6 @@ public class DuckDBResultSetMetaData implements ResultSetMetaData {
 			return Types.BIGINT;
 		case LIST:
 			return Types.ARRAY;
-		case ENUM:
-		case HUGEINT:
-		case UTINYINT:
-		case USMALLINT:
-		case STRUCT:
-		case UUID:
-		case JSON:
-		case UINTEGER:
-		case UBIGINT:
-		case INTERVAL:
-		case MAP:
-			return Types.JAVA_OBJECT;
 		case FLOAT:
 			return Types.FLOAT;
 		case DOUBLE:
@@ -135,7 +128,7 @@ public class DuckDBResultSetMetaData implements ResultSetMetaData {
 		case BLOB:
 			return Types.BLOB;
 		default:
-			throw new SQLException("Unsupported type " + type);
+			return Types.JAVA_OBJECT;
 		}
 	}
 
@@ -260,12 +253,14 @@ public class DuckDBResultSetMetaData implements ResultSetMetaData {
 		return "";
 	}
 
+	@Override
 	public <T> T unwrap(Class<T> iface) throws SQLException {
-		throw new SQLFeatureNotSupportedException("unwrap");
+		return JdbcUtils.unwrap(this, iface);
 	}
 
-	public boolean isWrapperFor(Class<?> iface) throws SQLException {
-		throw new SQLFeatureNotSupportedException("isWrapperFor");
+	@Override
+	public boolean isWrapperFor(Class<?> iface) {
+		return iface.isInstance(this);
 	}
 
 	private DuckDBColumnTypeMetaData typeMetadataForColumn(int columnIndex) throws SQLException {
