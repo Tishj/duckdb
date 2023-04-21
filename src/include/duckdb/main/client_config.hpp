@@ -83,6 +83,9 @@ struct ClientConfig {
 	//! Callback to create a progress bar display
 	progress_bar_display_create_func_t display_create_func = nullptr;
 
+	//! Callback to call on every progress bar update
+	optional_ptr<ProgressUpdateHandler> progress_update_handler = nullptr;
+
 	//! Override for the default extension repository
 	string custom_extension_repo = "";
 

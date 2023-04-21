@@ -16,8 +16,10 @@ unique_ptr<ProgressBarDisplay> ProgressBar::DefaultProgressBarDisplay() {
 }
 
 ProgressBar::ProgressBar(Executor &executor, idx_t show_progress_after,
-                         progress_bar_display_create_func_t create_display_func)
-    : executor(executor), show_progress_after(show_progress_after), current_percentage(-1) {
+                         progress_bar_display_create_func_t create_display_func,
+                         optional_ptr<ProgressUpdateHandler> progress_handler)
+    : executor(executor), show_progress_after(show_progress_after), current_percentage(-1),
+      progress_handler(progress_handler) {
 	if (create_display_func) {
 		display = create_display_func();
 	}
@@ -69,6 +71,9 @@ void ProgressBar::Update(bool final) {
 	}
 	if (new_percentage > current_percentage) {
 		current_percentage = new_percentage;
+	}
+	if (progress_handler) {
+		progress_handler->callback(progress_handler->context, current_percentage, final);
 	}
 	if (ShouldPrint(final)) {
 #ifndef DUCKDB_DISABLE_PRINT

@@ -17,7 +17,23 @@
 namespace duckdb {
 
 struct ClientConfig;
+
 typedef unique_ptr<ProgressBarDisplay> (*progress_bar_display_create_func_t)();
+
+typedef std::function<void(void *state, double percentage, bool finished)> progress_bar_update_callback_t;
+
+struct ProgressUpdateHandler {
+public:
+	ProgressUpdateHandler(void *context, progress_bar_update_callback_t callback)
+	    : context(context), callback(callback) {
+	}
+
+public:
+	//! The context to feed to the callback
+	void *context;
+	//! The user provided function to call on every progress update
+	progress_bar_update_callback_t callback;
+};
 
 class ProgressBar {
 public:
@@ -26,7 +42,8 @@ public:
 
 	explicit ProgressBar(
 	    Executor &executor, idx_t show_progress_after,
-	    progress_bar_display_create_func_t create_display_func = ProgressBar::DefaultProgressBarDisplay);
+	    progress_bar_display_create_func_t create_display_func = ProgressBar::DefaultProgressBarDisplay,
+	    optional_ptr<ProgressUpdateHandler> progress_handler = nullptr);
 
 	//! Starts the thread
 	void Start();
@@ -52,6 +69,8 @@ private:
 	double current_percentage;
 	//! The display used to print the progress
 	unique_ptr<ProgressBarDisplay> display;
+	//! The (optional) callback to perform on update
+	optional_ptr<ProgressUpdateHandler> progress_handler;
 	//! Whether or not profiling is supported for the current query
 	bool supported = true;
 	//! Whether the bar has already finished

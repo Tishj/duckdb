@@ -44,6 +44,8 @@ public:
 	std::mutex py_connection_lock;
 	//! MemoryFileSystem used to temporarily store file-like objects for reading
 	shared_ptr<ModifiedMemoryFileSystem> internal_object_filesystem;
+	//! (optionally) registered callback to invoke on every progress bar update
+	unique_ptr<ProgressUpdateHandler> progress_handler;
 
 public:
 	explicit DuckDBPyConnection() {
@@ -89,6 +91,8 @@ public:
 	shared_ptr<DuckDBPyType> DecimalType(int width, int scale);
 	shared_ptr<DuckDBPyType> StringType(const string &collation = string());
 	shared_ptr<DuckDBPyType> Type(const string &type_str);
+
+	shared_ptr<DuckDBPyConnection> SetProgressHandler(const py::function &callback, const py::object &state);
 
 	shared_ptr<DuckDBPyConnection> ExecuteMany(const string &query, py::object params = py::list());
 

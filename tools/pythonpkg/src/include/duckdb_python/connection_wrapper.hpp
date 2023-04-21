@@ -27,6 +27,9 @@ public:
 	static shared_ptr<DuckDBPyConnection> Execute(const string &query, py::object params = py::list(),
 	                                              bool many = false, shared_ptr<DuckDBPyConnection> conn = nullptr);
 
+	static shared_ptr<DuckDBPyConnection> SetProgressHandler(const py::function &callback, const py::object &state,
+	                                                         shared_ptr<DuckDBPyConnection> conn = nullptr);
+
 	static shared_ptr<DuckDBPyType> ArrayType(const shared_ptr<DuckDBPyType> &type,
 	                                          shared_ptr<DuckDBPyConnection> conn = nullptr);
 	static shared_ptr<DuckDBPyType> MapType(const shared_ptr<DuckDBPyType> &key, const shared_ptr<DuckDBPyType> &value,

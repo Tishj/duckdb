@@ -405,7 +405,8 @@ unique_ptr<PendingQueryResult> ClientContext::PendingPreparedStatement(ClientCon
 			display_create_func =
 			    config.display_create_func ? config.display_create_func : ProgressBar::DefaultProgressBarDisplay;
 		}
-		active_query->progress_bar = make_uniq<ProgressBar>(executor, config.wait_time, display_create_func);
+		active_query->progress_bar =
+		    make_uniq<ProgressBar>(executor, config.wait_time, display_create_func, config.progress_update_handler);
 		active_query->progress_bar->Start();
 		query_progress = 0;
 	}

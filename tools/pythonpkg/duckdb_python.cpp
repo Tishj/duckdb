@@ -133,6 +133,10 @@ static void InitializeConnectionMethods(py::module_ &m) {
 	         py::arg("name"), py::arg("connection") = py::none(), py::arg("columns") = py::none(),
 	         py::arg("sample_size") = py::none(), py::arg("maximum_depth") = py::none());
 
+	m.def("set_progress_handler", &PyConnectionWrapper::SetProgressHandler,
+	      "Register a callback to be called whenever the progress updates", py::arg("handler"),
+	      py::arg("state") = py::none(), py::arg("connection") = py::none());
+
 	m.def("values", &PyConnectionWrapper::Values, "Create a relation object from the passed values", py::arg("values"),
 	      py::arg("connection") = py::none());
 	m.def("from_query", &PyConnectionWrapper::FromQuery, "Create a relation object from the given SQL query",

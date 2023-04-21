@@ -39,6 +39,7 @@
 #include "duckdb/catalog/default/default_types.hpp"
 #include "duckdb/main/relation/value_relation.hpp"
 #include "duckdb_python/filesystem_object.hpp"
+#include "duckdb/common/progress_bar/progress_bar.hpp"
 
 #include <random>
 
@@ -99,6 +100,10 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	         "List registered filesystems, including builtin ones")
 	    .def("filesystem_is_registered", &DuckDBPyConnection::FileSystemIsRegistered,
 	         "Check if a filesystem with the provided name is currently registered", py::arg("name"));
+
+	m.def("set_progress_handler", &DuckDBPyConnection::SetProgressHandler,
+	      "Register a callback to be called whenever the progress updates", py::arg("handler"),
+	      py::arg("state") = py::none());
 
 	DefineMethod({"sqltype", "dtype", "type"}, m, &DuckDBPyConnection::Type,
 	             "Create a type object by parsing the 'type_str' string", py::arg("type_str"));
@@ -219,6 +224,46 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	    .def("install_extension", &DuckDBPyConnection::InstallExtension, "Install an extension by name",
 	         py::arg("extension"), py::kw_only(), py::arg("force_install") = false)
 	    .def("load_extension", &DuckDBPyConnection::LoadExtension, "Load an installed extension", py::arg("extension"));
+}
+
+static unique_ptr<ProgressUpdateHandler> CreateProgressHandler(PyObject *function, PyObject *state_object) {
+	progress_bar_update_callback_t callback = [=](void *state_p, double progress, bool finished) -> void {
+		py::gil_scoped_acquire gil;
+
+		auto parameters = py::tuple(3);
+		auto state = py::reinterpret_borrow<py::object>((PyObject *)state_p);
+		parameters[0] = std::move(state);
+		parameters[1] = py::float_(progress);
+		parameters[2] = py::bool_(finished);
+
+		PyObject_CallObject(function, parameters.ptr());
+	};
+	return make_uniq<ProgressUpdateHandler>(state_object, callback);
+}
+
+shared_ptr<DuckDBPyConnection> DuckDBPyConnection::SetProgressHandler(const py::function &callback,
+                                                                      const py::object &state) {
+	if (!connection) {
+		throw ConnectionException("Connection has already been closed!");
+	}
+
+	auto signature_func = py::module_::import("inspect").attr("signature");
+	auto signature = signature_func(callback);
+	auto sig_params = signature.attr("parameters");
+
+	auto params = py::dict(sig_params);
+	if (params.size() != 3) {
+		throw InvalidInputException("The provided callback takes '%d' parameters, expected a function that takes 3 "
+		                            "parameters (state: Any, progress: float, finished: bool");
+	}
+
+	// FIXME: this becomes a problem if we overwrite an existing handler and there are still relations that were created
+	// with that progress handler since the ClientConfig only contains a pointer to the data Maybe relations should
+	// always take the progress handler as a dependency if it's set?
+	this->progress_handler = CreateProgressHandler(callback.ptr(), state.ptr());
+	connection->context->config.progress_update_handler = this->progress_handler.get();
+	// FIXME: shouldn't we create a dependency for the state + func as well?
+	return shared_from_this();
 }
 
 void DuckDBPyConnection::UnregisterFilesystem(const py::str &name) {

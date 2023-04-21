@@ -100,6 +100,12 @@ shared_ptr<DuckDBPyConnection> PyConnectionWrapper::Append(const string &name, D
 	return conn->Append(name, value);
 }
 
+shared_ptr<DuckDBPyConnection> PyConnectionWrapper::SetProgressHandler(const py::function &callback,
+                                                                       const py::object &state,
+                                                                       shared_ptr<DuckDBPyConnection> conn) {
+	return conn->SetProgressHandler(callback, state);
+}
+
 shared_ptr<DuckDBPyConnection> PyConnectionWrapper::RegisterPythonObject(const string &name, py::object python_object,
                                                                          shared_ptr<DuckDBPyConnection> conn) {
 	return conn->RegisterPythonObject(name, python_object);
