@@ -108,7 +108,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalInsert &op
 		plan = CreatePlan(*op.children[0]);
 	}
 	dependencies.AddDependency(op.table);
-	return op.table->catalog->PlanInsert(context, op, std::move(plan));
+	return op.table.catalog->PlanInsert(context, op, std::move(plan));
 }
 
 } // namespace duckdb
