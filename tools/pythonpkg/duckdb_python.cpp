@@ -1,17 +1,17 @@
-#include "duckdb_python/pybind_wrapper.hpp"
+#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/parser/parser.hpp"
 
 #include "duckdb_python/python_objects.hpp"
-#include "duckdb_python/pyconnection.hpp"
+#include "duckdb_python/pyconnection/pyconnection.hpp"
 #include "duckdb_python/pyrelation.hpp"
 #include "duckdb_python/pyresult.hpp"
+#include "duckdb_python/pybind11/exceptions.hpp"
 #include "duckdb_python/typing.hpp"
-#include "duckdb_python/exceptions.hpp"
 #include "duckdb_python/connection_wrapper.hpp"
-#include "duckdb_python/conversions/pyconnection_default.hpp"
+#include "duckdb_python/pybind11/conversions/pyconnection_default.hpp"
 
 #include "duckdb.hpp"
 
@@ -112,18 +112,18 @@ static void InitializeConnectionMethods(py::module_ &m) {
 	    .def("df", &PyConnectionWrapper::FetchDF, "Fetch a result as DataFrame following execute()", py::kw_only(),
 	         py::arg("date_as_object") = false, py::arg("connection") = py::none())
 	    .def("fetch_arrow_table", &PyConnectionWrapper::FetchArrow, "Fetch a result as Arrow table following execute()",
-	         py::arg("chunk_size") = 1000000, py::arg("connection") = py::none())
+	         py::arg("rows_per_batch") = 1000000, py::arg("connection") = py::none())
 	    .def("torch", &PyConnectionWrapper::FetchPyTorch,
 	         "Fetch a result as dict of PyTorch Tensors following execute()", py::arg("connection") = py::none())
 	    .def("tf", &PyConnectionWrapper::FetchTF, "Fetch a result as dict of TensorFlow Tensors following execute()",
 	         py::arg("connection") = py::none())
 	    .def("fetch_record_batch", &PyConnectionWrapper::FetchRecordBatchReader,
-	         "Fetch an Arrow RecordBatchReader following execute()", py::arg("chunk_size") = 1000000,
+	         "Fetch an Arrow RecordBatchReader following execute()", py::arg("rows_per_batch") = 1000000,
 	         py::arg("connection") = py::none())
 	    .def("arrow", &PyConnectionWrapper::FetchArrow, "Fetch a result as Arrow table following execute()",
-	         py::arg("chunk_size") = 1000000, py::arg("connection") = py::none())
+	         py::arg("rows_per_batch") = 1000000, py::arg("connection") = py::none())
 	    .def("pl", &PyConnectionWrapper::FetchPolars, "Fetch a result as Polars DataFrame following execute()",
-	         py::arg("chunk_size") = 1000000, py::arg("connection") = py::none())
+	         py::arg("rows_per_batch") = 1000000, py::arg("connection") = py::none())
 	    .def("begin", &PyConnectionWrapper::Begin, "Start a new transaction", py::arg("connection") = py::none())
 	    .def("commit", &PyConnectionWrapper::Commit, "Commit changes performed within a transaction",
 	         py::arg("connection") = py::none())

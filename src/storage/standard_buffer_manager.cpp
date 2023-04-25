@@ -20,14 +20,17 @@ struct BufferAllocatorData : PrivateAllocatorData {
 
 unique_ptr<FileBuffer> StandardBufferManager::ConstructManagedBuffer(idx_t size, unique_ptr<FileBuffer> &&source,
                                                                      FileBufferType type) {
+	unique_ptr<FileBuffer> result;
 	if (source) {
 		auto tmp = std::move(source);
 		D_ASSERT(tmp->AllocSize() == BufferManager::GetAllocSize(size));
-		return make_uniq<FileBuffer>(*tmp, type);
+		result = make_uniq<FileBuffer>(*tmp, type);
 	} else {
 		// no re-usable buffer: allocate a new buffer
-		return make_uniq<FileBuffer>(Allocator::Get(db), type, size);
+		result = make_uniq<FileBuffer>(Allocator::Get(db), type, size);
 	}
+	result->Initialize(DBConfig::GetConfig(db).options.debug_initialize);
+	return result;
 }
 
 class TemporaryFileManager;
@@ -208,7 +211,7 @@ void StandardBufferManager::VerifyZeroReaders(shared_ptr<BlockHandle> &handle) {
 	auto replacement_buffer = make_uniq<FileBuffer>(Allocator::Get(db), handle->buffer->type,
 	                                                handle->memory_usage - Storage::BLOCK_HEADER_SIZE);
 	memcpy(replacement_buffer->buffer, handle->buffer->buffer, handle->buffer->size);
-	memset(handle->buffer->buffer, 165, handle->buffer->size); // 165 is default memory in debug mode
+	memset(handle->buffer->buffer, 0xa5, handle->buffer->size); // 0xa5 is default memory in debug mode
 	handle->buffer = std::move(replacement_buffer);
 #endif
 }
