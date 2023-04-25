@@ -20,7 +20,7 @@ struct RangeInOutTimestampFunctionState : public GlobalTableFunctionState {
 
 template <bool GENERATE_SERIES>
 struct RangeInOutNumericFunctionState : public GlobalTableFunctionState {
-	RangeIntExecutor<int64_t, GENERATE_SERIES> executor;
+	RangeIntExecutor<GENERATE_SERIES> executor;
 };
 
 template <bool GENERATE_SERIES>
@@ -89,7 +89,7 @@ static OperatorResultType RangeFunctionNumeric(ExecutionContext &context, TableF
 	auto &state = (RangeInOutNumericFunctionState<GENERATE_SERIES> &)*data_p.global_state;
 
 	auto &executor = state.executor;
-	return RangeFunctionInternal<RangeIntExecutor<int64_t, GENERATE_SERIES>>(context, executor, input, output);
+	return RangeFunctionInternal<RangeIntExecutor<GENERATE_SERIES>>(context, executor, input, output);
 }
 
 template <bool GENERATE_SERIES>
@@ -103,12 +103,12 @@ static OperatorResultType RangeFunctionTimestamp(ExecutionContext &context, Tabl
 
 } // namespace range
 
-void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
-
+template <bool GENERATE_SERIES>
+static void RegisterFunctionInternal(TableFunctionSet &set) {
 	// range(BIGINT);
-	TableFunction range_function({LogicalType::BIGINT}, nullptr, range::RangeIntFunctionBind<false>,
-	                             range::RangeFunctionNumericInit<false>);
-	range_function.in_out_function = range::RangeFunctionNumeric<false>;
+	TableFunction range_function({LogicalType::BIGINT}, nullptr, range::RangeIntFunctionBind<GENERATE_SERIES>,
+	                             range::RangeFunctionNumericInit<GENERATE_SERIES>);
+	range_function.in_out_function = range::RangeFunctionNumeric<GENERATE_SERIES>;
 	set.AddFunction(range_function);
 
 	// range(BIGINT, BIGINT);
@@ -121,10 +121,18 @@ void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
 
 	// range(TIMESTAMP, TIMESTAMP, INTERVAL);
 	range_function.arguments = {LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL};
-	range_function.init_global = range::RangeFunctionTimestampInit<false>;
-	range_function.bind = range::RangeTimestampFunctionBind<false>;
-	range_function.in_out_function = range::RangeFunctionTimestamp<false>;
+	range_function.init_global = range::RangeFunctionTimestampInit<GENERATE_SERIES>;
+	range_function.bind = range::RangeTimestampFunctionBind<GENERATE_SERIES>;
+	range_function.in_out_function = range::RangeFunctionTimestamp<GENERATE_SERIES>;
 	set.AddFunction(range_function);
+}
+
+void RangeInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
+	RegisterFunctionInternal<false>(set);
+}
+
+void GenerateSeriesInOutTableFunction::RegisterFunction(TableFunctionSet &set) {
+	RegisterFunctionInternal<true>(set);
 }
 
 } // namespace duckdb

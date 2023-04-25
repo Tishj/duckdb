@@ -25,7 +25,9 @@ class RangeTimestampExecutor : public RangeExecutor {
 	using increment_t = interval_t;
 
 public:
-	RangeTimestampExecutor() : settings(), start_data(range_t()), end_data(range_t()), increment_data(increment_t()) {
+	RangeTimestampExecutor()
+	    : settings(), start_data(range_t(), range_t()), end_data(range_t(), range_t()),
+	      increment_data(increment_t(), increment_t()) {
 	}
 	virtual ~RangeTimestampExecutor() {
 	}

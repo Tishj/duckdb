@@ -31,11 +31,13 @@ struct RangeSettings {
 template <class TYPE>
 struct SettingContainer {
 public:
-	SettingContainer(TYPE default_value) : initialized(false), default_value(std::move(default_value)) {
+	SettingContainer(TYPE default_value, TYPE null_value)
+	    : initialized(false), default_value(std::move(default_value)), null_value(std::move(null_value)) {
 	}
 	UnifiedVectorFormat format;
 	bool initialized = false;
 	TYPE default_value;
+	TYPE null_value;
 
 public:
 	void Set(idx_t count, Vector &vec) {
@@ -47,7 +49,7 @@ public:
 			idx = format.sel->get_index(idx);
 			if (!format.validity.RowIsValid(idx)) {
 				null = true;
-				return default_value;
+				return null_value;
 			}
 			return ((TYPE *)format.data)[idx];
 		}

@@ -38,4 +38,8 @@ struct RangeInOutTableFunction {
 	static void RegisterFunction(TableFunctionSet &set);
 };
 
+struct GenerateSeriesInOutTableFunction {
+	static void RegisterFunction(TableFunctionSet &set);
+};
+
 } // namespace duckdb

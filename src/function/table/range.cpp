@@ -237,35 +237,24 @@ static void RangeDateTimeFunction(ClientContext &context, TableFunctionInput &da
 
 void RangeTableFunction::RegisterFunction(BuiltinFunctions &set) {
 	TableFunctionSet range("range");
-
-	TableFunction range_function({LogicalType::BIGINT}, RangeFunction, RangeFunctionBind<false>, RangeFunctionInit);
-	// range_function.cardinality = RangeCardinality;
-
-	//// single argument range: (end) - implicit start = 0 and increment = 1
-	// range.AddFunction(range_function);
-	//// two arguments range: (start, end) - implicit increment = 1
-	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
-	// range.AddFunction(range_function);
-	//// three arguments range: (start, end, increment)
-	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
-	// range.AddFunction(range_function);
-	// range.AddFunction(TableFunction({LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL},
-	//                                 RangeDateTimeFunction, RangeDateTimeBind<false>, RangeDateTimeInit));
 	RangeInOutTableFunction::RegisterFunction(range);
 	set.AddFunction(range);
 
-	// generate_series: similar to range, but inclusive instead of exclusive bounds on the RHS
 	TableFunctionSet generate_series("generate_series");
-	range_function.bind = RangeFunctionBind<true>;
-	range_function.arguments = {LogicalType::BIGINT};
-	generate_series.AddFunction(range_function);
-	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
-	generate_series.AddFunction(range_function);
-	range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
-	generate_series.AddFunction(range_function);
-	generate_series.AddFunction(TableFunction({LogicalType::TIMESTAMP, LogicalType::TIMESTAMP, LogicalType::INTERVAL},
-	                                          RangeDateTimeFunction, RangeDateTimeBind<true>, RangeDateTimeInit));
+	GenerateSeriesInOutTableFunction::RegisterFunction(generate_series);
 	set.AddFunction(generate_series);
+
+	//// generate_series: similar to range, but inclusive instead of exclusive bounds on the RHS
+	// range_function.bind = RangeFunctionBind<true>;
+	// range_function.arguments = {LogicalType::BIGINT};
+	// generate_series.AddFunction(range_function);
+	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT};
+	// generate_series.AddFunction(range_function);
+	// range_function.arguments = {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
+	// generate_series.AddFunction(range_function);
+	// generate_series.AddFunction(TableFunction({LogicalType::TIMESTAMP, LogicalType::TIMESTAMP,
+	// LogicalType::INTERVAL},
+	//                                          RangeDateTimeFunction, RangeDateTimeBind<true>, RangeDateTimeInit));
 }
 
 void BuiltinFunctions::RegisterTableFunctions() {

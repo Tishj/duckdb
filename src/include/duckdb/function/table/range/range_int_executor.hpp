@@ -6,14 +6,12 @@ namespace duckdb {
 
 namespace range {
 
-template <class RANGE_TYPE, bool GENERATE_SERIES>
+template <bool GENERATE_SERIES>
 class RangeIntExecutor : public RangeExecutor {
-	using range_t = RANGE_TYPE;
-	using increment_t = RANGE_TYPE;
-	using IntRange = RangeSettings<range_t, range_t, increment_t>;
+	using IntRange = RangeSettings<hugeint_t, hugeint_t, hugeint_t>;
 
 public:
-	RangeIntExecutor() : settings(), start_data(0), end_data(0), increment_data(1) {
+	RangeIntExecutor() : settings(), start_data(0, GENERATE_SERIES ? 1 : 0), end_data(0, 0), increment_data(1, 1) {
 	}
 	~RangeIntExecutor() {
 	}
@@ -49,7 +47,7 @@ public:
 
 		auto remaining = GetRemaining(settings, total_written);
 
-		range_t current_value = start + increment * range_idx;
+		hugeint_t current_value = start + increment * range_idx;
 		int64_t current_value_i64;
 		if (!Hugeint::TryCast<int64_t>(current_value, current_value_i64)) {
 			throw InvalidInputException("Range value exceeds the capacity of BIGINT");
@@ -116,9 +114,16 @@ private:
 				return settings;
 			}
 
-			int64_t offset = settings.increment < 0 ? 1 : -1;
-			settings.size = Hugeint::Cast<idx_t>((settings.end - settings.start + (settings.increment + offset)) /
-			                                     settings.increment);
+			if (!GENERATE_SERIES) {
+				int64_t offset = settings.increment < 0 ? 1 : -1;
+				settings.size = Hugeint::Cast<idx_t>((settings.end - settings.start + (settings.increment + offset)) /
+				                                     settings.increment);
+			} else {
+				// FIXME: this isn't correct yet, might need a loop to figure out the size after all
+				settings.size =
+				    Hugeint::Cast<idx_t>((settings.end - settings.start + settings.increment) / settings.increment);
+				settings.size += ((settings.end - settings.start + settings.increment) % settings.increment) != 0;
+			}
 		}
 		return settings;
 	}
@@ -131,9 +136,9 @@ private:
 
 private:
 	IntRange settings;
-	SettingContainer<range_t> start_data;
-	SettingContainer<range_t> end_data;
-	SettingContainer<increment_t> increment_data;
+	SettingContainer<int64_t> start_data;
+	SettingContainer<int64_t> end_data;
+	SettingContainer<int64_t> increment_data;
 };
 
 } // namespace range
