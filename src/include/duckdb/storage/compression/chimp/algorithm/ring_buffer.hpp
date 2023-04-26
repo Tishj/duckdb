@@ -46,7 +46,7 @@ public:
 		return buffer[index % RING_SIZE];
 	}
 	//! Get the index where values that produce this 'key' are stored
-	inline const uint64_t &IndexOf(const uint64_t &key) const {
+	inline const uint16_t IndexOf(const uint64_t &key) const {
 		return indices[key];
 	}
 	//! Get the value at position 'index' of the buffer
@@ -64,7 +64,7 @@ public:
 private:
 	uint64_t buffer[RING_SIZE] = {};     //! Stores the corresponding values
 	uint64_t index = 0;                  //! Keeps track of the index of the current value
-	uint64_t indices[INDICES_SIZE] = {}; //! Stores the corresponding indices
+	uint16_t indices[INDICES_SIZE] = {}; //! Stores the corresponding indices
 };
 
 } // namespace duckdb
