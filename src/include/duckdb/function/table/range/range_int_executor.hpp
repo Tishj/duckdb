@@ -109,21 +109,22 @@ private:
 			settings.end = end_data.Get(input_idx, settings.null);
 			settings.increment = increment_data.Get(input_idx, settings.null);
 
+			if (GENERATE_SERIES) {
+				if (settings.increment < 0) {
+					settings.end = settings.end - 1;
+				} else {
+					settings.end = settings.end + 1;
+				}
+			}
+
 			VerifySettings(settings);
 			if (settings.null) {
 				return settings;
 			}
 
-			if (!GENERATE_SERIES) {
-				int64_t offset = settings.increment < 0 ? 1 : -1;
-				settings.size = Hugeint::Cast<idx_t>((settings.end - settings.start + (settings.increment + offset)) /
-				                                     settings.increment);
-			} else {
-				// FIXME: this isn't correct yet, might need a loop to figure out the size after all
-				settings.size =
-				    Hugeint::Cast<idx_t>((settings.end - settings.start + settings.increment) / settings.increment);
-				settings.size += ((settings.end - settings.start + settings.increment) % settings.increment) != 0;
-			}
+			int64_t offset = settings.increment < 0 ? 1 : -1;
+			settings.size = Hugeint::Cast<idx_t>((settings.end - settings.start + (settings.increment + offset)) /
+			                                     settings.increment);
 		}
 		return settings;
 	}
