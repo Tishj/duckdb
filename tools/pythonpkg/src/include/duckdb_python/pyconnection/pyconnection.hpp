@@ -20,6 +20,7 @@
 #include "duckdb_python/pyfilesystem.hpp"
 #include "duckdb_python/pybind11/registered_py_object.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/function/table_function.hpp"
 #include "duckdb_python/pybind11/conversions/exception_handling_enum.hpp"
 
 namespace duckdb {
@@ -98,6 +99,9 @@ public:
 	                  const shared_ptr<DuckDBPyType> &return_type = nullptr, bool varargs = false,
 	                  FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING,
 	                  PythonExceptionHandling exception_handling = PythonExceptionHandling::FORWARD_ERROR);
+
+	shared_ptr<DuckDBPyConnection> RegisterTableFunction(const string &name, const py::function &udf,
+	                                                     Optional<py::dict> schema);
 
 	shared_ptr<DuckDBPyConnection>
 	RegisterVectorizedUDF(const string &name, const py::function &udf, const py::object &arguments = py::none(),
@@ -221,6 +225,7 @@ private:
 	ScalarFunction CreateScalarUDF(const string &name, const py::object &udf, const py::object &parameters,
 	                               const shared_ptr<DuckDBPyType> &return_type, bool varargs,
 	                               FunctionNullHandling null_handling, PythonExceptionHandling exception_handling);
+	TableFunction CreateTableFunction(const string &name, const py::object &udf, Optional<py::dict> schema);
 	void RegisterArrowObject(const py::object &arrow_object, const string &name);
 
 	static PythonEnvironmentType environment;

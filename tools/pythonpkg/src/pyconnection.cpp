@@ -123,6 +123,10 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	      py::arg("return_type") = py::none(), py::arg("parameters") = py::none(), py::kw_only(),
 	      py::arg("varargs") = false, py::arg("null_handling") = 0, py::arg("exception_handling") = 0);
 
+	m.def("register_table_function", &DuckDBPyConnection::RegisterTableFunction,
+	      "Register a table function UDF so it can be used in queries", py::arg("name"), py::arg("function"),
+	      py::kw_only(), py::arg("schema") = py::none());
+
 	m.def("register_vectorized", &DuckDBPyConnection::RegisterVectorizedUDF,
 	      "Register a (vectorized) scalar UDF so it can be used in queries", py::arg("name"), py::arg("function"),
 	      py::arg("return_type") = py::none(), py::arg("parameters") = py::none(), py::kw_only(),
@@ -324,6 +328,23 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::UnregisterUDF(const string &n
 	registered_functions.erase(entry);
 
 	return shared_from_this();
+}
+
+shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterTableFunction(const string &name, const py::function &udf,
+                                                                         Optional<py::dict> schema) {
+	if (!connection) {
+		throw ConnectionException("Connection already closed!");
+	}
+
+	if (registered_functions.find(name) != registered_functions.end()) {
+		throw NotImplementedException("A function by the name of '%s' is already registered, registering multiple "
+		                              "functions by the same name is not supported yet, please unregister it first",
+		                              name);
+	}
+
+	auto table_function = CreateTableFunction(name, udf, schema);
+	CreateTableFunctionInfo info(table_function);
+	context.RegisterFunction(info);
 }
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterScalarUDF(const string &name, const py::function &udf,
