@@ -123,26 +123,23 @@ unique_ptr<FunctionData> BindExplicitSchema(unique_ptr<MapFunctionData> function
 	return std::move(function_data);
 }
 
-// we call the passed function with a zero-row data frame to infer the output columns and their names.
-// they better not change in the actual execution ^^
-unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, TableFunctionBindInput &input,
-                                                      vector<LogicalType> &return_types, vector<string> &names) {
-	py::gil_scoped_acquire acquire;
+unique_ptr<FunctionData> MapFunction::MapFunctionBindInternal(ClientContext &context, TableFunctionBindInput &input,
+                                                              vector<LogicalType> &return_types, vector<string> &names,
+                                                              PyObject *function, PyObject *schema) {
 
 	auto data_uptr = make_uniq<MapFunctionData>();
 	auto &data = *data_uptr;
-	data.function = (PyObject *)input.inputs[0].GetPointer();
-	auto explicit_schema = (PyObject *)input.inputs[1].GetPointer();
-
 	data.in_names = input.input_table_names;
 	data.in_types = input.input_table_types;
+	data.function = function;
 
-	if (explicit_schema != Py_None) {
-		return BindExplicitSchema(std::move(data_uptr), explicit_schema, return_types, names);
+	py::gil_scoped_acquire acquire;
+	if (schema != Py_None) {
+		return BindExplicitSchema(std::move(data_uptr), schema, return_types, names);
 	}
 
 	NumpyResultConversion conversion(data.in_types, 0);
-	auto df = FunctionCall(conversion, data.in_names, data.function);
+	auto df = FunctionCall(conversion, data.in_names, function);
 	vector<PandasColumnBindData> pandas_bind_data; // unused
 	Pandas::Bind(context, df, pandas_bind_data, return_types, names);
 
@@ -152,6 +149,17 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 	data.out_names = names;
 	data.out_types = return_types;
 	return std::move(data_uptr);
+}
+
+// we call the passed function with a zero-row data frame to infer the output columns and their names.
+// they better not change in the actual execution ^^
+unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, TableFunctionBindInput &input,
+                                                      vector<LogicalType> &return_types, vector<string> &names) {
+
+	auto function = (PyObject *)input.inputs[0].GetPointer();
+	auto explicit_schema = (PyObject *)input.inputs[1].GetPointer();
+
+	return MapFunctionBindInternal(context, input, return_types, names, function, explicit_schema);
 }
 
 static string TypeVectorToString(vector<LogicalType> &types) {

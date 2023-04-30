@@ -22,6 +22,9 @@ public:
 
 	static unique_ptr<FunctionData> MapFunctionBind(ClientContext &context, TableFunctionBindInput &input,
 	                                                vector<LogicalType> &return_types, vector<string> &names);
+	static unique_ptr<FunctionData> MapFunctionBindInternal(ClientContext &context, TableFunctionBindInput &input,
+	                                                        vector<LogicalType> &return_type, vector<string> &names,
+	                                                        PyObject *function, PyObject *schema);
 
 	static OperatorResultType MapFunctionExec(ExecutionContext &context, TableFunctionInput &data, DataChunk &input,
 	                                          DataChunk &output);

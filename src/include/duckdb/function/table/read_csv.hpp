@@ -23,6 +23,8 @@ class ReadCSV {
 public:
 	static unique_ptr<CSVFileHandle> OpenCSV(const string &file_path, FileCompressionType compression,
 	                                         ClientContext &context);
+	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
+	                                     vector<LogicalType> &return_types, vector<string> &names);
 };
 
 struct BaseCSVData : public TableFunctionData {

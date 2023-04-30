@@ -225,7 +225,7 @@ private:
 	ScalarFunction CreateScalarUDF(const string &name, const py::object &udf, const py::object &parameters,
 	                               const shared_ptr<DuckDBPyType> &return_type, bool varargs,
 	                               FunctionNullHandling null_handling, PythonExceptionHandling exception_handling);
-	TableFunction CreateTableFunction(const string &name, const py::object &udf, Optional<py::dict> schema);
+	class TableFunction CreateTableFunction(const string &name, PyObject *udf, PyObject *schema);
 	void RegisterArrowObject(const py::object &arrow_object, const string &name);
 
 	static PythonEnvironmentType environment;

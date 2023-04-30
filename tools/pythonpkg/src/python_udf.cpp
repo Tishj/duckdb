@@ -14,6 +14,7 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb_python/numpy/numpy_scan.hpp"
+#include "duckdb_python/map.hpp"
 
 namespace duckdb {
 
@@ -280,13 +281,6 @@ static scalar_function_t CreateVectorizedFunction(PyObject *function, PythonExce
 	return func;
 }
 
-static table_in_out_function_t CreatePandasUDF(PyObject *function) {
-	table_in_out_function_t func = [=](ExecutionContext &context, TableFunctionInput &data, DataChunk &input,
-	                                   DataChunk &output) {
-		py::gil_scoped_acquire gil;
-	}
-}
-
 static scalar_function_t CreateNativeFunction(PyObject *function, PythonExceptionHandling exception_handling) {
 	// Through the capture of the lambda, we have access to the function pointer
 	// We just need to make sure that it doesn't get garbage collected
@@ -367,26 +361,15 @@ ScalarFunction DuckDBPyConnection::CreateScalarUDF(const string &name, const py:
 	return CreateUDFInternal(name, std::move(func), udf, parameters, return_type, varargs, null_handling);
 }
 
-TableFunction DuckDBPyConnection::CreateTableFunction(const string &name, const py::object &udf,
-                                                      Optional<py::dict> schema) {
-	table_in_out_function_t func = CreatePandasUDF(udf.ptr());
+class TableFunction DuckDBPyConnection::CreateTableFunction(const string &name, PyObject *udf, PyObject *schema) {
+	table_in_out_function_t func = MapFunction::MapFunctionExec;
 
 	table_function_bind_t bind = [=](ClientContext &context, TableFunctionBindInput &input,
 	                                 vector<LogicalType> &return_types, vector<string> &names) {
-		if (schema.is(py::none())) {
-			throw InvalidInputException("Not providing a 'schema' for a table function UDF is not supported yet");
-		}
-		auto return_schema = reinterpret_borrow<py::dict>(schema);
-		for (auto &pair : return_schema) {
-			auto &out_name = py::str(pair.first);
-			auto &out_type = py::cast<shared_ptr<DuckDBPyType>>(pair.second);
-			return_types.push_back(out_type->Type());
-			names.push_back(std::string(out_name));
-		}
-		return make_uniq<TableFunctionData>();
+		return MapFunction::MapFunctionBindInternal(context, input, return_types, names, udf, schema);
 	};
 
-	TableFunction function(name, {LogicalType::TABLE}, nullptr, bind);
+	class TableFunction function(name, {LogicalType::TABLE}, nullptr, bind);
 	function.in_out_function = func;
 
 	return function;

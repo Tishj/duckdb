@@ -171,8 +171,10 @@ public:
 	}
 };
 
-typedef unique_ptr<FunctionData> (*table_function_bind_t)(ClientContext &context, TableFunctionBindInput &input,
-                                                          vector<LogicalType> &return_types, vector<string> &names);
+typedef std::function<unique_ptr<FunctionData>(ClientContext &, TableFunctionBindInput &, vector<LogicalType> &,
+                                               vector<string> &)>
+    table_function_bind_t;
+
 typedef unique_ptr<TableRef> (*table_function_bind_replace_t)(ClientContext &context, TableFunctionBindInput &input);
 typedef unique_ptr<GlobalTableFunctionState> (*table_function_init_global_t)(ClientContext &context,
                                                                              TableFunctionInitInput &input);
@@ -183,8 +185,8 @@ typedef unique_ptr<BaseStatistics> (*table_statistics_t)(ClientContext &context,
                                                          column_t column_index);
 typedef void (*table_function_t)(ClientContext &context, TableFunctionInput &data, DataChunk &output);
 
-typedef OperatorResultType (*table_in_out_function_t)(ExecutionContext &context, TableFunctionInput &data,
-                                                      DataChunk &input, DataChunk &output);
+typedef std::function<OperatorResultType(ExecutionContext &, TableFunctionInput &, DataChunk &, DataChunk &)>
+    table_in_out_function_t;
 typedef OperatorFinalizeResultType (*table_in_out_function_final_t)(ExecutionContext &context, TableFunctionInput &data,
                                                                     DataChunk &output);
 typedef idx_t (*table_function_get_batch_index_t)(ClientContext &context, const FunctionData *bind_data,

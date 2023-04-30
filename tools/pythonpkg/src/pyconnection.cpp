@@ -335,16 +335,24 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterTableFunction(const s
 	if (!connection) {
 		throw ConnectionException("Connection already closed!");
 	}
+	auto &context = *connection->context;
 
 	if (registered_functions.find(name) != registered_functions.end()) {
 		throw NotImplementedException("A function by the name of '%s' is already registered, registering multiple "
 		                              "functions by the same name is not supported yet, please unregister it first",
 		                              name);
 	}
+	py::gil_scoped_acquire gil;
 
-	auto table_function = CreateTableFunction(name, udf, schema);
+	auto table_function = CreateTableFunction(name, udf.ptr(), schema.ptr());
 	CreateTableFunctionInfo info(table_function);
 	context.RegisterFunction(info);
+
+	auto function_dependency = make_uniq<PythonDependencies>();
+	function_dependency->map_function = std::move(udf);
+	function_dependency->py_object_list.push_back(std::move(make_uniq<RegisteredObject>(std::move(schema))));
+	registered_functions[name] = std::move(function_dependency);
+	return shared_from_this();
 }
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterScalarUDF(const string &name, const py::function &udf,

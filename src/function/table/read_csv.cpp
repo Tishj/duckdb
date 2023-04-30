@@ -64,8 +64,8 @@ uint8_t GetCandidateSpecificity(const LogicalType &candidate_type) {
 	return it->second;
 }
 
-static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctionBindInput &input,
-                                            vector<LogicalType> &return_types, vector<string> &names) {
+unique_ptr<FunctionData> ReadCSV::Bind(ClientContext &context, TableFunctionBindInput &input,
+                                       vector<LogicalType> &return_types, vector<string> &names) {
 	auto result = make_uniq<ReadCSVData>();
 	auto &options = result->options;
 	result->files = MultiFileReader::GetFileList(context, input.inputs[0], "CSV");
@@ -243,7 +243,7 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, TableFunctio
 static unique_ptr<FunctionData> ReadCSVAutoBind(ClientContext &context, TableFunctionBindInput &input,
                                                 vector<LogicalType> &return_types, vector<string> &names) {
 	input.named_parameters["auto_detect"] = Value::BOOLEAN(true);
-	return ReadCSVBind(context, input, return_types, names);
+	return ReadCSV::Bind(context, input, return_types, names);
 }
 
 //===--------------------------------------------------------------------===//
@@ -1015,7 +1015,7 @@ static unique_ptr<FunctionData> CSVReaderDeserialize(ClientContext &context, Fie
 }
 
 TableFunction ReadCSVTableFunction::GetFunction() {
-	TableFunction read_csv("read_csv", {LogicalType::VARCHAR}, ReadCSVFunction, ReadCSVBind, ReadCSVInitGlobal,
+	TableFunction read_csv("read_csv", {LogicalType::VARCHAR}, ReadCSVFunction, ReadCSV::Bind, ReadCSVInitGlobal,
 	                       ReadCSVInitLocal);
 	read_csv.table_scan_progress = CSVReaderProgress;
 	read_csv.pushdown_complex_filter = CSVComplexFilterPushdown;
