@@ -8,11 +8,10 @@ TEST_CASE("Test streaming results in C API", "[capi]") {
 	CAPITester tester;
 	CAPIPrepared prepared;
 	CAPIPending pending;
-	duckdb::unique_ptr<CAPIResult> result;
 
 	// open the database in in-memory mode
 	REQUIRE(tester.OpenDatabase(nullptr));
-	REQUIRE(prepared.Prepare(tester, "SELECT i::UINT32 FROM range(1000000) tbl(i)"));
+	REQUIRE(prepared.Prepare(tester, "SELECT * from read_parquet('/Users/thijs/DuckDBLabs/duckdb/tmp/HelloDuckDB/resources/types_nested.parquet')"));
 	REQUIRE(pending.PendingStreaming(prepared));
 
 	while (true) {
@@ -23,26 +22,28 @@ TEST_CASE("Test streaming results in C API", "[capi]") {
 		}
 	}
 
-	result = pending.Execute();
-	REQUIRE(result);
-	REQUIRE(!result->HasError());
-	auto chunk = result->StreamChunk();
+	for (idx_t i = 0; i < 10; i++) {
+		auto result = pending.Execute();
+		REQUIRE(result);
+		REQUIRE(!result->HasError());
 
-	idx_t value = duckdb::DConstants::INVALID_INDEX;
-	idx_t chunk_count = 0;
-	while (chunk) {
-		auto old_value = value;
-
-		auto vector = chunk->GetVector(0);
-		uint32_t *data = (uint32_t *)duckdb_vector_get_data(vector);
-		value = data[0];
-		if (old_value != duckdb::DConstants::INVALID_INDEX) {
-			// We select from a range, so we can expect every starting value of a new chunk to be higher than the last
-			// one.
-			REQUIRE(value > old_value);
+		idx_t chunk_count = 0;
+		duckdb::vector<duckdb::unique_ptr<CAPIDataChunk>> chunks;
+		while (true) {
+			auto chunk = result->StreamChunk();
+			if (chunk == nullptr) {
+				break;
+			}
+			auto vector = chunk->GetVector(0);
+			chunk_count++;
+			if (chunk_count % 2 == 0) {
+				continue;
+			}
+			chunks.emplace_back(std::move(chunk));
 		}
-		chunk_count++;
-		chunk = result->StreamChunk();
+		for (auto i = chunks.rbegin(); i != chunks.rend(); i++) {
+			auto ptr = std::move(*i);
+		}
 	}
 }
 
