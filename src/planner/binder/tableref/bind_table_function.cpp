@@ -324,8 +324,10 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 		// cast the parameters to the type of the function
 		D_ASSERT(parameters.size() >= arguments.size());
 		for (idx_t i = 0; i < arguments.size() && i < table_function.arguments.size(); i++) {
-			if (CanCastFromType(table_function.arguments[i])) {
-				parameters[i] = parameters[i].CastAs(context, table_function.arguments[i]);
+			auto &target_type =
+			    i < table_function.arguments.size() ? table_function.arguments[i] : table_function.varargs;
+			if (CanCastFromType(target_type)) {
+				parameters[i] = parameters[i].CastAs(context, target_type);
 			}
 		}
 	}
@@ -352,7 +354,8 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 		D_ASSERT(select_list.size() == arguments.size());
 		for (idx_t i = 0; i < select_list.size(); i++) {
 			auto &source_expr = select_list[i];
-			auto &target_type = table_function.arguments[i];
+			auto &target_type =
+			    i < table_function.arguments.size() ? table_function.arguments[i] : table_function.varargs;
 			source_expr = BoundCastExpression::AddCastToType(context, std::move(source_expr), target_type, false);
 		}
 	}

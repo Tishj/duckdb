@@ -30,6 +30,10 @@ struct RepeatTableFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 
+struct RepeatRowTableFunction {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
 struct UnnestTableFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 };

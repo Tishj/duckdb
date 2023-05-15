@@ -25,6 +25,7 @@ void BuiltinFunctions::RegisterTableFunctions() {
 	RepeatTableFunction::RegisterFunction(*this);
 	SummaryTableFunction::RegisterFunction(*this);
 	UnnestTableFunction::RegisterFunction(*this);
+	RepeatRowTableFunction::RegisterFunction(*this);
 }
 
 } // namespace duckdb
