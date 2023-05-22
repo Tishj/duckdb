@@ -22,6 +22,7 @@
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb_python/pybind11/conversions/exception_handling_enum.hpp"
 #include "duckdb_python/pybind11/conversions/python_udf_type_enum.hpp"
+#include "duckdb/main/db_instance_cache.hpp"
 
 namespace duckdb {
 
@@ -51,6 +52,8 @@ public:
 
 public:
 	explicit DuckDBPyConnection() {
+	}
+	virtual ~DuckDBPyConnection() {
 	}
 
 public:
@@ -199,6 +202,8 @@ public:
 
 	//! Default connection to an in-memory database
 	static shared_ptr<DuckDBPyConnection> default_connection;
+	//! DB Cache, to avoid re-opening an existing connection within the same process.
+	static DBInstanceCache instance_cache;
 	//! Caches and provides an interface to get frequently used modules+subtypes
 	static shared_ptr<PythonImportCache> import_cache;
 
@@ -209,7 +214,13 @@ public:
 
 	static unique_ptr<QueryResult> CompletePendingQuery(PendingQueryResult &pending_query);
 
-private:
+public:
+	static void SetDefaultConfigArguments(ClientContext &context);
+	static bool IsDefaultConnectionString(const string &database, bool read_only,
+	                                      unordered_map<string, string> &config);
+	static void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig &config);
+
+protected:
 	PathLike GetPathLike(const py::object &object);
 	unique_lock<std::mutex> AcquireConnectionLock();
 	ScalarFunction CreateScalarUDF(const string &name, const py::function &udf, const py::object &parameters,

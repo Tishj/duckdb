@@ -10,6 +10,7 @@
 #include "duckdb_python/pyresult.hpp"
 #include "duckdb_python/pybind11/exceptions.hpp"
 #include "duckdb_python/typing.hpp"
+#include "duckdb_python/adbc/adbc.hpp"
 #include "duckdb_python/functional.hpp"
 #include "duckdb_python/connection_wrapper.hpp"
 #include "duckdb_python/pybind11/conversions/pyconnection_default.hpp"
@@ -285,6 +286,7 @@ PYBIND11_MODULE(DUCKDB_PYTHON_LIB_NAME, m) {
 	DuckDBPyFunctional::Initialize(m);
 	DuckDBPyRelation::Initialize(m);
 	DuckDBPyConnection::Initialize(m);
+	adbc::PyADBCModule::Initialize(m);
 	PythonObject::Initialize();
 
 	py::options pybind_opts;

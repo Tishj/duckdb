@@ -12,6 +12,16 @@
 
 namespace duckdb {
 
+unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_dict) {
+	unordered_map<string, string> config_dict;
+	for (auto &kv : py_config_dict) {
+		auto key = py::str(kv.first);
+		auto val = py::str(kv.second);
+		config_dict[key] = val;
+	}
+	return config_dict;
+}
+
 Value TransformListValue(py::handle ele);
 
 static Value EmptyMapValue() {

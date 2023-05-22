@@ -43,6 +43,7 @@ enum class PythonObjectType {
 
 PythonObjectType GetPythonObjectType(py::handle &ele);
 
+unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_dict);
 bool TryTransformPythonNumeric(Value &res, py::handle ele, const LogicalType &target_type = LogicalType::UNKNOWN);
 bool DictionaryHasMapFormat(const PyDictionary &dict);
 Value TransformPythonValue(py::handle ele, const LogicalType &target_type = LogicalType::UNKNOWN,

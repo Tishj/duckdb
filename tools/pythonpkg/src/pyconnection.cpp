@@ -55,7 +55,7 @@
 namespace duckdb {
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::default_connection = nullptr;
-DBInstanceCache instance_cache;
+DBInstanceCache DuckDBPyConnection::instance_cache;
 shared_ptr<PythonImportCache> DuckDBPyConnection::import_cache = nullptr;
 PythonEnvironmentType DuckDBPyConnection::environment = PythonEnvironmentType::NORMAL;
 
@@ -1431,20 +1431,10 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 	return nullptr;
 }
 
-unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_dict) {
-	unordered_map<string, string> config_dict;
-	for (auto &kv : py_config_dict) {
-		auto key = py::str(kv.first);
-		auto val = py::str(kv.second);
-		config_dict[key] = val;
-	}
-	return config_dict;
-}
-
-void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig &config) {
+void DuckDBPyConnection::CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig &config) {
 	// We don't cache unnamed memory instances (i.e., :memory:)
 	bool cache_instance = database != ":memory:" && !database.empty();
-	res.database = instance_cache.CreateInstance(database, config, cache_instance);
+	res.database = DuckDBPyConnection::instance_cache.CreateInstance(database, config, cache_instance);
 	res.connection = make_uniq<Connection>(*res.database);
 	auto &context = *res.connection->context;
 	PandasScanFunction scan_fun;
@@ -1474,7 +1464,7 @@ static bool HasJupyterProgressBarDependencies() {
 	return true;
 }
 
-static void SetDefaultConfigArguments(ClientContext &context) {
+void DuckDBPyConnection::SetDefaultConfigArguments(ClientContext &context) {
 	if (!DuckDBPyConnection::IsInteractive()) {
 		// Don't need to set any special default arguments
 		return;
@@ -1500,17 +1490,18 @@ static void SetDefaultConfigArguments(ClientContext &context) {
 
 static shared_ptr<DuckDBPyConnection> FetchOrCreateInstance(const string &database, DBConfig &config) {
 	auto res = make_shared<DuckDBPyConnection>();
-	res->database = instance_cache.GetInstance(database, config);
+	res->database = DuckDBPyConnection::instance_cache.GetInstance(database, config);
 	if (!res->database) {
 		//! No cached database, we must create a new instance
-		CreateNewInstance(*res, database, config);
+		DuckDBPyConnection::CreateNewInstance(*res, database, config);
 		return res;
 	}
 	res->connection = make_uniq<Connection>(*res->database);
 	return res;
 }
 
-bool IsDefaultConnectionString(const string &database, bool read_only, unordered_map<string, string> &config) {
+bool DuckDBPyConnection::IsDefaultConnectionString(const string &database, bool read_only,
+                                                   unordered_map<string, string> &config) {
 	bool is_default = StringUtil::CIEquals(database, ":default:");
 	if (!is_default) {
 		return false;
