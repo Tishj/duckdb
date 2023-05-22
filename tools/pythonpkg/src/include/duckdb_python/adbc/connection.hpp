@@ -3,6 +3,7 @@
 #include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb_python/pybind11/registered_py_object.hpp"
 #include "duckdb_python/pyconnection/pyconnection.hpp"
+#include "duckdb_python/arrow/arrow_array_stream.hpp"
 
 namespace duckdb {
 
@@ -21,6 +22,8 @@ public:
 
 public:
 	shared_ptr<PyADBCConnection> Clone();
+	py::dict GetMetadata();
+	arrow::RecordBatchReader GetObjects();
 };
 
 } // namespace adbc

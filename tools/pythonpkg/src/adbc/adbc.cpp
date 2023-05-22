@@ -11,6 +11,12 @@ void PyADBCModule::Initialize(py::module_ &parent) {
 	    parent.def_submodule("adbc", "This module contains classes and methods related to the DuckDB ADBC Connector");
 	PyADBCConnection::Initialize(m);
 
+	// TODO: the sqlite version of this returns an 'AdbcDatabase' object
+	// from 'adbc_driver_sqlite.connect'
+
+	// It defines a 'dbapi' submodule, which also contains 'connect'
+	// when that 'connect' method is called, it instead creates a 'Connection' object
+
 	m.def("connect", &PyADBCConnection::Connect,
 	      "Create a DuckDB database instance. Can take a database file name to read/write persistent data and a "
 	      "read_only flag if no changes are desired",
