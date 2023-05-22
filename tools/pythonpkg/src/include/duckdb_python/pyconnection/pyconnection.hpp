@@ -221,6 +221,10 @@ public:
 	static void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig &config);
 
 protected:
+	template <class Derived>
+	std::shared_ptr<Derived> shared_from_base() {
+		return std::static_pointer_cast<Derived>(shared_from_this());
+	}
 	PathLike GetPathLike(const py::object &object);
 	unique_lock<std::mutex> AcquireConnectionLock();
 	ScalarFunction CreateScalarUDF(const string &name, const py::function &udf, const py::object &parameters,

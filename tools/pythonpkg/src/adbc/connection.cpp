@@ -9,6 +9,7 @@ namespace adbc {
 void PyADBCConnection::Initialize(py::module_ &m) {
 	auto connection_module = py::class_<PyADBCConnection, shared_ptr<PyADBCConnection>, DuckDBPyConnection>(
 	    m, "Connection", py::module_local());
+	connection_module.def("clone", &PyADBCConnection::Clone, "Clone the current ADBC Connection");
 }
 
 shared_ptr<PyADBCConnection> FetchOrCreateInstance(const string &database, DBConfig &config) {
@@ -32,6 +33,10 @@ shared_ptr<PyADBCConnection> PyADBCConnection::Connect(const string &database, b
 	auto &client_context = *res->connection->context;
 	SetDefaultConfigArguments(client_context);
 	return res;
+}
+
+shared_ptr<PyADBCConnection> PyADBCConnection::Clone() {
+	return shared_from_base<PyADBCConnection>();
 }
 
 } // namespace adbc

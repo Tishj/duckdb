@@ -18,6 +18,9 @@ public:
 public:
 	static void Initialize(py::module_ &parent);
 	static shared_ptr<PyADBCConnection> Connect(const string &database, bool read_only, const py::dict &config);
+
+public:
+	shared_ptr<PyADBCConnection> Clone();
 };
 
 } // namespace adbc
