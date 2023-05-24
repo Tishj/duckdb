@@ -21,9 +21,7 @@ public:
 	static shared_ptr<PyADBCConnection> Connect(const string &database, bool read_only, const py::dict &config);
 
 public:
-	shared_ptr<PyADBCConnection> Clone();
-	py::dict GetMetadata();
-	arrow::RecordBatchReader GetObjects();
+	string Method();
 };
 
 } // namespace adbc
