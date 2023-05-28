@@ -15,27 +15,19 @@
 
 namespace duckdb {
 
-static void DebugArrowConvertData(const unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data) {
-	Printer::Print("{");
-	if (!arrow_convert_data.empty()) {
-		for (auto &entry : arrow_convert_data) {
-			std::cout << entry.first << " : " << (void *)entry.second.get() << std::endl;
-		}
-	} else {
-		Printer::Print("ARROW_CONVERT_DATA IS EMPTY");
-	}
-	Printer::Print("}");
-}
-
 static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
                                         idx_t col_idx) {
-	if (arrow_convert_data.empty() || !arrow_convert_data.count(col_idx)) {
-		auto insert = arrow_convert_data.emplace(std::make_pair(col_idx, make_uniq<ArrowConvertData>()));
-		D_ASSERT(insert.second);
+	// Note: outside of this method we already create an entry, which gets default initialized to nullptr
+	// so it's normal to find a nullptr here, we just need to override it.
+	auto entry = arrow_convert_data.find(col_idx);
+	if (entry == arrow_convert_data.end() || entry->second == nullptr) {
+		auto convert_data_p = make_uniq<ArrowConvertData>();
+		auto &convert_data = *convert_data_p;
+		arrow_convert_data[col_idx] = std::move(convert_data_p);
+		return convert_data;
+	} else {
+		return *entry->second;
 	}
-	D_ASSERT(arrow_convert_data.count(col_idx));
-	DebugArrowConvertData(arrow_convert_data);
-	return *arrow_convert_data[col_idx];
 }
 
 LogicalType ArrowTableFunction::GetArrowLogicalType(
