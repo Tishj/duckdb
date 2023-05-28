@@ -15,13 +15,8 @@
 
 namespace duckdb {
 
-static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
-                                        idx_t col_idx) {
-	if (arrow_convert_data.empty() || !arrow_convert_data.count(col_idx)) {
-		auto insert = arrow_convert_data.emplace(std::make_pair(col_idx, make_uniq<ArrowConvertData>()));
-		D_ASSERT(insert.second);
-	}
-	D_ASSERT(arrow_convert_data.count(col_idx));
+static void DebugArrowConvertData(const unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data) {
+	Printer::Print("{");
 	if (!arrow_convert_data.empty()) {
 		for (auto &entry : arrow_convert_data) {
 			std::cout << entry.first << " : " << (void *)entry.second.get() << std::endl;
@@ -29,6 +24,17 @@ static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowCon
 	} else {
 		Printer::Print("ARROW_CONVERT_DATA IS EMPTY");
 	}
+	Printer::Print("}");
+}
+
+static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
+                                        idx_t col_idx) {
+	if (arrow_convert_data.empty() || !arrow_convert_data.count(col_idx)) {
+		auto insert = arrow_convert_data.emplace(std::make_pair(col_idx, make_uniq<ArrowConvertData>()));
+		D_ASSERT(insert.second);
+	}
+	D_ASSERT(arrow_convert_data.count(col_idx));
+	DebugArrowConvertData(arrow_convert_data);
 	return *arrow_convert_data[col_idx];
 }
 
