@@ -22,14 +22,12 @@ static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowCon
 		D_ASSERT(insert.second);
 	}
 	D_ASSERT(arrow_convert_data.count(col_idx));
-	if (arrow_convert_data[col_idx].get() == nullptr) {
-		if (!arrow_convert_data.empty()) {
-			for (auto &entry : arrow_convert_data) {
-				std::cout << entry.first << " : " << (void *)entry.second.get() << std::endl;
-			}
-		} else {
-			Printer::Print("ARROW_CONVERT_DATA IS EMPTY");
+	if (!arrow_convert_data.empty()) {
+		for (auto &entry : arrow_convert_data) {
+			std::cout << entry.first << " : " << (void *)entry.second.get() << std::endl;
 		}
+	} else {
+		Printer::Print("ARROW_CONVERT_DATA IS EMPTY");
 	}
 	return *arrow_convert_data[col_idx];
 }
