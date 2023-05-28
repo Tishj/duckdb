@@ -14,16 +14,20 @@
 
 namespace duckdb {
 
+static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
+                                        idx_t col_idx) {
+	if (!arrow_convert_data.count(col_idx)) {
+		auto insert = arrow_convert_data.emplace(std::make_pair(col_idx, make_uniq<ArrowConvertData>()));
+		D_ASSERT(insert.second);
+	}
+	D_ASSERT(arrow_convert_data.count(col_idx));
+	return *arrow_convert_data[col_idx];
+}
+
 LogicalType ArrowTableFunction::GetArrowLogicalType(
     ArrowSchema &schema, unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data, idx_t col_idx) {
 	auto format = string(schema.format);
-	auto entry = arrow_convert_data.find(col_idx);
-	if (entry == arrow_convert_data.end()) {
-		auto insert = arrow_convert_data.emplace(std::make_pair(col_idx, make_uniq<ArrowConvertData>()));
-		D_ASSERT(insert.second);
-		entry = insert.first;
-	}
-	auto &convert_data = *entry->second;
+	auto &convert_data = GetConvertData(arrow_convert_data, col_idx);
 	if (format == "n") {
 		return LogicalType::SQLNULL;
 	} else if (format == "b") {
