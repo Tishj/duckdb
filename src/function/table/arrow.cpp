@@ -9,12 +9,13 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
+#include "duckdb/common/unordered_map.hpp"
 #include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
 
 LogicalType ArrowTableFunction::GetArrowLogicalType(
-    ArrowSchema &schema, std::unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data, idx_t col_idx) {
+    ArrowSchema &schema, unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data, idx_t col_idx) {
 	auto format = string(schema.format);
 	auto entry = arrow_convert_data.find(col_idx);
 	if (entry == arrow_convert_data.end()) {
