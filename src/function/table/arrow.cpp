@@ -11,6 +11,7 @@
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "utf8proc_wrapper.hpp"
+#include <iostream>
 
 namespace duckdb {
 
@@ -24,7 +25,7 @@ static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowCon
 	if (arrow_convert_data[col_idx].get() == nullptr) {
 		if (!arrow_convert_data.empty()) {
 			for (auto &entry : arrow_convert_data) {
-				Printer::Print(StringUtil::Format("[%d] : %p", entry.first, (void *)entry.second.get()));
+				std::cout << entry.first << " : " << (void *)entry.second.get() << std::endl;
 			}
 		} else {
 			Printer::Print("ARROW_CONVERT_DATA IS EMPTY");
