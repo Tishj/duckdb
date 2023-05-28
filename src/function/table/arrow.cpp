@@ -21,7 +21,7 @@ static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowCon
 		D_ASSERT(insert.second);
 	}
 	D_ASSERT(arrow_convert_data.count(col_idx));
-	if (!arrow_convert_data[col_idx]) {
+	if (arrow_convert_data[col_idx].get() == nullptr) {
 		if (!arrow_convert_data.empty()) {
 			for (auto &entry : arrow_convert_data) {
 				Printer::Print(StringUtil::Format("[%d] : %p", entry.first, (void *)entry.second.get()));
