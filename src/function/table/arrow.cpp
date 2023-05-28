@@ -16,7 +16,7 @@ namespace duckdb {
 
 static ArrowConvertData &GetConvertData(unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
                                         idx_t col_idx) {
-	if (!arrow_convert_data.count(col_idx)) {
+	if (arrow_convert_data.empty() || !arrow_convert_data.count(col_idx)) {
 		auto insert = arrow_convert_data.emplace(std::make_pair(col_idx, make_uniq<ArrowConvertData>()));
 		D_ASSERT(insert.second);
 	}
