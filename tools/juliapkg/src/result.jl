@@ -651,6 +651,7 @@ end
 
 # execute background tasks in a loop, until task execution is finished
 function execute_tasks(state::duckdb_task_state, active_tasks::Atomic{UInt32})
+	println("eek")
 	duckdb_execute_n_tasks_state(state, 1)
 	atomic_sub!(active_tasks, UInt32(1))
     return
@@ -689,7 +690,7 @@ function execute_multithreaded(stmt::Stmt)
 	while duckdb_execution_is_finished(stmt.con.handle) == false
 		# Spawn tasks up to JULIA_NUM_THREADS while the query isn't finished
 		tasks_to_spawn = Threads.nthreads() - active_tasks[]
-		for _ in 2:tasks_to_spawn
+		for _ in 1:tasks_to_spawn
 			atomic_add!(active_tasks, UInt32(1))
 			task = @spawn execute_tasks(task_state, active_tasks)
 			push!(tasks, task)
@@ -697,6 +698,7 @@ function execute_multithreaded(stmt::Stmt)
 		if duckdb_task_state_is_finished(task_state)
 			break
 		end
+		Base.yield()
 		GC.safepoint()
 	end
 
