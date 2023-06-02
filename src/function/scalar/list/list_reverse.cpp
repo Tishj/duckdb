@@ -6,69 +6,66 @@
 
 namespace duckdb {
 
+static SelectionVector CreateReverseSelectionVector(Vector &list, idx_t count) {
+	UnifiedVectorFormat input_list_data;
+	list.ToUnifiedFormat(count, input_list_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(input_list_data);
+	auto total_list_size = ListVector::GetListSize(list);
+
+	SelectionVector rev_sel(total_list_size);
+
+	for (idx_t i = 0; i < total_list_size; i++) {
+		rev_sel.set_index(i, 0);
+	}
+	// Limit the rows if we're dealing with a constant vector
+	count = list.GetVectorType() == VectorType::CONSTANT_VECTOR ? 1 : count;
+	for (idx_t row_idx = 0; row_idx < count; row_idx++) {
+		auto input_list_list_index = input_list_data.sel->get_index(row_idx);
+
+		if (!input_list_data.validity.RowIsValid(input_list_list_index)) {
+			continue;
+		};
+
+		D_ASSERT(input_list_data.validity.RowIsValid(input_list_list_index));
+		const auto &input_list_entry = list_entries[input_list_list_index];
+
+		// reverse the indices for a list
+		// ex for list of length 4: previous indices = [5,6,7,8] -> after indices = [8,7,6,5]
+		auto max_idx = input_list_entry.length - 1;
+
+		idx_t offset = input_list_entry.offset;
+		for (idx_t i = 0; i < input_list_entry.length; i++) {
+			rev_sel.set_index(offset + i, offset + (max_idx - i));
+		}
+	}
+	return rev_sel;
+}
+
 static void ListReverseFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 1);
 	auto count = args.size();
 
 	Vector &input_list = args.data[0];
 	if (input_list.GetType().id() == LogicalTypeId::SQLNULL) {
+		// If the input is NULL, the output is also NULL
 		result.SetVectorType(VectorType::CONSTANT_VECTOR);
 		ConstantVector::SetNull(result, true);
 		return;
 	}
 
-	// get the child vector
-	auto input_list_list_size = ListVector::GetListSize(input_list);
-	auto &input_list_child = ListVector::GetEntry(input_list);
-
-	UnifiedVectorFormat input_list_data;
-	input_list.ToUnifiedFormat(count, input_list_data);
-	auto input_list_entries = (list_entry_t *)input_list_data.data;
-
-	// get the child data
-	UnifiedVectorFormat input_list_child_data;
-	input_list_child.ToUnifiedFormat(input_list_list_size, input_list_child_data);
-
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_entries = FlatVector::GetData<list_entry_t>(result);
-	auto &result_validity = FlatVector::Validity(result);
 
 	// create a selection vector for slicing the child vector
-	SelectionVector rev_sel(input_list_list_size);
-
-	idx_t offset = 0;
-	idx_t offset_per_new_row = 0;
-
-	for (idx_t i = 0; i < count; i++) {
-		auto input_list_list_index = input_list_data.sel->get_index(i);
-
-		if (!input_list_data.validity.RowIsValid(input_list_list_index)) {
-			result_validity.SetInvalid(i);
-			continue;
-		};
-
-		result_entries[i].offset = offset;
-		result_entries[i].length = 0;
-
-		D_ASSERT(input_list_data.validity.RowIsValid(input_list_list_index));
-		const auto &input_list_entry = input_list_entries[input_list_list_index];
-		result_entries[i].length += input_list_entry.length;
-
-		// set reverse selection vector indices
-		// set index of selection vector in a way, that only the entries of the current row are reversed at once
-		for (idx_t j = 0; j < input_list_entry.length; j++) {
-			rev_sel.set_index(j + offset_per_new_row, input_list_entry.length - j - 1 + offset_per_new_row);
-		}
-		offset_per_new_row = offset_per_new_row + input_list_entry.length;
-		offset += result_entries[i].length;
-	}
+	auto rev_sel = CreateReverseSelectionVector(input_list, count);
 
 	result.Reference(input_list);
-	input_list_child.Slice(rev_sel, ListVector::GetListSize(input_list));
+	auto &result_child = ListVector::GetEntry(result);
+	result_child.Slice(rev_sel, ListVector::GetListSize(input_list));
 
 	if (input_list.GetVectorType() == VectorType::CONSTANT_VECTOR) {
 		result.SetVectorType(VectorType::CONSTANT_VECTOR);
 	}
+	result.Verify(count);
 }
 
 static unique_ptr<FunctionData> ListReverseBind(ClientContext &context, ScalarFunction &bound_function,
