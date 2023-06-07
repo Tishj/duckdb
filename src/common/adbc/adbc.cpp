@@ -13,9 +13,14 @@
 #endif
 
 #include "duckdb/common/adbc/single_batch_array_stream.hpp"
+#include "duckdb/common/arrow/arrow_cpp.hpp"
 
 #include <string.h>
 #include <stdlib.h>
+
+using duckdb::ArrowArrayCPP;
+using duckdb::ArrowArrayStreamCPP;
+using duckdb::ArrowSchemaCPP;
 
 // We must leak the symbols of the init function
 duckdb_adbc::AdbcStatusCode duckdb_adbc_init(size_t count, struct duckdb_adbc::AdbcDriver *driver,
@@ -550,7 +555,7 @@ struct DuckDBAdbcStatementWrapper {
 	::duckdb_arrow result;
 	::duckdb_prepared_statement statement;
 	char *ingestion_table_name;
-	ArrowArrayStream ingestion_stream;
+	ArrowArrayStreamCPP<true> ingestion_stream;
 };
 
 AdbcStatusCode StatementNew(struct AdbcConnection *connection, struct AdbcStatement *statement,
@@ -575,7 +580,7 @@ AdbcStatusCode StatementNew(struct AdbcConnection *connection, struct AdbcStatem
 
 	statement->private_data = nullptr;
 
-	auto statement_wrapper = (DuckDBAdbcStatementWrapper *)malloc(sizeof(DuckDBAdbcStatementWrapper));
+	auto statement_wrapper = new DuckDBAdbcStatementWrapper;
 	status = SetErrorMaybe(statement_wrapper, error, "Allocation error");
 	if (status != ADBC_STATUS_OK) {
 		return status;
@@ -585,7 +590,6 @@ AdbcStatusCode StatementNew(struct AdbcConnection *connection, struct AdbcStatem
 	statement_wrapper->connection = (duckdb_connection)connection->private_data;
 	statement_wrapper->statement = nullptr;
 	statement_wrapper->result = nullptr;
-	statement_wrapper->ingestion_stream.release = nullptr;
 	statement_wrapper->ingestion_table_name = nullptr;
 	return ADBC_STATUS_OK;
 }
@@ -604,15 +608,11 @@ AdbcStatusCode StatementRelease(struct AdbcStatement *statement, struct AdbcErro
 			duckdb_destroy_arrow(&wrapper->result);
 			wrapper->result = nullptr;
 		}
-		if (wrapper->ingestion_stream.release) {
-			wrapper->ingestion_stream.release(&wrapper->ingestion_stream);
-			wrapper->ingestion_stream.release = nullptr;
-		}
 		if (wrapper->ingestion_table_name) {
 			free(wrapper->ingestion_table_name);
 			wrapper->ingestion_table_name = nullptr;
 		}
-		free(statement->private_data);
+		delete wrapper;
 		statement->private_data = nullptr;
 	}
 	return ADBC_STATUS_OK;
@@ -691,17 +691,15 @@ AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct Arr
 		*rows_affected = 0;
 	}
 
-	if (wrapper->ingestion_stream.release && wrapper->ingestion_table_name) {
-		auto stream = wrapper->ingestion_stream;
-		wrapper->ingestion_stream.release = nullptr;
-		return Ingest(wrapper->connection, wrapper->ingestion_table_name, &stream, error);
+	if (wrapper->ingestion_stream.Valid() && wrapper->ingestion_table_name) {
+		auto stream = std::move(wrapper->ingestion_stream);
+		return Ingest(wrapper->connection, wrapper->ingestion_table_name, stream, error);
 	}
 
-	if (wrapper->ingestion_stream.release) {
+	if (wrapper->ingestion_stream.Valid()) {
 		duckdb::unique_ptr<duckdb::QueryResult> result;
-		ArrowArrayStream stream = wrapper->ingestion_stream;
-		wrapper->ingestion_stream.release = nullptr;
-		auto adbc_res = GetPreparedParameters(wrapper->connection, result, &stream, error);
+		auto stream = std::move(wrapper->ingestion_stream);
+		auto adbc_res = GetPreparedParameters(wrapper->connection, result, stream, error);
 		if (adbc_res != ADBC_STATUS_OK) {
 			return adbc_res;
 		}
@@ -819,11 +817,8 @@ AdbcStatusCode StatementBind(struct AdbcStatement *statement, struct ArrowArray 
 		return status;
 	}
 	auto wrapper = (DuckDBAdbcStatementWrapper *)statement->private_data;
-	if (wrapper->ingestion_stream.release) {
-		// Free the stream that was previously bound
-		wrapper->ingestion_stream.release(&wrapper->ingestion_stream);
-	}
-	status = BatchToArrayStream(values, schemas, &wrapper->ingestion_stream, error);
+	auto existing_stream = std::move(wrapper->ingestion_stream);
+	status = BatchToArrayStream(values, schemas, wrapper->ingestion_stream, error);
 	if (status != ADBC_STATUS_OK) {
 		return status;
 	}
@@ -845,10 +840,6 @@ AdbcStatusCode StatementBindStream(struct AdbcStatement *statement, struct Arrow
 		return status;
 	}
 	auto wrapper = (DuckDBAdbcStatementWrapper *)statement->private_data;
-	if (wrapper->ingestion_stream.release) {
-		// Release any resources currently held by the ingestion stream before we overwrite it
-		wrapper->ingestion_stream.release(&wrapper->ingestion_stream);
-	}
 	wrapper->ingestion_stream = *values;
 	values->release = nullptr;
 	return ADBC_STATUS_OK;
