@@ -130,6 +130,8 @@ enum class StatementSeparatorState : uint8_t {
 	DEFAULT,
 	SEPARATOR,
 	END,
+	COMMENT,
+	NEWLINE,
 };
 
 class StatementSeparator {
@@ -147,6 +149,7 @@ public:
 		current = 0;
 		this->query = query;
 		state = StatementSeparatorState::DEFAULT;
+		last_comment_idx = DConstants::INVALID_INDEX;
 	}
 	string TakeStatement() {
 		while (true) {
@@ -156,6 +159,8 @@ public:
 			case StatementSeparatorState::END: {
 				return GetStatement();
 			}
+			case StatementSeparatorState::COMMENT:
+			case StatementSeparatorState::NEWLINE:
 			case StatementSeparatorState::DEFAULT:
 			case StatementSeparatorState::IN_DOUBLE_QUOTE:
 			case StatementSeparatorState::IN_SINGLE_QUOTE: {
@@ -170,6 +175,7 @@ private:
 	idx_t current;
 	string query;
 	StatementSeparatorState state;
+	idx_t last_comment_idx;
 
 private:
 	string GetStatement() {
@@ -189,6 +195,7 @@ private:
 			return StatementSeparatorState::END;
 		}
 		switch (state) {
+		case StatementSeparatorState::NEWLINE:
 		case StatementSeparatorState::DEFAULT: {
 			if (query[current] == '"') {
 				return StatementSeparatorState::IN_DOUBLE_QUOTE;
@@ -198,6 +205,13 @@ private:
 			}
 			if (query[current] == ';') {
 				return StatementSeparatorState::SEPARATOR;
+			}
+			if (query[current] == '-') {
+				if (current > 0 && current - 1 == last_comment_idx) {
+					// '--' marks the start of a comment
+					return StatementSeparatorState::COMMENT;
+				}
+				last_comment_idx = current;
 			}
 			return StatementSeparatorState::DEFAULT;
 		}
@@ -221,6 +235,12 @@ private:
 				return StatementSeparatorState::IN_SINGLE_QUOTE;
 			}
 			return StatementSeparatorState::DEFAULT;
+		}
+		case StatementSeparatorState::COMMENT: {
+			if (query[current] == '\n') {
+				return StatementSeparatorState::NEWLINE;
+			}
+			return StatementSeparatorState::COMMENT;
 		}
 		default: {
 			throw InternalException("State not implemented!");
