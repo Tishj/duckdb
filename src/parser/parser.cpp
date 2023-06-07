@@ -124,6 +124,78 @@ end:
 	return ReplaceUnicodeSpaces(query_str, new_query, unicode_spaces);
 }
 
+enum class StatementSeparatorState : uint8_t {
+	IN_DOUBLE_QUOTE,
+	IN_SINGLE_QUOTE,
+	DEFAULT,
+	SEPARATOR,
+};
+
+class StatementSeparator {
+public:
+	StatementSeparator() {}
+public:
+	bool in_single_quote;
+	bool in_double_quote;
+	idx_t start;
+	idx_t current;
+	string query;
+	StatementSeparatorState state;
+public:
+	vector<string> Split(const string &query_string) {
+		Initialize(query_string);
+		while (!Done()) {
+			auto new_state = GetNextState();
+
+		}
+	}
+private:
+	StatementSeparatorState GetNextState() {
+		switch (state) {
+			case StatementSeparatorState::DEFAULT: {
+				if (query[current] == '"') {
+
+				}
+				if (query[current] == '\'') {
+
+				}
+				return StatementSeparatorState::DEFAULT;
+			}
+			case StatementSeparatorState::IN_DOUBLE_QUOTE: {
+
+			}
+			case StatementSeparatorState::IN_SINGLE_QUOTE: {
+
+			}
+			case StatementSeparatorState::SEPARATOR: {
+				
+			}
+		}
+	}
+	bool Done() {
+		return current >= query.size();
+	}
+	void Initialize(const string &query) {
+		in_single_quote = false;
+		in_double_quote = false;
+		idx_t start = 0;
+		idx_t current = 0;
+		this->query = query;
+		state = StatementSeparatorState::DEFAULT;
+	}
+};
+
+vector<string> SeparateStatements(const string &query) {
+	vector<string> unparsed_statements;
+
+	idx_t i = 0;
+	bool in_single_quote;
+	bool in_double_quote;
+	while (i < query.size()) {
+
+	}
+}
+
 void Parser::ParseQuery(const string &query) {
 	Transformer transformer(options);
 	string parser_error;
