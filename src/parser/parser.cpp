@@ -129,72 +129,101 @@ enum class StatementSeparatorState : uint8_t {
 	IN_SINGLE_QUOTE,
 	DEFAULT,
 	SEPARATOR,
+	END,
 };
 
 class StatementSeparator {
 public:
 	StatementSeparator() {}
 public:
-	bool in_single_quote;
-	bool in_double_quote;
+public:
+	bool Finished() const {
+		return current >= query.size();
+	}
+	void Initialize(const string &query) {
+		start = 0;
+		current = 0;
+		this->query = query;
+		state = StatementSeparatorState::DEFAULT;
+	}
+	string TakeStatement() {
+		while (true) {
+			state = GetNextState();
+			switch (state) {
+				case StatementSeparatorState::SEPARATOR:
+				case StatementSeparatorState::END: {
+					return GetStatement();
+				}
+				case StatementSeparatorState::DEFAULT:
+				case StatementSeparatorState::IN_DOUBLE_QUOTE:
+				case StatementSeparatorState::IN_SINGLE_QUOTE: {
+					break;
+				}
+			}
+		}
+	}
+private:
 	idx_t start;
 	idx_t current;
 	string query;
 	StatementSeparatorState state;
-public:
-	vector<string> Split(const string &query_string) {
-		Initialize(query_string);
-		while (!Done()) {
-			auto new_state = GetNextState();
-
-		}
-	}
 private:
+	string GetStatement() {
+		D_ASSERT(current > start);
+		auto size = current - start;
+		auto result = query.substr(start, size);
+		if (state == StatementSeparatorState::SEPARATOR) {
+			// Skip the ';' character
+			current++;
+		}
+		start = current;
+		return result;
+	}
 	StatementSeparatorState GetNextState() {
+		current++;
+		if (current >= query.size()) {
+			return StatementSeparatorState::END;
+		}
 		switch (state) {
 			case StatementSeparatorState::DEFAULT: {
 				if (query[current] == '"') {
-
+					return StatementSeparatorState::IN_DOUBLE_QUOTE;
 				}
 				if (query[current] == '\'') {
-
+					return StatementSeparatorState::IN_SINGLE_QUOTE;
+				}
+				if (query[current] == ';') {
+					return StatementSeparatorState::SEPARATOR;
 				}
 				return StatementSeparatorState::DEFAULT;
 			}
 			case StatementSeparatorState::IN_DOUBLE_QUOTE: {
-
+				if (query[current] == '"') {
+					return StatementSeparatorState::DEFAULT;
+				}
+				return StatementSeparatorState::IN_DOUBLE_QUOTE;
 			}
 			case StatementSeparatorState::IN_SINGLE_QUOTE: {
-
+				if (query[current] == '\'') {
+					return StatementSeparatorState::DEFAULT;
+				}
+				return StatementSeparatorState::IN_SINGLE_QUOTE;
 			}
 			case StatementSeparatorState::SEPARATOR: {
-				
+				if (query[current] == '"') {
+					return StatementSeparatorState::IN_DOUBLE_QUOTE;
+				}
+				if (query[current] == '\'') {
+					return StatementSeparatorState::IN_SINGLE_QUOTE;
+				}
+				return StatementSeparatorState::DEFAULT;
+			}
+			default: {
+				throw InternalException("State not implemented!");
 			}
 		}
 	}
-	bool Done() {
-		return current >= query.size();
-	}
-	void Initialize(const string &query) {
-		in_single_quote = false;
-		in_double_quote = false;
-		idx_t start = 0;
-		idx_t current = 0;
-		this->query = query;
-		state = StatementSeparatorState::DEFAULT;
-	}
 };
-
-vector<string> SeparateStatements(const string &query) {
-	vector<string> unparsed_statements;
-
-	idx_t i = 0;
-	bool in_single_quote;
-	bool in_double_quote;
-	while (i < query.size()) {
-
-	}
-}
 
 void Parser::ParseQuery(const string &query) {
 	Transformer transformer(options);
@@ -208,42 +237,48 @@ void Parser::ParseQuery(const string &query) {
 			return;
 		}
 	}
-	{
-		PostgresParser::SetPreserveIdentifierCase(options.preserve_identifier_case);
-		PostgresParser parser;
-		parser.Parse(query);
-		if (parser.success) {
-			if (!parser.parse_tree) {
-				// empty statement
-				return;
-			}
-
-			// if it succeeded, we transform the Postgres parse tree into a list of
-			// SQLStatements
-			transformer.TransformParseTree(parser.parse_tree, statements);
-		} else {
-			parser_error = QueryErrorContext::Format(query, parser.error_message, parser.error_location - 1);
-		}
-	}
-	if (!parser_error.empty()) {
-		if (options.extensions) {
-			for (auto &ext : *options.extensions) {
-				D_ASSERT(ext.parse_function);
-				auto result = ext.parse_function(ext.parser_info.get(), query);
-				if (result.type == ParserExtensionResultType::PARSE_SUCCESSFUL) {
-					auto statement = make_uniq<ExtensionStatement>(ext, std::move(result.parse_data));
-					statement->stmt_length = query.size();
-					statement->stmt_location = 0;
-					statements.push_back(std::move(statement));
+	StatementSeparator separator;
+	separator.Initialize(query);
+	while (!separator.Finished()) {
+		auto statement = separator.TakeStatement();
+		{
+			PostgresParser::SetPreserveIdentifierCase(options.preserve_identifier_case);
+			PostgresParser parser;
+			parser.Parse(query);
+			if (parser.success) {
+				if (!parser.parse_tree) {
+					// empty statement
 					return;
 				}
-				if (result.type == ParserExtensionResultType::DISPLAY_EXTENSION_ERROR) {
-					throw ParserException(result.error);
-				}
+
+				// if it succeeded, we transform the Postgres parse tree into a list of
+				// SQLStatements
+				transformer.TransformParseTree(parser.parse_tree, statements);
+			} else {
+				parser_error = QueryErrorContext::Format(query, parser.error_message, parser.error_location - 1);
 			}
 		}
-		throw ParserException(parser_error);
+		if (!parser_error.empty()) {
+			if (options.extensions) {
+				for (auto &ext : *options.extensions) {
+					D_ASSERT(ext.parse_function);
+					auto result = ext.parse_function(ext.parser_info.get(), query);
+					if (result.type == ParserExtensionResultType::PARSE_SUCCESSFUL) {
+						auto statement = make_uniq<ExtensionStatement>(ext, std::move(result.parse_data));
+						statement->stmt_length = query.size();
+						statement->stmt_location = 0;
+						statements.push_back(std::move(statement));
+						return;
+					}
+					if (result.type == ParserExtensionResultType::DISPLAY_EXTENSION_ERROR) {
+						throw ParserException(result.error);
+					}
+				}
+			}
+			throw ParserException(parser_error);
+		}
 	}
+
 	if (!statements.empty()) {
 		auto &last_statement = statements.back();
 		last_statement->stmt_length = query.size() - last_statement->stmt_location;
