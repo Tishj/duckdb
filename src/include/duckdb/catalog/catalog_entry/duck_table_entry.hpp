@@ -16,15 +16,14 @@ namespace duckdb {
 class DuckTableEntry : public TableCatalogEntry {
 public:
 	//! Create a TableCatalogEntry and initialize storage for it
-	DuckTableEntry(Catalog *catalog, SchemaCatalogEntry *schema, BoundCreateTableInfo *info,
+	DuckTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, BoundCreateTableInfo &info,
 	               std::shared_ptr<DataTable> inherited_storage = nullptr);
 
 public:
-	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo *info) override;
-	void UndoAlter(ClientContext &context, AlterInfo *info) override;
+	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo &info) override;
+	void UndoAlter(ClientContext &context, AlterInfo &info) override;
 	//! Returns the underlying storage of the table
 	DataTable &GetStorage() override;
-	DataTable *GetStoragePtr() override;
 	//! Returns a list of the bound constraints of the table
 	const vector<unique_ptr<BoundConstraint>> &GetBoundConstraints() override;
 
@@ -42,9 +41,11 @@ public:
 
 	TableStorageInfo GetStorageInfo(ClientContext &context) override;
 
-	bool IsDuckTable() override {
+	bool IsDuckTable() const override {
 		return true;
 	}
+
+	void BindUpdateConstraints(LogicalGet &get, LogicalProjection &proj, LogicalUpdate &update) override;
 
 private:
 	unique_ptr<CatalogEntry> RenameColumn(ClientContext &context, RenameColumnInfo &info);

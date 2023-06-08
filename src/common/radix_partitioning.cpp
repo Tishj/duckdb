@@ -9,7 +9,7 @@
 namespace duckdb {
 
 template <class OP, class RETURN_TYPE, typename... ARGS>
-RETURN_TYPE RadixBitsSwitch(idx_t radix_bits, ARGS &&...args) {
+RETURN_TYPE RadixBitsSwitch(idx_t radix_bits, ARGS &&... args) {
 	D_ASSERT(radix_bits <= sizeof(hash_t) * 8);
 	switch (radix_bits) {
 	case 1:
@@ -58,6 +58,36 @@ struct SelectFunctor {
 idx_t RadixPartitioning::Select(Vector &hashes, const SelectionVector *sel, idx_t count, idx_t radix_bits, idx_t cutoff,
                                 SelectionVector *true_sel, SelectionVector *false_sel) {
 	return RadixBitsSwitch<SelectFunctor, idx_t>(radix_bits, hashes, sel, count, cutoff, true_sel, false_sel);
+}
+
+struct HashsToBinsFunctor {
+	template <idx_t radix_bits>
+	static void Operation(Vector &hashes, Vector &bins, idx_t count) {
+		using CONSTANTS = RadixPartitioningConstants<radix_bits>;
+		UnaryExecutor::Execute<hash_t, hash_t>(hashes, bins, count,
+		                                       [&](hash_t hash) { return CONSTANTS::ApplyMask(hash); });
+	}
+};
+
+//===--------------------------------------------------------------------===//
+// Row Data Partitioning
+//===--------------------------------------------------------------------===//
+template <idx_t radix_bits>
+static void InitPartitions(BufferManager &buffer_manager, vector<unique_ptr<RowDataCollection>> &partition_collections,
+                           RowDataBlock *partition_blocks[], vector<BufferHandle> &partition_handles,
+                           data_ptr_t partition_ptrs[], idx_t block_capacity, idx_t row_width) {
+	using CONSTANTS = RadixPartitioningConstants<radix_bits>;
+
+	partition_collections.reserve(CONSTANTS::NUM_PARTITIONS);
+	partition_handles.reserve(CONSTANTS::NUM_PARTITIONS);
+	for (idx_t i = 0; i < CONSTANTS::NUM_PARTITIONS; i++) {
+		partition_collections.push_back(make_uniq<RowDataCollection>(buffer_manager, block_capacity, row_width));
+		partition_blocks[i] = &partition_collections[i]->CreateBlock();
+		partition_handles.push_back(buffer_manager.Pin(partition_blocks[i]->block));
+		if (partition_ptrs) {
+			partition_ptrs[i] = partition_handles[i].Ptr();
+		}
+	}
 }
 
 struct ComputePartitionIndicesFunctor {
@@ -185,8 +215,8 @@ void RadixPartitionedTupleData::RepartitionFinalizeStates(PartitionedTupleData &
                                                           idx_t finished_partition_idx) const {
 	D_ASSERT(old_partitioned_data.GetType() == PartitionedTupleDataType::RADIX &&
 	         new_partitioned_data.GetType() == PartitionedTupleDataType::RADIX);
-	const auto &old_radix_partitions = (RadixPartitionedTupleData &)old_partitioned_data;
-	const auto &new_radix_partitions = (RadixPartitionedTupleData &)new_partitioned_data;
+	const auto &old_radix_partitions = old_partitioned_data.Cast<RadixPartitionedTupleData>();
+	const auto &new_radix_partitions = new_partitioned_data.Cast<RadixPartitionedTupleData>();
 	const auto old_radix_bits = old_radix_partitions.GetRadixBits();
 	const auto new_radix_bits = new_radix_partitions.GetRadixBits();
 	D_ASSERT(new_radix_bits > old_radix_bits);

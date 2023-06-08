@@ -94,6 +94,9 @@ void SQLLogicTestRunner::Reconnect() {
 	if (original_sqlite_test) {
 		con->Query("SET integer_division=true");
 	}
+#ifdef DUCKDB_ALTERNATIVE_VERIFY
+	con->Query("SET pivot_filter_threshold=0");
+#endif
 	if (enable_verification) {
 		con->EnableQueryVerification();
 	}
@@ -494,6 +497,10 @@ void SQLLogicTestRunner::ExecuteFile(string script) {
 				if (TestForceStorage()) {
 					return;
 				}
+			} else if (param == "nothreadsan") {
+#ifdef DUCKDB_THREAD_SANITIZER
+				return;
+#endif
 			} else if (param == "strinline") {
 #ifdef DUCKDB_DEBUG_NO_INLINE
 				return;

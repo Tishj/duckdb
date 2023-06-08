@@ -1,4 +1,4 @@
-#include "duckdb_python/pybind_wrapper.hpp"
+#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb_python/spark/duckdb_spark.hpp"
 
 #include "duckdb_python/spark/session.hpp"

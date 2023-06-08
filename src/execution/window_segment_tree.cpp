@@ -12,7 +12,8 @@ namespace duckdb {
 
 WindowAggregateState::WindowAggregateState(AggregateObject aggr, const LogicalType &result_type_p)
     : aggr(std::move(aggr)), result_type(result_type_p), state(aggr.function.state_size()),
-      statev(Value::POINTER((idx_t)state.data())), statep(Value::POINTER((idx_t)state.data())) {
+      statev(Value::POINTER(CastPointerToValue(state.data()))),
+      statep(Value::POINTER(CastPointerToValue(state.data()))) {
 	statev.SetVectorType(VectorType::FLAT_VECTOR); // Prevent conversion of results to constants
 }
 
@@ -106,18 +107,10 @@ void WindowConstantAggregate::Sink(DataChunk &payload_chunk, SelectionVector *fi
 		auto end = partition_end - chunk_begin;
 
 		inputs.Reset();
-		if (begin) {
-			for (idx_t c = 0; c < payload_chunk.ColumnCount(); ++c) {
-				inputs.data[c].Slice(payload_chunk.data[c], begin, end);
-			}
-		} else {
-			inputs.Reference(payload_chunk);
-		}
-		inputs.SetCardinality(end - begin);
-
-		// Slice to any filtered rows
-		SelectionVector sel;
 		if (filter_sel) {
+			// 	Slice to any filtered rows in [begin, end)
+			SelectionVector sel;
+
 			//	Find the first value in [begin, end)
 			for (; filter_idx < filtered; ++filter_idx) {
 				auto idx = filter_sel->get_index(filter_idx);
@@ -125,7 +118,9 @@ void WindowConstantAggregate::Sink(DataChunk &payload_chunk, SelectionVector *fi
 					break;
 				}
 			}
-			sel.Initialize(filter_sel->data());
+
+			//	Find the first value in [end, filtered)
+			sel.Initialize(filter_sel->data() + filter_idx);
 			idx_t nsel = 0;
 			for (; filter_idx < filtered; ++filter_idx, ++nsel) {
 				auto idx = filter_sel->get_index(filter_idx);
@@ -135,8 +130,18 @@ void WindowConstantAggregate::Sink(DataChunk &payload_chunk, SelectionVector *fi
 			}
 
 			if (nsel != inputs.size()) {
-				inputs.Slice(sel, nsel);
+				inputs.Slice(payload_chunk, sel, nsel);
 			}
+		} else {
+			//	Slice to [begin, end)
+			if (begin) {
+				for (idx_t c = 0; c < payload_chunk.ColumnCount(); ++c) {
+					inputs.data[c].Slice(payload_chunk.data[c], begin, end);
+				}
+			} else {
+				inputs.Reference(payload_chunk);
+			}
+			inputs.SetCardinality(end - begin);
 		}
 
 		//	Aggregate the filtered rows into a single state
@@ -176,13 +181,14 @@ void WindowConstantAggregate::Compute(Vector &target, idx_t rid, idx_t start, id
 //===--------------------------------------------------------------------===//
 // WindowSegmentTree
 //===--------------------------------------------------------------------===//
-WindowSegmentTree::WindowSegmentTree(AggregateObject aggr, const LogicalType &result_type_p, DataChunk *input,
+WindowSegmentTree::WindowSegmentTree(AggregateObject aggr_p, const LogicalType &result_type_p, DataChunk *input,
                                      const ValidityMask &filter_mask_p, WindowAggregationMode mode_p)
-    : aggr(std::move(aggr)), result_type(result_type_p), state(aggr.function.state_size()),
-      statep(Value::POINTER((idx_t)state.data())), frame(0, 0), statev(Value::POINTER((idx_t)state.data())),
-      internal_nodes(0), input_ref(input), filter_mask(filter_mask_p), mode(mode_p) {
+    : aggr(std::move(aggr_p)), result_type(result_type_p), state(aggr.function.state_size()),
+      statep(Value::POINTER(CastPointerToValue(state.data()))), frame(0, 0), statel(LogicalType::POINTER),
+      statef(Value::POINTER(CastPointerToValue(state.data()))), internal_nodes(0), input_ref(input),
+      filter_mask(filter_mask_p), mode(mode_p) {
 	statep.Flatten(input->size());
-	statev.SetVectorType(VectorType::FLAT_VECTOR); // Prevent conversion of results to constants
+	statef.SetVectorType(VectorType::FLAT_VECTOR); // Prevent conversion of results to constants
 
 	if (input_ref && input_ref->ColumnCount() > 0) {
 		filter_sel.Initialize(input->size());
@@ -208,7 +214,7 @@ WindowSegmentTree::~WindowSegmentTree() {
 	AggregateInputData aggr_input_data(aggr.GetFunctionData(), Allocator::DefaultAllocator());
 	// call the destructor for all the intermediate states
 	data_ptr_t address_data[STANDARD_VECTOR_SIZE];
-	Vector addresses(LogicalType::POINTER, (data_ptr_t)address_data);
+	Vector addresses(LogicalType::POINTER, data_ptr_cast(address_data));
 	idx_t count = 0;
 	for (idx_t i = 0; i < internal_nodes; i++) {
 		address_data[count++] = data_ptr_t(levels_flat_native.get() + i * state.size());
@@ -222,7 +228,7 @@ WindowSegmentTree::~WindowSegmentTree() {
 	}
 
 	if (aggr.function.window && UseWindowAPI()) {
-		aggr.function.destructor(statev, aggr_input_data, 1);
+		aggr.function.destructor(statef, aggr_input_data, 1);
 	}
 }
 
@@ -232,24 +238,25 @@ void WindowSegmentTree::AggregateInit() {
 
 void WindowSegmentTree::AggegateFinal(Vector &result, idx_t rid) {
 	AggregateInputData aggr_input_data(aggr.GetFunctionData(), Allocator::DefaultAllocator());
-	aggr.function.finalize(statev, aggr_input_data, result, 1, rid);
+	aggr.function.finalize(statef, aggr_input_data, result, 1, rid);
 
 	if (aggr.function.destructor) {
-		aggr.function.destructor(statev, aggr_input_data, 1);
+		aggr.function.destructor(statef, aggr_input_data, 1);
 	}
 }
 
 void WindowSegmentTree::ExtractFrame(idx_t begin, idx_t end) {
-	const auto size = end - begin;
+	const auto count = end - begin;
 
-	auto &chunk = *input_ref;
-	const auto input_count = input_ref->ColumnCount();
-	inputs.SetCardinality(size);
-	for (idx_t i = 0; i < input_count; ++i) {
-		auto &v = inputs.data[i];
-		auto &vec = chunk.data[i];
-		v.Slice(vec, begin, end);
-		v.Verify(size);
+	auto &leaves = *input_ref;
+	const auto leaf_columns = leaves.ColumnCount();
+	inputs.SetCardinality(count);
+	for (idx_t i = 0; i < leaf_columns; ++i) {
+		auto &input = inputs.data[i];
+		auto &leaf = leaves.data[i];
+
+		input.Slice(leaf, begin, end);
+		input.Verify(count);
 	}
 
 	// Slice to any filtered rows
@@ -273,7 +280,7 @@ void WindowSegmentTree::WindowSegmentValue(idx_t l_idx, idx_t begin, idx_t end) 
 	}
 
 	const auto count = end - begin;
-	Vector s(statep, 0, count);
+	auto &s = statep; // Vector s(statep, 0, count);
 	if (l_idx == 0) {
 		ExtractFrame(begin, end);
 		AggregateInputData aggr_input_data(aggr.GetFunctionData(), Allocator::DefaultAllocator());
@@ -283,14 +290,14 @@ void WindowSegmentTree::WindowSegmentValue(idx_t l_idx, idx_t begin, idx_t end) 
 		// find out where the states begin
 		data_ptr_t begin_ptr = levels_flat_native.get() + state.size() * (begin + levels_flat_start[l_idx - 1]);
 		// set up a vector of pointers that point towards the set of states
-		Vector v(LogicalType::POINTER, count);
-		auto pdata = FlatVector::GetData<data_ptr_t>(v);
+		auto pdata = FlatVector::GetData<data_ptr_t>(statel);
 		for (idx_t i = 0; i < count; i++) {
-			pdata[i] = begin_ptr + i * state.size();
+			pdata[i] = begin_ptr;
+			begin_ptr += state.size();
 		}
-		v.Verify(count);
+		statel.Verify(count);
 		AggregateInputData aggr_input_data(aggr.GetFunctionData(), Allocator::DefaultAllocator());
-		aggr.function.combine(v, s, aggr_input_data, count);
+		aggr.function.combine(statel, s, aggr_input_data, count);
 	}
 }
 
@@ -305,7 +312,7 @@ void WindowSegmentTree::ConstructTree() {
 		level_nodes = (level_nodes + (TREE_FANOUT - 1)) / TREE_FANOUT;
 		internal_nodes += level_nodes;
 	} while (level_nodes > 1);
-	levels_flat_native = unique_ptr<data_t[]>(new data_t[internal_nodes * state.size()]);
+	levels_flat_native = make_unsafe_uniq_array<data_t>(internal_nodes * state.size());
 	levels_flat_start.push_back(0);
 
 	idx_t levels_flat_offset = 0;
@@ -315,6 +322,10 @@ void WindowSegmentTree::ConstructTree() {
 	// iterate over the levels of the segment tree
 	while ((level_size = (level_current == 0 ? input_ref->size()
 	                                         : levels_flat_offset - levels_flat_start[level_current - 1])) > 1) {
+		// Initialise the combine buffer to hold enough values for the bottom level of the state tree
+		if (level_current == 1) {
+			statel.Initialize(false, level_size);
+		}
 		for (idx_t pos = 0; pos < level_size; pos += TREE_FANOUT) {
 			// compute the aggregate for this entry in the segment tree
 			AggregateInit();

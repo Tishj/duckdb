@@ -66,9 +66,19 @@ struct DebugForceNoCrossProduct {
 };
 
 struct OrderedAggregateThreshold {
-	static constexpr const char *Name = "ordered_aggregate_threshold";
-	static constexpr const char *Description = "the number of rows to accumulate before sorting, used for tuning";
-	static constexpr const LogicalTypeId InputType = LogicalTypeId::UBIGINT;
+	static constexpr const char *Name = "ordered_aggregate_threshold"; // NOLINT
+	static constexpr const char *Description =                         // NOLINT
+	    "the number of rows to accumulate before sorting, used for tuning";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::UBIGINT; // NOLINT
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(ClientContext &context);
+};
+
+struct DebugAsOfIEJoin {
+	static constexpr const char *Name = "debug_asof_iejoin";                                                 // NOLINT
+	static constexpr const char *Description = "DEBUG SETTING: force use of IEJoin to implement AsOf joins"; // NOLINT
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;                                 // NOLINT
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
 	static Value GetSetting(ClientContext &context);
@@ -299,6 +309,15 @@ struct LogQueryPathSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct LockConfigurationSetting {
+	static constexpr const char *Name = "lock_configuration";
+	static constexpr const char *Description = "Whether or not the configuration can be altered";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(ClientContext &context);
+};
+
 struct ImmediateTransactionModeSetting {
 	static constexpr const char *Name = "immediate_transaction_mode";
 	static constexpr const char *Description =
@@ -347,10 +366,20 @@ struct PerfectHashThresholdSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct PivotFilterThreshold {
+	static constexpr const char *Name = "pivot_filter_threshold";
+	static constexpr const char *Description =
+	    "The threshold to switch from using filtered aggregates to LIST with a dedicated pivot operator";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BIGINT;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(ClientContext &context);
+};
+
 struct PivotLimitSetting {
 	static constexpr const char *Name = "pivot_limit";
 	static constexpr const char *Description =
-	    "The maximum numer of pivot columns in a pivot statement (default: 100000)";
+	    "The maximum number of pivot columns in a pivot statement (default: 100000)";
 	static constexpr const LogicalTypeId InputType = LogicalTypeId::BIGINT;
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -457,6 +486,16 @@ struct ThreadsSetting {
 struct UsernameSetting {
 	static constexpr const char *Name = "username";
 	static constexpr const char *Description = "The username to use. Ignored for legacy compatibility.";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(ClientContext &context);
+};
+
+struct FlushAllocatorSetting {
+	static constexpr const char *Name = "allocator_flush_threshold";
+	static constexpr const char *Description =
+	    "Peak allocation threshold at which to flush the allocator after completing a task.";
 	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
 	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
 	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);

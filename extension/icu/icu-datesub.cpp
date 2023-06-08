@@ -96,7 +96,7 @@ struct ICUCalendarSub : public ICUDateFunc {
 		auto &enddate_arg = args.data[2];
 
 		auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
-		auto &info = (BindData &)*func_expr.bind_info;
+		auto &info = func_expr.bind_info->Cast<BindData>();
 		CalendarPtr calendar(info.calendar->clone());
 
 		if (part_arg.GetVectorType() == VectorType::CONSTANT_VECTOR) {
@@ -144,7 +144,7 @@ struct ICUCalendarSub : public ICUDateFunc {
 
 		CreateScalarFunctionInfo func_info(set);
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		catalog.AddFunction(context, &func_info);
+		catalog.AddFunction(context, func_info);
 	}
 };
 
@@ -218,7 +218,7 @@ struct ICUCalendarDiff : public ICUDateFunc {
 		auto &enddate_arg = args.data[2];
 
 		auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
-		auto &info = (BindData &)*func_expr.bind_info;
+		auto &info = func_expr.bind_info->Cast<BindData>();
 		CalendarPtr calendar_ptr(info.calendar->clone());
 		auto calendar = calendar_ptr.get();
 
@@ -271,7 +271,7 @@ struct ICUCalendarDiff : public ICUDateFunc {
 
 		CreateScalarFunctionInfo func_info(set);
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		catalog.AddFunction(context, &func_info);
+		catalog.AddFunction(context, func_info);
 	}
 };
 

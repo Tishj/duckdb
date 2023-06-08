@@ -7,7 +7,7 @@
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/string.hpp"
 
-#include "duckdb_python/pyconnection.hpp"
+#include "duckdb_python/pyconnection/pyconnection.hpp"
 
 namespace duckdb {
 namespace spark {
@@ -48,46 +48,107 @@ SparkConf::SparkConf(bool load_defaults, const py::object &jvm, const py::object
 // Member methods
 
 bool SparkConf::Contains(const string &key) {
-	return false;
+	return regular_env.count(key);
 }
 
 py::object SparkConf::Get(const string &key, const py::object &default_value) {
-	return py::none();
+	auto entry = regular_env.find(key);
+	if (entry == regular_env.end()) {
+		return default_value;
+	}
+	return py::str(entry->second);
 }
 
 py::list SparkConf::GetAll() {
-	return py::list();
+	py::list result(regular_env.size());
+	idx_t i = 0;
+	for (auto &pair : regular_env) {
+		auto &key = pair.first;
+		auto &value = pair.second;
+
+		py::tuple key_val(2);
+		key_val[0] = key;
+		key_val[1] = value;
+		result[i] = std::move(key_val);
+		i++;
+	}
+	return result;
 }
 
 shared_ptr<SparkConf> SparkConf::Set(const string &key, const string &value) {
-	return shared_from_this();
+	regular_env[key] = value;
+}
+
+static void SetEnvironmentVariables(case_insensitive_map_t<string> &env, const py::list &pairs) {
+	for (auto &pair : pairs) {
+		if (!py::isinstance<py::tuple>(pair)) {
+			string actual_type = py::str(pair.get_type());
+			throw InvalidInputException("Entries of the 'pairs' list should be tuples, not %s", actual_type);
+		}
+		py::tuple key_value = py::cast<py::tuple>(pair);
+		if (key_value.size() != 2) {
+			throw InvalidInputException(
+			    "Expected to find a tuple containing a key and a value, but this tuple has %d members",
+			    key_value.size());
+		}
+		string key = py::str(key_value[0]);
+		string value = py::str(key_value[1]);
+		env[key] = value;
+	}
 }
 
 shared_ptr<SparkConf> SparkConf::SetAll(const py::list &pairs) {
+	SetEnvironmentVariables(regular_env, pairs);
 	return shared_from_this();
 }
 
 shared_ptr<SparkConf> SparkConf::SetAppName(const string &value) {
+	application_name = value;
 	return shared_from_this();
 }
 
-shared_ptr<SparkConf> SparkConf::SetExecutorEnv(const string &key, const string &value, const py::object &pairs) {
+shared_ptr<SparkConf> SparkConf::SetExecutorEnv(const py::object &key, const py::object &value,
+                                                const py::object &pairs) {
+	bool key_is_none = py::none().is(key);
+	bool value_is_none = py::none().is(value);
+	bool pairs_is_none = py::none().is(pairs);
+	if (!key_is_none && !value_is_none) {
+		if (!pairs_is_none) {
+			throw InvalidInputException("Either provide a key and a value or a list of pairs, not both");
+		}
+		string key_str = py::str(key);
+		string value_str = py::str(value);
+		executor_env[key_str] = value_str;
+	} else if (!pairs_is_none) {
+		if (!key_is_none || !value_is_none) {
+			throw InvalidInputException("Either provide a key and a value or a list of pairs, not both");
+		}
+		auto pairs_list = py::cast<py::list>(pairs);
+		SetEnvironmentVariables(executor_env, pairs_list);
+	}
 	return shared_from_this();
 }
 
 shared_ptr<SparkConf> SparkConf::SetIfMissing(const string &key, const string &value) {
+	if (regular_env.count(key)) {
+		return shared_from_this();
+	}
+	regular_env[key] = value;
 	return shared_from_this();
 }
 
 shared_ptr<SparkConf> SparkConf::SetMaster(const string &value) {
+	master_url = value;
 	return shared_from_this();
 }
 
 shared_ptr<SparkConf> SparkConf::SetSparkHome(const string &value) {
+	spark_home = value;
 	return shared_from_this();
 }
 
 string SparkConf::ToDebugString() {
+	// TODO: implement this
 	return "";
 }
 

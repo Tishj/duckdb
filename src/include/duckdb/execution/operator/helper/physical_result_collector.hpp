@@ -17,6 +17,9 @@ class PreparedStatementData;
 //! PhysicalResultCollector is an abstract class that is used to generate the final result of a query
 class PhysicalResultCollector : public PhysicalOperator {
 public:
+	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::RESULT_COLLECTOR;
+
+public:
 	explicit PhysicalResultCollector(PreparedStatementData &data);
 
 	StatementType statement_type;
@@ -36,7 +39,7 @@ public:
 	}
 
 public:
-	vector<PhysicalOperator *> GetChildren() const override;
+	vector<const_reference<PhysicalOperator>> GetChildren() const override;
 	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;
 
 	bool IsSource() const override {

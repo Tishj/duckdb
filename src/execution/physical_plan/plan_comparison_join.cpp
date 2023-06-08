@@ -20,10 +20,10 @@
 namespace duckdb {
 
 static bool CanPlanIndexJoin(ClientContext &context, TableScanBindData &bind_data, PhysicalTableScan &scan) {
-	auto table = bind_data.table;
-	auto &transaction = DuckTransaction::Get(context, *table->catalog);
+	auto &table = bind_data.table;
+	auto &transaction = DuckTransaction::Get(context, table.catalog);
 	auto &local_storage = LocalStorage::Get(transaction);
-	if (local_storage.Find(table->GetStoragePtr())) {
+	if (local_storage.Find(table.GetStorage())) {
 		// transaction local appends: skip index join
 		return false;
 	}
@@ -137,7 +137,7 @@ void CheckForPerfectJoinOpt(LogicalComparisonJoin &op, PerfectHashJoinStats &joi
 
 static optional_ptr<Index> CanUseIndexJoin(TableScanBindData &tbl, Expression &expr) {
 	optional_ptr<Index> result;
-	tbl.table->GetStorage().info->indexes.Scan([&](Index &index) {
+	tbl.table.GetStorage().info->indexes.Scan([&](Index &index) {
 		if (index.unbound_expressions.size() != 1) {
 			return false;
 		}
@@ -186,7 +186,7 @@ static bool PlanIndexJoin(ClientContext &context, LogicalComparisonJoin &op, uni
 	}
 	// index joins are not supported if there are pushed down table filters
 	D_ASSERT(right->type == PhysicalOperatorType::TABLE_SCAN);
-	auto &tbl_scan = (PhysicalTableScan &)*right;
+	auto &tbl_scan = right->Cast<PhysicalTableScan>();
 	//	if (tbl_scan.table_filters && !tbl_scan.table_filters->filters.empty()) {
 	//		return false;
 	//	}

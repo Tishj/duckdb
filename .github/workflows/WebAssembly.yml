@@ -17,6 +17,7 @@ on:
       - '!tools/wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/WebAssembly.yml'
+      - '.github/config/uncovered_files.csv'
   pull_request:
     paths-ignore:
       - '**.md'
@@ -26,6 +27,7 @@ on:
       - '!tools/wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/WebAssembly.yml'
+      - '.github/config/uncovered_files.csv'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/master' || github.sha }}
@@ -33,6 +35,7 @@ concurrency:
 
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  DUCKDB_WASM_VERSION: 2bed2fd
 
 jobs:
  linux-wasm-experimental:
@@ -50,7 +53,7 @@ jobs:
       run: |
         git clone --recurse-submodules https://github.com/duckdb/duckdb-wasm
         cd duckdb-wasm
-        git checkout e0bf0f326fe0f8db999e00f2f5b9c98a2e5ae657
+        git checkout ${{ env.DUCKDB_WASM_VERSION }}
 
     - name: Setup Ccache
       uses: hendrikmuhs/ccache-action@main
@@ -92,7 +95,7 @@ jobs:
       run: |
         git clone --recurse-submodules https://github.com/duckdb/duckdb-wasm
         cd duckdb-wasm
-        git checkout e0bf0f326fe0f8db999e00f2f5b9c98a2e5ae657
+        git checkout ${{ env.DUCKDB_WASM_VERSION }}
 
     - name: Setup Ccache
       uses: hendrikmuhs/ccache-action@main

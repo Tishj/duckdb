@@ -4,7 +4,7 @@
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/string.hpp"
 
-#include "duckdb_python/pyconnection.hpp"
+#include "duckdb_python/pyconnection/pyconnection.hpp"
 #include "duckdb_python/spark/data_frame.hpp"
 
 namespace duckdb {

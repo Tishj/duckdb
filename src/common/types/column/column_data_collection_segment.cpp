@@ -6,7 +6,8 @@ namespace duckdb {
 
 ColumnDataCollectionSegment::ColumnDataCollectionSegment(shared_ptr<ColumnDataAllocator> allocator_p,
                                                          vector<LogicalType> types_p)
-    : allocator(std::move(allocator_p)), types(std::move(types_p)), count(0), heap(allocator->GetAllocator()) {
+    : allocator(std::move(allocator_p)), types(std::move(types_p)), count(0),
+      heap(make_shared<StringHeap>(allocator->GetAllocator())) {
 }
 
 idx_t ColumnDataCollectionSegment::GetDataSize(idx_t type_size) {
@@ -14,7 +15,7 @@ idx_t ColumnDataCollectionSegment::GetDataSize(idx_t type_size) {
 }
 
 validity_t *ColumnDataCollectionSegment::GetValidityPointer(data_ptr_t base_ptr, idx_t type_size) {
-	return (validity_t *)(base_ptr + GetDataSize(type_size));
+	return reinterpret_cast<validity_t *>(base_ptr + GetDataSize(type_size));
 }
 
 VectorDataIndex ColumnDataCollectionSegment::AllocateVectorInternal(const LogicalType &type, ChunkMetaData &chunk_meta,

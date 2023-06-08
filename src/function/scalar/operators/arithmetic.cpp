@@ -10,6 +10,7 @@
 #include "duckdb/common/types/time.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
+#include "duckdb/common/enum_util.hpp"
 #include "duckdb/function/scalar/operators.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/function/scalar/nested_functions.hpp"
@@ -167,8 +168,8 @@ static unique_ptr<BaseStatistics> PropagateNumericStats(ClientContext &context, 
 	} else {
 		// no potential overflow: replace with non-overflowing operator
 		if (input.bind_data) {
-			auto bind_data = (DecimalArithmeticBindData *)input.bind_data;
-			bind_data->check_overflow = false;
+			auto &bind_data = input.bind_data->Cast<DecimalArithmeticBindData>();
+			bind_data.check_overflow = false;
 		}
 		expr.function.function = GetScalarIntegerFunction<BASEOP>(expr.return_type.InternalType());
 	}
@@ -248,9 +249,8 @@ unique_ptr<FunctionData> BindDecimalAddSubtract(ClientContext &context, ScalarFu
 
 static void SerializeDecimalArithmetic(FieldWriter &writer, const FunctionData *bind_data_p,
                                        const ScalarFunction &function) {
-	D_ASSERT(bind_data_p);
-	auto bind_data = (DecimalArithmeticBindData *)bind_data_p;
-	writer.WriteField(bind_data->check_overflow);
+	auto &bind_data = bind_data_p->Cast<DecimalArithmeticBindData>();
+	writer.WriteField(bind_data.check_overflow);
 	writer.WriteSerializable(function.return_type);
 	writer.WriteRegularSerializableList(function.arguments);
 }
@@ -365,8 +365,8 @@ ScalarFunction AddFun::GetFunction(const LogicalType &left_type, const LogicalTy
 		break;
 	}
 	// LCOV_EXCL_START
-	throw NotImplementedException("AddFun for types %s, %s", LogicalTypeIdToString(left_type.id()),
-	                              LogicalTypeIdToString(right_type.id()));
+	throw NotImplementedException("AddFun for types %s, %s", EnumUtil::ToString(left_type.id()),
+	                              EnumUtil::ToString(right_type.id()));
 	// LCOV_EXCL_STOP
 }
 
@@ -617,8 +617,8 @@ ScalarFunction SubtractFun::GetFunction(const LogicalType &left_type, const Logi
 		break;
 	}
 	// LCOV_EXCL_START
-	throw NotImplementedException("SubtractFun for types %s, %s", LogicalTypeIdToString(left_type.id()),
-	                              LogicalTypeIdToString(right_type.id()));
+	throw NotImplementedException("SubtractFun for types %s, %s", EnumUtil::ToString(left_type.id()),
+	                              EnumUtil::ToString(right_type.id()));
 	// LCOV_EXCL_STOP
 }
 

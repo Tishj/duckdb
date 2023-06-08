@@ -1,11 +1,10 @@
 #include "duckdb_python/pyrelation.hpp"
+#include "duckdb_python/pyconnection/pyconnection.hpp"
 #include "duckdb_python/pytype.hpp"
-#include "duckdb_python/pyconnection.hpp"
 #include "duckdb_python/pyresult.hpp"
 #include "duckdb/parser/qualified_name.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb_python/vector_conversion.hpp"
-#include "duckdb_python/pandas_type.hpp"
+#include "duckdb_python/numpy/numpy_type.hpp"
 #include "duckdb/main/relation/query_relation.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/main/relation/view_relation.hpp"
@@ -23,6 +22,7 @@ DuckDBPyRelation::DuckDBPyRelation(shared_ptr<Relation> rel_p) : rel(std::move(r
 	if (!rel) {
 		throw InternalException("DuckDBPyRelation created without a relation");
 	}
+	this->executed = false;
 	auto &columns = rel->Columns();
 	for (auto &col : columns) {
 		names.push_back(col.GetName());
@@ -34,6 +34,7 @@ DuckDBPyRelation::DuckDBPyRelation(unique_ptr<DuckDBPyResult> result_p) : rel(nu
 	if (!result) {
 		throw InternalException("DuckDBPyRelation created without a result");
 	}
+	this->executed = true;
 	this->types = result->GetTypes();
 	this->names = result->GetNames();
 }
@@ -402,6 +403,7 @@ static unique_ptr<QueryResult> PyExecuteRelation(const shared_ptr<Relation> &rel
 }
 
 unique_ptr<QueryResult> DuckDBPyRelation::ExecuteInternal(bool stream_result) {
+	this->executed = true;
 	return PyExecuteRelation(rel, stream_result);
 }
 
@@ -416,7 +418,7 @@ void DuckDBPyRelation::ExecuteOrThrow(bool stream_result) {
 	result = make_uniq<DuckDBPyResult>(std::move(query_result));
 }
 
-DataFrame DuckDBPyRelation::FetchDF(bool date_as_object) {
+PandasDataFrame DuckDBPyRelation::FetchDF(bool date_as_object) {
 	if (!result) {
 		if (!rel) {
 			return py::none();
@@ -532,7 +534,7 @@ py::dict DuckDBPyRelation::FetchNumpyInternal(bool stream, idx_t vectors_per_chu
 }
 
 //! Should this also keep track of when the result is empty and set result->result_closed accordingly?
-DataFrame DuckDBPyRelation::FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object) {
+PandasDataFrame DuckDBPyRelation::FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object) {
 	if (!result) {
 		if (!rel) {
 			return py::none();
@@ -573,14 +575,17 @@ duckdb::pyarrow::RecordBatchReader DuckDBPyRelation::ToRecordBatch(idx_t batch_s
 }
 
 void DuckDBPyRelation::Close() {
-	if (!result) {
+	// We always want to execute the query at least once, for side-effect purposes.
+	// if it has already been executed, we don't need to do it again.
+	if (!executed && !result) {
 		if (!rel) {
 			return;
 		}
 		ExecuteOrThrow();
 	}
-	AssertResultOpen();
-	result->Close();
+	if (result) {
+		result->Close();
+	}
 }
 
 bool DuckDBPyRelation::ContainsColumnByName(const string &name) const {
@@ -845,12 +850,16 @@ void DuckDBPyRelation::Create(const string &table) {
 	PyExecuteRelation(create);
 }
 
-unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Map(py::function fun) {
+unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Map(py::function fun, Optional<py::object> schema) {
 	AssertRelation();
 	vector<Value> params;
-	params.emplace_back(Value::POINTER((uintptr_t)fun.ptr()));
+	params.emplace_back(Value::POINTER(CastPointerToValue(fun.ptr())));
+	params.emplace_back(Value::POINTER(CastPointerToValue(schema.ptr())));
 	auto relation = make_uniq<DuckDBPyRelation>(rel->TableFunction("python_map_function", params));
-	relation->rel->extra_dependencies = make_uniq<PythonDependencies>(fun);
+	auto rel_dependency = make_uniq<PythonDependencies>();
+	rel_dependency->map_function = std::move(fun);
+	rel_dependency->py_object_list.push_back(make_uniq<RegisteredObject>(std::move(schema)));
+	relation->rel->extra_dependencies = std::move(rel_dependency);
 	return relation;
 }
 
@@ -876,9 +885,10 @@ void DuckDBPyRelation::Print() {
 
 string DuckDBPyRelation::Explain(ExplainType type) {
 	AssertRelation();
+	py::gil_scoped_release release;
 	auto res = rel->Explain(type);
 	D_ASSERT(res->type == duckdb::QueryResultType::MATERIALIZED_RESULT);
-	auto &materialized = (duckdb::MaterializedQueryResult &)*res;
+	auto &materialized = res->Cast<MaterializedQueryResult>();
 	auto &coll = materialized.Collection();
 	string result;
 	for (auto &row : coll.Rows()) {

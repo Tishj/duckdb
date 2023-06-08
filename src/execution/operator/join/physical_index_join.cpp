@@ -13,6 +13,7 @@
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
+#include "duckdb/execution/index/art/art_key.hpp"
 
 namespace duckdb {
 
@@ -48,12 +49,12 @@ public:
 	ExpressionExecutor probe_executor;
 
 	ArenaAllocator arena_allocator;
-	vector<Key> keys;
+	vector<ARTKey> keys;
 	unique_ptr<ColumnFetchState> fetch_state;
 
 public:
-	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
-		context.thread.profiler.Flush(op, &probe_executor, "probe_executor", 0);
+	void Finalize(const PhysicalOperator &op, ExecutionContext &context) override {
+		context.thread.profiler.Flush(op, probe_executor, "probe_executor", 0);
 	}
 };
 
@@ -66,7 +67,7 @@ PhysicalIndexJoin::PhysicalIndexJoin(LogicalOperator &op, unique_ptr<PhysicalOpe
       left_projection_map(left_projection_map_p), right_projection_map(std::move(right_projection_map_p)),
       index(index_p), conditions(std::move(cond)), join_type(join_type), lhs_first(lhs_first) {
 	D_ASSERT(right->type == PhysicalOperatorType::TABLE_SCAN);
-	auto &tbl_scan = (PhysicalTableScan &)*right;
+	auto &tbl_scan = right->Cast<PhysicalTableScan>();
 	column_ids = std::move(column_ids_p);
 	children.push_back(std::move(left));
 	children.push_back(std::move(right));
@@ -108,12 +109,12 @@ unique_ptr<OperatorState> PhysicalIndexJoin::GetOperatorState(ExecutionContext &
 
 void PhysicalIndexJoin::Output(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                OperatorState &state_p) const {
-	auto &phy_tbl_scan = (PhysicalTableScan &)*children[1];
+	auto &phy_tbl_scan = children[1]->Cast<PhysicalTableScan>();
 	auto &bind_tbl = phy_tbl_scan.bind_data->Cast<TableScanBindData>();
-	auto &transaction = DuckTransaction::Get(context.client, *bind_tbl.table->catalog);
+	auto &transaction = DuckTransaction::Get(context.client, bind_tbl.table.catalog);
 	auto &state = state_p.Cast<IndexJoinOperatorState>();
 
-	auto &tbl = bind_tbl.table->GetStorage();
+	auto &tbl = bind_tbl.table.GetStorage();
 	idx_t output_sel_idx = 0;
 	vector<row_t> fetch_rows;
 
@@ -138,7 +139,7 @@ void PhysicalIndexJoin::Output(ExecutionContext &context, DataChunk &input, Data
 		}
 		state.rhs_chunk.Reset();
 		state.fetch_state = make_uniq<ColumnFetchState>();
-		Vector row_ids(LogicalType::ROW_TYPE, (data_ptr_t)&fetch_rows[0]);
+		Vector row_ids(LogicalType::ROW_TYPE, data_ptr_cast(&fetch_rows[0]));
 		tbl.Fetch(transaction, state.rhs_chunk, fetch_ids, row_ids, output_sel_idx, *state.fetch_state);
 	}
 
@@ -166,7 +167,6 @@ void PhysicalIndexJoin::GetRHSMatches(ExecutionContext &context, DataChunk &inpu
 
 	auto &state = state_p.Cast<IndexJoinOperatorState>();
 	auto &art = index.Cast<ART>();
-	;
 
 	// generate the keys for this chunk
 	state.arena_allocator.Reset();
@@ -213,6 +213,8 @@ OperatorResultType PhysicalIndexJoin::ExecuteInternal(ExecutionContext &context,
 		state.lhs_idx = 0;
 		state.rhs_idx = 0;
 		state.first_fetch = true;
+		// reset the LHS chunk to reset the validity masks
+		state.join_keys.Reset();
 		return OperatorResultType::NEED_MORE_INPUT;
 	}
 	//! Output vectors
@@ -229,11 +231,11 @@ void PhysicalIndexJoin::BuildPipelines(Pipeline &current, MetaPipeline &meta_pip
 	// index join: we only continue into the LHS
 	// the right side is probed by the index join
 	// so we don't need to do anything in the pipeline with this child
-	meta_pipeline.GetState().AddPipelineOperator(current, this);
+	meta_pipeline.GetState().AddPipelineOperator(current, *this);
 	children[0]->BuildPipelines(current, meta_pipeline);
 }
 
-vector<const PhysicalOperator *> PhysicalIndexJoin::GetSources() const {
+vector<const_reference<PhysicalOperator>> PhysicalIndexJoin::GetSources() const {
 	return children[0]->GetSources();
 }
 

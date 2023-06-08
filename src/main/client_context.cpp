@@ -209,7 +209,7 @@ PreservedError ClientContext::EndQueryInternal(ClientContextLock &lock, bool suc
 }
 
 void ClientContext::CleanupInternal(ClientContextLock &lock, BaseQueryResult *result, bool invalidate_transaction) {
-	client_data->http_state = make_uniq<HTTPState>();
+	client_data->http_state = make_shared<HTTPState>();
 	if (!active_query) {
 		// no query currently active
 		return;
@@ -231,10 +231,6 @@ Executor &ClientContext::GetExecutor() {
 	D_ASSERT(active_query);
 	D_ASSERT(active_query->executor);
 	return *active_query->executor;
-}
-
-FileOpener *FileOpener::Get(ClientContext &context) {
-	return ClientData::Get(context).file_opener.get();
 }
 
 const string &ClientContext::GetCurrentQuery() {
@@ -419,7 +415,7 @@ unique_ptr<PendingQueryResult> ClientContext::PendingPreparedStatement(ClientCon
 		D_ASSERT(collector->type == PhysicalOperatorType::RESULT_COLLECTOR);
 		executor.Initialize(std::move(collector));
 	} else {
-		executor.Initialize(statement.plan.get());
+		executor.Initialize(*statement.plan);
 	}
 	auto types = executor.GetTypes();
 	D_ASSERT(types == statement.types);
@@ -495,6 +491,7 @@ unique_ptr<LogicalOperator> ClientContext::ExtractPlan(const string &query) {
 	}
 
 	unique_ptr<LogicalOperator> plan;
+	client_data->http_state = make_shared<HTTPState>();
 	RunFunctionInTransactionInternal(*lock, [&]() {
 		Planner planner(*this);
 		planner.CreatePlan(std::move(statements[0]));
@@ -777,8 +774,8 @@ void ClientContext::LogQueryInternal(ClientContextLock &, const string &query) {
 #endif
 	}
 	// log query path is set: log the query
-	client_data->log_query_writer->WriteData((const_data_ptr_t)query.c_str(), query.size());
-	client_data->log_query_writer->WriteData((const_data_ptr_t) "\n", 1);
+	client_data->log_query_writer->WriteData(const_data_ptr_cast(query.c_str()), query.size());
+	client_data->log_query_writer->WriteData(const_data_ptr_cast("\n"), 1);
 	client_data->log_query_writer->Flush();
 	client_data->log_query_writer->Sync();
 }
@@ -916,15 +913,15 @@ void ClientContext::DisableProfiling() {
 	config.enable_profiler = false;
 }
 
-void ClientContext::RegisterFunction(CreateFunctionInfo *info) {
+void ClientContext::RegisterFunction(CreateFunctionInfo &info) {
 	RunFunctionInTransaction([&]() {
-		auto existing_function =
-		    Catalog::GetEntry<ScalarFunctionCatalogEntry>(*this, INVALID_CATALOG, info->schema, info->name, true);
+		auto existing_function = Catalog::GetEntry<ScalarFunctionCatalogEntry>(*this, INVALID_CATALOG, info.schema,
+		                                                                       info.name, OnEntryNotFound::RETURN_NULL);
 		if (existing_function) {
-			auto new_info = (CreateScalarFunctionInfo *)info;
-			if (new_info->functions.MergeFunctionSet(existing_function->functions)) {
+			auto &new_info = info.Cast<CreateScalarFunctionInfo>();
+			if (new_info.functions.MergeFunctionSet(existing_function->functions)) {
 				// function info was updated from catalog entry, rewrite is needed
-				info->on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
+				info.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
 			}
 		}
 		// create function
@@ -937,7 +934,7 @@ void ClientContext::RunFunctionInTransactionInternal(ClientContextLock &lock, co
                                                      bool requires_valid_transaction) {
 	if (requires_valid_transaction && transaction.HasActiveTransaction() &&
 	    ValidChecker::IsInvalidated(ActiveTransaction())) {
-		throw Exception(ErrorManager::FormatException(*this, ErrorType::INVALIDATED_TRANSACTION));
+		throw TransactionException(ErrorManager::FormatException(*this, ErrorType::INVALIDATED_TRANSACTION));
 	}
 	// check if we are on AutoCommit. In this case we should start a transaction
 	bool require_new_transaction = transaction.IsAutoCommit() && !transaction.HasActiveTransaction();
@@ -978,7 +975,8 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 	unique_ptr<TableDescription> result;
 	RunFunctionInTransaction([&]() {
 		// obtain the table info
-		auto table = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema_name, table_name, true);
+		auto table = Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, schema_name, table_name,
+		                                                  OnEntryNotFound::RETURN_NULL);
 		if (!table) {
 			return;
 		}
@@ -995,18 +993,18 @@ unique_ptr<TableDescription> ClientContext::TableInfo(const string &schema_name,
 
 void ClientContext::Append(TableDescription &description, ColumnDataCollection &collection) {
 	RunFunctionInTransaction([&]() {
-		auto table_entry =
+		auto &table_entry =
 		    Catalog::GetEntry<TableCatalogEntry>(*this, INVALID_CATALOG, description.schema, description.table);
 		// verify that the table columns and types match up
-		if (description.columns.size() != table_entry->GetColumns().PhysicalColumnCount()) {
+		if (description.columns.size() != table_entry.GetColumns().PhysicalColumnCount()) {
 			throw Exception("Failed to append: table entry has different number of columns!");
 		}
 		for (idx_t i = 0; i < description.columns.size(); i++) {
-			if (description.columns[i].Type() != table_entry->GetColumns().GetColumn(PhysicalIndex(i)).Type()) {
+			if (description.columns[i].Type() != table_entry.GetColumns().GetColumn(PhysicalIndex(i)).Type()) {
 				throw Exception("Failed to append: table entry has different number of columns!");
 			}
 		}
-		table_entry->GetStorage().LocalAppend(*table_entry, *this, collection);
+		table_entry.GetStorage().LocalAppend(table_entry, *this, collection);
 	});
 }
 
@@ -1015,6 +1013,7 @@ void ClientContext::TryBindRelation(Relation &relation, vector<ColumnDefinition>
 	D_ASSERT(!relation.GetAlias().empty());
 	D_ASSERT(!relation.ToString().empty());
 #endif
+	client_data->http_state = make_shared<HTTPState>();
 	RunFunctionInTransaction([&]() {
 		// bind the expressions
 		auto binder = Binder::CreateBinder(*this);
@@ -1155,7 +1154,7 @@ ParserOptions ClientContext::GetParserOptions() const {
 
 ClientProperties ClientContext::GetClientProperties() const {
 	ClientProperties properties;
-	properties.timezone = ClientConfig::GetConfig(*this).ExtractTimezone();
+	properties.time_zone = ClientConfig::GetConfig(*this).ExtractTimezone();
 	return properties;
 }
 

@@ -9,7 +9,7 @@
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/vector_operations/binary_executor.hpp"
 #include "duckdb/execution/expression_executor.hpp"
-#include "duckdb/function/scalar/strftime.hpp"
+#include "duckdb/function/scalar/strftime_format.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parser/parsed_data/create_scalar_function_info.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
@@ -222,9 +222,9 @@ struct ICUStrptime : public ICUDateFunc {
 	static void TailPatch(const string &name, ClientContext &context, const vector<LogicalType> &types) {
 		// Find the old function
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		auto entry = catalog.GetEntry(context, CatalogType::SCALAR_FUNCTION_ENTRY, DEFAULT_SCHEMA, name);
-		D_ASSERT(entry && entry->type == CatalogType::SCALAR_FUNCTION_ENTRY);
-		auto &func = entry->Cast<ScalarFunctionCatalogEntry>();
+		auto &entry = catalog.GetEntry(context, CatalogType::SCALAR_FUNCTION_ENTRY, DEFAULT_SCHEMA, name);
+		D_ASSERT(entry.type == CatalogType::SCALAR_FUNCTION_ENTRY);
+		auto &func = entry.Cast<ScalarFunctionCatalogEntry>();
 		string error;
 
 		FunctionBinder function_binder(context);
@@ -249,13 +249,13 @@ struct ICUStrptime : public ICUDateFunc {
 
 	static bool CastFromVarchar(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
 		auto &cast_data = parameters.cast_data->Cast<CastData>();
-		auto info = (BindData *)cast_data.info.get();
-		CalendarPtr cal(info->calendar->clone());
+		auto &info = cast_data.info->Cast<BindData>();
+		CalendarPtr cal(info.calendar->clone());
 
 		UnaryExecutor::ExecuteWithNulls<string_t, timestamp_t>(
 		    source, result, count, [&](string_t input, ValidityMask &mask, idx_t idx) {
 			    timestamp_t result;
-			    const auto str = input.GetDataUnsafe();
+			    const auto str = input.GetData();
 			    const auto len = input.GetSize();
 			    string_t tz(nullptr, 0);
 			    bool has_offset = false;
@@ -417,7 +417,7 @@ struct ICUStrftime : public ICUDateFunc {
 
 		CreateScalarFunctionInfo func_info(set);
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		catalog.AddFunction(context, &func_info);
+		catalog.AddFunction(context, func_info);
 	}
 
 	static string_t CastOperation(icu::Calendar *calendar, timestamp_t input, Vector &result) {
@@ -476,8 +476,8 @@ struct ICUStrftime : public ICUDateFunc {
 
 	static bool CastToVarchar(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
 		auto &cast_data = parameters.cast_data->Cast<CastData>();
-		auto info = (BindData *)cast_data.info.get();
-		CalendarPtr calendar(info->calendar->clone());
+		auto &info = cast_data.info->Cast<BindData>();
+		CalendarPtr calendar(info.calendar->clone());
 
 		UnaryExecutor::ExecuteWithNulls<timestamp_t, string_t>(source, result, count,
 		                                                       [&](timestamp_t input, ValidityMask &mask, idx_t idx) {
