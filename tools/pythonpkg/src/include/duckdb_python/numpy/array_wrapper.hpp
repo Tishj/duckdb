@@ -53,6 +53,7 @@ public:
 	void Initialize(idx_t capacity);
 	void Resize(idx_t new_capacity);
 	void Append(idx_t current_offset, Vector &input, idx_t count);
+	void AllocateStrings(idx_t offset, Vector &source, Vector &codepoints, idx_t count);
 	py::object ToArray(idx_t count) const;
 	const LogicalType &Type() const;
 };
@@ -63,6 +64,8 @@ public:
 
 public:
 	void SetCategories();
+	//! Allocate all the python objects for the string columns
+	void AllocateStrings(DataChunk &chunk, idx_t offset);
 	void Append(DataChunk &chunk, idx_t offset);
 	void Append(DataChunk &chunk);
 	void SetCardinality(idx_t cardinality);

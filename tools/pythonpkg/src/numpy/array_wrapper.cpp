@@ -126,7 +126,7 @@ struct StringConvert {
 		}
 	}
 
-	static PyObject *ConvertUnicodeValue(const char *data, idx_t len, idx_t start_pos) {
+	static void ConvertUnicodeValue(PyObject *result, const char *data, idx_t len, idx_t start_pos) {
 		// slow path: check the code points
 		// we know that all characters before "start_pos" were ascii characters, so we don't need to check those
 
@@ -159,8 +159,6 @@ struct StringConvert {
 			}
 			codepoint_count++;
 		}
-		// based on the max codepoint, we construct the result string
-		auto result = PyUnicode_New(start_pos + codepoint_count, max_codepoint);
 		// based on the resulting unicode kind, we fill in the code points
 		auto kind = PyUtil::PyUnicodeKind(result);
 		switch (kind) {
@@ -179,11 +177,9 @@ struct StringConvert {
 		default:
 			throw NotImplementedException("Unsupported typekind constant '%d' for Python Unicode Compact decode", kind);
 		}
-		return result;
 	}
 
-	template <class DUCKDB_T, class NUMPY_T>
-	static PyObject *ConvertValue(string_t val) {
+	static void ConvertValue(PyObject *result, const string_t &val) {
 		// we could use PyUnicode_FromStringAndSize here, but it does a lot of verification that we don't need
 		// because of that it is a lot slower than it needs to be
 		auto data = const_data_ptr_cast(val.GetData());
@@ -192,18 +188,16 @@ struct StringConvert {
 		for (idx_t i = 0; i < len; i++) {
 			if (data[i] > 127) {
 				// there are! fallback to slower case
-				return ConvertUnicodeValue(const_char_ptr_cast(data), len, i);
+				return ConvertUnicodeValue(result, const_char_ptr_cast(data), len, i);
 			}
 		}
 		// no unicode: fast path
 		// directly construct the string and memcpy it
-		auto result = PyUnicode_New(len, 127);
 		auto target_data = PyUtil::PyUnicodeDataMutable(result);
 		memcpy(target_data, data, len);
-		return result;
 	}
-	template <class NUMPY_T>
-	static NUMPY_T NullValue() {
+
+	static PyObject *NullValue() {
 		return nullptr;
 	}
 };
@@ -342,6 +336,34 @@ static bool ConvertColumn(idx_t target_offset, data_ptr_t target_data, bool *tar
 			idx_t src_idx = idata.sel->get_index(i);
 			idx_t offset = target_offset + i;
 			out_ptr[offset] = CONVERT::template ConvertValue<DUCKDB_T, NUMPY_T>(src_ptr[src_idx]);
+			target_mask[offset] = false;
+		}
+		return false;
+	}
+}
+
+static bool ConvertColumnString(idx_t target_offset, data_ptr_t target_data, bool *target_mask, UnifiedVectorFormat &idata, idx_t count) {
+	// We have pre-allocated the strings for this column, so we just use the existing memory
+	auto src_ptr = UnifiedVectorFormat::GetData<string_t>(idata);
+	auto out_ptr = reinterpret_cast<PyObject **>(target_data);
+	if (!idata.validity.AllValid()) {
+		for (idx_t i = 0; i < count; i++) {
+			idx_t src_idx = idata.sel->get_index(i);
+			idx_t offset = target_offset + i;
+			if (!idata.validity.RowIsValidUnsafe(src_idx)) {
+				target_mask[offset] = true;
+				out_ptr[offset] = duckdb_py_convert::StringConvert::NullValue();
+			} else {
+				duckdb_py_convert::StringConvert::ConvertValue(out_ptr[offset], src_ptr[src_idx]);
+				target_mask[offset] = false;
+			}
+		}
+		return true;
+	} else {
+		for (idx_t i = 0; i < count; i++) {
+			idx_t src_idx = idata.sel->get_index(i);
+			idx_t offset = target_offset + i;
+			duckdb_py_convert::StringConvert::ConvertValue(out_ptr[offset], src_ptr[src_idx]);
 			target_mask[offset] = false;
 		}
 		return false;
@@ -632,6 +654,30 @@ void ArrayWrapper::Resize(idx_t new_capacity) {
 	mask->Resize(new_capacity);
 }
 
+void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoints, idx_t count) {
+	// TODO: also allow this for nested types that contain VARCHAR
+	D_ASSERT(data->type.id() == LogicalTypeId::VARCHAR);
+
+	UnifiedVectorFormat string_format;
+	source.ToUnifiedFormat(count, string_format);
+	auto string_data = UnifiedVectorFormat::GetData<string_t>(string_format);
+
+	UnifiedVectorFormat codepoint_format;
+	codepoints.ToUnifiedFormat(count, codepoint_format);
+	auto codepoint_data = UnifiedVectorFormat::GetData<int32_t>(codepoint_format);
+
+	auto dataptr = reinterpret_cast<PyObject **>(data->data);
+	for (idx_t i = 0; i < count; i++) {
+		auto string_index = string_format.sel->get_index(i);
+		auto len = string_data[string_index].GetSize();
+
+		auto codepoint_index = codepoint_format.sel->get_index(i);
+		auto max_codepoint = codepoint_data[codepoint_index];
+
+		dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
+	}
+}
+
 void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 	auto dataptr = data->data;
 	auto maskptr = reinterpret_cast<bool *>(mask->data);
@@ -644,6 +690,7 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 	input.ToUnifiedFormat(count, idata);
 	switch (input.GetType().id()) {
 	case LogicalTypeId::ENUM: {
+		py::gil_scoped_acquire gil;
 		auto size = EnumType::GetSize(input.GetType());
 		auto physical_type = input.GetType().InternalType();
 		if (size <= (idx_t)NumericLimits<int8_t>::Maximum()) {
@@ -718,18 +765,19 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 		                                                                               idata, count);
 		break;
 	case LogicalTypeId::TIME:
-	case LogicalTypeId::TIME_TZ:
+	case LogicalTypeId::TIME_TZ: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertColumn<dtime_t, PyObject *, duckdb_py_convert::TimeConvert>(current_offset, dataptr,
 		                                                                                   maskptr, idata, count);
 		break;
+	}
 	case LogicalTypeId::INTERVAL:
 		may_have_null = ConvertColumn<interval_t, int64_t, duckdb_py_convert::IntervalConvert>(current_offset, dataptr,
 		                                                                                       maskptr, idata, count);
 		break;
 	case LogicalTypeId::VARCHAR: {
-		py::gil_scoped_acquire gil;
-		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::StringConvert>(current_offset, dataptr,
-		                                                                                      maskptr, idata, count);
+		// Note we don't need the GIL here as we have pre-allocated them
+		may_have_null = ConvertColumnString(current_offset, dataptr, maskptr, idata, count);
 		break;
 	}
 	case LogicalTypeId::BLOB: {
@@ -836,10 +884,59 @@ void NumpyResultConversion::SetCategories() {
 	}
 }
 
+int32_t GetMaxCodePoint(const string_t &val) {
+	auto data = const_data_ptr_cast(val.GetData());
+	auto len = val.GetSize();
+	// check if there are any non-ascii characters in there
+	int32_t max_codepoint = 127;
+	for (idx_t i = 0; i < len; i++) {
+		max_codepoint = MaxValue<int32_t>(data[i], max_codepoint);
+	}
+	return max_codepoint;
+}
+
+void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
+	Vector codepoints(LogicalType::INTEGER, (idx_t)0);
+	int32_t *codepoint_data = nullptr;
+	bool initialized = false;
+
+	// For every column that will get filled with strings, pre-allocate them here
+	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
+		auto& column = chunk.data[col_idx];
+		if (column.GetType().id() != LogicalTypeId::VARCHAR) {
+			// TODO: also check for nested types if they contain strings
+			continue;
+		}
+		if (!initialized) {
+			codepoints.Initialize(false, chunk.size());
+			codepoint_data = FlatVector::GetData<int32_t>(codepoints);
+			initialized = true;
+		}
+		UnifiedVectorFormat format;
+
+		// Figure out the max codepoints for all of the strings
+		column.ToUnifiedFormat(chunk.size(), format);
+		auto strings = UnifiedVectorFormat::GetData<string_t>(format);
+		for (idx_t i = 0; i < chunk.size(); i++) {
+			idx_t index = format.sel->get_index(i);
+			codepoint_data[i] = GetMaxCodePoint(strings[index]);
+		}
+
+		// Then allocate the python objects
+		py::gil_scoped_acquire gil;
+		owned_data[col_idx].AllocateStrings(offset, column, codepoints, chunk.size());
+	}
+}
+
 void NumpyResultConversion::Append(DataChunk &chunk, idx_t offset) {
 	D_ASSERT(offset < capacity || (offset == 0 && chunk.size() == 0));
+
+	// Pre-allocate for the strings up front
+	AllocateStrings(chunk, offset);
+
 	auto chunk_types = chunk.GetTypes();
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
+		D_ASSERT(col_idx < chunk.ColumnCount());
 		owned_data[col_idx].Append(offset, chunk.data[col_idx], chunk.size());
 	}
 }
