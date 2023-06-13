@@ -678,7 +678,9 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 	}
 }
 
-void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
+void ArrayWrapper::Append(NumpyResultAppendState &state, idx_t column_index) {
+	auto &input = state.source.data[column_index];
+
 	auto dataptr = data->data;
 	auto maskptr = reinterpret_cast<bool *>(mask->data);
 	D_ASSERT(dataptr);
@@ -895,10 +897,47 @@ int32_t GetMaxCodePoint(const string_t &val) {
 	return max_codepoint;
 }
 
-void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
+static void GetCodePoints(NumpyResultAppendState &state) {
+	vector<LogicalType> codepoint_types;
+
+	for (idx_t i = 0; i < state.source.ColumnCount(); i++) {
+		auto &column = state.source.data[i];
+		if (column.GetType().id() != LogicalTypeId::VARCHAR) {
+			continue;
+		}
+		state.codepoint_mapping.push_back(i);
+		codepoint_types.push_back(LogicalType::INTEGER);
+	}
+
+	if (codepoint_types.empty()) {
+		state.codepoints.SetCardinality(0);
+		return;
+	}
+
+	state.codepoints.Initialize(Allocator::DefaultAllocator(), codepoint_types, state.source.size());
+	for (idx_t i = 0; i < codepoint_types.size(); i++) {
+		auto &source_idx = state.codepoint_mapping[i];
+		auto &column = state.source.data[source_idx];
+		UnifiedVectorFormat format;
+		auto codepoint_data = FlatVector::GetData<int32_t>(state.codepoints.data[i]);
+
+		// Figure out the max codepoints for all of the strings
+		column.ToUnifiedFormat(chunk.size(), format);
+		auto strings = UnifiedVectorFormat::GetData<string_t>(format);
+		for (idx_t i = 0; i < chunk.size(); i++) {
+			idx_t index = format.sel->get_index(i);
+			codepoint_data[i] = GetMaxCodePoint(strings[index]);
+		}
+	}
+}
+
+void NumpyResultConversion::AllocateStrings(NumpyResultAppendState &state) {
 	Vector codepoints(LogicalType::INTEGER, (idx_t)0);
 	int32_t *codepoint_data = nullptr;
 	bool initialized = false;
+
+	auto& chunk = state.source;
+	auto &offset = state.offset;
 
 	// For every column that will get filled with strings, pre-allocate them here
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
@@ -931,13 +970,14 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 void NumpyResultConversion::Append(DataChunk &chunk, idx_t offset) {
 	D_ASSERT(offset < capacity || (offset == 0 && chunk.size() == 0));
 
-	// Pre-allocate for the strings up front
-	AllocateStrings(chunk, offset);
+	NumpyResultAppendState state(offset, chunk);
 
-	auto chunk_types = chunk.GetTypes();
+	// Pre-allocate for the strings up front
+	AllocateStrings(state);
+
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
 		D_ASSERT(col_idx < chunk.ColumnCount());
-		owned_data[col_idx].Append(offset, chunk.data[col_idx], chunk.size());
+		owned_data[col_idx].Append(state, col_idx);
 	}
 }
 
