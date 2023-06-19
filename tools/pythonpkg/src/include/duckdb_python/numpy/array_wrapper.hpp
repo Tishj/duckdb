@@ -10,7 +10,6 @@
 
 #include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb/common/unordered_map.hpp"
-#include "duckdb/common/vector.hpp"
 #include "duckdb.hpp"
 
 namespace duckdb {
@@ -59,18 +58,6 @@ public:
 	const LogicalType &Type() const;
 };
 
-class NumpyResultAppendState {
-public:
-	NumpyResultAppendState(idx_t offset, DataChunk &source) : offset(offset), source(source) {}
-public:
-	idx_t offset;
-	DataChunk &source;
-	//! codepoint data idx -> source column idx
-	vector<idx_t> codepoint_mapping;
-	//! For every string column, contains the codepoint data
-	DataChunk codepoints;
-};
-
 class NumpyResultConversion {
 public:
 	NumpyResultConversion(const vector<LogicalType> &types, idx_t initial_capacity);
@@ -78,7 +65,7 @@ public:
 public:
 	void SetCategories();
 	//! Allocate all the python objects for the string columns
-	void AllocateStrings(NumpyResultAppendState &state);
+	void AllocateStrings(DataChunk &chunk, idx_t offset);
 	void Append(DataChunk &chunk, idx_t offset);
 	void Append(DataChunk &chunk);
 	void SetCardinality(idx_t cardinality);
