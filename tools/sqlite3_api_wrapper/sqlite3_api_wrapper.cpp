@@ -16,7 +16,7 @@
 #include "utf8proc_wrapper.hpp"
 #include "duckdb/common/box_renderer.hpp"
 #ifdef SHELL_INLINE_AUTOCOMPLETE
-#include "sql_auto_complete-extension.hpp"
+#include "autocomplete_extension.hpp"
 #endif
 
 #include <ctype.h>
@@ -117,7 +117,7 @@ int sqlite3_open_v2(const char *filename, /* Database filename (UTF-8) */
 		    "(e.g. duckdb -unsigned).");
 		pDb->db = make_uniq<DuckDB>(filename, &config);
 #ifdef SHELL_INLINE_AUTOCOMPLETE
-		pDb->db->LoadExtension<SQLAutoCompleteExtension>();
+		pDb->db->LoadExtension<AutocompleteExtension>();
 #endif
 		pDb->con = make_uniq<Connection>(*pDb->db);
 	} catch (const Exception &ex) {
@@ -1527,7 +1527,7 @@ SQLITE_API void sqlite3_result_blob64(sqlite3_context *context, const void *blob
 	}
 	context->result.type = SQLiteTypeValue::BLOB;
 	context->result.str = string((char *)blob, n_bytes);
-	if (xDel) {
+	if (xDel && xDel != SQLITE_TRANSIENT) {
 		xDel((void *)blob);
 	}
 }

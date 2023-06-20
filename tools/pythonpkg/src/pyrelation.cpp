@@ -23,6 +23,7 @@ DuckDBPyRelation::DuckDBPyRelation(shared_ptr<Relation> rel_p) : rel(std::move(r
 	if (!rel) {
 		throw InternalException("DuckDBPyRelation created without a relation");
 	}
+	this->executed = false;
 	auto &columns = rel->Columns();
 	for (auto &col : columns) {
 		names.push_back(col.GetName());
@@ -34,6 +35,7 @@ DuckDBPyRelation::DuckDBPyRelation(unique_ptr<DuckDBPyResult> result_p) : rel(nu
 	if (!result) {
 		throw InternalException("DuckDBPyRelation created without a result");
 	}
+	this->executed = true;
 	this->types = result->GetTypes();
 	this->names = result->GetNames();
 }
@@ -402,6 +404,7 @@ static unique_ptr<QueryResult> PyExecuteRelation(const shared_ptr<Relation> &rel
 }
 
 unique_ptr<QueryResult> DuckDBPyRelation::ExecuteInternal(bool stream_result) {
+	this->executed = true;
 	return PyExecuteRelation(rel, stream_result);
 }
 
@@ -482,6 +485,10 @@ py::dict DuckDBPyRelation::FetchNumpy() {
 		if (!rel) {
 			return py::none();
 		}
+		auto &context = *rel->context.GetContext();
+		ScopedConfigSetting setting(
+		    context.config, [](ClientConfig &config) { config.result_collector = PhysicalNumpyCollector::Create; },
+		    [](ClientConfig &config) { config.result_collector = nullptr; });
 		ExecuteOrThrow();
 	}
 	if (result->IsClosed()) {
@@ -577,14 +584,17 @@ duckdb::pyarrow::RecordBatchReader DuckDBPyRelation::ToRecordBatch(idx_t batch_s
 }
 
 void DuckDBPyRelation::Close() {
-	if (!result) {
+	// We always want to execute the query at least once, for side-effect purposes.
+	// if it has already been executed, we don't need to do it again.
+	if (!executed && !result) {
 		if (!rel) {
 			return;
 		}
 		ExecuteOrThrow();
 	}
-	AssertResultOpen();
-	result->Close();
+	if (result) {
+		result->Close();
+	}
 }
 
 bool DuckDBPyRelation::ContainsColumnByName(const string &name) const {
@@ -784,14 +794,13 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Query(const string &view_name, co
 	auto all_dependencies = rel->GetAllDependencies();
 	rel->context.GetContext()->external_dependencies[view_name] = std::move(all_dependencies);
 
-	Parser parser(rel->context.GetContext()->GetParserOptions());
-	parser.ParseQuery(sql_query);
-	if (parser.statements.size() != 1) {
+	auto statements = rel->context.GetContext()->ParseStatements(sql_query);
+	if (statements.size() != 1) {
 		throw InvalidInputException("'DuckDBPyRelation.query' only accepts a single statement");
 	}
-	auto &statement = *parser.statements[0];
+	auto &statement = *statements[0];
 	if (statement.type == StatementType::SELECT_STATEMENT) {
-		auto select_statement = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(parser.statements[0]));
+		auto select_statement = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(statements[0]));
 		auto query_relation =
 		    make_shared<QueryRelation>(rel->context.GetContext(), std::move(select_statement), "query_relation");
 		return make_uniq<DuckDBPyRelation>(std::move(query_relation));
@@ -803,7 +812,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Query(const string &view_name, co
 	}
 	{
 		py::gil_scoped_release release;
-		auto query_result = rel->context.GetContext()->Query(std::move(parser.statements[0]), false);
+		auto query_result = rel->context.GetContext()->Query(std::move(statements[0]), false);
 		// Execute it anyways, for creation/altering statements
 		// We only care that it succeeds, we can't store the result
 		D_ASSERT(query_result);

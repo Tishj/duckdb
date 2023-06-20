@@ -127,8 +127,6 @@ private:
 	unique_ptr<CreateStatement> TransformCreateFunction(duckdb_libpgquery::PGCreateFunctionStmt &stmt);
 	//! Transform a Postgres duckdb_libpgquery::T_PGCreateTypeStmt node into CreateStatement
 	unique_ptr<CreateStatement> TransformCreateType(duckdb_libpgquery::PGCreateTypeStmt &stmt);
-	//! Transform a Postgres duckdb_libpgquery::T_PGCreateDatabaseStmt node into a CreateStatement
-	unique_ptr<CreateStatement> TransformCreateDatabase(duckdb_libpgquery::PGCreateDatabaseStmt &stmt);
 	//! Transform a Postgres duckdb_libpgquery::T_PGAlterSeqStmt node into CreateStatement
 	unique_ptr<AlterStatement> TransformAlterSequence(duckdb_libpgquery::PGAlterSeqStmt &stmt);
 	//! Transform a Postgres duckdb_libpgquery::T_PGDropStmt node into a Drop[Table,Schema]Statement
@@ -233,6 +231,9 @@ private:
 	unique_ptr<ParsedExpression> TransformNullTest(duckdb_libpgquery::PGNullTest &root);
 	unique_ptr<ParsedExpression> TransformParamRef(duckdb_libpgquery::PGParamRef &node);
 	unique_ptr<ParsedExpression> TransformNamedArg(duckdb_libpgquery::PGNamedArgExpr &root);
+
+	//! Transform multi assignment reference into an Expression
+	unique_ptr<ParsedExpression> TransformMultiAssignRef(duckdb_libpgquery::PGMultiAssignRef &root);
 
 	unique_ptr<ParsedExpression> TransformSQLValueFunction(duckdb_libpgquery::PGSQLValueFunction &node);
 

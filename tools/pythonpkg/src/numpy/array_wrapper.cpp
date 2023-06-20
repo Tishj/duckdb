@@ -472,12 +472,12 @@ static bool ConvertDecimal(const LogicalType &decimal_type, idx_t target_offset,
 	}
 }
 
-RawArrayWrapper::RawArrayWrapper(py::array array_p, idx_t count_p, const LogicalType &type)
-    : array(std::move(array_p)), data(data_ptr_cast(array.mutable_data())), type(type), count(count_p) {
+RawArrayWrapper::RawArrayWrapper(py::array array_p, const LogicalType &type)
+    : array(std::move(array_p)), data(data_ptr_cast(array.mutable_data())), type(type) {
 	type_width = DuckDBToNumpyTypeWidth(type);
 }
 
-RawArrayWrapper::RawArrayWrapper(const LogicalType &type) : array(), data(nullptr), type(type), count(0) {
+RawArrayWrapper::RawArrayWrapper(const LogicalType &type) : array(), data(nullptr), type(type) {
 	type_width = DuckDBToNumpyTypeWidth(type);
 }
 
@@ -604,6 +604,11 @@ void RawArrayWrapper::Initialize(idx_t capacity) {
 void RawArrayWrapper::Resize(idx_t new_capacity) {
 	D_ASSERT(py::gil_check());
 	vector<py::ssize_t> new_shape {py::ssize_t(new_capacity)};
+	const long *current_shape = array.shape();
+	if (current_shape && *current_shape == (long)new_capacity) {
+		// Already correct shape
+		return;
+	}
 	array.resize(new_shape, false);
 	data = data_ptr_cast(array.mutable_data());
 }
@@ -639,6 +644,7 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 	input.ToUnifiedFormat(count, idata);
 	switch (input.GetType().id()) {
 	case LogicalTypeId::ENUM: {
+		py::gil_scoped_acquire gil;
 		auto size = EnumType::GetSize(input.GetType());
 		auto physical_type = input.GetType().InternalType();
 		if (size <= (idx_t)NumericLimits<int8_t>::Maximum()) {
@@ -713,42 +719,58 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 		                                                                               idata, count);
 		break;
 	case LogicalTypeId::TIME:
-	case LogicalTypeId::TIME_TZ:
+	case LogicalTypeId::TIME_TZ: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertColumn<dtime_t, PyObject *, duckdb_py_convert::TimeConvert>(current_offset, dataptr,
 		                                                                                   maskptr, idata, count);
 		break;
+	}
 	case LogicalTypeId::INTERVAL:
 		may_have_null = ConvertColumn<interval_t, int64_t, duckdb_py_convert::IntervalConvert>(current_offset, dataptr,
 		                                                                                       maskptr, idata, count);
 		break;
-	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::VARCHAR: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::StringConvert>(current_offset, dataptr,
 		                                                                                      maskptr, idata, count);
 		break;
-	case LogicalTypeId::BLOB:
+	}
+	case LogicalTypeId::BLOB: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::BlobConvert>(current_offset, dataptr,
 		                                                                                    maskptr, idata, count);
 		break;
-	case LogicalTypeId::BIT:
+	}
+	case LogicalTypeId::BIT: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::BitConvert>(current_offset, dataptr,
 		                                                                                   maskptr, idata, count);
 		break;
-	case LogicalTypeId::LIST:
+	}
+	case LogicalTypeId::LIST: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertNested<py::list, duckdb_py_convert::ListConvert>(current_offset, dataptr, maskptr, input,
 		                                                                        idata, count);
 		break;
-	case LogicalTypeId::MAP:
+	}
+	case LogicalTypeId::MAP: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertNested<py::dict, duckdb_py_convert::MapConvert>(current_offset, dataptr, maskptr, input,
 		                                                                       idata, count);
 		break;
-	case LogicalTypeId::STRUCT:
+	}
+	case LogicalTypeId::STRUCT: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertNested<py::dict, duckdb_py_convert::StructConvert>(current_offset, dataptr, maskptr,
 		                                                                          input, idata, count);
 		break;
-	case LogicalTypeId::UUID:
+	}
+	case LogicalTypeId::UUID: {
+		py::gil_scoped_acquire gil;
 		may_have_null = ConvertColumn<hugeint_t, PyObject *, duckdb_py_convert::UUIDConvert>(current_offset, dataptr,
 		                                                                                     maskptr, idata, count);
 		break;
+	}
 
 	default:
 		throw NotImplementedException("Unsupported type \"%s\"", input.GetType().ToString());
@@ -756,8 +778,6 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 	if (may_have_null) {
 		requires_mask = true;
 	}
-	data->count += count;
-	mask->count += count;
 }
 
 const LogicalType &ArrayWrapper::Type() const {
@@ -767,11 +787,11 @@ const LogicalType &ArrayWrapper::Type() const {
 py::object ArrayWrapper::ToArray(idx_t count) const {
 	D_ASSERT(py::gil_check());
 	D_ASSERT(data->array && mask->array);
-	data->Resize(data->count);
+	data->Resize(count);
 	if (!requires_mask) {
 		return std::move(data->array);
 	}
-	mask->Resize(mask->count);
+	mask->Resize(count);
 	// construct numpy arrays from the data and the mask
 	auto values = std::move(data->array);
 	auto nullmask = std::move(mask->array);
@@ -779,55 +799,6 @@ py::object ArrayWrapper::ToArray(idx_t count) const {
 	// create masked array and return it
 	auto masked_array = py::module::import("numpy.ma").attr("masked_array")(values, nullmask);
 	return masked_array;
-}
-
-NumpyResultConversion::NumpyResultConversion(vector<unique_ptr<NumpyResultConversion>> collections,
-                                             const vector<LogicalType> &types) {
-	D_ASSERT(py::gil_check());
-
-	// Calculate the size of the resulting arrays
-	count = 0;
-	for (auto &collection : collections) {
-		count += collection->Count();
-	}
-	capacity = count;
-
-	auto concatenate_func = py::module_::import("numpy").attr("concatenate");
-
-	D_ASSERT(owned_data.empty());
-	D_ASSERT(!collections.empty());
-	for (idx_t col_idx = 0; col_idx < types.size(); col_idx++) {
-		// Collect all the arrays of the collections for this column
-		py::tuple arrays(collections.size());
-		py::tuple masks(collections.size());
-
-		bool requires_mask = false;
-		for (idx_t i = 0; i < collections.size(); i++) {
-			auto &collection = collections[i];
-
-			// Check if the result array requires a mask
-			auto &source = collection->owned_data[col_idx];
-			requires_mask = requires_mask || source.requires_mask;
-
-			// Shrink to fit
-			source.Resize(source.data->count);
-
-			arrays[i] = *source.data->array;
-			masks[i] = *source.mask->array;
-		}
-		D_ASSERT(!arrays.empty());
-		D_ASSERT(arrays.size() == masks.size());
-		py::array result_array = concatenate_func(arrays);
-		py::array result_mask = concatenate_func(masks);
-		auto array_wrapper = make_uniq<RawArrayWrapper>(std::move(result_array), count, types[col_idx]);
-		auto mask_wrapper = make_uniq<RawArrayWrapper>(std::move(result_mask), count, types[col_idx]);
-		owned_data.emplace_back(std::move(array_wrapper), std::move(mask_wrapper), requires_mask);
-	}
-
-	// Delete the input arrays, we don't need them anymore
-	for (auto &collection : collections) {
-		collection->Reset();
-	}
 }
 
 NumpyResultConversion::NumpyResultConversion(const vector<LogicalType> &types, idx_t initial_capacity)
@@ -868,22 +839,25 @@ void NumpyResultConversion::SetCategories() {
 	}
 }
 
-void NumpyResultConversion::Append(DataChunk &chunk) {
-	if (count + chunk.size() > capacity) {
-		Resize(capacity * 2);
-	}
+void NumpyResultConversion::Append(DataChunk &chunk, idx_t offset) {
+	D_ASSERT(offset < capacity || (offset == 0 && chunk.size() == 0));
 	auto chunk_types = chunk.GetTypes();
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
-		owned_data[col_idx].Append(count, chunk.data[col_idx], chunk.size());
+		owned_data[col_idx].Append(offset, chunk.data[col_idx], chunk.size());
 	}
+}
 
-	count += chunk.size();
-#ifdef DEBUG
-	for (auto &data : owned_data) {
-		D_ASSERT(data.data->count == count);
-		D_ASSERT(data.mask->count == count);
+void NumpyResultConversion::SetCardinality(idx_t cardinality) {
+	count = cardinality;
+}
+
+void NumpyResultConversion::Append(DataChunk &chunk) {
+	if (count + chunk.size() > capacity) {
+		py::gil_scoped_acquire gil;
+		Resize(capacity * 2);
 	}
-#endif
+	Append(chunk, count);
+	count += chunk.size();
 }
 
 } // namespace duckdb
