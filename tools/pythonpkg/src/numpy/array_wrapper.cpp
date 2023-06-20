@@ -329,7 +329,6 @@ static bool ConvertColumnString(idx_t target_offset, data_ptr_t target_data, boo
 			idx_t offset = target_offset + i;
 			if (!idata.validity.RowIsValidUnsafe(src_idx)) {
 				target_mask[offset] = true;
-				out_ptr[offset] = duckdb_py_convert::StringConvert::NullValue();
 			} else {
 				duckdb_py_convert::StringConvert::ConvertValue(out_ptr[offset], src_ptr[src_idx]);
 				target_mask[offset] = false;
@@ -646,15 +645,32 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 	auto codepoint_data = UnifiedVectorFormat::GetData<uint8_t>(codepoint_format);
 
 	auto dataptr = reinterpret_cast<PyObject **>(data->data);
-	for (idx_t i = 0; i < count; i++) {
-		auto string_index = string_format.sel->get_index(i);
-		auto len = string_data[string_index].GetSize();
+	if (string_format.validity.AllValid()) {
+		for (idx_t i = 0; i < count; i++) {
+			auto string_index = string_format.sel->get_index(i);
+			if (!string_format.validity.RowIsValid(string_index)) {
+				dataptr[offset + i] = Py_None;
+			}
+			auto len = string_data[string_index].GetSize();
 
-		auto codepoint_index = codepoint_format.sel->get_index(i);
-		auto category = codepoint_data[codepoint_index];
-		D_ASSERT(category < 4);
-		auto max_codepoint = codepoint_bucket[category];
-		dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
+			auto codepoint_index = codepoint_format.sel->get_index(i);
+			auto category = codepoint_data[codepoint_index];
+			D_ASSERT(category < 4);
+			auto max_codepoint = codepoint_bucket[category];
+			dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
+		}
+	} else {
+		for (idx_t i = 0; i < count; i++) {
+
+			auto string_index = string_format.sel->get_index(i);
+			auto len = string_data[string_index].GetSize();
+
+			auto codepoint_index = codepoint_format.sel->get_index(i);
+			auto category = codepoint_data[codepoint_index];
+			D_ASSERT(category < 4);
+			auto max_codepoint = codepoint_bucket[category];
+			dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
+		}
 	}
 }
 
