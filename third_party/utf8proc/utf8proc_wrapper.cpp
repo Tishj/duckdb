@@ -102,39 +102,6 @@ UnicodeType Utf8Proc::Analyze(const char *s, size_t len, UnicodeInvalidReason *i
 	return type;
 }
 
-UnicodeByteCategory Utf8Proc::MaxUnicodeCategory(const char *s, size_t len) {
-	size_t ascii_codepoints = 0;
-	size_t one_byte_codepoints = 0;
-	size_t two_byte_codepoints = 0;
-	size_t three_byte_codepoints = 0;
-	size_t four_byte_codepoints = 0;
-	for (size_t i = 0; i < len; i++) {
-		ascii_codepoints += (s[i] & 0x80) == 0;
-		// 2Byte Unicode, but only up to 1 byte (255)
-		one_byte_codepoints += (s[i] & 0xFC) == 0xC0;
-		two_byte_codepoints += (s[i] & 0xE0) == 0xC0;
-		three_byte_codepoints += (s[i] & 0xF0) == 0xE0;
-		four_byte_codepoints += (s[i] & 0xF8) == 0xF0;
-	}
-	if (four_byte_codepoints > 0) {
-		return UnicodeByteCategory::FOUR_BYTE;
-	}
-	if (three_byte_codepoints > 0) {
-		return UnicodeByteCategory::FOUR_BYTE;
-	}
-	if (two_byte_codepoints > 0) {
-		return UnicodeByteCategory::TWO_BYTE;
-	}
-	if (one_byte_codepoints > 0) {
-		return UnicodeByteCategory::ONE_BYTE;
-	}
-	if (ascii_codepoints > 0) {
-		return UnicodeByteCategory::ASCII;
-	}
-	// TODO: assert?
-	return UnicodeByteCategory::ASCII;
-}
-
 char* Utf8Proc::Normalize(const char *s, size_t len) {
 	assert(s);
 	assert(Utf8Proc::Analyze(s, len) != UnicodeType::INVALID);

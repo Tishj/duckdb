@@ -115,9 +115,13 @@ struct TimeConvert {
 struct StringConvert {
 	template <class T>
 	static void ConvertUnicodeValueTemplated(T *result, const char *data, idx_t ascii_count, idx_t len) {
-		// we first fill in the batch of ascii characters directly
-		for (idx_t i = 0; i < ascii_count; i++) {
-			result[i] = data[i];
+		if (sizeof(T) == sizeof(char)) {
+			// fast path for 1 byte unicode
+			memcpy(result, data, len);
+			return;
+		} else {
+			// we first fill in the batch of ascii characters directly
+			memcpy(result, data, ascii_count);
 		}
 		int sz;
 		idx_t pos = ascii_count;
@@ -126,6 +130,7 @@ struct StringConvert {
 		while (pos < len) {
 			result[ascii_count + i] = Utf8Proc::UTF8ToCodepoint(data + pos, sz);
 			pos += sz;
+			i++;
 		}
 	}
 
@@ -630,7 +635,8 @@ void ArrayWrapper::Resize(idx_t new_capacity) {
 	mask->Resize(new_capacity);
 }
 
-void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoints, idx_t count) {
+void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, const uint8_t *codepoints, const uint32_t *lengths,
+                                   idx_t count) {
 	static const int32_t codepoint_bucket[] = {127, 255, 65535, 65536};
 	static constexpr uint8_t BUCKET_LENGTH = sizeof(codepoint_bucket) / sizeof(*codepoint_bucket);
 	// TODO: also allow this for nested types that contain VARCHAR
@@ -640,37 +646,32 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 	source.ToUnifiedFormat(count, string_format);
 	auto string_data = UnifiedVectorFormat::GetData<string_t>(string_format);
 
-	UnifiedVectorFormat codepoint_format;
-	codepoints.ToUnifiedFormat(count, codepoint_format);
-	auto codepoint_data = UnifiedVectorFormat::GetData<uint8_t>(codepoint_format);
-
 	auto dataptr = reinterpret_cast<PyObject **>(data->data);
 	if (string_format.validity.AllValid()) {
 		for (idx_t i = 0; i < count; i++) {
 			auto string_index = string_format.sel->get_index(i);
-			auto len = string_data[string_index].GetSize();
 
-			auto codepoint_index = codepoint_format.sel->get_index(i);
-			auto category = codepoint_data[codepoint_index];
+			auto category = codepoints[i];
+			auto length = lengths[i];
 			D_ASSERT(category < 4);
 			auto max_codepoint = codepoint_bucket[category];
-			dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
+
+			dataptr[offset + i] = PyUnicode_New(length, max_codepoint);
 		}
 	} else {
 		for (idx_t i = 0; i < count; i++) {
-
 			auto string_index = string_format.sel->get_index(i);
 			if (!string_format.validity.RowIsValid(string_index)) {
 				dataptr[offset + i] = nullptr;
 				continue;
 			}
-			auto len = string_data[string_index].GetSize();
 
-			auto codepoint_index = codepoint_format.sel->get_index(i);
-			auto category = codepoint_data[codepoint_index];
+			auto category = codepoints[i];
+			auto length = lengths[i];
 			D_ASSERT(category < 4);
 			auto max_codepoint = codepoint_bucket[category];
-			dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
+
+			dataptr[offset + i] = PyUnicode_New(length, max_codepoint);
 		}
 	}
 }
@@ -894,9 +895,12 @@ int32_t GetMaxCodePoint(const string_t &val) {
 
 void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 	Vector codepoints(LogicalType::UTINYINT, (idx_t)0);
+	Vector lengths(LogicalType::UINTEGER, (idx_t)0);
 	uint8_t *codepoint_data = nullptr;
+	uint32_t *length_data = nullptr;
 	bool initialized = false;
 
+	D_ASSERT(!py::gil_check());
 	// For every column that will get filled with strings, pre-allocate them here
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
 		auto &column = chunk.data[col_idx];
@@ -906,7 +910,9 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 		}
 		if (!initialized) {
 			codepoints.Initialize(false, chunk.size());
+			lengths.Initialize(false, chunk.size());
 			codepoint_data = FlatVector::GetData<uint8_t>(codepoints);
+			length_data = FlatVector::GetData<uint32_t>(lengths);
 			initialized = true;
 		}
 		UnifiedVectorFormat format;
@@ -919,7 +925,8 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 			for (idx_t i = 0; i < chunk.size(); i++) {
 				idx_t index = format.sel->get_index(i);
 				auto &str = strings[index];
-				codepoint_data[i] = static_cast<uint8_t>(Utf8Proc::MaxUnicodeCategory(str.GetData(), str.GetSize()));
+				codepoint_data[i] =
+				    static_cast<uint8_t>(PyUtil::MaxUnicodeCategory(str.GetData(), str.GetSize(), length_data[i]));
 			}
 		} else {
 			for (idx_t i = 0; i < chunk.size(); i++) {
@@ -928,13 +935,14 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 					continue;
 				}
 				auto &str = strings[index];
-				codepoint_data[i] = static_cast<uint8_t>(Utf8Proc::MaxUnicodeCategory(str.GetData(), str.GetSize()));
+				codepoint_data[i] =
+				    static_cast<uint8_t>(PyUtil::MaxUnicodeCategory(str.GetData(), str.GetSize(), length_data[i]));
 			}
 		}
 
 		// Then allocate the python objects
 		py::gil_scoped_acquire gil;
-		owned_data[col_idx].AllocateStrings(offset, column, codepoints, chunk.size());
+		owned_data[col_idx].AllocateStrings(offset, column, codepoint_data, length_data, chunk.size());
 	}
 }
 

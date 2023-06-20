@@ -53,7 +53,7 @@ public:
 	void Initialize(idx_t capacity);
 	void Resize(idx_t new_capacity);
 	void Append(idx_t current_offset, Vector &input, idx_t count);
-	void AllocateStrings(idx_t offset, Vector &source, Vector &codepoints, idx_t count);
+	void AllocateStrings(idx_t offset, Vector &source, const uint8_t *codepoints, const uint32_t *lengths, idx_t count);
 	py::object ToArray(idx_t count) const;
 	const LogicalType &Type() const;
 };

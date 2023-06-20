@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import math
+import pytest
 from decimal import Decimal
 from uuid import UUID
 
@@ -98,7 +99,8 @@ class TestAllTypes(object):
         assert want == bytearray(got)
 
 
-    def test_fetchnumpy(self, duckdb_cursor):
+    @pytest.mark.parametrize('type', get_all_types())
+    def test_fetchnumpy(self, type):
         conn = duckdb.connect()
 
         correct_answer_map = {
@@ -320,21 +322,23 @@ class TestAllTypes(object):
         # - 'date_array'
 
         rel = conn.table_function("test_all_types")
-        for cur_type in all_types:
-            if cur_type not in correct_answer_map:
-                continue
-            result = rel.project(cur_type).fetchnumpy()
-            result = result[cur_type]
-            correct_answer = correct_answer_map[cur_type]
-            if isinstance(result, pd.Categorical) or result.dtype == object:
-                assert recursive_equality(list(result), list(correct_answer))
-            else:
-                # assert_equal compares NaN equal, but also compares masked
-                # elements equal to any unmasked element
-                if (isinstance(result, np.ma.MaskedArray)
-                        or isinstance(correct_answer, np.ma.MaskedArray)):
-                    assert np.all(result.mask == correct_answer.mask)
-                np.testing.assert_equal(result, correct_answer)
+        if type not in correct_answer_map:
+            # This type is not tested (yet)
+            return
+
+        # Fetch the result as dictionary of numpy arrays
+        result = rel.project(type).fetchnumpy()[type]
+        correct_answer = correct_answer_map[type]
+
+        if isinstance(result, pd.Categorical) or result.dtype == object:
+            assert recursive_equality(list(result), list(correct_answer))
+        else:
+            # assert_equal compares NaN equal, but also compares masked
+            # elements equal to any unmasked element
+            if (isinstance(result, np.ma.MaskedArray)
+                    or isinstance(correct_answer, np.ma.MaskedArray)):
+                assert np.all(result.mask == correct_answer.mask)
+            np.testing.assert_equal(result, correct_answer)
 
     def test_arrow(self, duckdb_cursor):
         try:
