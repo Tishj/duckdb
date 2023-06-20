@@ -16,6 +16,7 @@ unique_ptr<PhysicalResultCollector> PhysicalNumpyCollector::Create(ClientContext
 	{
 		py::gil_scoped_acquire gil;
 		auto numpy_internal = py::module_::import("numpy.core.multiarray");
+		auto numpy_masked = py::module::import("numpy.ma");
 	}
 
 	if (!PhysicalPlanGenerator::PreserveInsertionOrder(context, *data.plan)) {

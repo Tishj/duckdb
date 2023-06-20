@@ -114,15 +114,18 @@ struct TimeConvert {
 
 struct StringConvert {
 	template <class T>
-	static void ConvertUnicodeValueTemplated(T *result, int32_t *codepoints, idx_t codepoint_count, const char *data,
-	                                         idx_t ascii_count) {
+	static void ConvertUnicodeValueTemplated(T *result, const char *data, idx_t ascii_count, idx_t len) {
 		// we first fill in the batch of ascii characters directly
 		for (idx_t i = 0; i < ascii_count; i++) {
 			result[i] = data[i];
 		}
-		// then we fill in the remaining codepoints from our codepoint array
-		for (idx_t i = 0; i < codepoint_count; i++) {
-			result[ascii_count + i] = codepoints[i];
+		int sz;
+		idx_t pos = ascii_count;
+		idx_t i = 0;
+		// then we fill in the remaining codepoints
+		while (pos < len) {
+			result[ascii_count + i] = Utf8Proc::UTF8ToCodepoint(data + pos, sz);
+			pos += sz;
 		}
 	}
 
@@ -135,44 +138,17 @@ struct StringConvert {
 		// we know that the max amount of codepoints is the length of the string
 		// for short strings (less than 64 bytes) we simply statically allocate an array of 256 bytes (64x int32)
 		// this avoids memory allocation for small strings (common case)
-		idx_t remaining = len - start_pos;
-		unique_ptr<int32_t[]> allocated_codepoints;
-		int32_t static_codepoints[64];
-		int32_t *codepoints;
-		if (remaining > 64) {
-			allocated_codepoints = unique_ptr<int32_t[]>(new int32_t[remaining]);
-			codepoints = allocated_codepoints.get();
-		} else {
-			codepoints = static_codepoints;
-		}
-		// now we iterate over the remainder of the string to convert the UTF8 string into a sequence of codepoints
-		// and to find the maximum codepoint
-		int32_t max_codepoint = 127;
-		int sz;
-		idx_t pos = start_pos;
-		idx_t codepoint_count = 0;
-		while (pos < len) {
-			codepoints[codepoint_count] = Utf8Proc::UTF8ToCodepoint(data + pos, sz);
-			pos += sz;
-			if (codepoints[codepoint_count] > max_codepoint) {
-				max_codepoint = codepoints[codepoint_count];
-			}
-			codepoint_count++;
-		}
 		// based on the resulting unicode kind, we fill in the code points
 		auto kind = PyUtil::PyUnicodeKind(result);
 		switch (kind) {
 		case PyUnicode_1BYTE_KIND:
-			ConvertUnicodeValueTemplated<Py_UCS1>(PyUtil::PyUnicode1ByteData(result), codepoints, codepoint_count, data,
-			                                      start_pos);
+			ConvertUnicodeValueTemplated<Py_UCS1>(PyUtil::PyUnicode1ByteData(result), data, start_pos, len);
 			break;
 		case PyUnicode_2BYTE_KIND:
-			ConvertUnicodeValueTemplated<Py_UCS2>(PyUtil::PyUnicode2ByteData(result), codepoints, codepoint_count, data,
-			                                      start_pos);
+			ConvertUnicodeValueTemplated<Py_UCS2>(PyUtil::PyUnicode2ByteData(result), data, start_pos, len);
 			break;
 		case PyUnicode_4BYTE_KIND:
-			ConvertUnicodeValueTemplated<Py_UCS4>(PyUtil::PyUnicode4ByteData(result), codepoints, codepoint_count, data,
-			                                      start_pos);
+			ConvertUnicodeValueTemplated<Py_UCS4>(PyUtil::PyUnicode4ByteData(result), data, start_pos, len);
 			break;
 		default:
 			throw NotImplementedException("Unsupported typekind constant '%d' for Python Unicode Compact decode", kind);
@@ -342,7 +318,8 @@ static bool ConvertColumn(idx_t target_offset, data_ptr_t target_data, bool *tar
 	}
 }
 
-static bool ConvertColumnString(idx_t target_offset, data_ptr_t target_data, bool *target_mask, UnifiedVectorFormat &idata, idx_t count) {
+static bool ConvertColumnString(idx_t target_offset, data_ptr_t target_data, bool *target_mask,
+                                UnifiedVectorFormat &idata, idx_t count) {
 	// We have pre-allocated the strings for this column, so we just use the existing memory
 	auto src_ptr = UnifiedVectorFormat::GetData<string_t>(idata);
 	auto out_ptr = reinterpret_cast<PyObject **>(target_data);
@@ -655,6 +632,8 @@ void ArrayWrapper::Resize(idx_t new_capacity) {
 }
 
 void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoints, idx_t count) {
+	static const int32_t codepoint_bucket[] = {127, 255, 65535, 65536};
+	static constexpr uint8_t BUCKET_LENGTH = sizeof(codepoint_bucket) / sizeof(*codepoint_bucket);
 	// TODO: also allow this for nested types that contain VARCHAR
 	D_ASSERT(data->type.id() == LogicalTypeId::VARCHAR);
 
@@ -664,7 +643,7 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 
 	UnifiedVectorFormat codepoint_format;
 	codepoints.ToUnifiedFormat(count, codepoint_format);
-	auto codepoint_data = UnifiedVectorFormat::GetData<int32_t>(codepoint_format);
+	auto codepoint_data = UnifiedVectorFormat::GetData<uint8_t>(codepoint_format);
 
 	auto dataptr = reinterpret_cast<PyObject **>(data->data);
 	for (idx_t i = 0; i < count; i++) {
@@ -672,8 +651,9 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 		auto len = string_data[string_index].GetSize();
 
 		auto codepoint_index = codepoint_format.sel->get_index(i);
-		auto max_codepoint = codepoint_data[codepoint_index];
-
+		auto category = codepoint_data[codepoint_index];
+		D_ASSERT(category < 4);
+		auto max_codepoint = codepoint_bucket[category];
 		dataptr[offset + i] = PyUnicode_New(len, max_codepoint);
 	}
 }
@@ -896,20 +876,20 @@ int32_t GetMaxCodePoint(const string_t &val) {
 }
 
 void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
-	Vector codepoints(LogicalType::INTEGER, (idx_t)0);
-	int32_t *codepoint_data = nullptr;
+	Vector codepoints(LogicalType::UTINYINT, (idx_t)0);
+	uint8_t *codepoint_data = nullptr;
 	bool initialized = false;
 
 	// For every column that will get filled with strings, pre-allocate them here
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
-		auto& column = chunk.data[col_idx];
+		auto &column = chunk.data[col_idx];
 		if (column.GetType().id() != LogicalTypeId::VARCHAR) {
 			// TODO: also check for nested types if they contain strings
 			continue;
 		}
 		if (!initialized) {
 			codepoints.Initialize(false, chunk.size());
-			codepoint_data = FlatVector::GetData<int32_t>(codepoints);
+			codepoint_data = FlatVector::GetData<uint8_t>(codepoints);
 			initialized = true;
 		}
 		UnifiedVectorFormat format;
@@ -917,9 +897,22 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 		// Figure out the max codepoints for all of the strings
 		column.ToUnifiedFormat(chunk.size(), format);
 		auto strings = UnifiedVectorFormat::GetData<string_t>(format);
-		for (idx_t i = 0; i < chunk.size(); i++) {
-			idx_t index = format.sel->get_index(i);
-			codepoint_data[i] = GetMaxCodePoint(strings[index]);
+
+		if (format.validity.AllValid()) {
+			for (idx_t i = 0; i < chunk.size(); i++) {
+				idx_t index = format.sel->get_index(i);
+				auto &str = strings[index];
+				codepoint_data[i] = static_cast<uint8_t>(Utf8Proc::MaxUnicodeCategory(str.GetData(), str.GetSize()));
+			}
+		} else {
+			for (idx_t i = 0; i < chunk.size(); i++) {
+				idx_t index = format.sel->get_index(i);
+				if (!format.validity.RowIsValid(index)) {
+					continue;
+				}
+				auto &str = strings[index];
+				codepoint_data[i] = static_cast<uint8_t>(Utf8Proc::MaxUnicodeCategory(str.GetData(), str.GetSize()));
+			}
 		}
 
 		// Then allocate the python objects

@@ -9,11 +9,14 @@ namespace duckdb {
 
 enum class UnicodeType { INVALID, ASCII, UNICODE };
 enum class UnicodeInvalidReason { BYTE_MISMATCH, INVALID_UNICODE };
+enum class UnicodeByteCategory : uint8_t {ASCII, ONE_BYTE, TWO_BYTE, FOUR_BYTE};
 
 class Utf8Proc {
 public:
 	//! Distinguishes ASCII, Valid UTF8 and Invalid UTF8 strings
 	static UnicodeType Analyze(const char *s, size_t len, UnicodeInvalidReason *invalid_reason = nullptr, size_t *invalid_pos = nullptr);
+	//! Whether the string contains only ascii or unicode, and also the unicode byte length.
+	static UnicodeByteCategory MaxUnicodeCategory(const char *s, size_t len);
 	//! Performs UTF NFC normalization of string, return value needs to be free'd
 	static char* Normalize(const char* s, size_t len);
 	//! Returns whether or not the UTF8 string is valid
