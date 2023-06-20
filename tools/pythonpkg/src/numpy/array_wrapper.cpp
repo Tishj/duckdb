@@ -648,9 +648,6 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 	if (string_format.validity.AllValid()) {
 		for (idx_t i = 0; i < count; i++) {
 			auto string_index = string_format.sel->get_index(i);
-			if (!string_format.validity.RowIsValid(string_index)) {
-				dataptr[offset + i] = Py_None;
-			}
 			auto len = string_data[string_index].GetSize();
 
 			auto codepoint_index = codepoint_format.sel->get_index(i);
@@ -663,6 +660,10 @@ void ArrayWrapper::AllocateStrings(idx_t offset, Vector &source, Vector &codepoi
 		for (idx_t i = 0; i < count; i++) {
 
 			auto string_index = string_format.sel->get_index(i);
+			if (!string_format.validity.RowIsValid(string_index)) {
+				dataptr[offset + i] = nullptr;
+				continue;
+			}
 			auto len = string_data[string_index].GetSize();
 
 			auto codepoint_index = codepoint_format.sel->get_index(i);
