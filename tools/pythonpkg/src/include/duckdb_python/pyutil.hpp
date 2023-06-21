@@ -8,6 +8,11 @@ namespace duckdb {
 
 enum class PyUnicodeType : uint8_t { ASCII = 0, ONE_BYTE = 1, TWO_BYTE = 2, FOUR_BYTE = 3 };
 
+struct PyUnicodeStringData {
+	uint32_t count;
+	PyUnicodeType type;
+};
+
 struct PyUtil {
 	static idx_t PyByteArrayGetSize(PyObject *obj) {
 		return PyByteArray_GET_SIZE(obj); // NOLINT
@@ -41,7 +46,7 @@ struct PyUtil {
 		return PyUnicode_IS_ASCII(obj);
 	}
 
-	static PyUnicodeType MaxUnicodeCategory(const char *s, uint32_t len, uint32_t &length) {
+	static PyUnicodeStringData AnalyzeUnicodeString(const uint8_t *s, uint32_t len) {
 		uint32_t ascii_codepoints = 0;
 		uint32_t one_byte_codepoints = 0;
 		uint32_t two_byte_codepoints = 0;
@@ -55,24 +60,21 @@ struct PyUtil {
 			three_byte_codepoints += (s[i] & 0xF0) == 0xE0;
 			four_byte_codepoints += (s[i] & 0xF8) == 0xF0;
 		}
-		length =
-		    ascii_codepoints + one_byte_codepoints + two_byte_codepoints + three_byte_codepoints + four_byte_codepoints;
+		PyUnicodeStringData data;
 		if (four_byte_codepoints > 0) {
-			return PyUnicodeType::FOUR_BYTE;
+			data.type = PyUnicodeType::FOUR_BYTE;
+		} else if (three_byte_codepoints > 0) {
+			data.type = PyUnicodeType::FOUR_BYTE;
+		} else if (two_byte_codepoints > 0) {
+			data.type = PyUnicodeType::TWO_BYTE;
+		} else if (one_byte_codepoints > 0) {
+			data.type = PyUnicodeType::ONE_BYTE;
+		} else {
+			data.type = PyUnicodeType::ASCII;
 		}
-		if (three_byte_codepoints > 0) {
-			return PyUnicodeType::FOUR_BYTE;
-		}
-		if (two_byte_codepoints > 0) {
-			return PyUnicodeType::TWO_BYTE;
-		}
-		if (one_byte_codepoints > 0) {
-			return PyUnicodeType::ONE_BYTE;
-		}
-		if (ascii_codepoints > 0) {
-			return PyUnicodeType::ASCII;
-		}
-		throw InternalException("Unrecognized PyUnicodeType");
+		data.count =
+		    ascii_codepoints + one_byte_codepoints + two_byte_codepoints + three_byte_codepoints + four_byte_codepoints;
+		return data;
 	}
 
 	static int PyUnicodeKind(PyObject *obj) {

@@ -893,6 +893,22 @@ int32_t GetMaxCodePoint(const string_t &val) {
 	return max_codepoint;
 }
 
+static void CollectUnicodeStringData(uint8_t *codepoint_data, uint32_t *length_data, const string_t &str, idx_t index) {
+	idx_t ascii_count = 0;
+	auto string_data = reinterpret_cast<const uint8_t *>(str.GetData());
+	auto string_length = str.GetSize();
+	for (; ascii_count < string_length && string_data[ascii_count] <= 127; ascii_count++) {
+	}
+	if (ascii_count == string_length) {
+		codepoint_data[index] = static_cast<uint8_t>(PyUnicodeType::ASCII);
+		length_data[index] = string_length;
+	} else {
+		auto unicode_string_data = PyUtil::AnalyzeUnicodeString(string_data + ascii_count, str.GetSize() - ascii_count);
+		codepoint_data[index] = static_cast<uint8_t>(unicode_string_data.type);
+		length_data[index] = ascii_count + unicode_string_data.count;
+	}
+}
+
 void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 	Vector codepoints(LogicalType::UTINYINT, (idx_t)0);
 	Vector lengths(LogicalType::UINTEGER, (idx_t)0);
@@ -925,8 +941,7 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 			for (idx_t i = 0; i < chunk.size(); i++) {
 				idx_t index = format.sel->get_index(i);
 				auto &str = strings[index];
-				codepoint_data[i] =
-				    static_cast<uint8_t>(PyUtil::MaxUnicodeCategory(str.GetData(), str.GetSize(), length_data[i]));
+				CollectUnicodeStringData(codepoint_data, length_data, str, i);
 			}
 		} else {
 			for (idx_t i = 0; i < chunk.size(); i++) {
@@ -935,8 +950,7 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 					continue;
 				}
 				auto &str = strings[index];
-				codepoint_data[i] =
-				    static_cast<uint8_t>(PyUtil::MaxUnicodeCategory(str.GetData(), str.GetSize(), length_data[i]));
+				CollectUnicodeStringData(codepoint_data, length_data, str, i);
 			}
 		}
 
