@@ -10,3 +10,7 @@ class TestUnicode(object):
         test_df = pd.DataFrame.from_dict({"i":[1, 2, 3], "j":["a", "c", u"ë"]})
         con.register('test_df_view', test_df)
         con.execute('SELECT i, j, LENGTH(j) FROM test_df_view').fetchall()
+
+    def test_unicode_types(self):
+        con = duckdb.connect()
+        

@@ -897,7 +897,7 @@ static void CollectUnicodeStringData(uint8_t *codepoint_data, uint32_t *length_d
 	idx_t ascii_count = 0;
 	auto string_data = reinterpret_cast<const uint8_t *>(str.GetData());
 	auto string_length = str.GetSize();
-	for (; ascii_count < string_length && string_data[ascii_count] <= 127; ascii_count++) {
+	for (; ascii_count < string_length && (string_data[ascii_count] & 0x80) == 0; ascii_count++) {
 	}
 	if (ascii_count == string_length) {
 		codepoint_data[index] = static_cast<uint8_t>(PyUnicodeType::ASCII);
