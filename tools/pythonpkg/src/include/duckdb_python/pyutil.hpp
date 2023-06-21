@@ -64,7 +64,7 @@ struct PyUtil {
 		if (four_byte_codepoints > 0) {
 			data.type = PyUnicodeType::FOUR_BYTE;
 		} else if (three_byte_codepoints > 0) {
-			data.type = PyUnicodeType::FOUR_BYTE;
+			data.type = PyUnicodeType::TWO_BYTE;
 		} else if (two_byte_codepoints > 0) {
 			data.type = PyUnicodeType::TWO_BYTE;
 		} else if (one_byte_codepoints > 0) {
