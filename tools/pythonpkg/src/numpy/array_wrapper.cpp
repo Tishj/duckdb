@@ -115,14 +115,8 @@ struct TimeConvert {
 struct StringConvert {
 	template <class T>
 	static void ConvertUnicodeValueTemplated(T *result, const char *data, idx_t ascii_count, idx_t len) {
-		if (sizeof(T) == sizeof(char)) {
-			// fast path for 1 byte unicode
-			memcpy(result, data, len);
-			return;
-		} else {
-			// we first fill in the batch of ascii characters directly
-			memcpy(result, data, ascii_count);
-		}
+		// we first fill in the batch of ascii characters directly
+		memcpy(result, data, ascii_count);
 		int sz;
 		idx_t pos = ascii_count;
 		idx_t i = 0;
@@ -916,7 +910,6 @@ void NumpyResultConversion::AllocateStrings(DataChunk &chunk, idx_t offset) {
 	uint32_t *length_data = nullptr;
 	bool initialized = false;
 
-	D_ASSERT(!py::gil_check());
 	// For every column that will get filled with strings, pre-allocate them here
 	for (idx_t col_idx = 0; col_idx < owned_data.size(); col_idx++) {
 		auto &column = chunk.data[col_idx];
