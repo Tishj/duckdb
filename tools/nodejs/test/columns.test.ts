@@ -13,7 +13,7 @@ describe('Column Types', function() {
 
           let cols = stmt.columns();
           
-          assert.equal(cols.length, 41);
+          assert.equal(cols.length, 42);
 
           var expected = [
             { name: 'bool', type: { id: 'BOOLEAN',  sql_type: 'BOOLEAN' } },
@@ -232,6 +232,29 @@ describe('Column Types', function() {
                   id: 'VARCHAR',
                   sql_type: 'VARCHAR'
                 }
+              }
+            },
+            {
+              name: "union",
+              type: {
+                id: "UNION",
+                sql_type: "UNION(name VARCHAR, age SMALLINT)",
+                children: [
+                  {
+                    name: "name",
+                    type: {
+                      id: "VARCHAR",
+                      sql_type: "VARCHAR"
+                    }
+                  },
+                  {
+                    name: "age",
+                    type: {
+                      id: "SMALLINT",
+                      sql_type: "SMALLINT",
+                    }
+                  }
+                ],
               }
             }
         ]
