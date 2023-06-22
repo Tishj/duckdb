@@ -215,6 +215,7 @@ idx_t ColumnDataCollectionSegment::ReadVector(ChunkManagementState &state, Vecto
 			VectorOperations::Copy(result, result, vdata.count, 0, 0);
 		}
 	}
+	result.Verify(vcount);
 	return vcount;
 }
 

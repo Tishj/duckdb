@@ -1,0 +1,44 @@
+# name: test/sql/types/string/test_string_corruption.test_slow
+# group: [string]
+
+statement ok
+CREATE or replace TABLE tbl AS
+SELECT
+    tinyint,
+    smallint,
+    int,
+    bigint,
+    hugeint,
+    utinyint,
+    usmallint,
+    uint,
+    ubigint,
+    time,
+    time_tz,
+    float,
+    double,
+    dec_4_1,
+    dec_9_4,
+    dec_18_6,
+    dec38_10,
+    interval,
+    varchar,
+    blob,
+    bit,
+    small_enum,
+    medium_enum,
+    large_enum,
+    int_array,
+    double_array,
+    varchar_array,
+    nested_int_array,
+    struct,
+    struct_of_arrays,
+    map
+FROM test_all_types(), range(4000000);
+
+statement ok
+PRAGMA temp_directory='tmp/temp.tmp';
+
+statement ok
+SELECT * FROM tbl limit 3000000;
