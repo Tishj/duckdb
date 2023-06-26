@@ -11,16 +11,25 @@ pytestmark = mark.skipif(
 )
 
 class TestHTTPFS(object):
+	@pytest.mark.skip('unreliable test breaks CI')
 	def test_read_json_httpfs(self, require):
 		connection = require('httpfs')
-		# FIXME: add test back
-		# res = connection.read_json('https://jsonplaceholder.typicode.com/todos')
-		# assert len(res.types) == 4
+		res = connection.read_json('https://jsonplaceholder.typicode.com/todos')
+		assert len(res.types) == 4
 
 	@pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
 	def test_httpfs(self, require, pandas):
 		connection = require('httpfs')
-		connection.execute("SELECT id, first_name, last_name FROM PARQUET_SCAN('https://raw.githubusercontent.com/cwida/duckdb/master/data/parquet-testing/userdata1.parquet') LIMIT 3;")
+		try:
+			connection.execute("SELECT id, first_name, last_name FROM PARQUET_SCAN('https://raw.githubusercontent.com/cwida/duckdb/master/data/parquet-testing/userdata2.parquet') LIMIT 3;")
+		except duckdb.HTTPException as e:
+			# Test will ignore result if it fails due to networking issues while running the test.
+			if (str(e).startswith("HTTP HEAD error")):
+				return
+			elif (str(e).startswith("Unable to connect")):
+				return
+			else:
+				raise e
 
 		result_df = connection.fetchdf()
 		exp_result = pandas.DataFrame({
