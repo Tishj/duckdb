@@ -20,16 +20,7 @@ class TestHTTPFS(object):
 	@pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
 	def test_httpfs(self, require, pandas):
 		connection = require('httpfs')
-		try:
-			connection.execute("SELECT id, first_name, last_name FROM PARQUET_SCAN('https://raw.githubusercontent.com/cwida/duckdb/master/data/parquet-testing/userdata1.parquet') LIMIT 3;")
-		except RuntimeError as e:
-			# Test will ignore result if it fails due to networking issues while running the test.
-			if (str(e).startswith("HTTP HEAD error")):
-				return
-			elif (str(e).startswith("Unable to connect")):
-				return
-			else:
-				raise e
+		connection.execute("SELECT id, first_name, last_name FROM PARQUET_SCAN('https://raw.githubusercontent.com/cwida/duckdb/master/data/parquet-testing/userdata1.parquet') LIMIT 3;")
 
 		result_df = connection.fetchdf()
 		exp_result = pandas.DataFrame({
