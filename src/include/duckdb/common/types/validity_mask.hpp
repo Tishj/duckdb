@@ -48,11 +48,7 @@ public:
 
 using validity_t = uint64_t;
 
-struct ValidityData : TemplatedValidityData<validity_t> {
-public:
-	DUCKDB_API explicit ValidityData(idx_t count);
-	DUCKDB_API ValidityData(const ValidityMask &original, idx_t count);
-};
+struct ValidityData : TemplatedValidityData<validity_t> {};
 
 //! Type used for validity masks
 template <typename V>

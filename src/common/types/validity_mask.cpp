@@ -2,12 +2,6 @@
 
 namespace duckdb {
 
-ValidityData::ValidityData(idx_t count) : TemplatedValidityData(count) {
-}
-ValidityData::ValidityData(const ValidityMask &original, idx_t count)
-    : TemplatedValidityData(original.GetData(), count) {
-}
-
 void ValidityMask::Combine(const ValidityMask &other, idx_t count) {
 	if (other.AllValid()) {
 		// X & 1 = X
