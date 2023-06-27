@@ -4,17 +4,45 @@ import pytest
 from conftest import NumpyPandas, ArrowPandas
 
 class TestExecute(object):
-    def test_simple_execute(self):
-        # we can use duckdb.query to run both DDL statements and select statements
-        duckdb.query('create view v1 as select 42 i')
-        rel = duckdb.query('select * from v1')
-        assert rel.fetchall()[0][0] == 42;
+    def test_simple_execute(self, connection):
+        res = connection.execute('select 42').fetchall()
+        assert res == [(42,)]
 
-        # also multiple statements
-        duckdb.query('create view v2 as select i*2 j from v1; create view v3 as select j * 2 from v2;')
-        rel = duckdb.query('select * from v3')
-        assert rel.fetchall()[0][0] == 168;
+    def test_prepared_execute(self, connection):
+        res = connection.execute('select $1', [42]).fetchall()
+        assert res == [(42,)]
 
-        # we can run multiple select statements - we get only the last result
-        res = duckdb.query('select 42; select 84;').fetchall()
-        assert res == [(84,)]
+    def test_execute_many(self, connection):
+        res = connection.execute('create table tbl (a varchar); select 42').fetchall()
+        assert res == [(42,)]
+        assert connection.table('tbl').columns == ['a']
+
+    def test_execute_many_prepared(self, connection):
+        res = connection.executemany('create table tbl (b bool); select $1', [
+            [42]
+        ]).fetchall()
+        assert res == [(42,)]
+        assert connection.table('tbl').columns == ['b']
+
+    def test_execute_insert_many_prepared(self, connection):
+        res = connection.execute('create table tbl (a varchar)')
+        connection.executemany('create table tbl2 (b bool); insert into tbl select $1', [
+            ['a'],
+            ['b']
+        ])
+        assert connection.table('tbl2').columns == ['b']
+        res = connection.table('tbl').fetchall()
+        assert res == [('a',), ('b',)]
+
+    def test_multi_execute_prepared(self, connection):
+        res = connection.execute('create table tbl (a varchar); create table tbl2 (b bool)')
+        connection.execute('insert into tbl select $1; insert into tbl2 select $1', [
+            [
+                ['a'],
+                ['b']
+            ],
+            [
+                [True],
+                [False]
+            ]
+        ])

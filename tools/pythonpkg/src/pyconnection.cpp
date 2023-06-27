@@ -478,6 +478,7 @@ unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(const string &query,
 		params_set = params;
 	}
 
+	unique_ptr<QueryResult> res;
 	// For every entry of the argument list, execute the prepared statement with said arguments
 	for (pybind11::handle single_query_params : params_set) {
 		if (prep->n_param != py::len(single_query_params)) {
@@ -485,7 +486,6 @@ unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(const string &query,
 			                            py::len(single_query_params));
 		}
 		auto args = DuckDBPyConnection::TransformPythonParamList(single_query_params);
-		unique_ptr<QueryResult> res;
 		{
 			py::gil_scoped_release release;
 			unique_lock<std::mutex> lock(py_connection_lock);
@@ -496,12 +496,8 @@ unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(const string &query,
 				res->ThrowError();
 			}
 		}
-
-		if (!many) {
-			return res;
-		}
 	}
-	return nullptr;
+	return res;
 }
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Execute(const string &query, py::object params, bool many) {

@@ -159,6 +159,9 @@ def require():
 
     return _require
 
+@pytest.fixture(scope='function', autouse=True)
+def connection():
+	return duckdb.connect()
 
 @pytest.fixture(scope='session', autouse=True)
 def duckdb_cursor(request):
