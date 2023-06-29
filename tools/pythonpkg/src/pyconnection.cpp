@@ -107,6 +107,10 @@ py::object ArrowTableFromDataframe(const py::object &df) {
 	}
 }
 
+static void InitializeConnectionOptionMethods(py::class_<PyConnectionOptions> &m) {
+	m.def_property("scan_variables", &PyConnectionOptions::GetScanVariables, &PyConnectionOptions::SetScanVariables);
+}
+
 static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_ptr<DuckDBPyConnection>> &m) {
 	m.def("cursor", &DuckDBPyConnection::Cursor, "Create a duplicate of the current connection")
 	    .def("register_filesystem", &DuckDBPyConnection::RegisterFilesystem, "Register a fsspec compliant filesystem",
@@ -126,6 +130,8 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 
 	m.def("remove_function", &DuckDBPyConnection::UnregisterUDF, "Remove a previously created function",
 	      py::arg("name"));
+
+	m.def_property_readonly("options", &DuckDBPyConnection::GetOptions);
 
 	DefineMethod({"sqltype", "dtype", "type"}, m, &DuckDBPyConnection::Type,
 	             "Create a type object by parsing the 'type_str' string", py::arg("type_str"));
@@ -250,6 +256,10 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	    .def("load_extension", &DuckDBPyConnection::LoadExtension, "Load an installed extension", py::arg("extension"));
 }
 
+const PyConnectionOptions &DuckDBPyConnection::GetOptions() {
+	return options;
+}
+
 void DuckDBPyConnection::UnregisterFilesystem(const py::str &name) {
 	auto &fs = database->GetFileSystem();
 
@@ -354,6 +364,9 @@ DuckDBPyConnection::RegisterScalarUDF(const string &name, const py::function &ud
 void DuckDBPyConnection::Initialize(py::handle &m) {
 	auto connection_module =
 	    py::class_<DuckDBPyConnection, shared_ptr<DuckDBPyConnection>>(m, "DuckDBPyConnection", py::module_local());
+
+	auto connection_settings = py::class_<PyConnectionOptions>(connection_module, "Options", py::module_local());
+	InitializeConnectionOptionMethods(connection_settings);
 
 	connection_module.def("__enter__", &DuckDBPyConnection::Enter)
 	    .def("__exit__", &DuckDBPyConnection::Exit, py::arg("exc_type"), py::arg("exc"), py::arg("traceback"));
@@ -1470,7 +1483,15 @@ void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig
 	                             "The maximum number of rows to sample when analyzing a pandas object column.",
 	                             LogicalType::UBIGINT, Value::UBIGINT(1000));
 	if (db_config.options.enable_external_access) {
-		db_config.replacement_scans.emplace_back(ScanReplacement);
+		auto replacement_scan = [&res](ClientContext &context, const string &table_name,
+		                               ReplacementScanData *data) -> unique_ptr<TableRef> {
+			if (!res.options.scan_variables) {
+				// If scanning local variables is disabled, override this replacement scan
+				return nullptr;
+			}
+			return ScanReplacement(context, table_name, data);
+		};
+		db_config.replacement_scans.emplace_back(replacement_scan);
 	}
 }
 

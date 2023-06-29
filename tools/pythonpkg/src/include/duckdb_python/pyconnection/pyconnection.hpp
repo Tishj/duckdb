@@ -37,8 +37,22 @@ public:
 	unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory;
 };
 
+struct PyConnectionOptions {
+public:
+	bool scan_variables = true;
+
+public:
+	bool GetScanVariables() {
+		return scan_variables;
+	}
+	void SetScanVariables(bool value) {
+		scan_variables = value;
+	}
+};
+
 struct DuckDBPyConnection : public std::enable_shared_from_this<DuckDBPyConnection> {
 public:
+	PyConnectionOptions options;
 	shared_ptr<DuckDB> database;
 	unique_ptr<Connection> connection;
 	unique_ptr<DuckDBPyRelation> result;
@@ -67,6 +81,8 @@ public:
 	static shared_ptr<DuckDBPyConnection> DefaultConnection();
 	static PythonImportCache *ImportCache();
 	static bool IsInteractive();
+
+	const PyConnectionOptions &GetOptions();
 
 	unique_ptr<DuckDBPyRelation>
 	ReadCSV(const py::object &name, const py::object &header = py::none(), const py::object &compression = py::none(),
