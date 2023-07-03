@@ -183,13 +183,14 @@ class DuckDBPyConnection:
     def create_function(
         self,
         name: str,
-        func: Callable,
-        args: Optional[List[DuckDBPyType]],
+        function: Callable,
         return_type: Optional[DuckDBPyType],
-        vectorized: Optional[bool] = False,
+        parameters: Optional[List[DuckDBPyType]],
+        type: Optional[PythonUDFType] = PythonUDFType.NATIVE,
         null_handling: Optional[FunctionNullHandling] = FunctionNullHandling.DEFAULT,
         exception_handling: Optional[PythonExceptionHandling] = PythonExceptionHandling.DEFAULT,
-        side_effects: Optional[bool] = False)  -> DuckDBPyConnection: ...
+        side_effects: Optional[bool] = False,
+    )  -> DuckDBPyConnection: ...
     def register_filesystem(self, filesystem: fsspec.AbstractFileSystem) -> None: ...
     def rollback(self) -> DuckDBPyConnection: ...
     def sql(self, query: str, alias: str = ...) -> DuckDBPyRelation: ...
@@ -535,10 +536,10 @@ def register(view_name: str, python_object: object, connection: DuckDBPyConnecti
 def remove_function(name: str, connection : DuckDBPyConnection = ...) -> DuckDBPyConnection: ...
 def create_function(
     name: str,
-    func: Callable,
-    args: Optional[List[DuckDBPyType]],
+    function: Callable,
     return_type: Optional[DuckDBPyType],
-    vectorized: Optional[bool] = False,
+    parameters: Optional[List[DuckDBPyType]],
+    type: Optional[PythonUDFType] = PythonUDFType.NATIVE,
     null_handling: Optional[FunctionNullHandling] = FunctionNullHandling.DEFAULT,
     exception_handling: Optional[PythonExceptionHandling] = PythonExceptionHandling.DEFAULT,
     side_effects: Optional[bool] = False,
