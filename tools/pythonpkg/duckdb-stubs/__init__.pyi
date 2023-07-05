@@ -82,6 +82,7 @@ class PythonExceptionHandling:
 
 class DuckDBPyConnection:
     class Options:
+        def __init__(self, *args, **kwargs) -> None: ...
         @property
         def scan_variables(self) -> bool: ...
 
