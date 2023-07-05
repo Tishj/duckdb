@@ -22,15 +22,17 @@ class TestPandasObject(object):
         df = con.execute('select * from view2').fetchall()
         assert df == [(1, None, 2),(1, 1.1, 2), (1, 1.1, 2), (1, 1.1, 2)]
 
-    def test_tuple_to_list(self, duckdb_cursor):
+    def test_tuple_to_list(self):
+        con = duckdb.connect()
         tuple_df = pd.DataFrame.from_dict(dict(nums=[(1,2,3,),(4,5,6,)]))
-        duckdb_cursor.execute("CREATE TABLE test as SELECT * FROM tuple_df");
-        res = duckdb_cursor.table('test').fetchall()
+        con.execute("CREATE TABLE test as SELECT * FROM tuple_df");
+        res = con.table('test').fetchall()
         assert res == [([1, 2, 3],), ([4, 5, 6],)]
 
-    def test_2273(self, duckdb_cursor):                  
+    def test_2273(self):
+        con = duckdb.connect()
         df_in = pd.DataFrame([[datetime.date(1992, 7, 30)]])
-        assert duckdb.query("Select * from df_in").fetchall() == [(datetime.date(1992, 7, 30),)]
+        assert con.query("Select * from df_in").fetchall() == [(datetime.date(1992, 7, 30),)]
 
     def test_object_to_string_with_stride(self, duckdb_cursor):
         data = np.array([["a", "b", "c"], [1,2,3], [1, 2, 3], [11, 22, 33]])

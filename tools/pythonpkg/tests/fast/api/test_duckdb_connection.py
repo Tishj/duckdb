@@ -266,7 +266,16 @@ class TestDuckDBConnection(object):
 
         # Skip all of the initial __xxxx__ methods
         connection_methods = dir(con)
-        filtered_methods = [method for method in connection_methods if not is_dunder_method(method)]
+        def is_excluded_method(method):
+            if method in [
+                'Options',
+                'options'
+            ]:
+                return True
+            if is_dunder_method(method):
+                return True
+            return False
+        filtered_methods = [method for method in connection_methods if not is_excluded_method(method)]
         for method in filtered_methods:
             # Assert that every method of DuckDBPyConnection is wrapped by the 'duckdb' module
             assert method in dir(duckdb)
