@@ -3,6 +3,7 @@ import tempfile
 import os
 import pytest
 import pandas as pd
+import datetime
 
 class TestConnectionSettings(object):
     def test_register_precedence(self):
@@ -41,3 +42,7 @@ class TestConnectionSettings(object):
         with pytest.raises(duckdb.CatalogException):
             # Because we disabled scanning variables, no replacement will be done for 'df'
             con.sql('select * from df')
+
+        con2 = duckdb.connect()
+        # Make sure these options are separate per connection
+        assert con2.options.scan_variables == True

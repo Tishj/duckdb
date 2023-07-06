@@ -256,8 +256,12 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	    .def("load_extension", &DuckDBPyConnection::LoadExtension, "Load an installed extension", py::arg("extension"));
 }
 
-const PyConnectionOptions &DuckDBPyConnection::GetOptions() {
-	return options;
+PyConnectionOptions DuckDBPyConnection::GetOptions() {
+	if (!connection) {
+		throw ConnectionException("Connection already closed!");
+	}
+	auto &config = connection->context->config;
+	return PyConnectionOptions(config);
 }
 
 void DuckDBPyConnection::UnregisterFilesystem(const py::str &name) {
@@ -1483,9 +1487,9 @@ void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig
 	                             "The maximum number of rows to sample when analyzing a pandas object column.",
 	                             LogicalType::UBIGINT, Value::UBIGINT(1000));
 	if (db_config.options.enable_external_access) {
-		auto replacement_scan = [&res](ClientContext &context, const string &table_name,
-		                               ReplacementScanData *data) -> unique_ptr<TableRef> {
-			if (!res.options.scan_variables) {
+		auto replacement_scan = [](ClientContext &context, const string &table_name,
+		                           ReplacementScanData *data) -> unique_ptr<TableRef> {
+			if (!context.config.scan_python_variables) {
 				// If scanning local variables is disabled, override this replacement scan
 				return nullptr;
 			}

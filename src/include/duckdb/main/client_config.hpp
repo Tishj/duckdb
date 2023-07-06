@@ -83,6 +83,8 @@ struct ClientConfig {
 	idx_t perfect_ht_threshold = 12;
 	//! The maximum number of rows to accumulate before sorting ordered aggregates.
 	idx_t ordered_aggregate_threshold = (idx_t(1) << 18);
+	//! Whether or not a replacement scan should be performed on local/global python variables
+	bool scan_python_variables = true;
 
 	//! Callback to create a progress bar display
 	progress_bar_display_create_func_t display_create_func = nullptr;
