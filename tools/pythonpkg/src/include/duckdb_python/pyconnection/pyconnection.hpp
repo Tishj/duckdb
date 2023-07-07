@@ -57,6 +57,7 @@ public:
 	static void Initialize(py::handle &m);
 	static void Cleanup();
 
+	static string CheckVariableName(const py::object &obj);
 	shared_ptr<DuckDBPyConnection> Enter();
 
 	static void Exit(DuckDBPyConnection &self, const py::object &exc_type, const py::object &exc,

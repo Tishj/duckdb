@@ -290,6 +290,8 @@ PYBIND11_MODULE(DUCKDB_PYTHON_LIB_NAME, m) { // NOLINT
 
 	py::options pybind_opts;
 
+	m.def("get_variable_name", &DuckDBPyConnection::CheckVariableName, py::arg("obj"));
+
 	m.doc() = "DuckDB is an embeddable SQL OLAP Database Management System";
 	m.attr("__package__") = "duckdb";
 	m.attr("__version__") = DuckDB::LibraryVersion();

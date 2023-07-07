@@ -1590,6 +1590,33 @@ bool DuckDBPyConnection::IsInteractive() {
 	return DuckDBPyConnection::environment != PythonEnvironmentType::NORMAL;
 }
 
+static bool ScanPythonDict(const py::object &obj, py::dict &dict, string &result) {
+	for (auto &item : dict) {
+		auto name = std::string(pybind11::str(item.first));
+		if (obj.ptr() == item.second.ptr()) {
+			result = name;
+			return true;
+		}
+	}
+	return false;
+}
+
+string DuckDBPyConnection::CheckVariableName(const py::object &obj) {
+	auto current_frame = py::module::import("inspect").attr("currentframe")();
+	auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
+	// search local dictionary
+	string variable_name;
+	if (local_dict && ScanPythonDict(obj, local_dict, variable_name)) {
+		return variable_name;
+	}
+	// search global dictionary
+	auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
+	if (global_dict && ScanPythonDict(obj, global_dict, variable_name)) {
+		return variable_name;
+	}
+	return "<NOT A LOCAL OR GLOBAL VARIABLE>";
+}
+
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Enter() {
 	return shared_from_this();
 }
