@@ -128,7 +128,8 @@ py::list DuckDBPyResult::Fetchall() {
 }
 
 py::dict DuckDBPyResult::FetchNumpy() {
-	return FetchNumpyInternal();
+	idx_t row_count;
+	return FetchNumpyInternal(row_count);
 }
 
 void DuckDBPyResult::FillNumpy(py::dict &res, idx_t col_idx, NumpyResultConversion &conversion, const char *name) {
@@ -156,7 +157,7 @@ py::dict DuckDBPyResult::FillDictionary(NumpyResultConversion &conversion) {
 	return res;
 }
 
-py::dict DuckDBPyResult::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk) {
+py::dict DuckDBPyResult::FetchNumpyInternal(idx_t &count, bool stream, idx_t vectors_per_chunk) {
 	if (!result) {
 		throw InvalidInputException("result closed");
 	}
@@ -165,6 +166,7 @@ py::dict DuckDBPyResult::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk
 	if (result->type == QueryResultType::NUMPY_RESULT) {
 		auto &numpy_result = result->Cast<NumpyQueryResult>();
 		auto &conversion = numpy_result.Collection();
+		count = conversion.Count();
 		return FillDictionary(conversion);
 	}
 
@@ -206,6 +208,7 @@ py::dict DuckDBPyResult::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk
 		}
 	}
 
+	count = conversion.Count();
 	return FillDictionary(conversion);
 }
 
@@ -229,9 +232,13 @@ void DuckDBPyResult::ChangeDateToDatetime(PandasDataFrame &df) {
 	}
 }
 
-PandasDataFrame DuckDBPyResult::FrameFromNumpy(bool date_as_object, const py::handle &o) {
+PandasDataFrame DuckDBPyResult::FrameFromNumpy(bool date_as_object, const py::handle &o, idx_t row_count) {
 	D_ASSERT(py::gil_check());
-	auto df = py::cast<PandasDataFrame>(py::module::import("pandas").attr("DataFrame")(o));
+	auto array_manager = py::module::import("pandas").attr("core").attr("internals").attr("ArrayManager");
+	auto row_index = py::module::import("pandas").attr("RangeIndex")(0, row_count, 1);
+	auto column_index = py::module::import("pandas").attr("Index")(o.attr("keys")());
+	auto manager = array_manager(o.attr("values")(), py::make_tuple(row_index, column_index));
+	auto df = py::cast<PandasDataFrame>(py::module::import("pandas").attr("DataFrame")(manager));
 	// Unfortunately we have to do a type change here for timezones since these types are not supported by numpy
 	ChangeToTZType(df);
 	if (date_as_object) {
@@ -242,18 +249,23 @@ PandasDataFrame DuckDBPyResult::FrameFromNumpy(bool date_as_object, const py::ha
 
 PandasDataFrame DuckDBPyResult::FetchDF(bool date_as_object) {
 	timezone_config = QueryResult::GetConfigTimezone(*result);
-	return FrameFromNumpy(date_as_object, FetchNumpyInternal());
+	idx_t row_count;
+	auto dict = FetchNumpyInternal(row_count);
+	return FrameFromNumpy(date_as_object, std::move(dict), row_count);
 }
 
 PandasDataFrame DuckDBPyResult::FetchDFChunk(idx_t num_of_vectors, bool date_as_object) {
 	if (timezone_config.empty()) {
 		timezone_config = QueryResult::GetConfigTimezone(*result);
 	}
-	return FrameFromNumpy(date_as_object, FetchNumpyInternal(true, num_of_vectors));
+	idx_t row_count;
+	auto dict = FetchNumpyInternal(row_count, true, num_of_vectors);
+	return FrameFromNumpy(date_as_object, std::move(dict), row_count);
 }
 
 py::dict DuckDBPyResult::FetchPyTorch() {
-	auto result_dict = FetchNumpyInternal();
+	idx_t row_count;
+	auto result_dict = FetchNumpyInternal(row_count);
 	auto from_numpy = py::module::import("torch").attr("from_numpy");
 	for (auto &item : result_dict) {
 		result_dict[item.first] = from_numpy(item.second);
@@ -262,7 +274,8 @@ py::dict DuckDBPyResult::FetchPyTorch() {
 }
 
 py::dict DuckDBPyResult::FetchTF() {
-	auto result_dict = FetchNumpyInternal();
+	idx_t row_count;
+	auto result_dict = FetchNumpyInternal(row_count);
 	auto convert_to_tensor = py::module::import("tensorflow").attr("convert_to_tensor");
 	for (auto &item : result_dict) {
 		result_dict[item.first] = convert_to_tensor(item.second);

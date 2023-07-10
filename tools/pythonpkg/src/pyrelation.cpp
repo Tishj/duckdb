@@ -537,7 +537,9 @@ py::dict DuckDBPyRelation::FetchNumpyInternal(bool stream, idx_t vectors_per_chu
 		ExecuteOrThrow();
 	}
 	AssertResultOpen();
-	auto res = result->FetchNumpyInternal(stream, vectors_per_chunk);
+	// Unused variable
+	idx_t row_count;
+	auto res = result->FetchNumpyInternal(row_count, stream, vectors_per_chunk);
 	result = nullptr;
 	return res;
 }

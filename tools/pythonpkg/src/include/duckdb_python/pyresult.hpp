@@ -29,7 +29,7 @@ public:
 
 	py::dict FetchNumpy();
 
-	py::dict FetchNumpyInternal(bool stream = false, idx_t vectors_per_chunk = 1);
+	py::dict FetchNumpyInternal(idx_t &count, bool stream = false, idx_t vectors_per_chunk = 1);
 
 	PandasDataFrame FetchDF(bool date_as_object);
 
@@ -62,7 +62,7 @@ private:
 
 	bool FetchArrowChunk(QueryResult *result, py::list &batches, idx_t rows_per_batch);
 
-	PandasDataFrame FrameFromNumpy(bool date_as_object, const py::handle &o);
+	PandasDataFrame FrameFromNumpy(bool date_as_object, const py::handle &o, idx_t count);
 
 	void ChangeToTZType(PandasDataFrame &df);
 	void ChangeDateToDatetime(PandasDataFrame &df);
