@@ -74,14 +74,17 @@ def benchmark_queries(benchmark_name, con, queries):
                     if verbose:
                         print(f"Fetching '{q}' as a DataFrame")
                     df_result = rel.df()
+                    del df_result
                 elif benchmark_name.startswith('arrow'):
                     if verbose:
                         print(f"Fetching '{q}' as an Arrow table")
                     df_result = rel.arrow()
+                    del df_result
                 else:
                     if verbose:
                         print(f"Fetching '{q}' as native Python lists/tuples")
                     df_result = rel.fetchall()
+                    del df_result
             else:
                 if verbose:
                     print(f"Query '{q}' did not produce output")
