@@ -1,6 +1,25 @@
 from statistics import mean
 import duckdb
 import time
+import sys
+
+out_file = None
+
+for arg in sys.argv[1:]:
+    if arg == "--verbose":
+        verbose = True
+    elif arg.startswith("--threads="):
+        threads = int(arg.replace("--threads=", ""))
+    elif arg.startswith("--nruns="):
+        nruns = int(arg.replace("--nruns=", ""))
+    elif arg.startswith("--out-file="):
+        out_file = arg.replace("--out-file=", "")
+    else:
+        print(f"Unrecognized parameter '{arg}'")
+        exit(1)
+
+if out_file is not None:
+	f = open(out_file, 'w+')
 
 con = duckdb.connect()
 
@@ -69,7 +88,7 @@ projection = ", ".join(columns)
 con.execute(f"""
 	create table tbl as select
 		{projection} from (select * from test_all_types() limit 1 offset 1),
-		range(10000)
+		range(1500000)
 """)
 
 result_collectors = {
@@ -86,9 +105,15 @@ for name, result_collector in result_collectors.items():
 			rel = con.table('tbl')[col]
 			start = time.time()
 			res = getattr(rel, result_collector)()
+			del(res)
 			end = time.time()
 			diff = end - start
 			times.append(diff)
-			print(f"{name}_{col}\t{i}\t{diff}")
+			timing = f"{name}_{col}\t{i}\t{diff}"
+			if out_file is not None:
+				f.write(timing)
+				f.write('\n')
+			else:
+				print(timing)
 		average = mean(times)
-		print(average)
+		print(f"\t{name}\t{col}\taverage:\t{average}")
