@@ -5,7 +5,7 @@ add_library_unity(
   OBJECT
   numeric_constant.cpp
   fixed_size_uncompressed.cpp
-  rle.cpp
+  ree.cpp
   dictionary_compression.cpp
   string_uncompressed.cpp
   uncompressed.cpp

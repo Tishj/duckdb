@@ -11,25 +11,25 @@
 
 namespace duckdb {
 
-using rle_count_t = uint16_t;
+using ree_count_t = uint16_t;
 
 //===--------------------------------------------------------------------===//
 // Analyze
 //===--------------------------------------------------------------------===//
-struct EmptyRLEWriter {
+struct EmptyREEWriter {
 	template <class VALUE_TYPE>
-	static void Operation(VALUE_TYPE value, rle_count_t count, void *dataptr, bool is_null) {
+	static void Operation(VALUE_TYPE value, ree_count_t count, void *dataptr, bool is_null) {
 	}
 };
 
 template <class T>
-struct RLEState {
-	RLEState() : seen_count(0), last_value(NullValue<T>()), last_seen_count(0), dataptr(nullptr) {
+struct REEState {
+	REEState() : seen_count(0), last_value(NullValue<T>()), last_seen_count(0), dataptr(nullptr) {
 	}
 
 	idx_t seen_count;
 	T last_value;
-	rle_count_t last_seen_count;
+	ree_count_t last_seen_count;
 	void *dataptr;
 	bool all_null = true;
 
@@ -39,7 +39,7 @@ public:
 		OP::template Operation<T>(last_value, last_seen_count, dataptr, all_null);
 	}
 
-	template <class OP = EmptyRLEWriter>
+	template <class OP = EmptyREEWriter>
 	void Update(const T *data, ValidityMask &validity, idx_t idx) {
 		if (validity.RowIsValid(idx)) {
 			if (all_null) {
@@ -60,7 +60,7 @@ public:
 				// issue the callback on the last value
 				Flush<OP>();
 
-				// increment the seen_count and put the new value into the RLE slot
+				// increment the seen_count and put the new value into the REE slot
 				last_value = data[idx];
 				seen_count++;
 				last_seen_count = 1;
@@ -69,7 +69,7 @@ public:
 			// NULL value: we merely increment the last_seen_count
 			last_seen_count++;
 		}
-		if (last_seen_count == NumericLimits<rle_count_t>::Maximum()) {
+		if (last_seen_count == NumericLimits<ree_count_t>::Maximum()) {
 			// we have seen the same value so many times in a row we are at the limit of what fits in our count
 			// write away the value and move to the next value
 			Flush<OP>();
@@ -80,69 +80,69 @@ public:
 };
 
 template <class T>
-struct RLEAnalyzeState : public AnalyzeState {
-	RLEAnalyzeState() {
+struct REEAnalyzeState : public AnalyzeState {
+	REEAnalyzeState() {
 	}
 
-	RLEState<T> state;
+	REEState<T> state;
 };
 
 template <class T>
-unique_ptr<AnalyzeState> RLEInitAnalyze(ColumnData &col_data, PhysicalType type) {
-	return make_uniq<RLEAnalyzeState<T>>();
+unique_ptr<AnalyzeState> REEInitAnalyze(ColumnData &col_data, PhysicalType type) {
+	return make_uniq<REEAnalyzeState<T>>();
 }
 
 template <class T>
-bool RLEAnalyze(AnalyzeState &state, Vector &input, idx_t count) {
-	auto &rle_state = state.template Cast<RLEAnalyzeState<T>>();
+bool REEAnalyze(AnalyzeState &state, Vector &input, idx_t count) {
+	auto &ree_state = state.template Cast<REEAnalyzeState<T>>();
 	UnifiedVectorFormat vdata;
 	input.ToUnifiedFormat(count, vdata);
 
 	auto data = UnifiedVectorFormat::GetData<T>(vdata);
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = vdata.sel->get_index(i);
-		rle_state.state.Update(data, vdata.validity, idx);
+		ree_state.state.Update(data, vdata.validity, idx);
 	}
 	return true;
 }
 
 template <class T>
-idx_t RLEFinalAnalyze(AnalyzeState &state) {
-	auto &rle_state = state.template Cast<RLEAnalyzeState<T>>();
-	return (sizeof(rle_count_t) + sizeof(T)) * rle_state.state.seen_count;
+idx_t REEFinalAnalyze(AnalyzeState &state) {
+	auto &ree_state = state.template Cast<REEAnalyzeState<T>>();
+	return (sizeof(ree_count_t) + sizeof(T)) * ree_state.state.seen_count;
 }
 
 //===--------------------------------------------------------------------===//
 // Compress
 //===--------------------------------------------------------------------===//
-struct RLEConstants {
-	static constexpr const idx_t RLE_HEADER_SIZE = sizeof(uint64_t);
+struct REEConstants {
+	static constexpr const idx_t REE_HEADER_SIZE = sizeof(uint64_t);
 };
 
 template <class T, bool WRITE_STATISTICS>
-struct RLECompressState : public CompressionState {
-	struct RLEWriter {
+struct REECompressState : public CompressionState {
+	struct REEWriter {
 		template <class VALUE_TYPE>
-		static void Operation(VALUE_TYPE value, rle_count_t count, void *dataptr, bool is_null) {
-			auto state = reinterpret_cast<RLECompressState<T, WRITE_STATISTICS> *>(dataptr);
+		static void Operation(VALUE_TYPE value, ree_count_t count, void *dataptr, bool is_null) {
+			auto state = reinterpret_cast<REECompressState<T, WRITE_STATISTICS> *>(dataptr);
 			state->WriteValue(value, count, is_null);
 		}
 	};
 
-	static idx_t MaxRLECount() {
-		auto entry_size = sizeof(T) + sizeof(rle_count_t);
-		auto entry_count = (Storage::BLOCK_SIZE - RLEConstants::RLE_HEADER_SIZE) / entry_size;
+	static idx_t MaxREECount() {
+		auto entry_size = sizeof(T) + sizeof(ree_count_t);
+		auto entry_count = (Storage::BLOCK_SIZE - REEConstants::REE_HEADER_SIZE) / entry_size;
 		auto max_vector_count = entry_count / STANDARD_VECTOR_SIZE;
 		return max_vector_count * STANDARD_VECTOR_SIZE;
 	}
 
-	explicit RLECompressState(ColumnDataCheckpointer &checkpointer_p)
+	explicit REECompressState(ColumnDataCheckpointer &checkpointer_p)
 	    : checkpointer(checkpointer_p),
-	      function(checkpointer.GetCompressionFunction(CompressionType::COMPRESSION_RLE)) {
+	      function(checkpointer.GetCompressionFunction(CompressionType::COMPRESSION_REE)) {
 		CreateEmptySegment(checkpointer.GetRowGroup().start);
 
 		state.dataptr = (void *)this;
-		max_rle_count = MaxRLECount();
+		max_ree_count = MaxREECount();
 	}
 
 	void CreateEmptySegment(idx_t row_start) {
@@ -159,15 +159,15 @@ struct RLECompressState : public CompressionState {
 		auto data = UnifiedVectorFormat::GetData<T>(vdata);
 		for (idx_t i = 0; i < count; i++) {
 			auto idx = vdata.sel->get_index(i);
-			state.template Update<RLECompressState<T, WRITE_STATISTICS>::RLEWriter>(data, vdata.validity, idx);
+			state.template Update<REECompressState<T, WRITE_STATISTICS>::REEWriter>(data, vdata.validity, idx);
 		}
 	}
 
-	void WriteValue(T value, rle_count_t count, bool is_null) {
-		// write the RLE entry
-		auto handle_ptr = handle.Ptr() + RLEConstants::RLE_HEADER_SIZE;
+	void WriteValue(T value, ree_count_t count, bool is_null) {
+		// write the REE entry
+		auto handle_ptr = handle.Ptr() + REEConstants::REE_HEADER_SIZE;
 		auto data_pointer = (T *)handle_ptr;
-		auto index_pointer = (rle_count_t *)(handle_ptr + max_rle_count * sizeof(T));
+		auto index_pointer = (ree_count_t *)(handle_ptr + max_ree_count * sizeof(T));
 		data_pointer[entry_count] = value;
 		index_pointer[entry_count] = count;
 		entry_count++;
@@ -178,7 +178,7 @@ struct RLECompressState : public CompressionState {
 		}
 		current_segment->count += count;
 
-		if (entry_count == max_rle_count) {
+		if (entry_count == max_ree_count) {
 			// we have finished writing this segment: flush it and create a new segment
 			auto row_start = current_segment->start + current_segment->count;
 			FlushSegment();
@@ -190,14 +190,14 @@ struct RLECompressState : public CompressionState {
 	void FlushSegment() {
 		// flush the segment
 		// we compact the segment by moving the counts so they are directly next to the values
-		idx_t counts_size = sizeof(rle_count_t) * entry_count;
-		idx_t original_rle_offset = RLEConstants::RLE_HEADER_SIZE + max_rle_count * sizeof(T);
-		idx_t minimal_rle_offset = AlignValue(RLEConstants::RLE_HEADER_SIZE + sizeof(T) * entry_count);
-		idx_t total_segment_size = minimal_rle_offset + counts_size;
+		idx_t counts_size = sizeof(ree_count_t) * entry_count;
+		idx_t original_ree_offset = REEConstants::REE_HEADER_SIZE + max_ree_count * sizeof(T);
+		idx_t minimal_ree_offset = AlignValue(REEConstants::REE_HEADER_SIZE + sizeof(T) * entry_count);
+		idx_t total_segment_size = minimal_ree_offset + counts_size;
 		auto data_ptr = handle.Ptr();
-		memmove(data_ptr + minimal_rle_offset, data_ptr + original_rle_offset, counts_size);
-		// store the final RLE offset within the segment
-		Store<uint64_t>(minimal_rle_offset, data_ptr);
+		memmove(data_ptr + minimal_ree_offset, data_ptr + original_ree_offset, counts_size);
+		// store the final REE offset within the segment
+		Store<uint64_t>(minimal_ree_offset, data_ptr);
 		handle.Destroy();
 
 		auto &state = checkpointer.GetCheckpointState();
@@ -205,7 +205,7 @@ struct RLECompressState : public CompressionState {
 	}
 
 	void Finalize() {
-		state.template Flush<RLECompressState<T, WRITE_STATISTICS>::RLEWriter>();
+		state.template Flush<REECompressState<T, WRITE_STATISTICS>::REEWriter>();
 
 		FlushSegment();
 		current_segment.reset();
@@ -216,19 +216,19 @@ struct RLECompressState : public CompressionState {
 	unique_ptr<ColumnSegment> current_segment;
 	BufferHandle handle;
 
-	RLEState<T> state;
+	REEState<T> state;
 	idx_t entry_count = 0;
-	idx_t max_rle_count;
+	idx_t max_ree_count;
 };
 
 template <class T, bool WRITE_STATISTICS>
-unique_ptr<CompressionState> RLEInitCompression(ColumnDataCheckpointer &checkpointer, unique_ptr<AnalyzeState> state) {
-	return make_uniq<RLECompressState<T, WRITE_STATISTICS>>(checkpointer);
+unique_ptr<CompressionState> REEInitCompression(ColumnDataCheckpointer &checkpointer, unique_ptr<AnalyzeState> state) {
+	return make_uniq<REECompressState<T, WRITE_STATISTICS>>(checkpointer);
 }
 
 template <class T, bool WRITE_STATISTICS>
-void RLECompress(CompressionState &state_p, Vector &scan_vector, idx_t count) {
-	auto &state = (RLECompressState<T, WRITE_STATISTICS> &)state_p;
+void REECompress(CompressionState &state_p, Vector &scan_vector, idx_t count) {
+	auto &state = (REECompressState<T, WRITE_STATISTICS> &)state_p;
 	UnifiedVectorFormat vdata;
 	scan_vector.ToUnifiedFormat(count, vdata);
 
@@ -236,8 +236,8 @@ void RLECompress(CompressionState &state_p, Vector &scan_vector, idx_t count) {
 }
 
 template <class T, bool WRITE_STATISTICS>
-void RLEFinalizeCompress(CompressionState &state_p) {
-	auto &state = (RLECompressState<T, WRITE_STATISTICS> &)state_p;
+void REEFinalizeCompress(CompressionState &state_p) {
+	auto &state = (REECompressState<T, WRITE_STATISTICS> &)state_p;
 	state.Finalize();
 }
 
@@ -245,25 +245,25 @@ void RLEFinalizeCompress(CompressionState &state_p) {
 // Scan
 //===--------------------------------------------------------------------===//
 template <class T>
-struct RLEScanState : public SegmentScanState {
-	explicit RLEScanState(ColumnSegment &segment) {
+struct REEScanState : public SegmentScanState {
+	explicit REEScanState(ColumnSegment &segment) {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 		handle = buffer_manager.Pin(segment.block);
 		entry_pos = 0;
 		position_in_entry = 0;
-		rle_count_offset = Load<uint64_t>(handle.Ptr() + segment.GetBlockOffset());
-		D_ASSERT(rle_count_offset <= Storage::BLOCK_SIZE);
+		ree_count_offset = Load<uint64_t>(handle.Ptr() + segment.GetBlockOffset());
+		D_ASSERT(ree_count_offset <= Storage::BLOCK_SIZE);
 	}
 
 	void Skip(ColumnSegment &segment, idx_t skip_count) {
 		auto data = handle.Ptr() + segment.GetBlockOffset();
-		auto index_pointer = (rle_count_t *)(data + rle_count_offset);
+		auto index_pointer = (ree_count_t *)(data + ree_count_offset);
 
 		for (idx_t i = 0; i < skip_count; i++) {
 			// assign the current value
 			position_in_entry++;
 			if (position_in_entry >= index_pointer[entry_pos]) {
-				// handled all entries in this RLE value
+				// handled all entries in this REE value
 				// move to the next entry
 				entry_pos++;
 				position_in_entry = 0;
@@ -274,12 +274,12 @@ struct RLEScanState : public SegmentScanState {
 	BufferHandle handle;
 	idx_t entry_pos;
 	idx_t position_in_entry;
-	uint32_t rle_count_offset;
+	uint32_t ree_count_offset;
 };
 
 template <class T>
-unique_ptr<SegmentScanState> RLEInitScan(ColumnSegment &segment) {
-	auto result = make_uniq<RLEScanState<T>>(segment);
+unique_ptr<SegmentScanState> REEInitScan(ColumnSegment &segment) {
+	auto result = make_uniq<REEScanState<T>>(segment);
 	return std::move(result);
 }
 
@@ -287,19 +287,19 @@ unique_ptr<SegmentScanState> RLEInitScan(ColumnSegment &segment) {
 // Scan base data
 //===--------------------------------------------------------------------===//
 template <class T>
-void RLESkip(ColumnSegment &segment, ColumnScanState &state, idx_t skip_count) {
-	auto &scan_state = state.scan_state->Cast<RLEScanState<T>>();
+void REESkip(ColumnSegment &segment, ColumnScanState &state, idx_t skip_count) {
+	auto &scan_state = state.scan_state->Cast<REEScanState<T>>();
 	scan_state.Skip(segment, skip_count);
 }
 
 template <class T>
-void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
+void REEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
                     idx_t result_offset) {
-	auto &scan_state = state.scan_state->Cast<RLEScanState<T>>();
+	auto &scan_state = state.scan_state->Cast<REEScanState<T>>();
 
 	auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
-	auto data_pointer = (T *)(data + RLEConstants::RLE_HEADER_SIZE);
-	auto index_pointer = (rle_count_t *)(data + scan_state.rle_count_offset);
+	auto data_pointer = (T *)(data + REEConstants::REE_HEADER_SIZE);
+	auto index_pointer = (ree_count_t *)(data + scan_state.ree_count_offset);
 
 	auto result_data = FlatVector::GetData<T>(result);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -308,7 +308,7 @@ void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_c
 		result_data[result_offset + i] = data_pointer[scan_state.entry_pos];
 		scan_state.position_in_entry++;
 		if (scan_state.position_in_entry >= index_pointer[scan_state.entry_pos]) {
-			// handled all entries in this RLE value
+			// handled all entries in this REE value
 			// move to the next entry
 			scan_state.entry_pos++;
 			scan_state.position_in_entry = 0;
@@ -317,21 +317,21 @@ void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_c
 }
 
 template <class T>
-void RLEScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result) {
+void REEScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result) {
 	// FIXME: emit constant vector if repetition of single value is >= scan_count
-	RLEScanPartial<T>(segment, state, scan_count, result, 0);
+	REEScanPartial<T>(segment, state, scan_count, result, 0);
 }
 
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
 template <class T>
-void RLEFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
-	RLEScanState<T> scan_state(segment);
+void REEFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
+	REEScanState<T> scan_state(segment);
 	scan_state.Skip(segment, row_id);
 
 	auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
-	auto data_pointer = (T *)(data + RLEConstants::RLE_HEADER_SIZE);
+	auto data_pointer = (T *)(data + REEConstants::REE_HEADER_SIZE);
 	auto result_data = FlatVector::GetData<T>(result);
 	result_data[result_idx] = data_pointer[scan_state.entry_pos];
 }
@@ -340,46 +340,46 @@ void RLEFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, 
 // Get Function
 //===--------------------------------------------------------------------===//
 template <class T, bool WRITE_STATISTICS = true>
-CompressionFunction GetRLEFunction(PhysicalType data_type) {
-	return CompressionFunction(CompressionType::COMPRESSION_RLE, data_type, RLEInitAnalyze<T>, RLEAnalyze<T>,
-	                           RLEFinalAnalyze<T>, RLEInitCompression<T, WRITE_STATISTICS>,
-	                           RLECompress<T, WRITE_STATISTICS>, RLEFinalizeCompress<T, WRITE_STATISTICS>,
-	                           RLEInitScan<T>, RLEScan<T>, RLEScanPartial<T>, RLEFetchRow<T>, RLESkip<T>);
+CompressionFunction GetREEFunction(PhysicalType data_type) {
+	return CompressionFunction(CompressionType::COMPRESSION_REE, data_type, REEInitAnalyze<T>, REEAnalyze<T>,
+	                           REEFinalAnalyze<T>, REEInitCompression<T, WRITE_STATISTICS>,
+	                           REECompress<T, WRITE_STATISTICS>, REEFinalizeCompress<T, WRITE_STATISTICS>,
+	                           REEInitScan<T>, REEScan<T>, REEScanPartial<T>, REEFetchRow<T>, REESkip<T>);
 }
 
-CompressionFunction RLEFun::GetFunction(PhysicalType type) {
+CompressionFunction REEFun::GetFunction(PhysicalType type) {
 	switch (type) {
 	case PhysicalType::BOOL:
 	case PhysicalType::INT8:
-		return GetRLEFunction<int8_t>(type);
+		return GetREEFunction<int8_t>(type);
 	case PhysicalType::INT16:
-		return GetRLEFunction<int16_t>(type);
+		return GetREEFunction<int16_t>(type);
 	case PhysicalType::INT32:
-		return GetRLEFunction<int32_t>(type);
+		return GetREEFunction<int32_t>(type);
 	case PhysicalType::INT64:
-		return GetRLEFunction<int64_t>(type);
+		return GetREEFunction<int64_t>(type);
 	case PhysicalType::INT128:
-		return GetRLEFunction<hugeint_t>(type);
+		return GetREEFunction<hugeint_t>(type);
 	case PhysicalType::UINT8:
-		return GetRLEFunction<uint8_t>(type);
+		return GetREEFunction<uint8_t>(type);
 	case PhysicalType::UINT16:
-		return GetRLEFunction<uint16_t>(type);
+		return GetREEFunction<uint16_t>(type);
 	case PhysicalType::UINT32:
-		return GetRLEFunction<uint32_t>(type);
+		return GetREEFunction<uint32_t>(type);
 	case PhysicalType::UINT64:
-		return GetRLEFunction<uint64_t>(type);
+		return GetREEFunction<uint64_t>(type);
 	case PhysicalType::FLOAT:
-		return GetRLEFunction<float>(type);
+		return GetREEFunction<float>(type);
 	case PhysicalType::DOUBLE:
-		return GetRLEFunction<double>(type);
+		return GetREEFunction<double>(type);
 	case PhysicalType::LIST:
-		return GetRLEFunction<uint64_t, false>(type);
+		return GetREEFunction<uint64_t, false>(type);
 	default:
-		throw InternalException("Unsupported type for RLE");
+		throw InternalException("Unsupported type for REE");
 	}
 }
 
-bool RLEFun::TypeIsSupported(PhysicalType type) {
+bool REEFun::TypeIsSupported(PhysicalType type) {
 	switch (type) {
 	case PhysicalType::BOOL:
 	case PhysicalType::INT8:
