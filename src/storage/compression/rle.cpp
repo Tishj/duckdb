@@ -292,9 +292,11 @@ void RLESkip(ColumnSegment &segment, ColumnScanState &state, idx_t skip_count) {
 	scan_state.Skip(segment, skip_count);
 }
 
+//! Scan less than STANDARD_VECTOR_SIZE worth of data
 template <class T>
-void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
-                    idx_t result_offset) {
+static void ScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
+                        idx_t result_offset) {
+	D_ASSERT(scan_count < STANDARD_VECTOR_SIZE);
 	auto &scan_state = state.scan_state->Cast<RLEScanState<T>>();
 
 	auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
@@ -303,6 +305,7 @@ void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_c
 
 	auto result_data = FlatVector::GetData<T>(result);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
+
 	for (idx_t i = 0; i < scan_count; i++) {
 		// assign the current value
 		result_data[result_offset + i] = data_pointer[scan_state.entry_pos];
@@ -314,6 +317,54 @@ void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_c
 			scan_state.position_in_entry = 0;
 		}
 	}
+}
+
+template <class T>
+void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
+                    idx_t result_offset) {
+	if (scan_count != STANDARD_VECTOR_SIZE) {
+		ScanPartial<T>(segment, state, scan_count, result, result_offset);
+		return;
+	}
+	D_ASSERT(result_offset == 0);
+	D_ASSERT(scan_count == STANDARD_VECTOR_SIZE);
+	// Only when we emit an entire Vector do we have control over the type of Vector to use.
+	auto &scan_state = state.scan_state->Cast<RLEScanState<T>>();
+
+	auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
+	auto data_pointer = (T *)(data + RLEConstants::RLE_HEADER_SIZE);
+	auto index_pointer = (rle_count_t *)(data + scan_state.rle_count_offset);
+
+	auto result_data = FlatVector::GetData<T>(result);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	SelectionVector sel;
+	sel.Initialize(scan_count);
+	idx_t dictionary_index = 0;
+
+	idx_t remaining = scan_count;
+	idx_t i = 0;
+	while (remaining != 0) {
+		result_data[dictionary_index] = data_pointer[scan_state.entry_pos];
+		// The amount of values left in this run
+		auto run_length = index_pointer[scan_state.entry_pos] - scan_state.position_in_entry;
+		// The amount capped to the amount of remaining values
+		if (run_length > remaining) {
+			run_length = remaining;
+		}
+		for (idx_t j = 0; j < run_length; j++) {
+			sel.set_index(i++, dictionary_index);
+		}
+		dictionary_index++;
+		scan_state.position_in_entry += run_length;
+		if (scan_state.position_in_entry >= index_pointer[scan_state.entry_pos]) {
+			// handled all entries in this RLE value
+			// move to the next entry
+			scan_state.entry_pos++;
+			scan_state.position_in_entry = 0;
+		}
+		remaining -= run_length;
+	}
+	result.Slice(sel, scan_count);
 }
 
 template <class T>
