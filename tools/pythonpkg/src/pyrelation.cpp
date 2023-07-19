@@ -577,6 +577,16 @@ duckdb::pyarrow::Table DuckDBPyRelation::ToArrowTable(idx_t batch_size) {
 		if (!rel) {
 			return py::none();
 		}
+		auto &context = *rel->context.GetContext();
+		ScopedConfigSetting setting(
+		    // Provide the batch size because we'll need it in the result collector
+		    context.config,
+		    [batch_size](ClientConfig &config) {
+			    config.result_collector = [](ClientContext &context, PreparedStatementData &data) {
+				    return PhysicalArrowCollector::Create(context, data, batch_size);
+			    }
+		    },
+		    [](ClientConfig &config) { config.result_collector = nullptr; });
 		ExecuteOrThrow();
 	}
 	AssertResultOpen();
