@@ -26,7 +26,7 @@ public:
 	//! Creates a successful query result with the specified names and types
 	DUCKDB_API ArrowQueryResult(StatementType statement_type, StatementProperties properties, vector<string> names_p,
 	                            vector<LogicalType> types_p, ClientProperties client_properties, idx_t row_count,
-	                            idx_t batch_size);
+	                            idx_t batch_size, idx_t total_batch_count, py::list record_batches);
 	//! Creates an unsuccessful query result with error condition
 	DUCKDB_API explicit ArrowQueryResult(PreservedError error);
 

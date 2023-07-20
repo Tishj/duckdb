@@ -15,14 +15,15 @@ BatchCollectionChunkScanState::BatchCollectionChunkScanState(BatchedDataCollecti
 BatchCollectionChunkScanState::~BatchCollectionChunkScanState() {
 }
 
-bool BatchCollectionChunkScanState::InternalLoad(PreservedError &error) {
+void BatchCollectionChunkScanState::InternalLoad(PreservedError &error) {
 	if (state.range.begin == state.range.end) {
-		return false;
+		// Signal empty chunk to break out of the loop
+		current_chunk->SetCardinality(0);
+		return;
 	}
 	current_chunk->Reset();
 	collection.Scan(state, *current_chunk);
-	state.range.begin++;
-	return true;
+	return;
 }
 
 bool BatchCollectionChunkScanState::HasError() const {
@@ -43,14 +44,13 @@ const vector<string> &BatchCollectionChunkScanState::Names() const {
 
 bool BatchCollectionChunkScanState::LoadNextChunk(PreservedError &error) {
 	if (finished) {
-		return !finished;
+		return false;
 	}
-	auto load_result = InternalLoad(error);
-	if (!load_result) {
+	InternalLoad(error);
+	if (ChunkIsEmpty()) {
 		finished = true;
 	}
-	offset = 0;
-	return !finished;
+	return true;
 }
 
 } // namespace duckdb

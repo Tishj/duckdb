@@ -25,7 +25,7 @@ public:
 	const vector<string> &Names() const override;
 
 private:
-	bool InternalLoad(PreservedError &error);
+	void InternalLoad(PreservedError &error);
 
 private:
 	BatchedDataCollection &collection;

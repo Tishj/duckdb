@@ -31,10 +31,11 @@ public:
 	idx_t CurrentOffset() const;
 	idx_t RemainingInChunk() const;
 	DataChunk &CurrentChunk();
+	void SkipChunk();
 	bool ChunkIsEmpty() const;
 	bool Finished() const;
 	bool ScanStarted() const;
-	void IncreaseOffset(idx_t increment);
+	void IncreaseOffset(idx_t increment, bool unsafe = false);
 
 protected:
 	idx_t offset = 0;

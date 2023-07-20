@@ -9,8 +9,16 @@ idx_t ChunkScanState::CurrentOffset() const {
 	return offset;
 }
 
-void ChunkScanState::IncreaseOffset(idx_t increment) {
-	D_ASSERT(increment <= RemainingInChunk());
+void ChunkScanState::SkipChunk() {
+	// FIXME: make this skip more efficient than just loading and discarding the result
+	PreservedError unused;
+	auto result = LoadNextChunk(unused);
+	(void)result;
+	D_ASSERT(result);
+}
+
+void ChunkScanState::IncreaseOffset(idx_t increment, bool unsafe) {
+	D_ASSERT(unsafe || increment <= RemainingInChunk());
 	offset += increment;
 }
 

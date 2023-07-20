@@ -199,6 +199,7 @@ bool ArrowUtil::TryFetchChunk(ChunkScanState &scan_state, ArrowOptions options, 
 
 		// The amount remaining, capped by the amount left in the current chunk
 		auto to_append_to_batch = MinValue(remaining, scan_state.RemainingInChunk());
+		D_ASSERT(to_append_to_batch > 0);
 		appender.Append(current_chunk, 0, to_append_to_batch, current_chunk.size());
 		count += to_append_to_batch;
 		scan_state.IncreaseOffset(to_append_to_batch);

@@ -74,74 +74,106 @@ private:
 	BatchCollectionChunkScanState scan_state;
 };
 
-static idx_t RequiredChunksForBatch(idx_t batch_size, idx_t &offset) {
-	idx_t size = 0;
-	idx_t chunks = 0;
-	while (size < batch_size) {
-		auto remaining_in_chunk = STANDARD_VECTOR_SIZE - offset;
-		auto remaining_to_insert = batch_size - size;
-		auto append = MinValue(remaining_to_insert, remaining_in_chunk);
-		size += append;
-		offset += append;
-		if (offset == STANDARD_VECTOR_SIZE) {
-			offset = 0;
-			chunks++;
-		}
-	}
-	return chunks;
-}
+static
 
-class ArrowMergeEvent : public BasePipelineEvent {
+    class ArrowMergeEvent : public BasePipelineEvent {
 public:
 	ArrowMergeEvent(ArrowQueryResult &result, BatchedDataCollection &batches, Pipeline &pipeline_p)
 	    : BasePipelineEvent(pipeline_p), result(result), batches(batches) {
+		record_batch_size = result.BatchSize();
 	}
 
 	ArrowQueryResult &result;
 	BatchedDataCollection &batches;
 
 public:
+	idx_t RemainingInCurrentChunk() {
+		// This assumes that every produced chunk from FetchChunk has STANDARD_VECTOR_SIZE tuples,
+		// except for the last one
+		idx_t start_of_chunk = batch_offset - (batch_offset % STANDARD_VECTOR_SIZE);
+		idx_t remaining = batch_tuples - start_of_chunk;
+		return MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE);
+	}
+
+	bool NextBatch() {
+		index++;
+		if (index >= batches.BatchCount()) {
+			return false;
+		}
+		auto batch_index = batches.IndexToBatchIndex(index);
+		batch_tuples = batches.BatchSize(batch_index);
+		batch_offset = 0;
+		return true;
+	}
+
+	idx_t RequiredChunksForBatch() {
+		idx_t size = 0;
+		idx_t chunks = 0;
+		while (size < record_batch_size) {
+			auto remaining_in_chunk = RemainingInCurrentChunk();
+			auto remaining_to_insert = record_batch_size - size;
+			auto append = MinValue(remaining_to_insert, remaining_in_chunk);
+			size += append;
+			if (size == record_batch_size) {
+				// We have completed this batch
+				break;
+			}
+			batch_offset += append;
+			if (batch_offset == batch_tuples) {
+				if (!NextBatch()) {
+					break;
+				}
+				chunks++;
+			}
+		}
+		return chunks;
+	}
+
 	void Schedule() override {
 		vector<shared_ptr<Task>> tasks;
 		idx_t chunk_offset = 0;
 		idx_t record_batch_index = 0;
 		auto &record_batches = result.GetRecordBatches();
-		auto batch_size = result.BatchSize();
 
-		idx_t index = 0;
 		while (index < batches.BatchCount()) {
-			// FIXME: this assumes that every batch contains STANDARD_VECTOR_SIZE tuples
-			auto chunks_required = 1 + RequiredChunksForBatch(batch_size, chunk_offset);
-			if (index + chunks_required > batches.BatchCount()) {
-				// Cap to the maximum batches we have, this is likely the last batch (?)
-				chunks_required = batches.BatchCount() - index;
-			}
+			auto starting_index = index;
+			auto initial_offset = batch_offset;
+			auto chunks_required = RequiredChunksForBatch();
 
-			idx_t range_end = chunks_required;
-			if (range_end == 0) {
-				D_ASSERT(batch_size < STANDARD_VECTOR_SIZE);
-				// If the batch size is smaller than a vector, we can potentially collect multiple batches from the same
-				// chunk
-				range_end++;
-			}
-			range_end += index;
+			// We can safely set the end to max, as we will only fetch one record batch with every task
+			// only the start index and the scan state offset mathers.
+			auto batch_range = batches.BatchRange(starting_index, DConstants::INVALID_INDEX);
 
-			auto batch_range = batches.BatchRange(index, range_end);
+			// Prepare the initial state for this scan state
 			BatchCollectionChunkScanState scan_state(batches, batch_range, pipeline->executor.context);
-			scan_state.IncreaseOffset(chunk_offset);
+			auto chunks_to_skip = initial_offset / STANDARD_VECTOR_SIZE;
+			auto offset_in_chunk = initial_offset % STANDARD_VECTOR_SIZE;
+			for (idx_t i = 0; i < chunks_to_skip; i++) {
+				scan_state.SkipChunk();
+			}
+			scan_state.IncreaseOffset(offset_in_chunk, true);
 
 			// Create a task to populate the arrow result with this batch at this offset
 			ArrowRecordBatchListEntry batch_list_entry(record_batches, record_batch_index);
 			tasks.push_back(make_uniq<ArrowBatchTask>(std::move(batch_list_entry), pipeline->executor,
 			                                          shared_from_this(), std::move(scan_state), result.names,
-			                                          batch_size));
+			                                          record_batch_size));
 
-			index += chunks_required;
 			record_batch_index++;
 		}
 		D_ASSERT(!tasks.empty());
 		SetTasks(std::move(tasks));
 	}
+
+private:
+	//! The current batch index of the batched data collection
+	idx_t index = 0;
+	//! The total amount of tuples in the current batch
+	idx_t batch_tuples = 0;
+	//! The offset inside the current batch
+	idx_t batch_offset = 0;
+	//! The max size of a record batch to output
+	idx_t record_batch_size;
 };
 
 } // namespace duckdb

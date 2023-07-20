@@ -69,6 +69,9 @@ public:
 	//! Inspect how big a given batch is
 	DUCKDB_API idx_t BatchSize(idx_t batch_index) const;
 
+	//! Inspect a given batch through a const reference
+	const ColumnDataCollection &Batch(idx_t batch_index) const;
+
 	//! Create an iterator range from the provided indices
 	BatchedChunkIteratorRange BatchRange(idx_t begin = 0, idx_t end = DConstants::INVALID_INDEX);
 

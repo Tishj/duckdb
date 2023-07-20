@@ -60,9 +60,13 @@ SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &eve
 	auto &types = gstate.collection->Types();
 	if (total_tuple_count == 0) {
 		// Create the result containing a single empty arrow result
-		gstate.result =
-		    make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
-		                                total_tuple_count, record_batch_size);
+		{
+			py::gil_scoped_acquire gil;
+			py::list record_batches(0);
+			gstate.result =
+			    make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(), 0,
+			                                record_batch_size, 0, std::move(record_batches));
+		}
 		return SinkFinalizeType::READY;
 	}
 
@@ -72,8 +76,14 @@ SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &eve
 	event.InsertEvent(std::move(new_event));
 
 	// Already create the final query result
-	gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
-	                                            total_tuple_count, record_batch_size);
+	idx_t total_batch_count = PhysicalArrowCollector::CalculateAmountOfBatches(total_tuple_count, record_batch_size);
+	{
+		py::gil_scoped_acquire gil;
+		py::list record_batches(total_batch_count);
+		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
+		                                            context.GetClientProperties(), total_tuple_count, record_batch_size,
+		                                            total_batch_count, std::move(record_batches));
+	}
 
 	return SinkFinalizeType::READY;
 }
