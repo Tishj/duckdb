@@ -90,4 +90,5 @@ private:
 	//! The last batch collection that was inserted into
 	CachedCollection last_collection;
 };
+
 } // namespace duckdb
