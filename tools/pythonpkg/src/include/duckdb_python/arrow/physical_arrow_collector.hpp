@@ -45,7 +45,6 @@ public:
 	                          GlobalSinkState &gstate) const override;
 
 public:
-	static idx_t CalculateAmountOfBatches(idx_t total_tuple_count, idx_t record_batch_size);
 	//! User provided batch size
 	idx_t record_batch_size;
 };

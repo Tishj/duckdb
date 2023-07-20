@@ -5,12 +5,21 @@
 
 namespace duckdb {
 
+static idx_t CalculateAmountOfBatches(idx_t total_row_count, idx_t batch_size) {
+	return (total_row_count / batch_size) + (total_row_count % batch_size) != 0;
+}
+
 ArrowQueryResult::ArrowQueryResult(StatementType statement_type, StatementProperties properties, vector<string> names_p,
-                                   vector<LogicalType> types_p py::list record_batches,
-                                   ClientProperties client_properties, idx_t row_count)
+                                   vector<LogicalType> types_p, ClientProperties client_properties, idx_t row_count,
+                                   idx_t batch_size)
     : QueryResult(QueryResultType::ARROW_RESULT, statement_type, std::move(properties), std::move(types_p),
                   std::move(names_p), std::move(client_properties)),
-      record_batches(std::move(record_batches)), row_count(row_count) {
+      row_count(row_count), batch_size(batch_size) {
+	total_batch_count = CalculateAmountOfBatches(row_count, batch_size);
+	{
+		py::gil_scoped_acquire gil;
+		record_batches = py::list(total_batch_count);
+	}
 }
 
 ArrowQueryResult::ArrowQueryResult(PreservedError error)
@@ -44,6 +53,10 @@ py::list &ArrowQueryResult::GetRecordBatches() {
 		                            GetError());
 	}
 	return record_batches;
+}
+
+idx_t ArrowQueryResult::BatchSize() const {
+	return batch_size;
 }
 
 } // namespace duckdb

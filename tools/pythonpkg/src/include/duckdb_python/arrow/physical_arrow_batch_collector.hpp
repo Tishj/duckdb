@@ -1,7 +1,7 @@
 #pragma once
 
+#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb/execution/operator/helper/physical_batch_collector.hpp"
-#include "duckdb_python/arrow/array_wrapper.hpp"
 
 namespace duckdb {
 

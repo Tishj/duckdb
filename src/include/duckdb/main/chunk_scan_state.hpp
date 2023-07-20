@@ -2,6 +2,7 @@
 
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/preserved_error.hpp"
 
 namespace duckdb {
 
@@ -16,11 +17,17 @@ public:
 	}
 
 public:
+	ChunkScanState(const ChunkScanState &other) = delete;
+	ChunkScanState(ChunkScanState &&other) = default;
+	ChunkScanState &operator=(const ChunkScanState &other) = delete;
+	ChunkScanState &operator=(ChunkScanState &&other) = default;
+
+public:
 	virtual bool LoadNextChunk(PreservedError &error) = 0;
 	virtual bool HasError() const = 0;
 	virtual PreservedError &GetError() = 0;
-	virtual vector<LogicalType> &Types() = 0;
-	virtual vector<string> &Names() = 0;
+	virtual const vector<LogicalType> &Types() const = 0;
+	virtual const vector<string> &Names() const = 0;
 	idx_t CurrentOffset() const;
 	idx_t RemainingInChunk() const;
 	DataChunk &CurrentChunk();

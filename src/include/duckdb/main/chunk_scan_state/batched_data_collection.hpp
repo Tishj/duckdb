@@ -6,27 +6,29 @@
 
 namespace duckdb {
 
-class BatchedDataCollection;
-struct BatchedChunkIteratorRange;
-struct BatchedChunkScanState;
-
 class BatchCollectionChunkScanState : public ChunkScanState {
 public:
-	BatchCollectionChunkScanState(BatchedDataCollection &result, BatchedChunkIteratorRange &range);
+	BatchCollectionChunkScanState(BatchedDataCollection &collection, BatchedChunkIteratorRange &range,
+	                              ClientContext &context);
 	~BatchCollectionChunkScanState();
+
+public:
+	BatchCollectionChunkScanState(const BatchCollectionChunkScanState &other) = delete;
+	BatchCollectionChunkScanState &operator=(const BatchCollectionChunkScanState &other) = delete;
+	BatchCollectionChunkScanState(BatchCollectionChunkScanState &&other) = default;
 
 public:
 	bool LoadNextChunk(PreservedError &error) override;
 	bool HasError() const override;
 	PreservedError &GetError() override;
-	vector<LogicalType> &Types() override;
-	vector<string> &Names() override;
+	const vector<LogicalType> &Types() const override;
+	const vector<string> &Names() const override;
 
 private:
 	bool InternalLoad(PreservedError &error);
 
 private:
-	BatchedDataCollection &result;
+	BatchedDataCollection &collection;
 	BatchedChunkScanState state;
 };
 

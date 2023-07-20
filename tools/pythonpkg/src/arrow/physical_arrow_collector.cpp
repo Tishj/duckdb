@@ -4,6 +4,7 @@
 #include "duckdb/main/prepared_statement_data.hpp"
 #include "duckdb_python/arrow/physical_arrow_batch_collector.hpp"
 #include "duckdb_python/arrow/arrow_merge_event.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
@@ -48,10 +49,6 @@ unique_ptr<GlobalSinkState> PhysicalArrowCollector::GetGlobalSinkState(ClientCon
 	return make_uniq<ArrowCollectorGlobalState>();
 }
 
-idx_t PhysicalArrowCollector::CalculateAmountOfBatches(idx_t total_row_count, idx_t batch_size) {
-	return (total_row_count / batch_size) + (total_row_count % batch_size) != 0;
-}
-
 SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                                   GlobalSinkState &gstate_p) const {
 	auto &gstate = gstate_p.Cast<ArrowCollectorGlobalState>();
@@ -59,27 +56,24 @@ SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &eve
 
 	gstate.collection = make_uniq<BatchedDataCollection>(context, types, std::move(gstate.batches), true);
 
-	// Pre-allocate the conversion result
-	py::list record_batches;
 	auto total_tuple_count = gstate.collection->Count();
-	auto total_batch_count = CalculateAmountOfBatches(total_tuple_count, record_batch_size);
-	// TODO: does this need the GIL?
-	record_batches.resize(total_batch_count);
 	auto &types = gstate.collection->Types();
 	if (total_tuple_count == 0) {
 		// Create the result containing a single empty arrow result
-		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types, std::move(record_batches),
-		                                            context.GetClientProperties(), total_tuple_count);
+		gstate.result =
+		    make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
+		                                total_tuple_count, record_batch_size);
 		return SinkFinalizeType::READY;
 	}
 
+	auto &arrow_result = (ArrowQueryResult &)*gstate.result;
 	// Spawn an event that will populate the batches in the arrow result
-	auto new_event = make_shared<ArrowMergeEvent>(*gstate.result, *gstate.collection, pipeline);
+	auto new_event = make_shared<ArrowMergeEvent>(arrow_result, *gstate.collection, pipeline);
 	event.InsertEvent(std::move(new_event));
 
 	// Already create the final query result
-	gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, std::move(result),
-	                                            context.GetClientProperties(), total_tuple_count);
+	gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
+	                                            total_tuple_count, record_batch_size);
 
 	return SinkFinalizeType::READY;
 }

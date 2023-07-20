@@ -29,11 +29,11 @@ PreservedError &QueryResultChunkScanState::GetError() {
 	return result.GetErrorObject();
 }
 
-vector<LogicalType> &QueryResultChunkScanState::Types() {
+const vector<LogicalType> &QueryResultChunkScanState::Types() const {
 	return result.types;
 }
 
-vector<string> &QueryResultChunkScanState::Names() {
+const vector<string> &QueryResultChunkScanState::Names() const {
 	return result.names;
 }
 

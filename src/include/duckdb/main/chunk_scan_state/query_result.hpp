@@ -16,8 +16,8 @@ public:
 	bool LoadNextChunk(PreservedError &error) override;
 	bool HasError() const override;
 	PreservedError &GetError() override;
-	vector<LogicalType> &Types() override;
-	vector<string> &Names() override;
+	const vector<LogicalType> &Types() const override;
+	const vector<string> &Names() const override;
 
 private:
 	bool InternalLoad(PreservedError &error);

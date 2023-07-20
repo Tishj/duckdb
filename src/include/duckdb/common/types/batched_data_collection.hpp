@@ -58,7 +58,7 @@ public:
 	DUCKDB_API idx_t Count() const;
 
 	//! Inspect the types of the collection
-	DUCKDB_API const vector<LogicalType> Types() const;
+	DUCKDB_API const vector<LogicalType> &Types() const;
 
 	//! Inspect how many batches this collection contains
 	DUCKDB_API idx_t BatchCount() const;

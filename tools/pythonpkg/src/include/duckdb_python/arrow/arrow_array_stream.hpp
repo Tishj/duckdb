@@ -51,6 +51,7 @@ public:
 
 enum class PyArrowObjectType { Invalid, Table, RecordBatchReader, Scanner, Dataset };
 
+py::object CreatePyArrowRecordBatch(ArrowSchema &schema, ArrowArray &array);
 void TransformDuckToArrowChunk(ArrowSchema &arrow_schema, ArrowArray &data, py::list &batches);
 
 PyArrowObjectType GetArrowType(const py::handle &obj);

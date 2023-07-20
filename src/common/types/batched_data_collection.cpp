@@ -103,7 +103,7 @@ unique_ptr<ColumnDataCollection> BatchedDataCollection::FetchCollection() {
 	return result;
 }
 
-const vector<LogicalType> BatchedDataCollection::Types() const {
+const vector<LogicalType> &BatchedDataCollection::Types() const {
 	return types;
 }
 

@@ -1159,6 +1159,11 @@ ClientProperties ClientContext::GetClientProperties() const {
 	return {client_context.ExtractTimezone(), db->config.options.arrow_offset_size};
 }
 
+ArrowOptions ClientContext::GetArrowOptions() const {
+	auto properties = GetClientProperties();
+	return {properties.arrow_offset_size, properties.time_zone};
+}
+
 bool ClientContext::ExecutionIsFinished() {
 	if (!active_query || !active_query->executor) {
 		return false;
