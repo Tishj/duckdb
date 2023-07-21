@@ -7,11 +7,10 @@ namespace duckdb {
 
 ArrowQueryResult::ArrowQueryResult(StatementType statement_type, StatementProperties properties, vector<string> names_p,
                                    vector<LogicalType> types_p, ClientProperties client_properties, idx_t row_count,
-                                   idx_t batch_size, idx_t total_batch_count, py::list record_batches)
+                                   idx_t batch_size)
     : QueryResult(QueryResultType::ARROW_RESULT, statement_type, std::move(properties), std::move(types_p),
                   std::move(names_p), std::move(client_properties)),
-      row_count(row_count), batch_size(batch_size), total_batch_count(total_batch_count),
-      record_batches(std::move(record_batches)) {
+      row_count(row_count), batch_size(batch_size) {
 }
 
 ArrowQueryResult::ArrowQueryResult(PreservedError error)
@@ -44,7 +43,13 @@ py::list &ArrowQueryResult::GetRecordBatches() {
 		throw InvalidInputException("Attempting to get collection from an unsuccessful query result\n: Error %s",
 		                            GetError());
 	}
-	return record_batches;
+	D_ASSERT(record_batches);
+	return *record_batches;
+}
+
+void ArrowQueryResult::SetRecordBatches(unique_ptr<py::list> record_batches) {
+	D_ASSERT(!record_batches);
+	this->record_batches = std::move(record_batches);
 }
 
 idx_t ArrowQueryResult::BatchSize() const {
