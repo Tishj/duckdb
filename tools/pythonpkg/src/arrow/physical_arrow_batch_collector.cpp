@@ -12,8 +12,8 @@ unique_ptr<GlobalSinkState> PhysicalArrowBatchCollector::GetGlobalSinkState(Clie
 }
 
 SinkFinalizeType PhysicalArrowBatchCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                                       GlobalSinkState &gstate_p) const {
-	auto &gstate = gstate_p.Cast<ArrowBatchGlobalState>();
+                                                       OperatorSinkFinalizeInput &input) const {
+	auto &gstate = input.global_state.Cast<ArrowBatchGlobalState>();
 
 	auto total_tuple_count = gstate.data.Count();
 	if (total_tuple_count == 0) {

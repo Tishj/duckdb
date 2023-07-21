@@ -31,7 +31,6 @@ public:
 	idx_t CurrentOffset() const;
 	idx_t RemainingInChunk() const;
 	DataChunk &CurrentChunk();
-	void SkipChunk();
 	bool ChunkIsEmpty() const;
 	bool Finished() const;
 	bool ScanStarted() const;

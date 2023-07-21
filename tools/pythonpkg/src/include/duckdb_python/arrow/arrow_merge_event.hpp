@@ -62,9 +62,7 @@ private:
 	BatchCollectionChunkScanState scan_state;
 };
 
-static
-
-    class ArrowMergeEvent : public BasePipelineEvent {
+class ArrowMergeEvent : public BasePipelineEvent {
 public:
 	ArrowMergeEvent(ArrowQueryResult &result, BatchedDataCollection &batches, Pipeline &pipeline_p)
 	    : BasePipelineEvent(pipeline_p), result(result), batches(batches) {

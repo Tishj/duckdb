@@ -33,19 +33,20 @@ unique_ptr<PhysicalResultCollector> PhysicalArrowCollector::Create(ClientContext
 	}
 }
 
-void PhysicalArrowCollector::Combine(ExecutionContext &context, GlobalSinkState &gstate_p,
-                                     LocalSinkState &lstate_p) const {
-	auto &gstate = gstate_p.Cast<ArrowCollectorGlobalState>();
-	auto &lstate = lstate_p.Cast<MaterializedCollectorLocalState>();
+SinkCombineResultType PhysicalArrowCollector::Combine(ExecutionContext &context,
+                                                      OperatorSinkCombineInput &input) const {
+	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
+	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
 	if (lstate.collection->Count() == 0) {
 		py::gil_scoped_acquire gil;
 		lstate.collection.reset();
-		return;
+		return SinkCombineResultType::FINISHED;
 	}
 
 	// Collect all the collections
 	lock_guard<mutex> l(gstate.glock);
 	gstate.batches[gstate.batch_index++] = std::move(lstate.collection);
+	return SinkCombineResultType::FINISHED;
 }
 
 unique_ptr<QueryResult> PhysicalArrowCollector::GetResult(GlobalSinkState &state_p) {
@@ -58,8 +59,8 @@ unique_ptr<GlobalSinkState> PhysicalArrowCollector::GetGlobalSinkState(ClientCon
 }
 
 SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                                  GlobalSinkState &gstate_p) const {
-	auto &gstate = gstate_p.Cast<ArrowCollectorGlobalState>();
+                                                  OperatorSinkFinalizeInput &input) const {
+	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
 	D_ASSERT(gstate.collection == nullptr);
 
 	gstate.collection = make_uniq<BatchedDataCollection>(context, types, std::move(gstate.batches), true);

@@ -1,20 +1,10 @@
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/main/chunk_scan_state.hpp"
-#include "duckdb/main/query_result.hpp"
-#include "duckdb/main/stream_query_result.hpp"
 
 namespace duckdb {
 
 idx_t ChunkScanState::CurrentOffset() const {
 	return offset;
-}
-
-void ChunkScanState::SkipChunk() {
-	// FIXME: make this skip more efficient than just loading and discarding the result
-	PreservedError unused;
-	auto result = LoadNextChunk(unused);
-	(void)result;
-	D_ASSERT(result);
 }
 
 void ChunkScanState::IncreaseOffset(idx_t increment, bool unsafe) {
