@@ -37,7 +37,7 @@ public:
 
 public:
 	static idx_t CalculateAmountOfBatches(idx_t total_row_count, idx_t batch_size) {
-		return (total_row_count / batch_size) + (total_row_count % batch_size) != 0;
+		return (total_row_count / batch_size) + (total_row_count % batch_size != 0);
 	}
 
 public:

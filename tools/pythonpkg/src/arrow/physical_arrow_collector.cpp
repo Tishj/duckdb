@@ -12,6 +12,14 @@ unique_ptr<PhysicalResultCollector> PhysicalArrowCollector::Create(ClientContext
                                                                    idx_t batch_size) {
 	(void)context;
 
+	// The creation of the record batches requires this module, and when this is imported for the first time from a
+	// thread that is not the main execution thread this might cause a crash. So we import it here while we're still in
+	// the main thread.
+	{
+		py::gil_scoped_acquire gil;
+		auto pyarrow_lib_module = py::module::import("pyarrow").attr("lib");
+	}
+
 	if (!PhysicalPlanGenerator::PreserveInsertionOrder(context, *data.plan)) {
 		// the plan is not order preserving, so we just use the parallel materialized collector
 		return make_uniq_base<PhysicalResultCollector, PhysicalArrowCollector>(data, true, batch_size);

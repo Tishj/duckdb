@@ -21,6 +21,7 @@ void BatchCollectionChunkScanState::InternalLoad(PreservedError &error) {
 		current_chunk->SetCardinality(0);
 		return;
 	}
+	offset = 0;
 	current_chunk->Reset();
 	collection.Scan(state, *current_chunk);
 	return;

@@ -146,8 +146,8 @@ public:
 
 			// Prepare the initial state for this scan state
 			BatchCollectionChunkScanState scan_state(batches, batch_range, pipeline->executor.context);
-			auto chunks_to_skip = initial_offset / STANDARD_VECTOR_SIZE;
-			auto offset_in_chunk = initial_offset % STANDARD_VECTOR_SIZE;
+			idx_t chunks_to_skip = initial_offset / STANDARD_VECTOR_SIZE;
+			idx_t offset_in_chunk = initial_offset % STANDARD_VECTOR_SIZE;
 			for (idx_t i = 0; i < chunks_to_skip; i++) {
 				scan_state.SkipChunk();
 			}
