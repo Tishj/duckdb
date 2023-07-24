@@ -4320,6 +4320,10 @@ const char* EnumUtil::ToChars<QueryResultType>(QueryResultType value) {
 		return "STREAM_RESULT";
 	case QueryResultType::PENDING_RESULT:
 		return "PENDING_RESULT";
+	case QueryResultType::NUMPY_RESULT:
+		return "NUMPY_RESULT";
+	case QueryResultType::ARROW_RESULT:
+		return "ARROW_RESULT";
 	default:
 		throw NotImplementedException(StringUtil::Format("Enum value: '%d' not implemented", value));
 	}
@@ -4335,6 +4339,12 @@ QueryResultType EnumUtil::FromString<QueryResultType>(const char *value) {
 	}
 	if (StringUtil::Equals(value, "PENDING_RESULT")) {
 		return QueryResultType::PENDING_RESULT;
+	}
+	if (StringUtil::Equals(value, "NUMPY_RESULT")) {
+		return QueryResultType::NUMPY_RESULT;
+	}
+	if (StringUtil::Equals(value, "ARROW_RESULT")) {
+		return QueryResultType::ARROW_RESULT;
 	}
 	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented", value));
 }
