@@ -12,6 +12,7 @@
 #include "duckdb/common/winapi.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/common/preserved_error.hpp"
+#include "duckdb/common/unique_ptr.hpp"
 
 namespace duckdb {
 
@@ -26,7 +27,7 @@ public:
 	//! Creates a successful query result with the specified names and types
 	DUCKDB_API ArrowQueryResult(StatementType statement_type, StatementProperties properties, vector<string> names_p,
 	                            vector<LogicalType> types_p, ClientProperties client_properties, idx_t row_count,
-	                            idx_t batch_size, idx_t total_batch_count, py::list record_batches);
+	                            idx_t batch_size);
 	//! Creates an unsuccessful query result with error condition
 	DUCKDB_API explicit ArrowQueryResult(PreservedError error);
 
@@ -43,13 +44,13 @@ public:
 
 public:
 	py::list &GetRecordBatches();
+	void SetRecordBatches(unique_ptr<py::list> record_batches);
 	idx_t BatchSize() const;
 
 private:
-	py::list record_batches;
+	unique_ptr<py::list> record_batches;
 	idx_t row_count;
 	idx_t batch_size;
-	idx_t total_batch_count;
 };
 
 } // namespace duckdb

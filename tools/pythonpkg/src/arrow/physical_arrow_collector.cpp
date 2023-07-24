@@ -33,19 +33,20 @@ unique_ptr<PhysicalResultCollector> PhysicalArrowCollector::Create(ClientContext
 	}
 }
 
-void PhysicalArrowCollector::Combine(ExecutionContext &context, GlobalSinkState &gstate_p,
-                                     LocalSinkState &lstate_p) const {
-	auto &gstate = gstate_p.Cast<ArrowCollectorGlobalState>();
-	auto &lstate = lstate_p.Cast<MaterializedCollectorLocalState>();
+SinkCombineResultType PhysicalArrowCollector::Combine(ExecutionContext &context,
+                                                      OperatorSinkCombineInput &input) const {
+	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
+	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
 	if (lstate.collection->Count() == 0) {
 		py::gil_scoped_acquire gil;
 		lstate.collection.reset();
-		return;
+		return SinkCombineResultType::FINISHED;
 	}
 
 	// Collect all the collections
 	lock_guard<mutex> l(gstate.glock);
 	gstate.batches[gstate.batch_index++] = std::move(lstate.collection);
+	return SinkCombineResultType::FINISHED;
 }
 
 unique_ptr<QueryResult> PhysicalArrowCollector::GetResult(GlobalSinkState &state_p) {
@@ -58,8 +59,8 @@ unique_ptr<GlobalSinkState> PhysicalArrowCollector::GetGlobalSinkState(ClientCon
 }
 
 SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                                  GlobalSinkState &gstate_p) const {
-	auto &gstate = gstate_p.Cast<ArrowCollectorGlobalState>();
+                                                  OperatorSinkFinalizeInput &input) const {
+	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
 	D_ASSERT(gstate.collection == nullptr);
 
 	gstate.collection = make_uniq<BatchedDataCollection>(context, types, std::move(gstate.batches), true);
@@ -67,31 +68,25 @@ SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &eve
 	auto total_tuple_count = gstate.collection->Count();
 	auto &types = gstate.collection->Types();
 	if (total_tuple_count == 0) {
-		// Create the result containing a single empty arrow result
+		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
+		                                            context.GetClientProperties(), 0, record_batch_size);
 		{
 			py::gil_scoped_acquire gil;
-			py::list record_batches(0);
-			gstate.result =
-			    make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(), 0,
-			                                record_batch_size, 0, std::move(record_batches));
+			// This result is empty, add an empty list of record batches
+			auto &arrow_result = (ArrowQueryResult &)*gstate.result;
+			arrow_result.SetRecordBatches(make_uniq<py::list>(0));
 		}
 		return SinkFinalizeType::READY;
 	}
+
+	// Already create the final query result
+	gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
+	                                            total_tuple_count, record_batch_size);
 
 	auto &arrow_result = (ArrowQueryResult &)*gstate.result;
 	// Spawn an event that will populate the batches in the arrow result
 	auto new_event = make_shared<ArrowMergeEvent>(arrow_result, *gstate.collection, pipeline);
 	event.InsertEvent(std::move(new_event));
-
-	// Already create the final query result
-	idx_t total_batch_count = PhysicalArrowCollector::CalculateAmountOfBatches(total_tuple_count, record_batch_size);
-	{
-		py::gil_scoped_acquire gil;
-		py::list record_batches(total_batch_count);
-		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
-		                                            context.GetClientProperties(), total_tuple_count, record_batch_size,
-		                                            total_batch_count, std::move(record_batches));
-	}
 
 	return SinkFinalizeType::READY;
 }

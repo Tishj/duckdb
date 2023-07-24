@@ -36,18 +36,13 @@ public:
 	}
 
 public:
-	static idx_t CalculateAmountOfBatches(idx_t total_row_count, idx_t batch_size) {
-		return (total_row_count / batch_size) + (total_row_count % batch_size != 0);
-	}
-
-public:
 	static unique_ptr<PhysicalResultCollector> Create(ClientContext &context, PreparedStatementData &data,
 	                                                  idx_t batch_size);
-	void Combine(ExecutionContext &context, GlobalSinkState &gstate, LocalSinkState &lstate) const override;
+	SinkCombineResultType Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const override;
 	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 	SinkFinalizeType Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-	                          GlobalSinkState &gstate) const override;
+	                          OperatorSinkFinalizeInput &input) const override;
 
 public:
 	//! User provided batch size

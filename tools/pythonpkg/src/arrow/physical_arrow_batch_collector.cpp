@@ -12,31 +12,26 @@ unique_ptr<GlobalSinkState> PhysicalArrowBatchCollector::GetGlobalSinkState(Clie
 }
 
 SinkFinalizeType PhysicalArrowBatchCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                                       GlobalSinkState &gstate_p) const {
-	auto &gstate = gstate_p.Cast<ArrowBatchGlobalState>();
+                                                       OperatorSinkFinalizeInput &input) const {
+	auto &gstate = input.global_state.Cast<ArrowBatchGlobalState>();
 
 	auto total_tuple_count = gstate.data.Count();
 	if (total_tuple_count == 0) {
 		// Create the result containing a single empty result conversion
+		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
+		                                            context.GetClientProperties(), 0, record_batch_size);
 		{
 			py::gil_scoped_acquire gil;
-			py::list record_batches(0);
-			gstate.result =
-			    make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(), 0,
-			                                record_batch_size, 0, std::move(record_batches));
+			// This result is empty, add an empty list of record batches
+			auto &arrow_result = (ArrowQueryResult &)*gstate.result;
+			arrow_result.SetRecordBatches(make_uniq<py::list>(0));
 		}
 		return SinkFinalizeType::READY;
 	}
 
 	// Already create the final query result
-	{
-		py::gil_scoped_acquire gil;
-		auto total_batch_count = PhysicalArrowCollector::CalculateAmountOfBatches(total_tuple_count, record_batch_size);
-		py::list record_batches(total_batch_count);
-		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
-		                                            context.GetClientProperties(), total_tuple_count, record_batch_size,
-		                                            total_batch_count, std::move(record_batches));
-	}
+	gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
+	                                            total_tuple_count, record_batch_size);
 	// Spawn an event that will populate the conversion result
 	auto &arrow_result = (ArrowQueryResult &)*gstate.result;
 	auto new_event = make_shared<ArrowMergeEvent>(arrow_result, gstate.data, pipeline);
