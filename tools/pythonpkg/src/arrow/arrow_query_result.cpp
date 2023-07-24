@@ -48,7 +48,7 @@ py::list &ArrowQueryResult::GetRecordBatches() {
 }
 
 void ArrowQueryResult::SetRecordBatches(unique_ptr<py::list> record_batches) {
-	D_ASSERT(!record_batches);
+	D_ASSERT(!this->record_batches);
 	this->record_batches = std::move(record_batches);
 }
 
