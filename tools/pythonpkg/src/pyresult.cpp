@@ -19,6 +19,7 @@
 #include "duckdb_python/numpy/numpy_query_result.hpp"
 #include "duckdb/main/chunk_scan_state/query_result.hpp"
 #include "duckdb_python/arrow/arrow_query_result.hpp"
+#include "duckdb/main/chunk_scan_state/query_result.hpp"
 
 namespace duckdb {
 
