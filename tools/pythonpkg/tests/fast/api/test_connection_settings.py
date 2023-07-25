@@ -5,6 +5,7 @@ import pytest
 import pandas as pd
 import datetime
 
+
 class TestConnectionSettings(object):
     def test_register_precedence(self):
         con = duckdb.connect()
