@@ -21,10 +21,10 @@ template <class _Tp, bool SAFE = true>
 class vector : public std::vector<_Tp, std::allocator<_Tp>> {
 public:
 	using original = std::vector<_Tp, std::allocator<_Tp>>;
-	using original::original;
 	using size_type = typename original::size_type;
 	using const_reference = typename original::const_reference;
 	using reference = typename original::reference;
+	using value_type = typename original::value_type;
 
 private:
 	static inline void AssertIndexInBounds(idx_t index, idx_t size) {
@@ -47,13 +47,86 @@ public:
 		original::clear();
 	}
 
-	// Because we create the other constructor, the implicitly created constructor
-	// gets deleted, so we have to be explicit
-	vector() = default;
+	// Move constructor from base class
 	vector(original &&other) : original(std::move(other)) {
 	}
+
+	// Construct a new vector of this type from another vector with a different SAFE level
 	template <bool _SAFE>
 	vector(vector<_Tp, _SAFE> &&other) : original(std::move(other)) {
+	}
+
+	// Default constructor
+	vector() : original() {
+	}
+
+	// Constructor with allocator
+	explicit vector(const std::allocator<_Tp> &__a) : original(__a) {
+	}
+
+	// Constructor with size
+	explicit vector(size_type __n) : original(__n) {
+	}
+
+	// Constructor with size and value
+	vector(size_type __n, const value_type &__x) : original(__n, __x) {
+	}
+
+	// Constructor with size, value, and allocator
+	vector(size_type __n, const value_type &__x, const std::allocator<_Tp> &__a) : original(__n, __x, __a) {
+	}
+
+	// Range constructor with iterators
+	template <class _InputIterator>
+	vector(_InputIterator __first, _InputIterator __last) : original(__first, __last) {
+	}
+
+	// Range constructor with iterators and allocator
+	template <class _InputIterator>
+	vector(_InputIterator __first, _InputIterator __last, const std::allocator<_Tp> &__a)
+	    : original(__first, __last, __a) {
+	}
+
+	// Copy constructor
+	vector(const vector &__x) : original(__x) {
+	}
+
+	// Copy constructor with allocator
+	vector(const vector &__x, const std::allocator<_Tp> &__a) : original(__x, __a) {
+	}
+
+	// Move constructor
+	vector(vector &&__x) noexcept : original(std::move(__x)) {
+	}
+
+	// Move constructor with allocator
+	vector(vector &&__x, const std::allocator<_Tp> &__a) : original(std::move(__x), __a) {
+	}
+
+	// Initializer list constructor
+	vector(std::initializer_list<_Tp> __il) : original(__il) {
+	}
+
+	// Initializer list constructor with allocator
+	vector(std::initializer_list<_Tp> __il, const std::allocator<_Tp> &__a) : original(__il, __a) {
+	}
+
+	// Copy assignment operator
+	vector &operator=(const vector &__x) {
+		original::operator=(__x);
+		return *this;
+	}
+
+	// Move assignment operator
+	vector &operator=(vector &&__x) noexcept {
+		original::operator=(std::move(__x));
+		return *this;
+	}
+
+	// Initializer list assignment operator
+	vector &operator=(std::initializer_list<_Tp> __il) {
+		original::operator=(__il);
+		return *this;
 	}
 
 	template <bool _SAFE = false>
