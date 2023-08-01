@@ -25,7 +25,7 @@ struct MapFunctionData : public TableFunctionData {
 	vector<string> in_names, out_names;
 };
 
-static py::handle FunctionCall(NumpyResultConversion &conversion, const vector<string> &names, PyObject *function) {
+static py::object FunctionCall(NumpyResultConversion &conversion, const vector<string> &names, PyObject *function) {
 	py::dict in_numpy_dict;
 	for (idx_t col_idx = 0; col_idx < names.size(); col_idx++) {
 		in_numpy_dict[names[col_idx].c_str()] = conversion.ToArray(col_idx);
@@ -40,7 +40,7 @@ static py::handle FunctionCall(NumpyResultConversion &conversion, const vector<s
 		throw InvalidInputException("Python error. See above for a stack trace.");
 	}
 
-	py::handle df(df_obj);
+	auto df = py::reinterpret_steal<py::object>(df_obj);
 	if (df.is_none()) { // no return, probably modified in place
 		throw InvalidInputException("No return value from Python function");
 	}
@@ -131,8 +131,8 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 
 	auto data_uptr = make_uniq<MapFunctionData>();
 	auto &data = *data_uptr;
-	data.function = reinterpret_cast<PyObject *>(input.inputs[0].GetPointer());
-	auto explicit_schema = reinterpret_cast<PyObject *>(input.inputs[1].GetPointer());
+	data.function = reinterpret_cast<PyObject *>(input.inputs[1].GetPointer());
+	auto explicit_schema = reinterpret_cast<PyObject *>(input.inputs[2].GetPointer());
 
 	data.in_names = input.input_table_names;
 	data.in_types = input.input_table_types;

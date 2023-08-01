@@ -63,6 +63,9 @@ public:
 
 	void Serialize(Serializer &serializer) const;
 	static BoundOrderByNode Deserialize(Deserializer &source, PlanDeserializationState &state);
+
+	void FormatSerialize(FormatSerializer &serializer) const;
+	static BoundOrderByNode FormatDeserialize(FormatDeserializer &deserializer);
 };
 
 class BoundLimitModifier : public BoundResultModifier {
@@ -95,6 +98,12 @@ public:
 	unique_ptr<BoundOrderModifier> Copy() const;
 	static bool Equals(const BoundOrderModifier &left, const BoundOrderModifier &right);
 	static bool Equals(const unique_ptr<BoundOrderModifier> &left, const unique_ptr<BoundOrderModifier> &right);
+
+	void Serialize(Serializer &serializer) const;
+	static unique_ptr<BoundOrderModifier> Deserialize(Deserializer &source, PlanDeserializationState &state);
+
+	void FormatSerialize(FormatSerializer &serializer) const;
+	static unique_ptr<BoundOrderModifier> FormatDeserialize(FormatDeserializer &deserializer);
 };
 
 enum class DistinctType : uint8_t { DISTINCT = 0, DISTINCT_ON = 1 };

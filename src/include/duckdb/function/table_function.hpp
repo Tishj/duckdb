@@ -204,8 +204,14 @@ typedef string (*table_function_to_string_t)(const FunctionData *bind_data);
 
 typedef void (*table_function_serialize_t)(FieldWriter &writer, const FunctionData *bind_data,
                                            const TableFunction &function);
-typedef unique_ptr<FunctionData> (*table_function_deserialize_t)(ClientContext &context, FieldReader &reader,
+typedef unique_ptr<FunctionData> (*table_function_deserialize_t)(PlanDeserializationState &context, FieldReader &reader,
                                                                  TableFunction &function);
+
+typedef void (*table_function_format_serialize_t)(FormatSerializer &serializer,
+                                                  const optional_ptr<FunctionData> bind_data,
+                                                  const TableFunction &function);
+typedef unique_ptr<FunctionData> (*table_function_format_deserialize_t)(FormatDeserializer &deserializer,
+                                                                        TableFunction &function);
 
 class TableFunction : public SimpleNamedParameterFunction {
 public:
@@ -265,6 +271,8 @@ public:
 
 	table_function_serialize_t serialize;
 	table_function_deserialize_t deserialize;
+	table_function_format_serialize_t format_serialize;
+	table_function_format_deserialize_t format_deserialize;
 	bool verify_serialization = true;
 
 	//! Whether or not the table function supports projection pushdown. If not supported a projection will be added

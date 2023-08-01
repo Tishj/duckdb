@@ -147,8 +147,20 @@ ArenaChunk *ArenaAllocator::GetTail() {
 	return tail;
 }
 
-bool ArenaAllocator::IsEmpty() {
+bool ArenaAllocator::IsEmpty() const {
 	return head == nullptr;
+}
+
+idx_t ArenaAllocator::SizeInBytes() const {
+	idx_t total_size = 0;
+	if (!IsEmpty()) {
+		auto current = head.get();
+		while (current != nullptr) {
+			total_size += current->current_position;
+			current = current->next.get();
+		}
+	}
+	return total_size;
 }
 
 } // namespace duckdb
