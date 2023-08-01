@@ -37,13 +37,13 @@ class TestPandasEnum(object):
                 "amt": [1, 2, 3, 4, 5, 6],
             }
         )
-        duckdb_cursor.register('df', df)
+        con.register('df', df)
         with pytest.raises(
             duckdb.ConversionException,
             match='Type UINT8 with value 0 can\'t be cast because the value is out of range for the destination type UINT8',
         ):
-            duckdb_cursor.execute(f"INSERT INTO tab SELECT * FROM df;")
+            con.execute(f"INSERT INTO tab SELECT * FROM df;")
 
-        assert duckdb_cursor.execute("select * from tab").fetchall() == []
-        duckdb_cursor.execute("DROP TABLE tab")
-        duckdb_cursor.execute("DROP TYPE cat")
+        assert con.execute("select * from tab").fetchall() == []
+        con.execute("DROP TABLE tab")
+        con.execute("DROP TYPE cat")
