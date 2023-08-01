@@ -12,8 +12,6 @@
 #include "duckdb/common/arrow/arrow.hpp"
 #include "duckdb/common/arrow/arrow_options.hpp"
 
-struct ArrowSchema;
-
 namespace duckdb {
 
 struct ArrowConverter {
