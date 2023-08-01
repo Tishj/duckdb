@@ -6,7 +6,7 @@
 
 #include "duckdb.h"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
-#include "duckdb/common/arrow/arrow.hpp"
+#include "duckdb/common/arrow/nanoarrow/nanoarrow.hpp"
 
 #ifndef DUCKDB_AMALGAMATION
 #include "duckdb/main/connection.hpp"
@@ -56,6 +56,8 @@ duckdb_adbc::AdbcStatusCode duckdb_adbc_init(size_t count, struct duckdb_adbc::A
 	driver->ConnectionGetTableSchema = duckdb_adbc::ConnectionGetTableSchema;
 	driver->StatementSetSubstraitPlan = duckdb_adbc::StatementSetSubstraitPlan;
 
+	driver->ConnectionGetInfo = duckdb_adbc::ConnectionGetInfo;
+	driver->StatementGetParameterSchema = duckdb_adbc::StatementGetParameterSchema;
 	return ADBC_STATUS_OK;
 }
 
@@ -71,9 +73,7 @@ struct DuckDBAdbcStatementWrapper {
 	IngestionMode ingestion_mode = IngestionMode::CREATE;
 };
 
-static AdbcStatusCode QueryInternal(struct AdbcConnection *connection, struct ArrowArrayStream *out, const char *query,
-                                    struct AdbcError *error);
-AdbcStatusCode SetErrorMaybe(const void *result, AdbcError *error, const std::string &error_message) {
+AdbcStatusCode SetErrorMaybe(const void *result, AdbcError *error, const char *error_message) {
 	if (!error) {
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
@@ -117,6 +117,9 @@ struct DuckDBAdbcDatabaseWrapper {
 };
 
 static void EmptyErrorRelease(AdbcError *error) {
+	// The object is valid but doesn't contain any data that needs to be cleaned up
+	// Just set the release to nullptr to indicate that it's no longer valid.
+	error->release = nullptr;
 	return;
 }
 
@@ -737,6 +740,18 @@ AdbcStatusCode GetPreparedParameters(duckdb_connection connection, duckdb::uniqu
 	return ADBC_STATUS_OK;
 }
 
+static AdbcStatusCode IngestToTableFromBoundStream(DuckDBAdbcStatementWrapper *statement, AdbcError *error) {
+	// See ADBC_INGEST_OPTION_TARGET_TABLE
+	D_ASSERT(statement->ingestion_stream.Valid());
+	D_ASSERT(statement->ingestion_table_name);
+
+	// Take the input stream from the statement
+	auto stream = std::move(statement->ingestion_stream);
+
+	// Ingest into a table from the bound stream
+	return Ingest(statement->connection, statement->ingestion_table_name, stream, error, statement->ingestion_mode);
+}
+
 AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct ArrowArrayStream *out,
                                      int64_t *rows_affected, struct AdbcError *error) {
 	if (!error) {
@@ -759,12 +774,15 @@ AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct Arr
 		*rows_affected = 0;
 	}
 
-	if (wrapper->ingestion_stream.Valid() && wrapper->ingestion_table_name) {
-		auto stream = std::move(wrapper->ingestion_stream);
-		return Ingest(wrapper->connection, wrapper->ingestion_table_name, stream, error, wrapper->ingestion_mode);
+	const auto has_stream = wrapper->ingestion_stream.Valid();
+	const auto to_table = wrapper->ingestion_table_name != nullptr;
+
+	if (has_stream && to_table) {
+		return IngestToTableFromBoundStream(wrapper, error);
 	}
 
-	if (wrapper->ingestion_stream.Valid()) {
+	if (has_stream) {
+		// A stream was bound to the statement, use that to bind parameters
 		duckdb::unique_ptr<duckdb::QueryResult> result;
 		auto stream = std::move(wrapper->ingestion_stream);
 		auto adbc_res = GetPreparedParameters(wrapper->connection, result, stream, error);
@@ -776,28 +794,30 @@ AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct Arr
 		}
 		duckdb::unique_ptr<duckdb::DataChunk> chunk;
 		while ((chunk = result->Fetch()) != nullptr) {
+			if (chunk->size() == 0) {
+				SetError(error, "Please provide a non-empty chunk to be bound");
+				return ADBC_STATUS_INVALID_ARGUMENT;
+			}
 			if (chunk->size() != 1) {
 				// TODO: add support for binding multiple rows
 				SetError(error, "Binding multiple rows at once is not supported yet");
-				return ADBC_STATUS_INVALID_ARGUMENT;
+				return ADBC_STATUS_NOT_IMPLEMENTED;
 			}
-			for (idx_t row_idx = 0; row_idx < chunk->size(); row_idx++) {
-				duckdb_clear_bindings(wrapper->statement);
-				for (idx_t col_idx = 0; col_idx < chunk->ColumnCount(); col_idx++) {
-					auto val = chunk->GetValue(col_idx, row_idx);
-					auto duck_val = (duckdb_value)&val;
-					auto res = duckdb_bind_value(wrapper->statement, 1 + col_idx, duck_val);
-					if (res != DuckDBSuccess) {
-						SetError(error, duckdb_prepare_error(wrapper->statement));
-						return ADBC_STATUS_INVALID_ARGUMENT;
-					}
-				}
-
-				auto res = duckdb_execute_prepared_arrow(wrapper->statement, &wrapper->result);
+			duckdb_clear_bindings(wrapper->statement);
+			for (idx_t col_idx = 0; col_idx < chunk->ColumnCount(); col_idx++) {
+				auto val = chunk->GetValue(col_idx, 0);
+				auto duck_val = (duckdb_value)&val;
+				auto res = duckdb_bind_value(wrapper->statement, 1 + col_idx, duck_val);
 				if (res != DuckDBSuccess) {
-					SetError(error, duckdb_query_arrow_error(wrapper->result));
+					SetError(error, duckdb_prepare_error(wrapper->statement));
 					return ADBC_STATUS_INVALID_ARGUMENT;
 				}
+			}
+
+			auto res = duckdb_execute_prepared_arrow(wrapper->statement, &wrapper->result);
+			if (res != DuckDBSuccess) {
+				SetError(error, duckdb_query_arrow_error(wrapper->result));
+				return ADBC_STATUS_INVALID_ARGUMENT;
 			}
 		}
 	} else {
@@ -946,29 +966,6 @@ AdbcStatusCode StatementSetOption(struct AdbcStatement *statement, const char *k
 		}
 	}
 	return ADBC_STATUS_INVALID_ARGUMENT;
-}
-
-AdbcStatusCode QueryInternal(struct AdbcConnection *connection, struct ArrowArrayStream *out, const char *query,
-                             struct AdbcError *error) {
-	AdbcStatement statement;
-
-	auto status = StatementNew(connection, &statement, error);
-	if (status != ADBC_STATUS_OK) {
-		SetError(error, "unable to initialize statement");
-		return status;
-	}
-	status = StatementSetSqlQuery(&statement, query, error);
-	if (status != ADBC_STATUS_OK) {
-		SetError(error, "unable to initialize statement");
-		return status;
-	}
-	status = StatementExecuteQuery(&statement, out, nullptr, error);
-	if (status != ADBC_STATUS_OK) {
-		SetError(error, "unable to initialize statement");
-		return status;
-	}
-
-	return ADBC_STATUS_OK;
 }
 
 AdbcStatusCode ConnectionGetObjects(struct AdbcConnection *connection, int depth, const char *catalog,

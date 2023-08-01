@@ -23,8 +23,6 @@ import typing
 
 import adbc_driver_manager
 
-from ._version import __version__  # noqa:F401
-
 __all__ = ["StatementOptions", "connect"]
 
 
@@ -44,5 +42,6 @@ def connect(uri: typing.Optional[str] = None) -> adbc_driver_manager.AdbcDatabas
 
 @functools.cache
 def _driver_path() -> str:
-	import duckdb
-	return duckdb.__file__
+    import duckdb
+
+    return duckdb.duckdb.__file__

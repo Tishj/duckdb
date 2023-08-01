@@ -8,20 +8,17 @@
 
 #include "duckdb.h"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
-#include "duckdb/common/arrow/arrow.hpp"
+#include "duckdb/common/arrow/nanoarrow/nanoarrow.hpp"
 
-#include "stdlib.h"
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "duckdb/common/adbc/nanoarrow/nanoarrow.h"
-
 namespace duckdb_adbc {
 
-static size_t kErrorBufferSize = 256;
+using duckdb_nanoarrow::ArrowSchemaDeepCopy;
 
 struct SingleBatchArrayStream {
 	struct ArrowSchema schema;
