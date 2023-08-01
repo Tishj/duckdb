@@ -925,13 +925,14 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const string &query, s
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
 	}
-	auto statements = connection->ExtractStatements(query);
 	if (alias.empty()) {
 		alias = "unnamed_relation_" + StringUtil::GenerateRandomName(16);
 	}
-	if (statements.size() == 1 && statements[0]->type == StatementType::SELECT_STATEMENT) {
+	Parser parser(connection->context->GetParserOptions());
+	parser.ParseQuery(query);
+	if (parser.statements.size() == 1 && parser.statements[0]->type == StatementType::SELECT_STATEMENT) {
 		return make_uniq<DuckDBPyRelation>(connection->RelationFromQuery(
-		    unique_ptr_cast<SQLStatement, SelectStatement>(std::move(statements[0])), alias));
+		    unique_ptr_cast<SQLStatement, SelectStatement>(std::move(parser.statements[0])), alias));
 	}
 	auto res = ExecuteInternal(query);
 	if (!res) {
