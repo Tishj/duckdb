@@ -31,7 +31,7 @@ public:
 
 	void ProduceRecordBatches() {
 		auto &list = result.GetRecordBatches();
-		auto arrow_options = executor.context.GetArrowOptions();
+		auto arrow_options = executor.context.GetClientProperties();
 		for (auto &index : record_batch_indices) {
 			ArrowArray data;
 			idx_t count;

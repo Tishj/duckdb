@@ -24,6 +24,7 @@
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/external_dependencies.hpp"
 #include "duckdb/common/preserved_error.hpp"
+#include "duckdb/main/client_properties.hpp"
 
 namespace duckdb {
 class Appender;
@@ -187,7 +188,6 @@ public:
 	DUCKDB_API unordered_set<string> GetTableNames(const string &query);
 
 	DUCKDB_API ClientProperties GetClientProperties() const;
-	DUCKDB_API ArrowOptions GetArrowOptions() const;
 
 	//! Returns true if execution of the current query is finished
 	DUCKDB_API bool ExecutionIsFinished();

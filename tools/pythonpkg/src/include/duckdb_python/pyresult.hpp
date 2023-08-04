@@ -75,8 +75,6 @@ private:
 	unique_ptr<QueryResult> result;
 	unique_ptr<DataChunk> current_chunk;
 
-	string timezone_config;
-
 	bool result_closed = false;
 };
 
