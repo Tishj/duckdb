@@ -828,7 +828,7 @@ NumpyResultConversion::NumpyResultConversion(const vector<LogicalType> &types, i
     : count(0), capacity(0) {
 	owned_data.reserve(types.size());
 	for (auto &type : types) {
-		owned_data.emplace_back(type, std::move(client_properties));
+		owned_data.emplace_back(type, client_properties);
 	}
 	Resize(initial_capacity);
 }
