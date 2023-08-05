@@ -43,7 +43,7 @@ public:
 	DUCKDB_API idx_t RowCount() const;
 
 public:
-	py::list &GetRecordBatches();
+	const py::list &GetRecordBatches();
 	void SetRecordBatches(unique_ptr<py::list> record_batches);
 	idx_t BatchSize() const;
 

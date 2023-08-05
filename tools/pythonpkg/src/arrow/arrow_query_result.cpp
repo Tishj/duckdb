@@ -38,7 +38,7 @@ idx_t ArrowQueryResult::RowCount() const {
 	return row_count;
 }
 
-py::list &ArrowQueryResult::GetRecordBatches() {
+const py::list &ArrowQueryResult::GetRecordBatches() {
 	if (HasError()) {
 		throw InvalidInputException("Attempting to get collection from an unsuccessful query result\n: Error %s",
 		                            GetError());
