@@ -15,6 +15,8 @@
 #include "duckdb/catalog/dependency_list.hpp"
 #include "duckdb/function/function_set.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
+#include "duckdb/common/serializer/format_serializer.hpp"
+#include "duckdb/common/serializer/format_deserializer.hpp"
 
 namespace duckdb {
 
@@ -215,7 +217,7 @@ static unique_ptr<GlobalTableFunctionState> IndexScanInitGlobal(ClientContext &c
 	auto &bind_data = input.bind_data->Cast<TableScanBindData>();
 	data_ptr_t row_id_data = nullptr;
 	if (!bind_data.result_ids.empty()) {
-		row_id_data = (data_ptr_t)&bind_data.result_ids[0];
+		row_id_data = (data_ptr_t)&bind_data.result_ids[0]; // NOLINT - this is not pretty
 	}
 	auto result = make_uniq<IndexScanGlobalState>(row_id_data);
 	auto &local_storage = LocalStorage::Get(context, bind_data.table.catalog);
@@ -279,6 +281,15 @@ void TableScanPushdownComplexFilter(ClientContext &context, LogicalGet &get, Fun
 		return;
 	}
 	if (bind_data.is_index_scan) {
+		return;
+	}
+	if (!get.table_filters.filters.empty()) {
+		// if there were filters before we can't convert this to an index scan
+		return;
+	}
+	if (!get.projection_ids.empty()) {
+		// if columns were pruned by RemoveUnusedColumns we can't convert this to an index scan,
+		// because index scan does not support filter_prune (yet)
 		return;
 	}
 	if (filters.empty()) {
@@ -350,7 +361,7 @@ void TableScanPushdownComplexFilter(ClientContext &context, LogicalGet &get, Fun
 			} else if (expr.type == ExpressionType::COMPARE_BETWEEN) {
 				// BETWEEN expression
 				auto &between = expr.Cast<BoundBetweenExpression>();
-				if (!between.input->Equals(index_expression.get())) {
+				if (!between.input->Equals(*index_expression)) {
 					// expression doesn't match the current index expression
 					continue;
 				}
@@ -417,7 +428,7 @@ static void TableScanSerialize(FieldWriter &writer, const FunctionData *bind_dat
 	writer.WriteString(bind_data.table.schema.catalog.GetName());
 }
 
-static unique_ptr<FunctionData> TableScanDeserialize(ClientContext &context, FieldReader &reader,
+static unique_ptr<FunctionData> TableScanDeserialize(PlanDeserializationState &state, FieldReader &reader,
                                                      TableFunction &function) {
 	auto schema_name = reader.ReadRequired<string>();
 	auto table_name = reader.ReadRequired<string>();
@@ -426,7 +437,7 @@ static unique_ptr<FunctionData> TableScanDeserialize(ClientContext &context, Fie
 	auto result_ids = reader.ReadRequiredList<row_t>();
 	auto catalog_name = reader.ReadField<string>(INVALID_CATALOG);
 
-	auto &catalog_entry = Catalog::GetEntry<TableCatalogEntry>(context, catalog_name, schema_name, table_name);
+	auto &catalog_entry = Catalog::GetEntry<TableCatalogEntry>(state.context, catalog_name, schema_name, table_name);
 	if (catalog_entry.type != CatalogType::TABLE_ENTRY) {
 		throw SerializationException("Cant find table for %s.%s", schema_name, table_name);
 	}
@@ -435,6 +446,35 @@ static unique_ptr<FunctionData> TableScanDeserialize(ClientContext &context, Fie
 	result->is_index_scan = is_index_scan;
 	result->is_create_index = is_create_index;
 	result->result_ids = std::move(result_ids);
+	return std::move(result);
+}
+
+static void TableScanFormatSerialize(FormatSerializer &serializer, const optional_ptr<FunctionData> bind_data_p,
+                                     const TableFunction &function) {
+	auto &bind_data = bind_data_p->Cast<TableScanBindData>();
+	serializer.WriteProperty(100, "catalog", bind_data.table.schema.catalog.GetName());
+	serializer.WriteProperty(101, "schema", bind_data.table.schema.name);
+	serializer.WriteProperty(102, "table", bind_data.table.name);
+	serializer.WriteProperty(103, "is_index_scan", bind_data.is_index_scan);
+	serializer.WriteProperty(104, "is_create_index", bind_data.is_create_index);
+	serializer.WriteProperty(105, "result_ids", bind_data.result_ids);
+	serializer.WriteProperty(106, "result_ids", bind_data.result_ids);
+}
+
+static unique_ptr<FunctionData> TableScanFormatDeserialize(FormatDeserializer &deserializer, TableFunction &function) {
+	auto catalog = deserializer.ReadProperty<string>(100, "catalog");
+	auto schema = deserializer.ReadProperty<string>(101, "schema");
+	auto table = deserializer.ReadProperty<string>(102, "table");
+	auto &catalog_entry =
+	    Catalog::GetEntry<TableCatalogEntry>(deserializer.Get<ClientContext &>(), catalog, schema, table);
+	if (catalog_entry.type != CatalogType::TABLE_ENTRY) {
+		throw SerializationException("Cant find table for %s.%s", schema, table);
+	}
+	auto result = make_uniq<TableScanBindData>(catalog_entry.Cast<DuckTableEntry>());
+	deserializer.ReadProperty(103, "is_index_scan", result->is_index_scan);
+	deserializer.ReadProperty(104, "is_create_index", result->is_create_index);
+	deserializer.ReadProperty(105, "result_ids", result->result_ids);
+	deserializer.ReadProperty(106, "result_ids", result->result_ids);
 	return std::move(result);
 }
 
@@ -453,6 +493,8 @@ TableFunction TableScanFunction::GetIndexScanFunction() {
 	scan_function.filter_pushdown = false;
 	scan_function.serialize = TableScanSerialize;
 	scan_function.deserialize = TableScanDeserialize;
+	scan_function.format_serialize = TableScanFormatSerialize;
+	scan_function.format_deserialize = TableScanFormatDeserialize;
 	return scan_function;
 }
 
@@ -473,6 +515,8 @@ TableFunction TableScanFunction::GetFunction() {
 	scan_function.filter_prune = true;
 	scan_function.serialize = TableScanSerialize;
 	scan_function.deserialize = TableScanDeserialize;
+	scan_function.format_serialize = TableScanFormatSerialize;
+	scan_function.format_deserialize = TableScanFormatDeserialize;
 	return scan_function;
 }
 

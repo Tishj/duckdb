@@ -4,12 +4,15 @@
 
 using namespace duckdb;
 
-static void TestArrowRoundtrip(const string &query, ArrowOptions options = ArrowOptions()) {
+static void TestArrowRoundtrip(const string &query, bool export_large_buffer = false) {
 	DuckDB db;
 	Connection con(db);
-
-	REQUIRE(ArrowTestHelper::RunArrowComparison(con, query, true, options));
-	REQUIRE(ArrowTestHelper::RunArrowComparison(con, query, false, options));
+	if (export_large_buffer) {
+		auto res = con.Query("SET arrow_large_buffer_size=True");
+		REQUIRE(!res->HasError());
+	}
+	REQUIRE(ArrowTestHelper::RunArrowComparison(con, query, true));
+	REQUIRE(ArrowTestHelper::RunArrowComparison(con, query, false));
 }
 
 static void TestParquetRoundtrip(const string &path) {
@@ -28,19 +31,19 @@ static void TestParquetRoundtrip(const string &path) {
 }
 
 TEST_CASE("Test Export Large", "[arrow]") {
-	ArrowOptions options;
-	options.offset_size = ArrowOffsetSize::REGULAR;
+	// Test with Regular Buffer Size
 	TestArrowRoundtrip("SELECT 'bla' FROM range(10000)");
-
-	TestArrowRoundtrip("SELECT 'bla' FROM range(10000)", options);
 
 	TestArrowRoundtrip("SELECT 'bla'::BLOB FROM range(10000)");
 
-	TestArrowRoundtrip("SELECT 'bla'::BLOB FROM range(10000)", options);
-
 	TestArrowRoundtrip("SELECT '3d038406-6275-4aae-bec1-1235ccdeaade'::UUID FROM range(10000) tbl(i)");
 
-	TestArrowRoundtrip("SELECT '3d038406-6275-4aae-bec1-1235ccdeaade'::UUID FROM range(10000) tbl(i)", options);
+	// Test with Large Buffer Size
+	TestArrowRoundtrip("SELECT 'bla' FROM range(10000)", true);
+
+	TestArrowRoundtrip("SELECT 'bla'::BLOB FROM range(10000)", true);
+
+	TestArrowRoundtrip("SELECT '3d038406-6275-4aae-bec1-1235ccdeaade'::UUID FROM range(10000) tbl(i)", true);
 }
 
 TEST_CASE("Test arrow roundtrip", "[arrow]") {
@@ -71,7 +74,7 @@ TEST_CASE("Test arrow roundtrip", "[arrow]") {
 	// FIXME: there seems to be a bug in the enum arrow reader in this test when run with vsize=2
 	return;
 #endif
-	TestArrowRoundtrip("SELECT * EXCLUDE(bit) REPLACE "
+	TestArrowRoundtrip("SELECT * EXCLUDE(bit,time_tz) REPLACE "
 	                   "(interval (1) seconds AS interval, hugeint::DOUBLE as hugeint) FROM test_all_types()");
 }
 
@@ -99,7 +102,8 @@ TEST_CASE("Test Parquet Files round-trip", "[arrow][.]") {
 	// data.emplace_back("data/parquet-testing/complex.parquet");
 	data.emplace_back("data/parquet-testing/data-types.parquet");
 	data.emplace_back("data/parquet-testing/date.parquet");
-	data.emplace_back("data/parquet-testing/date_stats.parquet");
+	// arrow can't read this because it's a time with a timezone and it's not supported by arrow
+	//	data.emplace_back("data/parquet-testing/date_stats.parquet");
 	data.emplace_back("data/parquet-testing/decimal_stats.parquet");
 	data.emplace_back("data/parquet-testing/decimals.parquet");
 	data.emplace_back("data/parquet-testing/enum.parquet");

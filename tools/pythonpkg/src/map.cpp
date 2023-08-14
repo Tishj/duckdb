@@ -24,7 +24,7 @@ struct MapFunctionData : public TableFunctionData {
 	vector<string> in_names, out_names;
 };
 
-static py::handle FunctionCall(NumpyResultConversion &conversion, vector<string> &names, PyObject *function) {
+static py::object FunctionCall(NumpyResultConversion &conversion, const vector<string> &names, PyObject *function) {
 	py::dict in_numpy_dict;
 	for (idx_t col_idx = 0; col_idx < names.size(); col_idx++) {
 		in_numpy_dict[names[col_idx].c_str()] = conversion.ToArray(col_idx);
@@ -39,7 +39,7 @@ static py::handle FunctionCall(NumpyResultConversion &conversion, vector<string>
 		throw InvalidInputException("Python error. See above for a stack trace.");
 	}
 
-	py::handle df(df_obj);
+	auto df = py::reinterpret_steal<py::object>(df_obj);
 	if (df.is_none()) { // no return, probably modified in place
 		throw InvalidInputException("No return value from Python function");
 	}
@@ -130,26 +130,21 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 
 	auto data_uptr = make_uniq<MapFunctionData>();
 	auto &data = *data_uptr;
-	data.function = (PyObject *)input.inputs[0].GetPointer();
-<<<<<<< HEAD
-	// Skip the POINTER column
-	idx_t user_input = input.input_table_types.size() - 1;
+	data.function = reinterpret_cast<PyObject *>(input.inputs[0].GetPointer());
+	auto explicit_schema = reinterpret_cast<PyObject *>(input.inputs[1].GetPointer());
+
+	// Skip the POINTER columns
+	idx_t user_input = input.input_table_types.size() - 2;
 	for (idx_t i = 0; i < user_input; i++) {
 		data.in_types.push_back(input.input_table_types[i]);
 		data.in_names.push_back(input.input_table_names[i]);
 	}
-=======
-	auto explicit_schema = (PyObject *)input.inputs[1].GetPointer();
-
-	data.in_names = input.input_table_names;
-	data.in_types = input.input_table_types;
->>>>>>> master
 
 	if (explicit_schema != Py_None) {
 		return BindExplicitSchema(std::move(data_uptr), explicit_schema, return_types, names);
 	}
 
-	NumpyResultConversion conversion(data.in_types, 0);
+	NumpyResultConversion conversion(data.in_types, 0, context.GetClientProperties());
 	auto df = FunctionCall(conversion, data.in_names, data.function);
 	vector<PandasColumnBindData> pandas_bind_data; // unused
 	Pandas::Bind(context, df, pandas_bind_data, return_types, names);
@@ -162,7 +157,7 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 	return std::move(data_uptr);
 }
 
-static string TypeVectorToString(vector<LogicalType> &types) {
+static string TypeVectorToString(const vector<LogicalType> &types) {
 	return StringUtil::Join(types, types.size(), ", ", [](const LogicalType &argument) { return argument.ToString(); });
 }
 
@@ -177,9 +172,9 @@ OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, Table
 		return OperatorResultType::NEED_MORE_INPUT;
 	}
 
-	auto &data = (MapFunctionData &)*data_p.bind_data;
+	auto &data = data_p.bind_data->Cast<MapFunctionData>();
 
-	NumpyResultConversion conversion(data.in_types, input.size());
+	NumpyResultConversion conversion(data.in_types, input.size(), context.client.GetClientProperties());
 	conversion.Append(input, data.in_types.size());
 
 	auto df = FunctionCall(conversion, data.in_names, data.function);

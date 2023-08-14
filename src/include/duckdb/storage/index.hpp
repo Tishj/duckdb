@@ -14,7 +14,7 @@
 #include "duckdb/common/sort/sort.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/planner/expression.hpp"
-#include "duckdb/storage/meta_block_writer.hpp"
+#include "duckdb/storage/metadata/metadata_writer.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/common/types/constraint_conflict_info.hpp"
 
@@ -104,8 +104,10 @@ public:
 	//! Obtains a lock and calls Vacuum while holding that lock
 	void Vacuum();
 
-	//! Returns the string representation of an index
-	virtual string ToString() = 0;
+	//! Returns the string representation of an index, or only traverses and verifies the index
+	virtual string VerifyAndToString(IndexLock &state, const bool only_verify) = 0;
+	//! Obtains a lock and calls VerifyAndToString while holding that lock
+	string VerifyAndToString(const bool only_verify);
 
 	//! Returns true if the index is affected by updates on the specified column IDs, and false otherwise
 	bool IndexIsUpdated(const vector<PhysicalIndex> &column_ids) const;
@@ -124,7 +126,7 @@ public:
 	}
 
 	//! Serializes the index and returns the pair of block_id offset positions
-	virtual BlockPointer Serialize(MetaBlockWriter &writer);
+	virtual BlockPointer Serialize(MetadataWriter &writer);
 	//! Returns the serialized data pointer to the block and offset of the serialized index
 	BlockPointer GetSerializedDataPointer() const {
 		return serialized_data_pointer;
@@ -153,13 +155,13 @@ public:
 	template <class TARGET>
 	TARGET &Cast() {
 		D_ASSERT(dynamic_cast<TARGET *>(this));
-		return (TARGET &)*this;
+		return reinterpret_cast<TARGET &>(*this);
 	}
 
 	template <class TARGET>
 	const TARGET &Cast() const {
 		D_ASSERT(dynamic_cast<const TARGET *>(this));
-		return (const TARGET &)*this;
+		return reinterpret_cast<const TARGET &>(*this);
 	}
 };
 

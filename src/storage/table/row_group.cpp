@@ -6,11 +6,12 @@
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/column_checkpoint_state.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
+#include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/common/chrono.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/storage/checkpoint/table_data_writer.hpp"
-#include "duckdb/storage/meta_block_reader.hpp"
+#include "duckdb/storage/metadata/metadata_reader.hpp"
 #include "duckdb/transaction/duck_transaction_manager.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/attached_database.hpp"
@@ -66,6 +67,21 @@ void VersionNode::SetStart(idx_t start) {
 	}
 }
 
+idx_t VersionNode::GetCommittedDeletedCount(idx_t count) {
+	idx_t deleted_count = 0;
+	for (idx_t r = 0, i = 0; r < count; r += STANDARD_VECTOR_SIZE, i++) {
+		if (!info[i]) {
+			continue;
+		}
+		idx_t max_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, count - r);
+		if (max_count == 0) {
+			break;
+		}
+		deleted_count += info[i]->GetCommittedDeletedCount(max_count);
+	}
+	return deleted_count;
+}
+
 RowGroup::~RowGroup() {
 }
 
@@ -100,19 +116,14 @@ ColumnData &RowGroup::GetColumn(storage_t c) {
 	if (column_pointers.size() != columns.size()) {
 		throw InternalException("Lazy loading a column but the pointer was not set");
 	}
-	auto &block_manager = GetCollection().GetBlockManager();
+	auto &metadata_manager = GetCollection().GetMetadataManager();
 	auto &types = GetCollection().GetTypes();
 	auto &block_pointer = column_pointers[c];
-	MetaBlockReader column_data_reader(block_manager, block_pointer.block_id);
-	column_data_reader.offset = block_pointer.offset;
+	MetadataReader column_data_reader(metadata_manager, block_pointer);
 	this->columns[c] =
 	    ColumnData::Deserialize(GetBlockManager(), GetTableInfo(), c, start, column_data_reader, types[c], nullptr);
 	is_loaded[c] = true;
 	return *columns[c];
-}
-
-DatabaseInstance &RowGroup::GetDatabase() {
-	return GetCollection().GetDatabase();
 }
 
 BlockManager &RowGroup::GetBlockManager() {
@@ -269,7 +280,7 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 }
 
 unique_ptr<RowGroup> RowGroup::AddColumn(RowGroupCollection &new_collection, ColumnDefinition &new_column,
-                                         ExpressionExecutor &executor, Expression *default_value, Vector &result) {
+                                         ExpressionExecutor &executor, Expression &default_value, Vector &result) {
 	Verify();
 
 	// construct a new column data for the new column
@@ -284,10 +295,8 @@ unique_ptr<RowGroup> RowGroup::AddColumn(RowGroupCollection &new_collection, Col
 		added_column->InitializeAppend(state);
 		for (idx_t i = 0; i < rows_to_write; i += STANDARD_VECTOR_SIZE) {
 			idx_t rows_in_this_vector = MinValue<idx_t>(rows_to_write - i, STANDARD_VECTOR_SIZE);
-			if (default_value) {
-				dummy_chunk.SetCardinality(rows_in_this_vector);
-				executor.ExecuteExpression(dummy_chunk, result);
-			}
+			dummy_chunk.SetCardinality(rows_in_this_vector);
+			executor.ExecuteExpression(dummy_chunk, result);
 			added_column->Append(state, result, rows_in_this_vector);
 		}
 	}
@@ -502,7 +511,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					if (column == COLUMN_IDENTIFIER_ROW_ID) {
 						D_ASSERT(result.data[i].GetType().InternalType() == PhysicalType::INT64);
 						result.data[i].SetVectorType(VectorType::FLAT_VECTOR);
-						auto result_data = (int64_t *)FlatVector::GetData(result.data[i]);
+						auto result_data = FlatVector::GetData<int64_t>(result.data[i]);
 						for (size_t sel_idx = 0; sel_idx < approved_tuple_count; sel_idx++) {
 							result_data[sel_idx] = this->start + current_row + sel.get_index(sel_idx);
 						}
@@ -650,7 +659,7 @@ void RowGroup::AppendVersionInfo(TransactionData transaction, idx_t count) {
 			} else {
 				D_ASSERT(version_info->info[vector_idx]->type == ChunkInfoType::VECTOR_INFO);
 				// use existing vector
-				info = (ChunkVectorInfo *)version_info->info[vector_idx].get();
+				info = &version_info->info[vector_idx]->Cast<ChunkVectorInfo>();
 			}
 			info->Append(start, end, transaction.transaction_id);
 		}
@@ -795,6 +804,13 @@ RowGroupWriteData RowGroup::WriteToDisk(PartialBlockManager &manager,
 	return result;
 }
 
+bool RowGroup::AllDeleted() {
+	if (!version_info) {
+		return false;
+	}
+	return version_info->GetCommittedDeletedCount(count) == count;
+}
+
 RowGroupPointer RowGroup::Checkpoint(RowGroupWriter &writer, TableStatistics &global_stats) {
 	RowGroupPointer row_group_pointer;
 
@@ -815,7 +831,7 @@ RowGroupPointer RowGroup::Checkpoint(RowGroupWriter &writer, TableStatistics &gl
 	for (auto &state : result.states) {
 		// get the current position of the table data writer
 		auto &data_writer = writer.GetPayloadWriter();
-		auto pointer = data_writer.GetBlockPointer();
+		auto pointer = data_writer.GetMetaBlockPointer();
 
 		// store the stats and the data pointers in the row group pointers
 		row_group_pointer.data_pointers.push_back(pointer);
@@ -881,8 +897,8 @@ void RowGroup::Serialize(RowGroupPointer &pointer, Serializer &main_serializer) 
 	writer.WriteField<uint64_t>(pointer.tuple_count);
 	auto &serializer = writer.GetSerializer();
 	for (auto &data_pointer : pointer.data_pointers) {
-		serializer.Write<block_id_t>(data_pointer.block_id);
-		serializer.Write<uint64_t>(data_pointer.offset);
+		serializer.Write<idx_t>(data_pointer.block_pointer);
+		serializer.Write<uint32_t>(data_pointer.offset);
 	}
 	CheckpointDeletes(pointer.versions.get(), serializer);
 	writer.Finalize();
@@ -900,9 +916,9 @@ RowGroupPointer RowGroup::Deserialize(Deserializer &main_source, const vector<Lo
 
 	auto &source = reader.GetSource();
 	for (idx_t i = 0; i < physical_columns; i++) {
-		BlockPointer pointer;
-		pointer.block_id = source.Read<block_id_t>();
-		pointer.offset = source.Read<uint64_t>();
+		MetaBlockPointer pointer;
+		pointer.block_pointer = source.Read<idx_t>();
+		pointer.offset = source.Read<uint32_t>();
 		result.data_pointers.push_back(pointer);
 	}
 	result.versions = DeserializeDeletes(source);
@@ -912,12 +928,12 @@ RowGroupPointer RowGroup::Deserialize(Deserializer &main_source, const vector<Lo
 }
 
 //===--------------------------------------------------------------------===//
-// GetStorageInfo
+// GetColumnSegmentInfo
 //===--------------------------------------------------------------------===//
-void RowGroup::GetStorageInfo(idx_t row_group_index, TableStorageInfo &result) {
+void RowGroup::GetColumnSegmentInfo(idx_t row_group_index, vector<ColumnSegmentInfo> &result) {
 	for (idx_t col_idx = 0; col_idx < GetColumnCount(); col_idx++) {
 		auto &col_data = GetColumn(col_idx);
-		col_data.GetStorageInfo(row_group_index, {col_idx}, result);
+		col_data.GetColumnSegmentInfo(row_group_index, {col_idx}, result);
 	}
 }
 
@@ -985,7 +1001,7 @@ void VersionDeleteState::Delete(row_t row_id) {
 			info.version_info->info[vector_idx] =
 			    make_uniq<ChunkVectorInfo>(info.start + vector_idx * STANDARD_VECTOR_SIZE);
 		} else if (info.version_info->info[vector_idx]->type == ChunkInfoType::CONSTANT_INFO) {
-			auto &constant = (ChunkConstantInfo &)*info.version_info->info[vector_idx];
+			auto &constant = info.version_info->info[vector_idx]->Cast<ChunkConstantInfo>();
 			// info exists but it's a constant info: convert to a vector info
 			auto new_info = make_uniq<ChunkVectorInfo>(info.start + vector_idx * STANDARD_VECTOR_SIZE);
 			new_info->insert_id = constant.insert_id.load();
@@ -995,7 +1011,7 @@ void VersionDeleteState::Delete(row_t row_id) {
 			info.version_info->info[vector_idx] = std::move(new_info);
 		}
 		D_ASSERT(info.version_info->info[vector_idx]->type == ChunkInfoType::VECTOR_INFO);
-		current_info = (ChunkVectorInfo *)info.version_info->info[vector_idx].get();
+		current_info = &info.version_info->info[vector_idx]->Cast<ChunkVectorInfo>();
 		current_chunk = vector_idx;
 		chunk_row = vector_idx * STANDARD_VECTOR_SIZE;
 	}

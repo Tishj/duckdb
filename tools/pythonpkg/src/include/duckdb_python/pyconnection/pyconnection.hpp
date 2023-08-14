@@ -59,7 +59,7 @@ public:
 
 	shared_ptr<DuckDBPyConnection> Enter();
 
-	static bool Exit(DuckDBPyConnection &self, const py::object &exc_type, const py::object &exc,
+	static void Exit(DuckDBPyConnection &self, const py::object &exc_type, const py::object &exc,
 	                 const py::object &traceback);
 
 	static bool DetectAndGetEnvironment();
@@ -100,7 +100,8 @@ public:
 	RegisterScalarUDF(const string &name, const py::function &udf, const py::object &arguments = py::none(),
 	                  const shared_ptr<DuckDBPyType> &return_type = nullptr, PythonUDFType type = PythonUDFType::NATIVE,
 	                  FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING,
-	                  PythonExceptionHandling exception_handling = PythonExceptionHandling::FORWARD_ERROR);
+	                  PythonExceptionHandling exception_handling = PythonExceptionHandling::FORWARD_ERROR,
+	                  bool side_effects = false);
 
 	shared_ptr<DuckDBPyConnection> UnregisterUDF(const string &name);
 
@@ -118,8 +119,8 @@ public:
 
 	void LoadExtension(const string &extension);
 
-	unique_ptr<DuckDBPyRelation> FromQuery(const string &query, const string &alias = "query_relation");
-	unique_ptr<DuckDBPyRelation> RunQuery(const string &query, const string &alias = "query_relation");
+	unique_ptr<DuckDBPyRelation> RunQuery(const string &query, string alias = "",
+	                                      const py::object &params = py::none());
 
 	unique_ptr<DuckDBPyRelation> Table(const string &tname);
 
@@ -161,6 +162,8 @@ public:
 
 	void Close();
 
+	void Interrupt();
+
 	ModifiedMemoryFileSystem &GetObjectFileSystem();
 
 	// cursor() is stupid
@@ -191,6 +194,7 @@ public:
 	static shared_ptr<DuckDBPyConnection> Connect(const string &database, bool read_only, const py::dict &config);
 
 	static vector<Value> TransformPythonParamList(const py::handle &params);
+	static case_insensitive_map_t<Value> TransformPythonParamDict(const py::dict &params);
 
 	void RegisterFilesystem(AbstractFileSystem filesystem);
 	void UnregisterFilesystem(const py::str &name);
@@ -214,7 +218,8 @@ private:
 	unique_lock<std::mutex> AcquireConnectionLock();
 	ScalarFunction CreateScalarUDF(const string &name, const py::function &udf, const py::object &parameters,
 	                               const shared_ptr<DuckDBPyType> &return_type, bool vectorized,
-	                               FunctionNullHandling null_handling, PythonExceptionHandling exception_handling);
+	                               FunctionNullHandling null_handling, PythonExceptionHandling exception_handling,
+	                               bool side_effects);
 	void RegisterArrowObject(const py::object &arrow_object, const string &name);
 
 	static PythonEnvironmentType environment;

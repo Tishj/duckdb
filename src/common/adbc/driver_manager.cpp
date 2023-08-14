@@ -61,16 +61,18 @@ void GetWinError(std::string *buffer) {
 
 void ReleaseError(struct AdbcError *error) {
 	if (error) {
-		if (error->message)
+		if (error->message) {
 			delete[] error->message;
+		}
 		error->message = nullptr;
 		error->release = nullptr;
 	}
 }
 
 void SetError(struct AdbcError *error, const std::string &message) {
-	if (!error)
+	if (!error) {
 		return;
+	}
 	if (error->message) {
 		// Append
 		std::string buffer = error->message;
@@ -107,8 +109,9 @@ struct ManagerDriverState {
 static AdbcStatusCode ReleaseDriver(struct AdbcDriver *driver, struct AdbcError *error) {
 	AdbcStatusCode status = ADBC_STATUS_OK;
 
-	if (!driver->private_manager)
+	if (!driver->private_manager) {
 		return status;
+	}
 	ManagerDriverState *state = reinterpret_cast<ManagerDriverState *>(driver->private_manager);
 
 	if (state->driver_release) {
@@ -131,27 +134,8 @@ static AdbcStatusCode ReleaseDriver(struct AdbcDriver *driver, struct AdbcError 
 
 // Default stubs
 
-AdbcStatusCode ConnectionCommit(struct AdbcConnection *, struct AdbcError *error) {
-	return ADBC_STATUS_NOT_IMPLEMENTED;
-}
-
 AdbcStatusCode ConnectionGetInfo(struct AdbcConnection *connection, uint32_t *info_codes, size_t info_codes_length,
                                  struct ArrowArrayStream *out, struct AdbcError *error) {
-	return ADBC_STATUS_NOT_IMPLEMENTED;
-}
-
-AdbcStatusCode ConnectionGetTableSchema(struct AdbcConnection *, const char *, const char *, const char *,
-                                        struct ArrowSchema *, struct AdbcError *error) {
-	return ADBC_STATUS_NOT_IMPLEMENTED;
-}
-
-AdbcStatusCode ConnectionReadPartition(struct AdbcConnection *connection, const uint8_t *serialized_partition,
-                                       size_t serialized_length, struct ArrowArrayStream *out,
-                                       struct AdbcError *error) {
-	return ADBC_STATUS_NOT_IMPLEMENTED;
-}
-
-AdbcStatusCode ConnectionRollback(struct AdbcConnection *, struct AdbcError *error) {
 	return ADBC_STATUS_NOT_IMPLEMENTED;
 }
 
@@ -160,17 +144,8 @@ AdbcStatusCode StatementBind(struct AdbcStatement *, struct ArrowArray *, struct
 	return ADBC_STATUS_NOT_IMPLEMENTED;
 }
 
-AdbcStatusCode StatementExecutePartitions(struct AdbcStatement *statement, struct ArrowSchema *schema,
-                                          struct AdbcPartitions *partitions, int64_t *rows_affected,
-                                          struct AdbcError *error) {
-	return ADBC_STATUS_NOT_IMPLEMENTED;
-}
-
 AdbcStatusCode StatementGetParameterSchema(struct AdbcStatement *statement, struct ArrowSchema *schema,
                                            struct AdbcError *error) {
-	return ADBC_STATUS_NOT_IMPLEMENTED;
-}
-AdbcStatusCode StatementSetSubstraitPlan(struct AdbcStatement *, const uint8_t *, size_t, struct AdbcError *error) {
 	return ADBC_STATUS_NOT_IMPLEMENTED;
 }
 
@@ -329,7 +304,12 @@ AdbcStatusCode AdbcConnectionGetObjects(struct AdbcConnection *connection, int d
                                         const char *db_schema, const char *table_name, const char **table_types,
                                         const char *column_name, struct ArrowArrayStream *stream,
                                         struct AdbcError *error) {
-	if (!connection->private_driver) {
+	if (!connection) {
+		SetError(error, "connection can't be null");
+		return ADBC_STATUS_INVALID_STATE;
+	}
+	if (!connection->private_data) {
+		SetError(error, "connection must be initialized");
 		return ADBC_STATUS_INVALID_STATE;
 	}
 	return connection->private_driver->ConnectionGetObjects(connection, depth, catalog, db_schema, table_name,
@@ -369,15 +349,17 @@ AdbcStatusCode AdbcConnectionInit(struct AdbcConnection *connection, struct Adbc
 	delete args;
 
 	auto status = database->private_driver->ConnectionNew(connection, error);
-	if (status != ADBC_STATUS_OK)
+	if (status != ADBC_STATUS_OK) {
 		return status;
+	}
 	connection->private_driver = database->private_driver;
 
 	for (const auto &option : options) {
 		status = database->private_driver->ConnectionSetOption(connection, option.first.c_str(), option.second.c_str(),
 		                                                       error);
-		if (status != ADBC_STATUS_OK)
+		if (status != ADBC_STATUS_OK) {
 			return status;
+		}
 	}
 	return connection->private_driver->ConnectionInit(connection, database, error);
 }
@@ -466,6 +448,9 @@ AdbcStatusCode AdbcStatementExecutePartitions(struct AdbcStatement *statement, A
 
 AdbcStatusCode AdbcStatementExecuteQuery(struct AdbcStatement *statement, struct ArrowArrayStream *out,
                                          int64_t *rows_affected, struct AdbcError *error) {
+	if (!statement) {
+		return ADBC_STATUS_INVALID_ARGUMENT;
+	}
 	if (!statement->private_driver) {
 		return ADBC_STATUS_INVALID_STATE;
 	}
@@ -482,6 +467,9 @@ AdbcStatusCode AdbcStatementGetParameterSchema(struct AdbcStatement *statement, 
 
 AdbcStatusCode AdbcStatementNew(struct AdbcConnection *connection, struct AdbcStatement *statement,
                                 struct AdbcError *error) {
+	if (!connection) {
+		return ADBC_STATUS_INVALID_ARGUMENT;
+	}
 	if (!connection->private_driver) {
 		return ADBC_STATUS_INVALID_STATE;
 	}
@@ -491,7 +479,12 @@ AdbcStatusCode AdbcStatementNew(struct AdbcConnection *connection, struct AdbcSt
 }
 
 AdbcStatusCode AdbcStatementPrepare(struct AdbcStatement *statement, struct AdbcError *error) {
-	if (!statement->private_driver) {
+	auto status = SetErrorMaybe(statement, error, "Missing statement object");
+	if (status != ADBC_STATUS_OK) {
+		return status;
+	}
+	status = SetErrorMaybe(statement->private_data, error, "Invalid statement object");
+	if (status != ADBC_STATUS_OK) {
 		return ADBC_STATUS_INVALID_STATE;
 	}
 	return statement->private_driver->StatementPrepare(statement, error);
