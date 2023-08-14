@@ -8,6 +8,7 @@
 #include "duckdb/function/table/range/range_executor.hpp"
 #include "duckdb/function/table/range/range_int_executor.hpp"
 #include "duckdb/function/table/range/range_timestamp_executor.hpp"
+#include "duckdb/function/table/range/range_function_bind_data.hpp"
 
 namespace duckdb {
 
@@ -15,47 +16,71 @@ namespace range {
 
 template <bool GENERATE_SERIES>
 struct RangeInOutTimestampFunctionState : public GlobalTableFunctionState {
+	RangeInOutTimestampFunctionState(ClientContext &context, vector<unique_ptr<Expression>> args_list_p)
+	    : RangeTimestampExecutor<GENERATE_SERIES>(context, std::move(args_list_p)) {
+	}
 	RangeTimestampExecutor<GENERATE_SERIES> executor;
 };
 
 template <bool GENERATE_SERIES>
 struct RangeInOutNumericFunctionState : public GlobalTableFunctionState {
+	RangeInOutNumericFunctionState(ClientContext &context, vector<unique_ptr<Expression>> args_list_p)
+	    : RangeIntExecutor<GENERATE_SERIES>(context, std::move(args_list_p)) {
+	}
 	RangeIntExecutor<GENERATE_SERIES> executor;
 };
 
 template <bool GENERATE_SERIES>
 static unique_ptr<GlobalTableFunctionState> RangeFunctionNumericInit(ClientContext &context,
                                                                      TableFunctionInitInput &input) {
-	return make_uniq<RangeInOutNumericFunctionState<GENERATE_SERIES>>();
+	auto bind_data = input.bind_data->Cast<RangeFunctionBindData>();
+
+	vector<unique_ptr<Expression>> args_list;
+	// initialize the global state's args_list with bound expressions referencing the input columns
+	for (idx_t i = 0; i < bind_data.input_types.size(); i++) {
+		auto expr = make_uniq<BoundReferenceExpression>(bind_data.input_types[i], i);
+		args_list.push_back(std::move(expr));
+	}
+	auto result = make_uniq<RangeInOutNumericFunctionState<GENERATE_SERIES>>(context, std::move(args_list));
 }
+
 template <bool GENERATE_SERIES>
 static unique_ptr<GlobalTableFunctionState> RangeFunctionTimestampInit(ClientContext &context,
                                                                        TableFunctionInitInput &input) {
-	return make_uniq<RangeInOutTimestampFunctionState<GENERATE_SERIES>>();
+	auto bind_data = input.bind_data->Cast<RangeFunctionBindData>();
+
+	vector<unique_ptr<Expression>> args_list;
+	// initialize the global state's args_list with bound expressions referencing the input columns
+	for (idx_t i = 0; i < bind_data.input_types.size(); i++) {
+		auto expr = make_uniq<BoundReferenceExpression>(bind_data.input_types[i], i);
+		args_list.push_back(std::move(expr));
+	}
+	auto result = make_uniq<RangeInOutTimestampFunctionState<GENERATE_SERIES>>(context, std::move(args_list));
 }
 
 template <bool GENERATE_SERIES>
 static unique_ptr<FunctionData> RangeFunctionBindInternal(const LogicalType &return_type,
-                                                          vector<LogicalType> &return_types, vector<string> &names) {
+                                                          vector<LogicalType> &return_types, vector<string> &names,
+                                                          TableFunctionBindInput &input) {
 	if (!GENERATE_SERIES) {
 		names.emplace_back("range");
 	} else {
 		names.emplace_back("generate_series");
 	}
 	return_types.emplace_back(return_type);
-	return make_uniq<TableFunctionData>();
+	return make_uniq<RangeFunctionBindData>(input.input_table_types);
 }
 
 template <bool GENERATE_SERIES>
 static unique_ptr<FunctionData> RangeIntFunctionBind(ClientContext &context, TableFunctionBindInput &input,
                                                      vector<LogicalType> &return_types, vector<string> &names) {
-	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::BIGINT, return_types, names);
+	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::BIGINT, return_types, names, input);
 }
 
 template <bool GENERATE_SERIES>
 static unique_ptr<FunctionData> RangeTimestampFunctionBind(ClientContext &context, TableFunctionBindInput &input,
                                                            vector<LogicalType> &return_types, vector<string> &names) {
-	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::TIMESTAMP, return_types, names);
+	return RangeFunctionBindInternal<GENERATE_SERIES>(LogicalType::TIMESTAMP, return_types, names, input);
 }
 
 template <class EXECUTOR>

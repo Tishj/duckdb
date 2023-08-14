@@ -25,9 +25,9 @@ class RangeTimestampExecutor : public RangeExecutor {
 	using increment_t = interval_t;
 
 public:
-	RangeTimestampExecutor()
-	    : settings(), start_data(range_t(), range_t()), end_data(range_t(), range_t()),
-	      increment_data(increment_t(), increment_t()) {
+	RangeTimestampExecutor(ClientContext &context, vector<unique_ptr<Expression>> args_list_p)
+	    : RangeExecutor(context, std::move(args_list_p)), settings(), start_data(range_t(), range_t()),
+	      end_data(range_t(), range_t()), increment_data(increment_t(), increment_t()) {
 	}
 	virtual ~RangeTimestampExecutor() {
 	}

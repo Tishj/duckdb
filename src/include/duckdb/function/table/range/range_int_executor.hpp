@@ -11,8 +11,11 @@ class RangeIntExecutor : public RangeExecutor {
 	using IntRange = RangeSettings<hugeint_t, hugeint_t, hugeint_t>;
 
 public:
-	RangeIntExecutor() : settings(), start_data(0, GENERATE_SERIES ? 1 : 0), end_data(0, 0), increment_data(1, 1) {
+	RangeIntExecutor(ClientContext &context, vector<unique_ptr<Expression>> args_list_p)
+	    : RangeExecutor(context, std::move(args_list_p)), settings(), start_data(0, GENERATE_SERIES ? 1 : 0),
+	      end_data(0, 0), increment_data(1, 1) {
 	}
+
 	~RangeIntExecutor() {
 	}
 
@@ -88,16 +91,19 @@ private:
 
 	IntRange &GetCurrentSettings(DataChunk &chunk) {
 		if (input_idx == 0) {
+			args_data.Reset();
+			expr_executor.Execute(chunk, args_data);
+
 			// Initialize the vector formats for the entire chunk
-			if (chunk.ColumnCount() == 1) {
-				end_data.Set(chunk.size(), chunk.data[0]);
-			} else if (chunk.ColumnCount() == 2) {
-				start_data.Set(chunk.size(), chunk.data[0]);
-				end_data.Set(chunk.size(), chunk.data[1]);
-			} else if (chunk.ColumnCount() == 3) {
-				start_data.Set(chunk.size(), chunk.data[0]);
-				end_data.Set(chunk.size(), chunk.data[1]);
-				increment_data.Set(chunk.size(), chunk.data[2]);
+			if (args_data.ColumnCount() == 1) {
+				end_data.Set(args_data.size(), args_data.data[0]);
+			} else if (args_data.ColumnCount() == 2) {
+				start_data.Set(args_data.size(), args_data.data[0]);
+				end_data.Set(args_data.size(), args_data.data[1]);
+			} else if (args_data.ColumnCount() == 3) {
+				start_data.Set(args_data.size(), args_data.data[0]);
+				end_data.Set(args_data.size(), args_data.data[1]);
+				increment_data.Set(args_data.size(), args_data.data[2]);
 			} else {
 				throw InvalidInputException("'range' expects 1, 2 or 3 arguments!");
 			}
