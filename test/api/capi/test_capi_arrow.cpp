@@ -9,7 +9,7 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 	CAPITester tester;
 	duckdb::unique_ptr<CAPIResult> result;
 	duckdb_prepared_statement stmt = nullptr;
-	duckdb_arrow arrow_result;
+	duckdb_arrow arrow_result = nullptr;
 
 	// open the database in in-memory mode
 	REQUIRE(tester.OpenDatabase(nullptr));
@@ -24,9 +24,10 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 	}
 
 	SECTION("test query arrow") {
-		REQUIRE(duckdb_query_arrow(tester.connection, "SELECT 42 AS VALUE", &arrow_result) == DuckDBSuccess);
+		REQUIRE(duckdb_query_arrow(tester.connection, "SELECT 42 AS VALUE, [1,2,3,4,5] AS LST", &arrow_result) ==
+		        DuckDBSuccess);
 		REQUIRE(duckdb_arrow_row_count(arrow_result) == 1);
-		REQUIRE(duckdb_arrow_column_count(arrow_result) == 1);
+		REQUIRE(duckdb_arrow_column_count(arrow_result) == 2);
 		REQUIRE(duckdb_arrow_rows_changed(arrow_result) == 0);
 
 		// query schema
@@ -34,7 +35,9 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 		REQUIRE(duckdb_query_arrow_schema(arrow_result, (duckdb_arrow_schema *)&arrow_schema) == DuckDBSuccess);
 		REQUIRE(string(arrow_schema->name) == "duckdb_query_result");
 		// User need to release the data themselves
-		arrow_schema->release(arrow_schema);
+		if (arrow_schema->release) {
+			arrow_schema->release(arrow_schema);
+		}
 		delete arrow_schema;
 
 		// query array data
@@ -54,14 +57,9 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 
 	SECTION("test multiple chunks") {
 		// create table that consists of multiple chunks
-		REQUIRE_NO_FAIL(tester.Query("BEGIN TRANSACTION"));
 		REQUIRE_NO_FAIL(tester.Query("CREATE TABLE test(a INTEGER)"));
-		for (size_t i = 0; i < 500; i++) {
-			REQUIRE_NO_FAIL(
-			    tester.Query("INSERT INTO test VALUES (1); INSERT INTO test VALUES (2); INSERT INTO test VALUES "
-			                 "(3); INSERT INTO test VALUES (4); INSERT INTO test VALUES (5);"));
-		}
-		REQUIRE_NO_FAIL(tester.Query("COMMIT"));
+		REQUIRE_NO_FAIL(
+		    tester.Query("INSERT INTO test SELECT i FROM (VALUES (1), (2), (3), (4), (5)) t(i), range(500);"));
 
 		REQUIRE(duckdb_query_arrow(tester.connection, "SELECT CAST(a AS INTEGER) AS a FROM test ORDER BY a",
 		                           &arrow_result) == DuckDBSuccess);
@@ -118,7 +116,8 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 		const auto column_names = duckdb::vector<string> {"value"};
 
 		ArrowSchema *arrow_schema = new ArrowSchema();
-		ArrowOptions options;
+
+		ClientProperties options = ((Connection *)tester.connection)->context->GetClientProperties();
 		duckdb::ArrowConverter::ToArrowSchema(arrow_schema, logical_types, column_names, options);
 
 		ArrowArray *arrow_array = new ArrowArray();
@@ -155,7 +154,6 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 		SECTION("big array") {
 			// Create a view with a `value` column containing 4096 values.
 			int num_buffers = 2, size = STANDARD_VECTOR_SIZE * num_buffers;
-			ArrowOptions options;
 			ArrowAppender appender(logical_types, size, options);
 			Allocator allocator;
 
@@ -230,7 +228,7 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 		arrow_schema->release(arrow_schema);
 		delete arrow_schema;
 
-		if (arrow_array->release != nullptr) {
+		if (arrow_array->release) {
 			arrow_array->release(arrow_array);
 		}
 
@@ -239,4 +237,7 @@ TEST_CASE("Test arrow in C API", "[capi][arrow]") {
 		duckdb_destroy_arrow(&arrow_result);
 		duckdb_destroy_prepare(&stmt);
 	}
+
+	// FIXME: needs test for scanning a fixed size list
+	// this likely requires nanoarrow to create the array to scan
 }
