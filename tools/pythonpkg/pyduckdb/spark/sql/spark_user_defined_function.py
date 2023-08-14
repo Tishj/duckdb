@@ -45,7 +45,7 @@ class UserDefinedFunction:
         self._returnType = returnType
         # Stores UserDefinedPythonFunctions jobj, once initialized
         self._returnType_placeholder: Optional[DataType] = None
-        self._judf_placeholder = None
+        self.duck_udf_placeholder = None
         self._name = name or (func.__name__ if hasattr(func, "__name__") else func.__class__.__name__)
         self.evalType = evalType
         self.deterministic = deterministic
@@ -68,12 +68,7 @@ class UserDefinedFunction:
             try:
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
-                raise PySparkNotImplementedError(
-                    error_class="NOT_IMPLEMENTED",
-                    message_parameters={
-                        "feature": f"Invalid return type with scalar Pandas UDFs: " f"{self._returnType_placeholder}"
-                    },
-                )
+                raise NotImplementedError("NOT_IMPLEMENTED")
         elif (
             self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             or self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
@@ -82,21 +77,9 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise PySparkNotImplementedError(
-                        error_class="NOT_IMPLEMENTED",
-                        message_parameters={
-                            "feature": f"Invalid return type with grouped map Pandas UDFs or "
-                            f"at groupby.applyInPandas(WithState): {self._returnType_placeholder}"
-                        },
-                    )
+                    raise NotImplementedError("NOT_IMPLEMENTED")
             else:
-                raise TypeError(
-                    error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
-                    message_parameters={
-                        "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF or " "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
-                        "return_type": str(self._returnType_placeholder),
-                    },
-                )
+                raise TypeError("INVALID_RETURN_TYPE_FOR_PANDAS_UDF")
         elif (
             self.evalType == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             or self.evalType == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
@@ -105,40 +88,17 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise PySparkNotImplementedError(
-                        error_class="NOT_IMPLEMENTED",
-                        message_parameters={
-                            "feature": f"Invalid return type in mapInPandas: " f"{self._returnType_placeholder}"
-                        },
-                    )
+                    raise NotImplementedError("NOT_IMPLEMENTED")
             else:
-                raise TypeError(
-                    error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
-                    message_parameters={
-                        "eval_type": "SQL_MAP_PANDAS_ITER_UDF or SQL_MAP_ARROW_ITER_UDF",
-                        "return_type": str(self._returnType_placeholder),
-                    },
-                )
+                raise TypeError("INVALID_RETURN_TYPE_FOR_PANDAS_UDF")
         elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise PySparkNotImplementedError(
-                        error_class="NOT_IMPLEMENTED",
-                        message_parameters={
-                            "feature": f"Invalid return type in cogroup.applyInPandas: "
-                            f"{self._returnType_placeholder}"
-                        },
-                    )
+                    raise NotImplementedError("NOT_IMPLEMENTED")
             else:
-                raise TypeError(
-                    error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
-                    message_parameters={
-                        "eval_type": "SQL_COGROUPED_MAP_PANDAS_UDF",
-                        "return_type": str(self._returnType_placeholder),
-                    },
-                )
+                raise TypeError("INVALID_RETURN_TYPE_FOR_PANDAS_UDF")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
                 # StructType is not yet allowed as a return type, explicitly check here to fail fast
@@ -146,48 +106,12 @@ class UserDefinedFunction:
                     raise TypeError
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
-                raise PySparkNotImplementedError(
-                    error_class="NOT_IMPLEMENTED",
-                    message_parameters={
-                        "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
-                        f"{self._returnType_placeholder}"
-                    },
-                )
+                raise NotImplementedError("NOT_IMPLEMENTED")
 
         return self._returnType_placeholder
 
-    @property
-    def _judf(self) -> JavaObject:
-        # It is possible that concurrent access, to newly created UDF,
-        # will initialize multiple UserDefinedPythonFunctions.
-        # This is unlikely, doesn't affect correctness,
-        # and should have a minimal performance impact.
-        if self._judf_placeholder is None:
-            self._judf_placeholder = self._create_judf(self.func)
-        return self._judf_placeholder
-
-    def _create_judf(self, func: Callable[..., Any]) -> JavaObject:
-        from pyspark.sql import SparkSession
-
-        spark = SparkSession._getActiveSessionOrCreate()
-        sc = spark.sparkContext
-
-        wrapped_func = _wrap_function(sc, func, self.returnType)
-        jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        assert sc._jvm is not None
-        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic
-        )
-        return judf
-
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        sc = get_active_spark_context()
-        if sc.profiler_collector:
-            raise ContributionsAcceptedError
-        else:
-            judf = self._judf
-            jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-        return Column(jPythonUDF)
+        raise ContributionsAcceptedError
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
@@ -231,6 +155,6 @@ class UserDefinedFunction:
         """
         # Here, we explicitly clean the cache to create a JVM UDF instance
         # with 'deterministic' updated. See SPARK-23233.
-        self._judf_placeholder = None
+        self.duck_udf_placeholder = None
         self.deterministic = False
         return self
