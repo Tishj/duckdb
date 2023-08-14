@@ -346,7 +346,8 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 		MoveCorrelatedExpressions(*subquery->binder);
 	}
 
-	if (subquery && SubqueryRequiresCast(table_function.arguments, subquery->subquery->types)) {
+	auto subquery_requires_cast = subquery && SubqueryRequiresCast(table_function.arguments, subquery->subquery->types);
+	if (subquery_requires_cast) {
 		// We need to rebind the subquery with cast expressions applied
 		D_ASSERT(subquery->subquery->type == QueryNodeType::SELECT_NODE);
 		auto &select_node = (BoundSelectNode &)*subquery->subquery;
@@ -366,6 +367,14 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 
 	if (subquery) {
 		input_table_types = subquery->subquery->types;
+		if (subquery_requires_cast) {
+			auto &select_node = (BoundSelectNode &)*subquery->subquery;
+			auto &select_list = select_node.select_list;
+			// The types are cast, so we need to update the input_table_types as well
+			for (idx_t i = 0; i < select_list.size(); i++) {
+				input_table_types[i] = select_list[i]->return_type;
+			}
+		}
 		input_table_names = subquery->subquery->names;
 	}
 	auto get = BindTableFunctionInternal(table_function, ref.alias.empty() ? fexpr.function_name : ref.alias,

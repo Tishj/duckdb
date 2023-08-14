@@ -6,7 +6,7 @@ namespace duckdb {
 
 struct RangeFunctionBindData : public FunctionData {
 public:
-	RangeFunctionBindData(vector<LogicalType> &input_types) : input_types(input_types) {
+	RangeFunctionBindData(vector<LogicalType> input_types_p) : input_types(std::move(input_types_p)) {
 	}
 	~RangeFunctionBindData() {
 	}
@@ -37,7 +37,7 @@ public:
 	}
 
 public:
-	const vector<LogicalType> &input_types;
+	vector<LogicalType> input_types;
 };
 
 } // namespace duckdb

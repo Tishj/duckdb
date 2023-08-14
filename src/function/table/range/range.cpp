@@ -9,6 +9,7 @@
 #include "duckdb/function/table/range/range_int_executor.hpp"
 #include "duckdb/function/table/range/range_timestamp_executor.hpp"
 #include "duckdb/function/table/range/range_function_bind_data.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
 
 namespace duckdb {
 
@@ -17,7 +18,7 @@ namespace range {
 template <bool GENERATE_SERIES>
 struct RangeInOutTimestampFunctionState : public GlobalTableFunctionState {
 	RangeInOutTimestampFunctionState(ClientContext &context, vector<unique_ptr<Expression>> args_list_p)
-	    : RangeTimestampExecutor<GENERATE_SERIES>(context, std::move(args_list_p)) {
+	    : executor(context, std::move(args_list_p)) {
 	}
 	RangeTimestampExecutor<GENERATE_SERIES> executor;
 };
@@ -25,7 +26,7 @@ struct RangeInOutTimestampFunctionState : public GlobalTableFunctionState {
 template <bool GENERATE_SERIES>
 struct RangeInOutNumericFunctionState : public GlobalTableFunctionState {
 	RangeInOutNumericFunctionState(ClientContext &context, vector<unique_ptr<Expression>> args_list_p)
-	    : RangeIntExecutor<GENERATE_SERIES>(context, std::move(args_list_p)) {
+	    : executor(context, std::move(args_list_p)) {
 	}
 	RangeIntExecutor<GENERATE_SERIES> executor;
 };
@@ -38,10 +39,10 @@ static unique_ptr<GlobalTableFunctionState> RangeFunctionNumericInit(ClientConte
 	vector<unique_ptr<Expression>> args_list;
 	// initialize the global state's args_list with bound expressions referencing the input columns
 	for (idx_t i = 0; i < bind_data.input_types.size(); i++) {
-		auto expr = make_uniq<BoundReferenceExpression>(bind_data.input_types[i], i);
+		auto expr = make_uniq_base<Expression, BoundReferenceExpression>(bind_data.input_types[i], i);
 		args_list.push_back(std::move(expr));
 	}
-	auto result = make_uniq<RangeInOutNumericFunctionState<GENERATE_SERIES>>(context, std::move(args_list));
+	return make_uniq<RangeInOutNumericFunctionState<GENERATE_SERIES>>(context, std::move(args_list));
 }
 
 template <bool GENERATE_SERIES>
@@ -52,10 +53,10 @@ static unique_ptr<GlobalTableFunctionState> RangeFunctionTimestampInit(ClientCon
 	vector<unique_ptr<Expression>> args_list;
 	// initialize the global state's args_list with bound expressions referencing the input columns
 	for (idx_t i = 0; i < bind_data.input_types.size(); i++) {
-		auto expr = make_uniq<BoundReferenceExpression>(bind_data.input_types[i], i);
+		auto expr = make_uniq_base<Expression, BoundReferenceExpression>(bind_data.input_types[i], i);
 		args_list.push_back(std::move(expr));
 	}
-	auto result = make_uniq<RangeInOutTimestampFunctionState<GENERATE_SERIES>>(context, std::move(args_list));
+	return make_uniq<RangeInOutTimestampFunctionState<GENERATE_SERIES>>(context, std::move(args_list));
 }
 
 template <bool GENERATE_SERIES>

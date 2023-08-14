@@ -67,7 +67,6 @@ protected:
 		vector<LogicalType> args_data_types;
 		for (auto &exp : args_list) {
 			D_ASSERT(exp->type == ExpressionType::BOUND_REF);
-			auto &ref = exp->Cast<BoundReferenceExpression>();
 			args_data_types.push_back(exp->return_type);
 			expr_executor.AddExpression(*exp);
 		}
