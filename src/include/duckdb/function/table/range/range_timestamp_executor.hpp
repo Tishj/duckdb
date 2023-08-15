@@ -133,16 +133,19 @@ private:
 
 	TimeRange &GetCurrentSettings(DataChunk &chunk) {
 		if (input_idx == 0) {
+			args_data.Reset();
+			expr_executor.Execute(chunk, args_data);
+
 			// Initialize the vector formats for the entire chunk
-			if (chunk.ColumnCount() == 1) {
-				end_data.Set(chunk.size(), chunk.data[0]);
-			} else if (chunk.ColumnCount() == 2) {
-				start_data.Set(chunk.size(), chunk.data[0]);
-				end_data.Set(chunk.size(), chunk.data[1]);
-			} else if (chunk.ColumnCount() == 3) {
-				start_data.Set(chunk.size(), chunk.data[0]);
-				end_data.Set(chunk.size(), chunk.data[1]);
-				increment_data.Set(chunk.size(), chunk.data[2]);
+			if (args_data.ColumnCount() == 1) {
+				end_data.Set(args_data.size(), args_data.data[0]);
+			} else if (args_data.ColumnCount() == 2) {
+				start_data.Set(args_data.size(), args_data.data[0]);
+				end_data.Set(args_data.size(), args_data.data[1]);
+			} else if (args_data.ColumnCount() == 3) {
+				start_data.Set(args_data.size(), args_data.data[0]);
+				end_data.Set(args_data.size(), args_data.data[1]);
+				increment_data.Set(args_data.size(), args_data.data[2]);
 			} else {
 				throw InvalidInputException("'range' expects 1, 2 or 3 arguments!");
 			}
