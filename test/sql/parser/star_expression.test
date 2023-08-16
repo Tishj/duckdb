@@ -66,4 +66,4 @@ not supported
 statement error
 FROM range(*, *);
 ----
-not supported
+Binder Error: * expression without FROM clause!

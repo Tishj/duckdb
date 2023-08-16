@@ -78,7 +78,8 @@ static OperatorResultType UnnestFunction(ExecutionContext &context, TableFunctio
 }
 
 void UnnestTableFunction::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction unnest_function("unnest", {LogicalTypeId::TABLE}, nullptr, UnnestBind, UnnestInit, UnnestLocalInit);
+	TableFunction unnest_function("unnest", {}, nullptr, UnnestBind, UnnestInit, UnnestLocalInit);
+	unnest_function.varargs = LogicalType::ANY;
 	unnest_function.in_out_function = UnnestFunction;
 	set.AddFunction(unnest_function);
 }
