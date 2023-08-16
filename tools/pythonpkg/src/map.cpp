@@ -133,12 +133,8 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 	data.function = reinterpret_cast<PyObject *>(input.inputs[0].GetPointer());
 	auto explicit_schema = reinterpret_cast<PyObject *>(input.inputs[1].GetPointer());
 
-	// Skip the POINTER columns
-	idx_t user_input = input.input_table_types.size() - 2;
-	for (idx_t i = 0; i < user_input; i++) {
-		data.in_types.push_back(input.input_table_types[i]);
-		data.in_names.push_back(input.input_table_names[i]);
-	}
+	data.in_types = input.input_table_types;
+	data.in_names = input.input_table_names;
 
 	if (explicit_schema != Py_None) {
 		return BindExplicitSchema(std::move(data_uptr), explicit_schema, return_types, names);
@@ -164,9 +160,6 @@ static string TypeVectorToString(const vector<LogicalType> &types) {
 OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,
                                                 DataChunk &output) {
 	py::gil_scoped_acquire acquire;
-
-	// Last input column contains the pointer to the UDF
-	D_ASSERT(input.data.rbegin()->GetType() == LogicalType::POINTER);
 
 	if (input.size() == 0) {
 		return OperatorResultType::NEED_MORE_INPUT;

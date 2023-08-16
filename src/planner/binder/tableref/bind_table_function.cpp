@@ -36,6 +36,79 @@ static bool IsTableInTableOutFunction(const TableFunctionCatalogEntry &table_fun
 	return false;
 }
 
+string Binder::BindTableFunctionExpressions(vector<unique_ptr<ParsedExpression>> &expressions,
+                                            vector<Value> &parameters, named_parameter_map_t &named_parameters) {
+	for (idx_t param_idx = 0; param_idx < expressions.size(); param_idx++) {
+		auto &child = expressions[param_idx];
+		string parameter_name;
+
+		// hack to make named parameters work
+		if (child->type == ExpressionType::COMPARE_EQUAL) {
+			// comparison, check if the LHS is a columnref
+			auto &comp = child->Cast<ComparisonExpression>();
+			if (comp.left->type == ExpressionType::COLUMN_REF) {
+				auto &colref = comp.left->Cast<ColumnRefExpression>();
+				if (!colref.IsQualified()) {
+					parameter_name = colref.GetColumnName();
+					child = std::move(comp.right);
+				}
+			}
+		}
+		if (child->type == ExpressionType::SUBQUERY) {
+			return "Only table-in-out functions can have subquery parameters";
+		}
+
+		TableFunctionBinder binder(*this, context);
+		LogicalType sql_type;
+		auto copied_expr = child->Copy();
+		auto expr = binder.Bind(copied_expr, &sql_type);
+		if (expr->HasParameter()) {
+			throw ParameterNotResolvedException();
+		}
+		if (!expr->IsScalar()) {
+			// should have been eliminated before
+			throw InternalException("Table function requires a constant parameter");
+		}
+		auto constant = ExpressionExecutor::EvaluateScalar(context, *expr, true);
+		if (parameter_name.empty()) {
+			// unnamed parameter
+			if (!named_parameters.empty()) {
+				return "Unnamed parameters cannot come after named parameters";
+			}
+			parameters.emplace_back(std::move(constant));
+		} else {
+			named_parameters[parameter_name] = std::move(constant);
+		}
+	}
+	return string();
+}
+
+static bool ParameterIsInternal(ParsedExpression &expr) {
+	if (expr.expression_class != ExpressionClass::CONSTANT) {
+		return false;
+	}
+	auto &value_expr = expr.Cast<ConstantExpression>();
+	if (value_expr.value.type() != LogicalType::POINTER) {
+		return false;
+	}
+	return true;
+}
+
+static vector<unique_ptr<ParsedExpression>>
+ExtractInternalParameters(vector<unique_ptr<ParsedExpression>> &expressions) {
+	vector<unique_ptr<ParsedExpression>> internal_parameters;
+	vector<unique_ptr<ParsedExpression>> remaining_parameters;
+	for (auto &expr : expressions) {
+		if (ParameterIsInternal(*expr)) {
+			internal_parameters.push_back(std::move(expr));
+		} else {
+			remaining_parameters.push_back(std::move(expr));
+		}
+	}
+	expressions = std::move(remaining_parameters);
+	return internal_parameters;
+}
+
 bool Binder::BindTableInTableOutFunctionParameters(const TableFunctionCatalogEntry &table_function,
                                                    vector<unique_ptr<ParsedExpression>> &expressions,
                                                    vector<LogicalType> &arguments,
@@ -83,50 +156,12 @@ bool Binder::BindTableFunctionParameters(const TableFunctionCatalogEntry &table_
                                          vector<LogicalType> &arguments, vector<Value> &parameters,
                                          named_parameter_map_t &named_parameters, string &error) {
 	D_ASSERT(!IsTableInTableOutFunction(table_function));
-	for (idx_t param_idx = 0; param_idx < expressions.size(); param_idx++) {
-		auto &child = expressions[param_idx];
-		string parameter_name;
-
-		// hack to make named parameters work
-		if (child->type == ExpressionType::COMPARE_EQUAL) {
-			// comparison, check if the LHS is a columnref
-			auto &comp = child->Cast<ComparisonExpression>();
-			if (comp.left->type == ExpressionType::COLUMN_REF) {
-				auto &colref = comp.left->Cast<ColumnRefExpression>();
-				if (!colref.IsQualified()) {
-					parameter_name = colref.GetColumnName();
-					child = std::move(comp.right);
-				}
-			}
-		}
-		if (child->type == ExpressionType::SUBQUERY) {
-			error = "Only table-in-out functions can have subquery parameters";
-			return false;
-		}
-
-		TableFunctionBinder binder(*this, context);
-		LogicalType sql_type;
-		auto copied_expr = child->Copy();
-		auto expr = binder.Bind(copied_expr, &sql_type);
-		if (expr->HasParameter()) {
-			throw ParameterNotResolvedException();
-		}
-		if (!expr->IsScalar()) {
-			// should have been eliminated before
-			throw InternalException("Table function requires a constant parameter");
-		}
-		auto constant = ExpressionExecutor::EvaluateScalar(context, *expr, true);
-		if (parameter_name.empty()) {
-			// unnamed parameter
-			if (!named_parameters.empty()) {
-				error = "Unnamed parameters cannot come after named parameters";
-				return false;
-			}
-			arguments.emplace_back(sql_type);
-			parameters.emplace_back(std::move(constant));
-		} else {
-			named_parameters[parameter_name] = std::move(constant);
-		}
+	error = BindTableFunctionExpressions(expressions, parameters, named_parameters);
+	if (!error.empty()) {
+		return false;
+	}
+	for (auto &param : parameters) {
+		arguments.push_back(param.type());
 	}
 	return true;
 }
@@ -283,8 +318,20 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 
 	auto is_table_in_out = IsTableInTableOutFunction(function);
 	if (is_table_in_out) {
+		// We don't want to bundle these into the subquery because they are required at bind time
+		auto internal_expressions = ExtractInternalParameters(fexpr.children);
 		if (!BindTableInTableOutFunctionParameters(function, fexpr.children, arguments, subquery, error)) {
 			throw BinderException(FormatError(ref, error));
+		}
+		if (!internal_expressions.empty()) {
+			// We have parameters that we use internally to provide extra data to a function, such as POINTER
+			error = BindTableFunctionExpressions(internal_expressions, parameters, named_parameters);
+			if (!error.empty()) {
+				throw BinderException(FormatError(ref, error));
+			}
+			for (auto &param : parameters) {
+				arguments.push_back(param.type());
+			}
 		}
 		D_ASSERT(subquery);
 	} else {

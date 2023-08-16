@@ -294,6 +294,8 @@ private:
 	                                   unique_ptr<ParsedExpression> &where_clause);
 	unique_ptr<BoundTableRef> BindBoundPivot(PivotRef &expr);
 
+	string BindTableFunctionExpressions(vector<unique_ptr<ParsedExpression>> &expressions, vector<Value> &parameters,
+	                                    named_parameter_map_t &named_parameters);
 	bool BindTableFunctionParameters(const TableFunctionCatalogEntry &table_function,
 	                                 vector<unique_ptr<ParsedExpression>> &expressions, vector<LogicalType> &arguments,
 	                                 vector<Value> &parameters, named_parameter_map_t &named_parameters, string &error);
