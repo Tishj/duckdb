@@ -40,13 +40,11 @@ static OperatorResultType SummaryFunction(ExecutionContext &context, TableFuncti
 	for (idx_t col_idx = 0; col_idx < input.ColumnCount(); col_idx++) {
 		output.data[col_idx + 1].Reference(input.data[col_idx]);
 	}
-
 	return OperatorResultType::NEED_MORE_INPUT;
 }
 
 void SummaryTableFunction::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction summary_function("summary", {}, nullptr, SummaryFunctionBind);
-	summary_function.varargs = LogicalType::ANY;
+	TableFunction summary_function("summary", {LogicalType::TABLE}, nullptr, SummaryFunctionBind);
 	summary_function.in_out_function = SummaryFunction;
 	set.AddFunction(summary_function);
 }

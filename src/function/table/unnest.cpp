@@ -74,15 +74,12 @@ static OperatorResultType UnnestFunction(ExecutionContext &context, TableFunctio
                                          DataChunk &output) {
 	auto &state = data_p.global_state->Cast<UnnestGlobalState>();
 	auto &lstate = data_p.local_state->Cast<UnnestLocalState>();
-	return PhysicalUnnest::ExecuteInternal(context, input, output, *lstate.operator_state, state.select_list, false,
-	                                       data_p.add_in_out_mapping);
+	return PhysicalUnnest::ExecuteInternal(context, input, output, *lstate.operator_state, state.select_list, false);
 }
 
 void UnnestTableFunction::RegisterFunction(BuiltinFunctions &set) {
-	TableFunction unnest_function("unnest", {}, nullptr, UnnestBind, UnnestInit, UnnestLocalInit);
-	unnest_function.varargs = LogicalType::ANY;
+	TableFunction unnest_function("unnest", {LogicalTypeId::TABLE}, nullptr, UnnestBind, UnnestInit, UnnestLocalInit);
 	unnest_function.in_out_function = UnnestFunction;
-	unnest_function.in_out_mapping = true;
 	set.AddFunction(unnest_function);
 }
 

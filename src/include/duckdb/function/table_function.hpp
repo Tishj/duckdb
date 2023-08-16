@@ -131,9 +131,6 @@ public:
 	optional_ptr<const FunctionData> bind_data;
 	optional_ptr<LocalTableFunctionState> local_state;
 	optional_ptr<GlobalTableFunctionState> global_state;
-	//! Whether or not the current execution should write the in-out mapping vector
-	//! for table in-out functions
-	bool add_in_out_mapping = false;
 };
 
 enum ScanType { TABLE, PARQUET };
@@ -287,9 +284,6 @@ public:
 	//! Whether or not the table function can immediately prune out filter columns that are unused in the remainder of
 	//! the query plan, e.g., "SELECT i FROM tbl WHERE j = 42;" - j does not need to leave the table function at all
 	bool filter_prune;
-	//! Whether or not the table function produces an extra column containing the mapping from output row to
-	//! the input row that produced it.
-	bool in_out_mapping = false;
 	//! Additional function info, passed to the bind
 	shared_ptr<TableFunctionInfo> function_info;
 
