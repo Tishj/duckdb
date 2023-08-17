@@ -26,14 +26,33 @@
 
 namespace duckdb {
 
-static bool IsTableInTableOutFunction(const TableFunctionCatalogEntry &table_function) {
-	// If any of the functions is a table in-out function
-	for (auto &fun : table_function.functions.functions) {
-		if (fun.in_out_function) {
-			return true;
+namespace {
+enum class BindTableFunctionType : uint8_t {
+	REGULAR_TABLE_FUNCTION,
+	TABLE_IN_OUT_FUNCTION,
+	// If the function_set contains both types
+	AMBIGIOUS
+};
+}
+
+static BindTableFunctionType GetBindFunctionType(const TableFunction &fun) {
+	return fun.in_out_function ? BindTableFunctionType::TABLE_IN_OUT_FUNCTION
+	                           : BindTableFunctionType::REGULAR_TABLE_FUNCTION;
+}
+
+static BindTableFunctionType AnalyzeBindFunctionType(const TableFunctionCatalogEntry &table_function) {
+	auto &functions = table_function.functions.functions;
+	if (functions.empty()) {
+		return BindTableFunctionType::REGULAR_TABLE_FUNCTION;
+	}
+	auto type = GetBindFunctionType(functions[0]);
+	for (idx_t i = 1; i < functions.size(); i++) {
+		auto new_type = GetBindFunctionType(functions[i]);
+		if (new_type != type) {
+			return BindTableFunctionType::AMBIGIOUS;
 		}
 	}
-	return false;
+	return type;
 }
 
 string Binder::BindTableFunctionExpressions(vector<unique_ptr<ParsedExpression>> &expressions,
@@ -109,12 +128,9 @@ ExtractInternalParameters(vector<unique_ptr<ParsedExpression>> &expressions) {
 	return internal_parameters;
 }
 
-bool Binder::BindTableInTableOutFunctionParameters(const TableFunctionCatalogEntry &table_function,
-                                                   vector<unique_ptr<ParsedExpression>> &expressions,
+bool Binder::BindTableInTableOutFunctionParameters(vector<unique_ptr<ParsedExpression>> &expressions,
                                                    vector<LogicalType> &arguments,
                                                    unique_ptr<BoundSubqueryRef> &subquery, string &error) {
-	D_ASSERT(IsTableInTableOutFunction(table_function));
-
 	auto binder = Binder::CreateBinder(this->context, this, true);
 	unique_ptr<QueryNode> subquery_node;
 	if (expressions.size() == 1 && expressions[0]->type == ExpressionType::SUBQUERY) {
@@ -143,7 +159,6 @@ bool Binder::BindTableInTableOutFunctionParameters(const TableFunctionCatalogEnt
 	}
 	auto node = binder->BindNode(*subquery_node);
 	subquery = make_uniq<BoundSubqueryRef>(std::move(binder), std::move(node));
-	MoveCorrelatedExpressions(*subquery->binder);
 	arguments.clear();
 	for (auto &type : subquery->subquery->types) {
 		arguments.push_back(type);
@@ -151,11 +166,9 @@ bool Binder::BindTableInTableOutFunctionParameters(const TableFunctionCatalogEnt
 	return true;
 }
 
-bool Binder::BindTableFunctionParameters(const TableFunctionCatalogEntry &table_function,
-                                         vector<unique_ptr<ParsedExpression>> &expressions,
+bool Binder::BindTableFunctionParameters(vector<unique_ptr<ParsedExpression>> &expressions,
                                          vector<LogicalType> &arguments, vector<Value> &parameters,
                                          named_parameter_map_t &named_parameters, string &error) {
-	D_ASSERT(!IsTableInTableOutFunction(table_function));
 	error = BindTableFunctionExpressions(expressions, parameters, named_parameters);
 	if (!error.empty()) {
 		return false;
@@ -316,11 +329,22 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	unique_ptr<BoundSubqueryRef> subquery;
 	string error;
 
-	auto is_table_in_out = IsTableInTableOutFunction(function);
-	if (is_table_in_out) {
+	auto table_function_type = AnalyzeBindFunctionType(function);
+	if (table_function_type != BindTableFunctionType::REGULAR_TABLE_FUNCTION) {
+		vector<unique_ptr<ParsedExpression>> expressions;
+		if (table_function_type == BindTableFunctionType::AMBIGIOUS) {
+			// Make a copy of the expressions, we might need them later to rebind
+			// if the selected_type is not TABLE_IN_OUT_FUNCTION
+			for (auto &expr : fexpr.children) {
+				expressions.push_back(expr->Copy());
+			}
+		} else {
+			expressions = std::move(fexpr.children);
+		}
+
 		// We don't want to bundle these into the subquery because they are required at bind time
-		auto internal_expressions = ExtractInternalParameters(fexpr.children);
-		if (!BindTableInTableOutFunctionParameters(function, fexpr.children, arguments, subquery, error)) {
+		auto internal_expressions = ExtractInternalParameters(expressions);
+		if (!BindTableInTableOutFunctionParameters(expressions, arguments, subquery, error)) {
 			throw BinderException(FormatError(ref, error));
 		}
 		if (!internal_expressions.empty()) {
@@ -335,7 +359,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 		}
 		D_ASSERT(subquery);
 	} else {
-		if (!BindTableFunctionParameters(function, fexpr.children, arguments, parameters, named_parameters, error)) {
+		if (!BindTableFunctionParameters(fexpr.children, arguments, parameters, named_parameters, error)) {
 			throw BinderException(FormatError(ref, error));
 		}
 	}
@@ -348,12 +372,34 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	}
 	auto table_function = function.functions.GetFunctionByOffset(best_function_idx);
 
+	auto selected_type = GetBindFunctionType(table_function);
+	if (table_function_type == BindTableFunctionType::AMBIGIOUS) {
+		// We weren't sure if the function was a table in-out function or not, we bound the parameters as a table in-out
+		// so now we might have to rebind the parameters
+		if (selected_type == BindTableFunctionType::TABLE_IN_OUT_FUNCTION) {
+			// Finalize the bind of the parameters
+			MoveCorrelatedExpressions(*subquery->binder);
+		} else {
+			D_ASSERT(selected_type == BindTableFunctionType::REGULAR_TABLE_FUNCTION);
+			subquery = nullptr;
+			arguments.clear();
+			parameters.clear();
+			named_parameters.clear();
+			if (!BindTableFunctionParameters(fexpr.children, arguments, parameters, named_parameters, error)) {
+				throw BinderException(FormatError(ref, error));
+			}
+		}
+	} else if (table_function_type == BindTableFunctionType::TABLE_IN_OUT_FUNCTION) {
+		// Finalize the bind of the parameters
+		MoveCorrelatedExpressions(*subquery->binder);
+	}
+
 	// now check the named parameters
 	BindNamedParameters(table_function.named_parameters, named_parameters, error_context, table_function.name);
 
 	vector<LogicalType> input_table_types;
 	vector<string> input_table_names;
-	if (!is_table_in_out) {
+	if (selected_type == BindTableFunctionType::REGULAR_TABLE_FUNCTION) {
 		D_ASSERT(!subquery);
 		// cast the parameters to the type of the function
 		D_ASSERT(parameters.size() >= arguments.size());
@@ -365,6 +411,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 			}
 		}
 	} else {
+		D_ASSERT(selected_type == BindTableFunctionType::TABLE_IN_OUT_FUNCTION);
 		D_ASSERT(subquery);
 		auto subquery_requires_cast = SubqueryRequiresCast(table_function.arguments, subquery->subquery->types);
 		input_table_types = subquery->subquery->types;
