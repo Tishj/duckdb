@@ -129,8 +129,9 @@ public:
 	idx_t GenerateTableIndex();
 
 	optional_ptr<CatalogEntry> GetCatalogEntry(CatalogType type, const string &catalog, const string &schema,
-	                                           const string &name, OnEntryNotFound on_entry_not_found,
-	                                           QueryErrorContext &error_context);
+	                                           const string &name,
+	                                           OnEntryNotFound on_entry_not_found = OnEntryNotFound::THROW_EXCEPTION,
+	                                           QueryErrorContext error_context = QueryErrorContext());
 
 	//! Add a common table expression to the binder
 	void AddCTE(const string &name, CommonTableExpressionInfo &cte);

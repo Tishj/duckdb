@@ -500,7 +500,7 @@ BoundStatement Binder::BindReturning(vector<unique_ptr<ParsedExpression>> return
 
 optional_ptr<CatalogEntry> Binder::GetCatalogEntry(CatalogType type, const string &catalog, const string &schema,
                                                    const string &name, OnEntryNotFound on_entry_not_found,
-                                                   QueryErrorContext &error_context) {
+                                                   QueryErrorContext error_context) {
 	return entry_retriever.GetEntry(type, catalog, schema, name, on_entry_not_found, error_context);
 }
 
