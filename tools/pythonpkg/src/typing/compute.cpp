@@ -22,6 +22,7 @@
 #include "duckdb/main/connection.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/types/vector.hpp"
+#include "duckdb/execution/operator/order/physical_order.hpp"
 
 namespace duckdb {
 
@@ -141,7 +142,7 @@ static void ConvertPyArrowToDataChunk(const py::object &table, DataChunk &result
 	}
 }
 
-py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::object &sort_keys, const string &null_placement, const py::object &options, const py::object &memory_pool) {
+py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::object &sort_keys_p, const string &null_placement, const py::object &options, const py::object &memory_pool) {
 	if (!py::none().is(options)) {
 		throw NotImplementedException("Explicit 'sort_options' are not supported yet");
 	}
@@ -149,8 +150,12 @@ py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::objec
 		throw NotImplementedException("Explicit 'memory_pool' is not supported yet");
 	}
 
-	auto array_class = py::module::import("pyarrow").attr("lib").attr("Array");
+	if (!py::isinstance<py::list>(sort_keys_p)) {
+		throw InvalidInputException("sort keys has to be provided as a list of tuples");
+	}
+	auto sort_keys = py::list(sort_keys_p);
 
+	auto array_class = py::module::import("pyarrow").attr("lib").attr("Array");
 	if (!py::isinstance(array, array_class)) {
 		throw InvalidInputException("Please provide a pyarrow Array");
 	}
@@ -158,9 +163,6 @@ py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::objec
 	// ----------- Convert the arrow array to a DataChunk -----------
 	py::list single_array(1);
 	py::list single_name(1);
-
-	
-
 
 	single_array[0] = array;
 	single_name[0] = "c0";
@@ -170,8 +172,38 @@ py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::objec
 	auto count = py::len(array);
 	// FIXME: we require the ClientContext to convert pyarrow to DataChunk.
 	auto &context = *DuckDBPyConnection::DefaultConnection()->connection->context;
+	DataChunk intermediate;
+	ConvertPyArrowToDataChunk(python_object, intermediate, context, count);
+
+	// ----------- Add the indices array to the input -----------
+
+	vector<LogicalType> types;
+	auto intermediate_types = intermediate.GetTypes();
+	types.assign(intermediate_types.begin(), intermediate_types.end());
+	types.push_back(LogicalType::USMALLINT);
+
 	DataChunk input_chunk;
-	ConvertPyArrowToDataChunk(python_object, input_chunk, context, count);
+	input_chunk.Initialize(context, types, count);
+	input_chunk.data[0].Reference(intermediate.data[0]);
+	input_chunk.data[1].Sequence(0, 1, count);
+
+	// ----------- Create the order by nodes -----------
+
+	vector<BoundOrderByNode> orders;
+	for (auto &key_p : sort_keys) {
+		if (!py::isinstance<py::tuple>(key_p)) {
+			throw InvalidInputException("Elements of the sort_keys should be tuples");
+		}
+		auto key = py::cast<py::tuple>(key_p);
+		if (key.size() != 2) {
+			throw InvalidInputException("All provided tuples should have 2 elements");
+		}
+		auto name = key[0];
+		auto order = key[1];
+	}
+
+	//PhysicalOrder order(types, )
+
 
 	// ----------- Create the inputs to the PhysicalOrder operator -----------
 
