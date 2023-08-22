@@ -156,6 +156,16 @@ static void ConvertPyArrowToDataChunk(const py::object &table, DataChunk &result
 	}
 }
 
+static OrderByNullType GetNullOrder(const string &null_order) {
+	if (StringUtil::CIEquals(null_order, "at_end")) {
+		return OrderByNullType::NULLS_LAST;
+	} else if (StringUtil::CIEquals(null_order, "at_start")) {
+		return OrderByNullType::NULLS_FIRST;
+	} else {
+		throw InvalidInputException("Please provide 'null_placement' as 'at_end' or 'at_start'");
+	}
+}
+
 static OrderType GetOrderType(const py::object &order_p) {
 	if (!py::isinstance<py::str>(order_p)) {
 		throw InvalidInputException("'order' has to be provided as a string");
@@ -240,7 +250,7 @@ py::object DuckDBPyCompute::SortIndices(const py::object &array, py::object &sor
 
 		OrderType order_type = GetOrderType(order);
 		// default value
-		OrderByNullType null_order = OrderByNullType::NULLS_LAST;
+		OrderByNullType null_order = GetNullOrder(null_placement);
 		// name is ignored for 'sort_indices', just create a BoundReferenceExpression
 		auto expr = make_uniq_base<Expression, BoundReferenceExpression>(types[0], 0);
 		orders.emplace_back(order_type, null_order, std::move(expr));
