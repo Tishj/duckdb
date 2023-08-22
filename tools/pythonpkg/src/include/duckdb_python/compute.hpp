@@ -9,7 +9,7 @@ class DuckDBPyCompute {
 public:
 	DuckDBPyCompute() = delete;
 
-	static py::object SortIndices(const py::object &array, const py::object &sort_keys, const string &null_placement, const py::object &options, const py::object &memory_pool);
+	static py::object SortIndices(const py::object &array, py::object &sort_keys, const string &null_placement, const py::object &options, const py::object &memory_pool);
 public:
 	static void Initialize(py::module_ &m);
 };

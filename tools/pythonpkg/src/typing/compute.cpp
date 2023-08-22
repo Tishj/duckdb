@@ -23,6 +23,20 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/execution/operator/order/physical_order.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "duckdb/parser/parser.hpp"
+
+#include "duckdb/common/enums/order_type.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression.hpp"
+
+#include "duckdb/execution/executor.hpp"
+#include "duckdb/execution/operator/scan/physical_column_data_scan.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
+#include "duckdb/common/enums/physical_operator_type.hpp"
+#include "duckdb/common/enums/pending_execution_result.hpp"
+
+#include "duckdb/main/client_properties.hpp"
 
 namespace duckdb {
 
@@ -57,7 +71,7 @@ void DuckDBPyCompute::Initialize(py::module_ &parent) {
 			If not passed, will allocate memory from the default memory pool.
 	)",
 		py::arg("input"),
-		py::arg("sort_keys") = py::tuple(),
+		py::arg("sort_keys") = py::none(),
 		py::kw_only(),
 		py::arg("null_placement") = "at_end",
 		py::arg("options") = py::none(),
@@ -142,12 +156,34 @@ static void ConvertPyArrowToDataChunk(const py::object &table, DataChunk &result
 	}
 }
 
-py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::object &sort_keys_p, const string &null_placement, const py::object &options, const py::object &memory_pool) {
+static OrderType GetOrderType(const py::object &order_p) {
+	if (!py::isinstance<py::str>(order_p)) {
+		throw InvalidInputException("'order' has to be provided as a string");
+	}
+	string order = py::str(order_p);
+	auto order_l = StringUtil::Lower(order);
+
+	if (order_l == "ascending") {
+		return OrderType::ASCENDING;
+	} else if (order_l == "descending") {
+		return OrderType::DESCENDING;
+	} else {
+		throw InvalidInputException("Only 'ascending' or 'descending' are allowed options");
+	}
+}
+
+py::object DuckDBPyCompute::SortIndices(const py::object &array, py::object &sort_keys_p, const string &null_placement, const py::object &options, const py::object &memory_pool) {
 	if (!py::none().is(options)) {
 		throw NotImplementedException("Explicit 'sort_options' are not supported yet");
 	}
 	if (!py::none().is(memory_pool)) {
 		throw NotImplementedException("Explicit 'memory_pool' is not supported yet");
+	}
+	if (py::none().is(sort_keys_p)) {
+		// Insert default order
+		auto sort_keys = py::list(1);
+		sort_keys[0] = py::make_tuple("dummy", "ascending");
+		sort_keys_p = sort_keys;
 	}
 
 	if (!py::isinstance<py::list>(sort_keys_p)) {
@@ -180,12 +216,13 @@ py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::objec
 	vector<LogicalType> types;
 	auto intermediate_types = intermediate.GetTypes();
 	types.assign(intermediate_types.begin(), intermediate_types.end());
-	types.push_back(LogicalType::USMALLINT);
+	types.push_back(LogicalType::INTEGER);
 
 	DataChunk input_chunk;
 	input_chunk.Initialize(context, types, count);
 	input_chunk.data[0].Reference(intermediate.data[0]);
 	input_chunk.data[1].Sequence(0, 1, count);
+	input_chunk.SetCardinality(count);
 
 	// ----------- Create the order by nodes -----------
 
@@ -200,14 +237,51 @@ py::object DuckDBPyCompute::SortIndices(const py::object &array, const py::objec
 		}
 		auto name = key[0];
 		auto order = key[1];
+
+		OrderType order_type = GetOrderType(order);
+		// default value
+		OrderByNullType null_order = OrderByNullType::NULLS_LAST;
+		// name is ignored for 'sort_indices', just create a BoundReferenceExpression
+		auto expr = make_uniq_base<Expression, BoundReferenceExpression>(types[0], 0);
+		orders.emplace_back(order_type, null_order, std::move(expr));
 	}
 
-	//PhysicalOrder order(types, )
+	// ----------- Create a way for us to feed the data into the order operator -----------
 
+	// Feed the chunk to a ColumnDataCollection
+	auto data_collection = make_uniq<ColumnDataCollection>(context, types);
+	ColumnDataAppendState append_state;
+	data_collection->InitializeAppend(append_state);
+	data_collection->Append(append_state, input_chunk);
 
-	// ----------- Create the inputs to the PhysicalOrder operator -----------
+	// Create a PhysicalColumnDataScan operator
+	auto physical_scan = make_uniq<PhysicalColumnDataScan>(types, PhysicalOperatorType::COLUMN_DATA_SCAN, count, std::move(data_collection));
 
-	return py::none();
+	// ----------- Create the Order operator -----------
+
+	// Create the PhysicalOrder which will execute the sort
+	vector<idx_t> projections = {0, 1};
+	PhysicalOrder order(std::move(types), std::move(orders), projections, count);
+
+	order.children.push_back(std::move(physical_scan));
+
+	// ----------- Execute the sort -----------
+
+	Executor executor(context);
+	executor.Initialize(order);
+
+	auto execution_result = PendingExecutionResult::RESULT_NOT_READY;
+	while (execution_result != PendingExecutionResult::RESULT_READY) {
+		execution_result = executor.ExecuteTask();
+	}
+
+	auto result = executor.FetchChunk();
+
+	auto client_properties = context.GetClientProperties();
+	vector<string> names = {"c0", "c1"};
+	types = result->GetTypes();
+	auto record_batch_list = ConvertToSingleBatch(types, names, *result, client_properties);
+	return record_batch_list[0].attr("__getitem__")("c1");
 }
 
 } // namespace duckdb
