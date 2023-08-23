@@ -53,13 +53,13 @@ public:
 
 	const vector<string> &GetNames();
 	const vector<LogicalType> &GetTypes();
+	static bool FetchArrowChunk(QueryResult &query_result, ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch);
 
 private:
 	py::list FetchAllArrowChunks(idx_t rows_per_batch);
 
 	void FillNumpy(py::dict &res, idx_t col_idx, NumpyResultConversion &conversion, const char *name);
 
-	bool FetchArrowChunk(ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch);
 
 	PandasDataFrame FrameFromNumpy(bool date_as_object, const py::handle &o);
 

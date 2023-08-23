@@ -43,6 +43,9 @@ void VectorOperations::GenerateSequence(Vector &result, idx_t count, int64_t sta
 	case PhysicalType::INT64:
 		TemplatedGenerateSequence<int64_t>(result, count, start, increment);
 		break;
+	case PhysicalType::UINT64:
+		TemplatedGenerateSequence<uint64_t>(result, count, start, increment);
+		break;
 	case PhysicalType::FLOAT:
 		TemplatedGenerateSequence<float>(result, count, start, increment);
 		break;

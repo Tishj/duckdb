@@ -284,10 +284,9 @@ py::dict DuckDBPyResult::FetchTF() {
 	return result_dict;
 }
 
-bool DuckDBPyResult::FetchArrowChunk(ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch) {
+bool DuckDBPyResult::FetchArrowChunk(QueryResult &query_result, ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch) {
 	ArrowArray data;
 	idx_t count;
-	auto &query_result = *result.get();
 	{
 		py::gil_scoped_release release;
 		count = ArrowUtil::FetchChunk(scan_state, query_result.client_properties, rows_per_batch, &data);
@@ -309,8 +308,8 @@ py::list DuckDBPyResult::FetchAllArrowChunks(idx_t rows_per_batch) {
 	auto pyarrow_lib_module = py::module::import("pyarrow").attr("lib");
 
 	py::list batches;
-	QueryResultChunkScanState scan_state(*result.get());
-	while (FetchArrowChunk(scan_state, batches, rows_per_batch)) {
+	QueryResultChunkScanState scan_state(*result);
+	while (FetchArrowChunk(*result, scan_state, batches, rows_per_batch)) {
 	}
 	return batches;
 }
