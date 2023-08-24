@@ -160,9 +160,7 @@ private:
 
 	// Deserialize shared_ptr
 	template <typename T = void>
-	inline typename std::enable_if<
-		is_shared_ptr<T>::value, T
-	>::type Read() {
+	inline typename std::enable_if<is_shared_ptr<T>::value, T>::type Read() {
 		using ELEMENT_TYPE = typename is_shared_ptr<T>::ELEMENT_TYPE;
 		OnObjectBegin();
 		auto val = ELEMENT_TYPE::FormatDeserialize(*this);

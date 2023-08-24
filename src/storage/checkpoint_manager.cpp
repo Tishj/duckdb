@@ -316,8 +316,13 @@ void CheckpointWriter::WriteView(ViewCatalogEntry &view) {
 }
 
 void CheckpointReader::ReadView(ClientContext &context, MetadataReader &reader) {
-	auto info = CatalogEntry::Deserialize(reader);
-	catalog.CreateView(context, info->Cast<CreateViewInfo>());
+	auto info = ViewCatalogEntry::Deserialize(reader);
+
+	auto binder = Binder::CreateBinder(context);
+	auto &view_info = info->Cast<CreateViewInfo>();
+	binder->BindCreateViewInfo(view_info);
+
+	catalog.CreateView(context, view_info);
 }
 
 //===--------------------------------------------------------------------===//
@@ -351,12 +356,12 @@ void CheckpointReader::ReadIndex(ClientContext &context, MetadataReader &reader)
 	auto info = IndexCatalogEntry::Deserialize(reader);
 	auto &index_info = info->Cast<CreateIndexInfo>();
 
+	// FIXME: try to unify this code with 'Binder::Bind(CreateStatement &stmt)' CatalogType::INDEX_ENTRY
+
 	// create the index in the catalog
 	auto &schema_catalog = catalog.GetSchema(context, info->schema);
 	auto &table_catalog =
 	    catalog.GetEntry(context, CatalogType::TABLE_ENTRY, info->schema, index_info.table).Cast<DuckTableEntry>();
-	auto &index_catalog = schema_catalog.CreateIndex(context, index_info, table_catalog)->Cast<DuckIndexEntry>();
-	index_catalog.info = table_catalog.GetStorage().info;
 
 	// we deserialize the index lazily, i.e., we do not need to load any node information
 	// except the root block id and offset
@@ -382,10 +387,22 @@ void CheckpointReader::ReadIndex(ClientContext &context, MetadataReader &reader)
 	vector<column_t> column_ids;
 	binder->bind_context.AddBaseTable(0, index_info.table, column_names, column_types, column_ids, &table_catalog);
 	IndexBinder idx_binder(*binder, context);
+	auto &dependencies = info->dependencies;
+	auto &catalog = Catalog::GetCatalog(binder->context, info->catalog);
+	idx_binder.SetCatalogLookupCallback([&dependencies, &catalog](CatalogEntry &entry) {
+		if (&catalog != &entry.ParentCatalog()) {
+			// Don't register any cross-catalog dependencies
+			return;
+		}
+		dependencies.AddDependency(entry);
+	});
 	unbound_expressions.reserve(parsed_expressions.size());
 	for (auto &expr : parsed_expressions) {
 		unbound_expressions.push_back(idx_binder.Bind(expr));
 	}
+
+	auto &index_catalog = schema_catalog.CreateIndex(context, index_info, table_catalog)->Cast<DuckIndexEntry>();
+	index_catalog.info = table_catalog.GetStorage().info;
 
 	if (parsed_expressions.empty()) {
 		// this is a PK/FK index: we create the necessary bound column ref expressions
@@ -422,6 +439,8 @@ void CheckpointWriter::WriteType(TypeCatalogEntry &type) {
 
 void CheckpointReader::ReadType(ClientContext &context, MetadataReader &reader) {
 	auto info = TypeCatalogEntry::Deserialize(reader);
+
+	// TODO: bind the create type info
 	catalog.CreateType(context, info->Cast<CreateTypeInfo>());
 }
 
@@ -434,6 +453,10 @@ void CheckpointWriter::WriteMacro(ScalarMacroCatalogEntry &macro) {
 
 void CheckpointReader::ReadMacro(ClientContext &context, MetadataReader &reader) {
 	auto info = MacroCatalogEntry::Deserialize(reader);
+
+	auto binder = Binder::CreateBinder(context);
+	binder->BindCreateFunctionInfo(*info);
+
 	catalog.CreateFunction(context, info->Cast<CreateMacroInfo>());
 }
 
@@ -443,6 +466,10 @@ void CheckpointWriter::WriteTableMacro(TableMacroCatalogEntry &macro) {
 
 void CheckpointReader::ReadTableMacro(ClientContext &context, MetadataReader &reader) {
 	auto info = MacroCatalogEntry::Deserialize(reader);
+
+	auto binder = Binder::CreateBinder(context);
+	binder->BindCreateFunctionInfo(*info);
+
 	catalog.CreateFunction(context, info->Cast<CreateMacroInfo>());
 }
 

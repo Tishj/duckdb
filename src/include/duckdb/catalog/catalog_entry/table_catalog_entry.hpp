@@ -55,6 +55,8 @@ public:
 	DUCKDB_API TableCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTableInfo &info);
 
 public:
+	static unique_ptr<CreateInfo> Deserialize(Deserializer &deserializer);
+
 	DUCKDB_API unique_ptr<CreateInfo> GetInfo() const override;
 
 	DUCKDB_API bool HasGeneratedColumns() const;

@@ -57,6 +57,10 @@ vector<LogicalType> TableCatalogEntry::GetTypes() {
 	return types;
 }
 
+unique_ptr<CreateInfo> TableCatalogEntry::Deserialize(Deserializer &source) {
+	return CatalogEntry::Deserialize(source);
+}
+
 unique_ptr<CreateInfo> TableCatalogEntry::GetInfo() const {
 	auto result = make_uniq<CreateTableInfo>();
 	result->catalog = catalog.GetName();
