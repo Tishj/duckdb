@@ -170,17 +170,6 @@ private:
 		return val;
 	}
 
-	// Deserialize a reference<CatalogEntry>
-	template <typename T = void>
-	inline typename std::enable_if<
-			std::is_same<
-				typename is_reference<T>::ELEMENT_TYPE,
-				CatalogEntry
-			>::value, T
-		>::type Read() {
-		throw NotImplementedException("GOT HERE");
-	}
-
 	// Deserialize a vector
 	template <typename T = void>
 	inline typename std::enable_if<is_vector<T>::value, T>::type Read() {
