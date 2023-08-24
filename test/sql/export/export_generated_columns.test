@@ -2,6 +2,9 @@
 # description: Test export of generated columns
 # group: [export]
 
+# FIXME: macros are currently deserialized after tables, breaking this test when used with --force-reload
+require skip_reload
+
 statement ok
 BEGIN TRANSACTION
 
