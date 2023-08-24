@@ -1318,7 +1318,7 @@ static void performSearch(linenoiseState *l) {
 	if (l->search_buf.empty()) {
 		return;
 	}
-	std::unordered_set<std::string> matches;
+	duckdb::unordered_set<std::string> matches;
 	auto lsearch = duckdb::StringUtil::Lower(l->search_buf);
 	for (size_t i = history_len; i > 0; i--) {
 		size_t history_index = i - 1;

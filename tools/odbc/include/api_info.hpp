@@ -40,12 +40,12 @@ public:
 struct ApiInfo {
 private:
 	// fill all supported functions in this array
-	static const std::unordered_set<SQLUSMALLINT> BASE_SUPPORTED_FUNCTIONS;
+	static const duckdb::unordered_set<SQLUSMALLINT> BASE_SUPPORTED_FUNCTIONS;
 
 	// fill ODBC3 supported functions in this array
-	static const std::unordered_set<SQLUSMALLINT> ODBC3_EXTRA_SUPPORTED_FUNCTIONS;
+	static const duckdb::unordered_set<SQLUSMALLINT> ODBC3_EXTRA_SUPPORTED_FUNCTIONS;
 
-	// static const std::unordered_set<SQLSMALLINT> ODBC_SUPPORTED_SQL_TYPES;
+	// static const duckdb::unordered_set<SQLSMALLINT> ODBC_SUPPORTED_SQL_TYPES;
 
 	static const vector<TypeInfo> ODBC_SUPPORTED_SQL_TYPES;
 

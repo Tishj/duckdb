@@ -441,7 +441,7 @@ void UnionByName::CombineUnionTypes(const vector<string> &col_names, const vecto
 }
 
 bool MultiFileReaderOptions::AutoDetectHivePartitioningInternal(const vector<string> &files, ClientContext &context) {
-	std::unordered_set<string> partitions;
+	unordered_set<string> partitions;
 	auto &fs = FileSystem::GetFileSystem(context);
 
 	auto splits_first_file = StringUtil::Split(files.front(), fs.PathSeparator(files.front()));

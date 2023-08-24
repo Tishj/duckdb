@@ -14,9 +14,8 @@ namespace duckdb {
 //! Returns true if A and B are disjoint, false otherwise
 template <class T>
 static bool Disjoint(const unordered_set<T> &a, const unordered_set<T> &b) {
-	return std::all_of(a.begin(), a.end(), [&b](typename std::unordered_set<T>::const_reference entry) {
-		return b.find(entry) == b.end();
-	});
+	return std::all_of(a.begin(), a.end(),
+	                   [&b](typename unordered_set<T>::const_reference entry) { return b.find(entry) == b.end(); });
 }
 
 bool QueryGraphManager::Build(LogicalOperator &op) {

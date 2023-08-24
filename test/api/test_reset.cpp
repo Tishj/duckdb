@@ -100,7 +100,7 @@ OptionValueSet &GetValueForOption(const string &name) {
 }
 
 bool OptionIsExcludedFromTest(const string &name) {
-	static unordered_set<string> excluded_options = {
+	static duckdb::unordered_set<string> excluded_options = {
 	    "schema",
 	    "search_path",
 	    "debug_window_mode",
