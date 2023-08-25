@@ -5,16 +5,15 @@
 
 namespace duckdb {
 
-CreateTypeInfo::CreateTypeInfo() : CreateInfo(CatalogType::TYPE_ENTRY) {
+CreateTypeInfo::CreateTypeInfo() : CreateInfo(CatalogType::TYPE_ENTRY, "") {
 }
 CreateTypeInfo::CreateTypeInfo(string name_p, LogicalType type_p)
-    : CreateInfo(CatalogType::TYPE_ENTRY), name(std::move(name_p)), type(std::move(type_p)) {
+    : CreateInfo(CatalogType::TYPE_ENTRY, std::move(name_p)), type(std::move(type_p)) {
 }
 
 unique_ptr<CreateInfo> CreateTypeInfo::Copy() const {
 	auto result = make_uniq<CreateTypeInfo>();
 	CopyProperties(*result);
-	result->name = name;
 	result->type = type;
 	if (query) {
 		result->query = query->Copy();
@@ -24,7 +23,6 @@ unique_ptr<CreateInfo> CreateTypeInfo::Copy() const {
 
 void CreateTypeInfo::SerializeInternal(Serializer &serializer) const {
 	FieldWriter writer(serializer);
-	writer.WriteString(name);
 	writer.WriteSerializable(type);
 	if (query) {
 		throw InternalException("Cannot serialize CreateTypeInfo with query");

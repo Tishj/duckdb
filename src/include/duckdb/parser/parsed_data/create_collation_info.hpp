@@ -17,8 +17,6 @@ struct CreateCollationInfo : public CreateInfo {
 	DUCKDB_API CreateCollationInfo(string name_p, ScalarFunction function_p, bool combinable_p,
 	                               bool not_required_for_equality_p);
 
-	//! The name of the collation
-	string name;
 	//! The collation function to push in case collation is required
 	ScalarFunction function;
 	//! Whether or not the collation can be combined with other collations.

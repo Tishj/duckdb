@@ -31,8 +31,6 @@ enum class SequenceInfo : uint8_t {
 struct CreateSequenceInfo : public CreateInfo {
 	CreateSequenceInfo();
 
-	//! Sequence name to create
-	string name;
 	//! Usage count of the sequence
 	uint64_t usage_count;
 	//! The increment value

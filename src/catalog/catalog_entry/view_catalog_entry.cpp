@@ -22,14 +22,14 @@ void ViewCatalogEntry::Initialize(CreateViewInfo &info) {
 }
 
 ViewCatalogEntry::ViewCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateViewInfo &info)
-    : StandardEntry(CatalogType::VIEW_ENTRY, schema, catalog, info.view_name) {
+    : StandardEntry(CatalogType::VIEW_ENTRY, schema, catalog, info.name) {
 	Initialize(info);
 }
 
 unique_ptr<CreateInfo> ViewCatalogEntry::GetInfo() const {
 	auto result = make_uniq<CreateViewInfo>();
 	result->schema = schema.name;
-	result->view_name = name;
+	result->name = name;
 	result->sql = sql;
 	result->query = unique_ptr_cast<SQLStatement, SelectStatement>(query->Copy());
 	result->aliases = aliases;

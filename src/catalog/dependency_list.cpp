@@ -4,17 +4,18 @@
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/common/serializer/format_deserializer.hpp"
 #include "duckdb/common/serializer/format_serializer.hpp"
+#include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 
 namespace duckdb {
 
-void DependencyList::AddDependency(CatalogEntry &entry) {
+void PhysicalDependencyList::AddDependency(CatalogEntry &entry) {
 	if (entry.internal) {
 		return;
 	}
 	set.insert(entry);
 }
 
-void DependencyList::VerifyDependencies(Catalog &catalog, const string &name) {
+void PhysicalDependencyList::VerifyDependencies(Catalog &catalog, const string &name) {
 	for (auto &dep_entry : set) {
 		auto &dep = dep_entry.get();
 		if (&dep.ParentCatalog() != &catalog) {
@@ -26,50 +27,47 @@ void DependencyList::VerifyDependencies(Catalog &catalog, const string &name) {
 	}
 }
 
-bool DependencyList::Contains(CatalogEntry &entry) {
+bool PhysicalDependencyList::Contains(CatalogEntry &entry) {
 	return set.count(entry);
 }
 
-void DependencyList::FormatSerialize(FormatSerializer &serializer) const {
-	serializer.WriteProperty(100, "set", set);
+uint64_t CreateInfoHashFunction::operator()(const LogicalDependency &a) const {
+	hash_t hash = duckdb::Hash<string_t>(a.name);
+	hash = CombineHash(hash, duckdb::Hash<uint8_t>(static_cast<uint8_t>(a.type)));
+	return hash;
 }
 
-DependencyList DependencyList::FormatDeserialize(FormatDeserializer &serializer) {
-	DependencyList dependencies;
-	dependencies.set = serializer.ReadProperty<catalog_entry_set_t>(100, "set");
-	return dependencies;
-}
-
-void DependencyList::Serialize(Serializer &serializer) const {
-	idx_t size = set.size();
-	serializer.Write(size);
-	for (auto &entry_p : set) {
-		auto &entry = entry_p.get();
-		auto type = entry.type;
-		auto catalog = entry.ParentCatalog().GetName();
-		auto schema = entry.ParentSchema().name;
-		auto name = entry.name;
-
-		serializer.Write(type);
-		serializer.WriteString(catalog);
-		serializer.WriteString(schema);
-		serializer.WriteString(name);
+bool CreateInfoEquality::operator()(const LogicalDependency &a, const LogicalDependency &b) const {
+	if (a.type != b.type) {
+		return false;
 	}
+	if (a.name != b.name) {
+		return false;
+	}
+	return true;
 }
 
-DependencyList DependencyList::Deserialize(Deserializer &deserializer) {
-	DependencyList dependencies;
+void LogicalDependencyList::AddDependency(LogicalDependency entry) {
+	set.insert(entry);
+}
 
-	auto count = deserializer.Read<idx_t>();
-	auto &context = deserializer.GetContext();
-	for (idx_t i = 0; i < count; i++) {
-		auto type = deserializer.Read<CatalogType>();
-		auto catalog = deserializer.Read<string>();
-		auto schema = deserializer.Read<string>();
-		auto name = deserializer.Read<string>();
-		// FIXME: this can get called before the dependencies are added to the catalog
-		auto entry = Catalog::GetEntry(context, type, catalog, schema, name, OnEntryNotFound::THROW_EXCEPTION);
-		dependencies.AddDependency(*entry);
+void LogicalDependencyList::AddDependency(CatalogEntry &entry) {
+	LogicalDependency dependency = {entry.name, entry.type};
+	set.insert(dependency);
+}
+
+bool LogicalDependencyList::Contains(LogicalDependency& entry) {
+	return set.count(entry);
+}
+
+PhysicalDependencyList LogicalDependencyList::GetPhysical(SchemaCatalogEntry &schema, CatalogTransaction &transaction) const {
+	PhysicalDependencyList dependencies;
+	for (auto &entry : set) {
+		auto &name = entry.name;
+		auto &type = entry.type;
+
+		auto catalog_entry = schema.GetEntry(transaction, type, name);
+		dependencies.AddDependency(*catalog_entry);
 	}
 	return dependencies;
 }

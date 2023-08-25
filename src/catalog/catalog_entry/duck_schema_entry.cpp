@@ -74,10 +74,12 @@ DuckSchemaEntry::DuckSchemaEntry(Catalog &catalog, string name_p, bool is_intern
 optional_ptr<CatalogEntry> DuckSchemaEntry::AddEntryInternal(CatalogTransaction transaction,
                                                              unique_ptr<StandardEntry> entry,
                                                              OnCreateConflict on_conflict,
-                                                             DependencyList dependencies) {
+                                                             LogicalDependencyList logical_dependencies) {
 	auto entry_name = entry->name;
 	auto entry_type = entry->type;
 	auto result = entry.get();
+
+	PhysicalDependencyList dependencies = logical_dependencies.GetPhysical(*this, transaction);
 
 	// first find the set for this entry
 	auto &set = GetCatalogSet(entry_type);
@@ -179,7 +181,7 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::CreateFunction(CatalogTransaction tr
 
 optional_ptr<CatalogEntry> DuckSchemaEntry::AddEntry(CatalogTransaction transaction, unique_ptr<StandardEntry> entry,
                                                      OnCreateConflict on_conflict) {
-	DependencyList dependencies = entry->dependencies;
+	LogicalDependencyList dependencies = entry->dependencies;
 	return AddEntryInternal(transaction, std::move(entry), on_conflict, dependencies);
 }
 

@@ -418,7 +418,7 @@ template <class T>
 static void CreateTPCHTable(ClientContext &context, string catalog_name, string schema, string suffix) {
 	auto info = make_uniq<CreateTableInfo>();
 	info->schema = schema;
-	info->table = T::Name + suffix;
+	info->name = T::Name + suffix;
 	info->on_conflict = OnCreateConflict::IGNORE_ON_CONFLICT;
 	info->temporary = false;
 	for (idx_t i = 0; i < T::ColumnCount; i++) {

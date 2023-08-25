@@ -6,23 +6,21 @@
 
 namespace duckdb {
 
-CreateMacroInfo::CreateMacroInfo() : CreateFunctionInfo(CatalogType::MACRO_ENTRY, INVALID_SCHEMA) {
+CreateMacroInfo::CreateMacroInfo() : CreateFunctionInfo(CatalogType::MACRO_ENTRY, "", INVALID_SCHEMA) {
 }
 
-CreateMacroInfo::CreateMacroInfo(CatalogType type) : CreateFunctionInfo(type, INVALID_SCHEMA) {
+CreateMacroInfo::CreateMacroInfo(CatalogType type) : CreateFunctionInfo(type, "", INVALID_SCHEMA) {
 }
 
 unique_ptr<CreateInfo> CreateMacroInfo::Copy() const {
 	auto result = make_uniq<CreateMacroInfo>();
 	result->function = function->Copy();
-	result->name = name;
 	CopyProperties(*result);
 	return std::move(result);
 }
 
 void CreateMacroInfo::SerializeInternal(Serializer &serializer) const {
 	FieldWriter writer(serializer);
-	writer.WriteString(name);
 	writer.WriteSerializable(*function);
 	writer.Finalize();
 }
@@ -32,7 +30,6 @@ unique_ptr<CreateMacroInfo> CreateMacroInfo::Deserialize(Deserializer &deseriali
 	result->DeserializeBase(deserializer);
 
 	FieldReader reader(deserializer);
-	result->name = reader.ReadRequired<string>();
 	result->function = reader.ReadRequiredSerializable<MacroFunction>();
 	reader.Finalize();
 

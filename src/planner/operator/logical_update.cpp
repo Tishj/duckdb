@@ -31,7 +31,7 @@ unique_ptr<LogicalOperator> LogicalUpdate::Deserialize(LogicalDeserializationSta
 	auto &catalog = Catalog::GetCatalog(context, info->catalog);
 
 	auto &table_catalog_entry =
-	    catalog.GetEntry<TableCatalogEntry>(context, info->schema, info->Cast<CreateTableInfo>().table);
+	    catalog.GetEntry<TableCatalogEntry>(context, info->schema, info->Cast<CreateTableInfo>().name);
 	auto result = make_uniq<LogicalUpdate>(table_catalog_entry);
 	result->table_index = reader.ReadRequired<idx_t>();
 	result->return_chunk = reader.ReadRequired<bool>();

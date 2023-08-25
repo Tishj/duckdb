@@ -29,7 +29,7 @@ unique_ptr<LogicalOperator> LogicalDelete::Deserialize(LogicalDeserializationSta
 	auto &table_info = info->Cast<CreateTableInfo>();
 
 	auto &table_catalog_entry =
-	    Catalog::GetEntry<TableCatalogEntry>(context, info->catalog, info->schema, table_info.table);
+	    Catalog::GetEntry<TableCatalogEntry>(context, info->catalog, info->schema, table_info.name);
 
 	auto table_index = reader.ReadRequired<idx_t>();
 	auto result = make_uniq<LogicalDelete>(table_catalog_entry, table_index);

@@ -12,6 +12,7 @@
 namespace duckdb {
 
 void CreateInfo::Serialize(Serializer &serializer) const {
+	serializer.Write(name);
 	serializer.Write(type);
 	serializer.WriteString(catalog);
 	serializer.WriteString(schema);
@@ -25,13 +26,14 @@ void CreateInfo::Serialize(Serializer &serializer) const {
 }
 
 void CreateInfo::DeserializeBase(Deserializer &deserializer) {
+	this->name = deserializer.Read<string>();
 	this->catalog = deserializer.Read<string>();
 	this->schema = deserializer.Read<string>();
 	this->on_conflict = deserializer.Read<OnCreateConflict>();
 	this->temporary = deserializer.Read<bool>();
 	this->internal = deserializer.Read<bool>();
 	this->sql = deserializer.Read<string>();
-	this->dependencies = DependencyList::Deserialize(deserializer);
+	this->dependencies = LogicalDependencyList::Deserialize(deserializer);
 }
 
 unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &deserializer) {
@@ -62,6 +64,7 @@ unique_ptr<CreateInfo> CreateInfo::Deserialize(Deserializer &source, PlanDeseria
 }
 
 void CreateInfo::CopyProperties(CreateInfo &other) const {
+	other.name = name;
 	other.type = type;
 	other.catalog = catalog;
 	other.schema = schema;

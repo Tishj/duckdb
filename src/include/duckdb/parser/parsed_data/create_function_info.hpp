@@ -14,14 +14,12 @@
 namespace duckdb {
 
 struct CreateFunctionInfo : public CreateInfo {
-	explicit CreateFunctionInfo(CatalogType type, string schema = DEFAULT_SCHEMA) : CreateInfo(type, schema) {
+	explicit CreateFunctionInfo(CatalogType type, const string &name, string schema = DEFAULT_SCHEMA) : CreateInfo(type, name, schema) {
 		D_ASSERT(type == CatalogType::SCALAR_FUNCTION_ENTRY || type == CatalogType::AGGREGATE_FUNCTION_ENTRY ||
 		         type == CatalogType::TABLE_FUNCTION_ENTRY || type == CatalogType::PRAGMA_FUNCTION_ENTRY ||
 		         type == CatalogType::MACRO_ENTRY || type == CatalogType::TABLE_MACRO_ENTRY);
 	}
 
-	//! Function name
-	string name;
 	//! The description (if any)
 	string description;
 	//! Parameter names (if any)
@@ -31,7 +29,6 @@ struct CreateFunctionInfo : public CreateInfo {
 
 protected:
 	void SerializeInternal(Serializer &serializer) const override {
-		serializer.WriteString(name);
 	}
 };
 

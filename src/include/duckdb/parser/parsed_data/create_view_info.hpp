@@ -17,11 +17,9 @@ class SchemaCatalogEntry;
 
 struct CreateViewInfo : public CreateInfo {
 	CreateViewInfo();
-	CreateViewInfo(SchemaCatalogEntry &schema, string view_name);
-	CreateViewInfo(string catalog_p, string schema_p, string view_name);
+	CreateViewInfo(SchemaCatalogEntry &schema, string name);
+	CreateViewInfo(string catalog_p, string schema_p, string name);
 
-	//! Table name to insert to
-	string view_name;
 	//! Aliases of the view
 	vector<string> aliases;
 	//! Return types

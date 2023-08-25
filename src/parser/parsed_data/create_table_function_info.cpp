@@ -4,14 +4,13 @@
 namespace duckdb {
 
 CreateTableFunctionInfo::CreateTableFunctionInfo(TableFunction function)
-    : CreateFunctionInfo(CatalogType::TABLE_FUNCTION_ENTRY), functions(function.name) {
-	name = function.name;
+    : CreateFunctionInfo(CatalogType::TABLE_FUNCTION_ENTRY, function.name), functions(function.name) {
 	functions.AddFunction(std::move(function));
 	internal = true;
 }
+
 CreateTableFunctionInfo::CreateTableFunctionInfo(TableFunctionSet set)
-    : CreateFunctionInfo(CatalogType::TABLE_FUNCTION_ENTRY), functions(std::move(set)) {
-	name = functions.name;
+    : CreateFunctionInfo(CatalogType::TABLE_FUNCTION_ENTRY, set.name), functions(std::move(set)) {
 	for (auto &func : functions.functions) {
 		func.name = functions.name;
 	}

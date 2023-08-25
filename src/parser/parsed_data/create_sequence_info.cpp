@@ -6,14 +6,13 @@
 namespace duckdb {
 
 CreateSequenceInfo::CreateSequenceInfo()
-    : CreateInfo(CatalogType::SEQUENCE_ENTRY, INVALID_SCHEMA), name(string()), usage_count(0), increment(1),
+    : CreateInfo(CatalogType::SEQUENCE_ENTRY, "", INVALID_SCHEMA), usage_count(0), increment(1),
       min_value(1), max_value(NumericLimits<int64_t>::Maximum()), start_value(1), cycle(false) {
 }
 
 unique_ptr<CreateInfo> CreateSequenceInfo::Copy() const {
 	auto result = make_uniq<CreateSequenceInfo>();
 	CopyProperties(*result);
-	result->name = name;
 	result->schema = schema;
 	result->usage_count = usage_count;
 	result->increment = increment;
@@ -26,7 +25,6 @@ unique_ptr<CreateInfo> CreateSequenceInfo::Copy() const {
 
 void CreateSequenceInfo::SerializeInternal(Serializer &serializer) const {
 	FieldWriter writer(serializer);
-	writer.WriteString(name);
 	writer.WriteString(schema);
 	writer.WriteField(usage_count);
 	writer.WriteField(increment);
@@ -42,7 +40,6 @@ unique_ptr<CreateSequenceInfo> CreateSequenceInfo::Deserialize(Deserializer &des
 	result->DeserializeBase(deserializer);
 
 	FieldReader reader(deserializer);
-	result->name = reader.ReadRequired<string>();
 	result->schema = reader.ReadRequired<string>();
 	result->usage_count = reader.ReadRequired<uint64_t>();
 	result->increment = reader.ReadRequired<int64_t>();

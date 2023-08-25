@@ -29,7 +29,6 @@ void CreateIndexInfo::SerializeInternal(Serializer &serializer) const {
 	FieldWriter writer(serializer);
 	writer.WriteField(index_type);
 	writer.WriteString(table);
-	writer.WriteString(index_name);
 	writer.WriteField(constraint_type);
 
 	writer.WriteSerializableList<ParsedExpression>(parsed_expressions);

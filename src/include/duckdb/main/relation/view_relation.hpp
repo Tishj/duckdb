@@ -14,10 +14,10 @@ namespace duckdb {
 
 class ViewRelation : public Relation {
 public:
-	ViewRelation(const std::shared_ptr<ClientContext> &context, string schema_name, string view_name);
+	ViewRelation(const std::shared_ptr<ClientContext> &context, string schema_name, string name);
 
 	string schema_name;
-	string view_name;
+	string name;
 	vector<ColumnDefinition> columns;
 
 public:

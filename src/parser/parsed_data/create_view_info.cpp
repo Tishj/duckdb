@@ -8,11 +8,10 @@
 
 namespace duckdb {
 
-CreateViewInfo::CreateViewInfo() : CreateInfo(CatalogType::VIEW_ENTRY, INVALID_SCHEMA) {
+CreateViewInfo::CreateViewInfo() : CreateInfo(CatalogType::VIEW_ENTRY, "", INVALID_SCHEMA) {
 }
 CreateViewInfo::CreateViewInfo(string catalog_p, string schema_p, string view_name_p)
-    : CreateInfo(CatalogType::VIEW_ENTRY, std::move(schema_p), std::move(catalog_p)),
-      view_name(std::move(view_name_p)) {
+    : CreateInfo(CatalogType::VIEW_ENTRY, std::move(view_name_p), std::move(schema_p), std::move(catalog_p)) {
 }
 
 CreateViewInfo::CreateViewInfo(SchemaCatalogEntry &schema, string view_name)
@@ -20,7 +19,7 @@ CreateViewInfo::CreateViewInfo(SchemaCatalogEntry &schema, string view_name)
 }
 
 unique_ptr<CreateInfo> CreateViewInfo::Copy() const {
-	auto result = make_uniq<CreateViewInfo>(catalog, schema, view_name);
+	auto result = make_uniq<CreateViewInfo>(catalog, schema, name);
 	CopyProperties(*result);
 	result->aliases = aliases;
 	result->types = types;
@@ -33,7 +32,6 @@ unique_ptr<CreateViewInfo> CreateViewInfo::Deserialize(Deserializer &deserialize
 	result->DeserializeBase(deserializer);
 
 	FieldReader reader(deserializer);
-	result->view_name = reader.ReadRequired<string>();
 	result->aliases = reader.ReadRequiredList<string>();
 	result->types = reader.ReadRequiredSerializableList<LogicalType, LogicalType>();
 	result->query = reader.ReadOptional<SelectStatement>(nullptr);
@@ -44,7 +42,6 @@ unique_ptr<CreateViewInfo> CreateViewInfo::Deserialize(Deserializer &deserialize
 
 void CreateViewInfo::SerializeInternal(Serializer &serializer) const {
 	FieldWriter writer(serializer);
-	writer.WriteString(view_name);
 	writer.WriteList<string>(aliases);
 	writer.WriteRegularSerializableList(types);
 	writer.WriteOptional(query);
@@ -53,7 +50,7 @@ void CreateViewInfo::SerializeInternal(Serializer &serializer) const {
 
 unique_ptr<CreateViewInfo> CreateViewInfo::FromSelect(ClientContext &context, unique_ptr<CreateViewInfo> info) {
 	D_ASSERT(info);
-	D_ASSERT(!info->view_name.empty());
+	D_ASSERT(!info->name.empty());
 	D_ASSERT(!info->sql.empty());
 	D_ASSERT(!info->query);
 

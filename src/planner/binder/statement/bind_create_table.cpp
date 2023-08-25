@@ -39,7 +39,7 @@ static void BindCheckConstraint(Binder &binder, BoundCreateTableInfo &info, cons
 
 	auto bound_constraint = make_uniq<BoundCheckConstraint>();
 	// check constraint: bind the expression
-	CheckBinder check_binder(binder, binder.context, base.table, base.columns, bound_constraint->bound_columns);
+	CheckBinder check_binder(binder, binder.context, base.name, base.columns, bound_constraint->bound_columns);
 	auto &check = cond->Cast<CheckConstraint>();
 	// create a copy of the unbound expression because the binding destroys the constraint
 	auto unbound_expression = check.expression->Copy();
@@ -104,7 +104,7 @@ static void BindConstraints(Binder &binder, BoundCreateTableInfo &info) {
 			if (unique.is_primary_key) {
 				// we can only have one primary key per table
 				if (has_primary_key) {
-					throw ParserException("table \"%s\" has more than one primary key", base.table);
+					throw ParserException("table \"%s\" has more than one primary key", base.name);
 				}
 				has_primary_key = true;
 				primary_keys = keys;
@@ -169,10 +169,10 @@ void Binder::BindGeneratedColumns(BoundCreateTableInfo &info) {
 	// Create a new binder because we dont need (or want) these bindings in this scope
 	auto binder = Binder::CreateBinder(context);
 	binder->SetCatalogLookupCallback(entry_retriever.GetCallback());
-	binder->bind_context.AddGenericBinding(table_index, base.table, names, types);
+	binder->bind_context.AddGenericBinding(table_index, base.name, names, types);
 	auto expr_binder = ExpressionBinder(*binder, context);
 	string ignore;
-	auto table_binding = binder->bind_context.GetBinding(base.table, ignore);
+	auto table_binding = binder->bind_context.GetBinding(base.name, ignore);
 	D_ASSERT(table_binding && ignore.empty());
 
 	auto bind_order = info.column_dependency_manager.GetBindOrder(base.columns);
@@ -227,7 +227,7 @@ void Binder::BindDefaultValues(const ColumnList &columns, vector<unique_ptr<Expr
 	}
 }
 
-static void ExtractExpressionDependencies(Expression &expr, DependencyList &dependencies) {
+static void ExtractExpressionDependencies(Expression &expr, LogicalDependencyList &dependencies) {
 	if (expr.type == ExpressionType::BOUND_FUNCTION) {
 		auto &function = expr.Cast<BoundFunctionExpression>();
 		if (function.function.dependency) {
@@ -251,10 +251,11 @@ static void ExtractDependencies(BoundCreateTableInfo &info) {
 		}
 	}
 }
+
 unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateInfo> info, SchemaCatalogEntry &schema) {
 	auto &base = info->Cast<CreateTableInfo>();
 	auto result = make_uniq<BoundCreateTableInfo>(schema, std::move(info));
-	auto &dependencies = result->dependencies;
+	auto &dependencies = base.dependencies;
 	if (base.query) {
 		// construct the result object
 		auto query_obj = Bind(*base.query);
@@ -285,8 +286,8 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		// bind the default values
 		BindDefaultValues(base.columns, result->bound_defaults);
 	}
-	// extract dependencies from any default values or CHECK constraints
-	ExtractDependencies(*result);
+	//// extract dependencies from any default values or CHECK constraints
+	//ExtractDependencies(*result);
 
 	if (base.columns.PhysicalColumnCount() == 0) {
 		throw BinderException("Creating a table without physical (non-generated) columns is not supported");
@@ -299,7 +300,7 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		}
 		BindLogicalType(column.TypeMutable(), &result->schema.catalog);
 	}
-	result->dependencies.VerifyDependencies(schema.catalog, result->Base().table);
+	//result->dependencies.VerifyDependencies(schema.catalog, result->Base().name);
 	properties.allow_stream_result = false;
 	return result;
 }
