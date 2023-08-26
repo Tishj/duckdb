@@ -20,7 +20,7 @@ class unordered_set {
 #ifdef DUCKDB_DEBUG_UNORDERED_SET
 	struct SetCompare {
 		bool operator()(const T &__x, const T &__y) const {
-			return KeyEqual()(__x, __y);
+			return !KeyEqual()(__x, __y);
 		}
 	};
 	using original = std::set<T, SetCompare>;
@@ -263,8 +263,15 @@ template <typename T, typename Hash, typename KeyEqual>
 std::pair<typename unordered_set<T, Hash, KeyEqual>::iterator, bool>
 unordered_set<T, Hash, KeyEqual>::insert(const value_type &value) {
 #ifdef DUCKDB_DEBUG_UNORDERED_SET
-	auto result = _set.insert(value);
-	return std::make_pair(std::reverse_iterator<typename original::iterator>(result.first), result.second);
+	auto iter = _set.find(value);
+	bool success = false;
+	if (iter == _set.end()) {
+		auto result = _set.insert(value);
+		iter = result.first;
+		success = result.second;
+	}
+
+	return std::make_pair(std::reverse_iterator<typename original::iterator>(iter), success);
 #else
 	return _set.insert(value);
 #endif
@@ -275,8 +282,15 @@ template <typename P>
 std::pair<typename unordered_set<T, Hash, KeyEqual>::iterator, bool>
 unordered_set<T, Hash, KeyEqual>::insert(P &&value) {
 #ifdef DUCKDB_DEBUG_UNORDERED_SET
-	auto result = _set.insert(std::forward<P>(value));
-	return std::make_pair(std::reverse_iterator<typename original::iterator>(result.first), result.second);
+	auto iter = _set.find(value);
+	bool success = false;
+	if (iter == _set.end()) {
+		auto result = _set.insert(std::forward<P>(value));
+		iter = result.first;
+		success = result.second;
+	}
+
+	return std::make_pair(std::reverse_iterator<typename original::iterator>(iter), success);
 #else
 	return _set.insert(std::forward<P>(value));
 #endif
@@ -286,7 +300,11 @@ template <typename T, typename Hash, typename KeyEqual>
 typename unordered_set<T, Hash, KeyEqual>::iterator unordered_set<T, Hash, KeyEqual>::insert(const_iterator hint,
                                                                                              const value_type &value) {
 #ifdef DUCKDB_DEBUG_UNORDERED_SET
-	return std::reverse_iterator<typename original::iterator>(_set.insert(hint, value));
+	auto iter = _set.find(value);
+	if (iter == _set.end()) {
+		return std::reverse_iterator<typename original::iterator>(_set.insert(hint, value));
+	}
+	return std::reverse_iterator<typename original::iterator>(iter);
 #else
 	return _set.insert(hint, value);
 #endif
@@ -297,7 +315,11 @@ template <typename P>
 typename unordered_set<T, Hash, KeyEqual>::iterator unordered_set<T, Hash, KeyEqual>::insert(const_iterator hint,
                                                                                              P &&value) {
 #ifdef DUCKDB_DEBUG_UNORDERED_SET
-	return std::reverse_iterator<typename original::iterator>(_set.insert(hint, std::forward<P>(value)));
+	auto iter = _set.find(value);
+	if (iter == _set.end()) {
+		return std::reverse_iterator<typename original::iterator>(_set.insert(hint, std::forward<P>(value)));
+	}
+	return std::reverse_iterator<typename original::iterator>(iter);
 #else
 	return _set.insert(hint, std::forward<P>(value));
 #endif
@@ -306,12 +328,26 @@ typename unordered_set<T, Hash, KeyEqual>::iterator unordered_set<T, Hash, KeyEq
 template <typename T, typename Hash, typename KeyEqual>
 template <typename InputIt>
 void unordered_set<T, Hash, KeyEqual>::insert(InputIt first, InputIt last) {
+#ifdef DUCKDB_DEBUG_UNORDERED_SET
+	std::unordered_set<T, Hash, KeyEqual> temporary(first, last);
+	for (auto &entry : temporary) {
+		insert(entry);
+	}
+#else
 	_set.insert(first, last);
+#endif
 }
 
 template <typename T, typename Hash, typename KeyEqual>
 void unordered_set<T, Hash, KeyEqual>::insert(std::initializer_list<value_type> ilist) {
+#ifdef DUCKDB_DEBUG_UNORDERED_SET
+	std::unordered_set<T, Hash, KeyEqual> temporary(ilist);
+	for (auto &entry : temporary) {
+		insert(entry);
+	}
+#else
 	_set.insert(ilist);
+#endif
 }
 
 } // namespace duckdb
