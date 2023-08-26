@@ -12,7 +12,7 @@
 namespace duckdb {
 
 void CreateInfo::Serialize(Serializer &serializer) const {
-	serializer.Write(name);
+	serializer.WriteString(name);
 	serializer.Write(type);
 	serializer.WriteString(catalog);
 	serializer.WriteString(schema);

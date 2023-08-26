@@ -21,7 +21,7 @@ unique_ptr<CreateStatement> Transformer::TransformCreateTableAs(duckdb_libpgquer
 	auto info = make_uniq<CreateTableInfo>();
 	info->catalog = qname.catalog;
 	info->schema = qname.schema;
-	info->table = qname.name;
+	info->name = qname.name;
 	info->on_conflict = TransformOnConflict(stmt.onconflict);
 	info->temporary =
 	    stmt.into->rel->relpersistence == duckdb_libpgquery::PGPostgresRelPersistence::PG_RELPERSISTENCE_TEMP;

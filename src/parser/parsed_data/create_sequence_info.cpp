@@ -6,8 +6,8 @@
 namespace duckdb {
 
 CreateSequenceInfo::CreateSequenceInfo()
-    : CreateInfo(CatalogType::SEQUENCE_ENTRY, "", INVALID_SCHEMA), usage_count(0), increment(1),
-      min_value(1), max_value(NumericLimits<int64_t>::Maximum()), start_value(1), cycle(false) {
+    : CreateInfo(CatalogType::SEQUENCE_ENTRY, "", INVALID_SCHEMA), usage_count(0), increment(1), min_value(1),
+      max_value(NumericLimits<int64_t>::Maximum()), start_value(1), cycle(false) {
 }
 
 unique_ptr<CreateInfo> CreateSequenceInfo::Copy() const {

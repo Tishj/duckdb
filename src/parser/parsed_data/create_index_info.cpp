@@ -9,7 +9,6 @@ unique_ptr<CreateInfo> CreateIndexInfo::Copy() const {
 	CopyProperties(*result);
 
 	result->index_type = index_type;
-	result->index_name = index_name;
 	result->constraint_type = constraint_type;
 	result->table = table;
 	for (auto &expr : expressions) {
@@ -46,7 +45,6 @@ unique_ptr<CreateIndexInfo> CreateIndexInfo::Deserialize(Deserializer &deseriali
 	FieldReader reader(deserializer);
 	result->index_type = reader.ReadRequired<IndexType>();
 	result->table = reader.ReadRequired<string>();
-	result->index_name = reader.ReadRequired<string>();
 	result->constraint_type = reader.ReadRequired<IndexConstraintType>();
 
 	result->parsed_expressions = reader.ReadRequiredSerializableList<ParsedExpression>();

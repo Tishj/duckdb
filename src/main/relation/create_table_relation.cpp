@@ -19,7 +19,7 @@ BoundStatement CreateTableRelation::Bind(Binder &binder) {
 	CreateStatement stmt;
 	auto info = make_uniq<CreateTableInfo>();
 	info->schema = schema_name;
-	info->table = table_name;
+	info->name = table_name;
 	info->query = std::move(select);
 	info->on_conflict = OnCreateConflict::ERROR_ON_CONFLICT;
 	stmt.info = std::move(info);

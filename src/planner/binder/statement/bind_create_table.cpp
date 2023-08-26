@@ -287,7 +287,7 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		BindDefaultValues(base.columns, result->bound_defaults);
 	}
 	//// extract dependencies from any default values or CHECK constraints
-	//ExtractDependencies(*result);
+	// ExtractDependencies(*result);
 
 	if (base.columns.PhysicalColumnCount() == 0) {
 		throw BinderException("Creating a table without physical (non-generated) columns is not supported");
@@ -300,7 +300,7 @@ unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateIn
 		}
 		BindLogicalType(column.TypeMutable(), &result->schema.catalog);
 	}
-	//result->dependencies.VerifyDependencies(schema.catalog, result->Base().name);
+	// result->dependencies.VerifyDependencies(schema.catalog, result->Base().name);
 	properties.allow_stream_result = false;
 	return result;
 }

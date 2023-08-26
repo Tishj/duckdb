@@ -80,7 +80,7 @@ unique_ptr<CreateStatement> Transformer::TransformCreateTable(duckdb_libpgquery:
 	auto qname = TransformQualifiedName(*stmt.relation);
 	info->catalog = qname.catalog;
 	info->schema = qname.schema;
-	info->table = qname.name;
+	info->name = qname.name;
 	info->on_conflict = TransformOnConflict(stmt.onconflict);
 	info->temporary =
 	    stmt.relation->relpersistence == duckdb_libpgquery::PGPostgresRelPersistence::PG_RELPERSISTENCE_TEMP;

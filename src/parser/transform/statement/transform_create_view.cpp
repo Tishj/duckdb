@@ -14,7 +14,7 @@ unique_ptr<CreateStatement> Transformer::TransformCreateView(duckdb_libpgquery::
 	auto qname = TransformQualifiedName(*stmt.view);
 	info->catalog = qname.catalog;
 	info->schema = qname.schema;
-	info->view_name = qname.name;
+	info->name = qname.name;
 	info->temporary = !stmt.view->relpersistence;
 	if (info->temporary && IsInvalidCatalog(info->catalog)) {
 		info->catalog = TEMP_CATALOG;

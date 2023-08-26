@@ -58,7 +58,7 @@ static unique_ptr<CreateViewInfo> GetDefaultView(ClientContext &context, const s
 		if (internal_views[index].schema == schema && internal_views[index].name == name) {
 			auto result = make_uniq<CreateViewInfo>();
 			result->schema = schema;
-			result->view_name = name;
+			result->name = name;
 			result->sql = internal_views[index].sql;
 			result->temporary = true;
 			result->internal = true;

@@ -37,8 +37,15 @@ private:
 //! A minimal representation of a CreateInfo / CatalogEntry
 //! enough to look up the entry inside SchemaCatalogEntry::GetEntry
 struct LogicalDependency {
+public:
 	string name;
+	string schema;
+	string catalog;
 	CatalogType type;
+
+public:
+	void FormatSerialize(FormatSerializer &serializer) const;
+	static LogicalDependency FormatDeserialize(FormatDeserializer &deserializer);
 };
 
 struct CreateInfoHashFunction {
@@ -52,11 +59,18 @@ struct CreateInfoEquality {
 //! The DependencyList containing LogicalDependency objects, not looked up in the catalog yet
 class LogicalDependencyList {
 	using create_info_set_t = unordered_set<LogicalDependency, CreateInfoHashFunction, CreateInfoEquality>;
+
 public:
 	DUCKDB_API void AddDependency(LogicalDependency entry);
 	DUCKDB_API void AddDependency(CatalogEntry &entry);
-	DUCKDB_API bool Contains(LogicalDependency& entry);
-	DUCKDB_API PhysicalDependencyList GetPhysical(SchemaCatalogEntry &schema, CatalogTransaction &transaction) const;
+	DUCKDB_API bool Contains(LogicalDependency &entry);
+	DUCKDB_API PhysicalDependencyList GetPhysical(ClientContext &context) const;
+
+public:
+	void Serialize(Serializer &serializer) const;
+	static LogicalDependencyList Deserialize(Deserializer &source);
+	void FormatSerialize(FormatSerializer &serializer) const;
+	static LogicalDependencyList FormatDeserialize(FormatDeserializer &deserializer);
 
 private:
 	create_info_set_t set;

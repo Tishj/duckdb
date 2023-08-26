@@ -9,7 +9,7 @@ namespace duckdb {
 
 ViewRelation::ViewRelation(const std::shared_ptr<ClientContext> &context, string schema_name_p, string view_name_p)
     : Relation(context, RelationType::VIEW_RELATION), schema_name(std::move(schema_name_p)),
-      view_name(std::move(view_name_p)) {
+      name(std::move(view_name_p)) {
 	context->TryBindRelation(*this, this->columns);
 }
 
@@ -23,12 +23,12 @@ unique_ptr<QueryNode> ViewRelation::GetQueryNode() {
 unique_ptr<TableRef> ViewRelation::GetTableRef() {
 	auto table_ref = make_uniq<BaseTableRef>();
 	table_ref->schema_name = schema_name;
-	table_ref->table_name = view_name;
+	table_ref->table_name = name;
 	return std::move(table_ref);
 }
 
 string ViewRelation::GetAlias() {
-	return view_name;
+	return name;
 }
 
 const vector<ColumnDefinition> &ViewRelation::Columns() {
@@ -36,7 +36,7 @@ const vector<ColumnDefinition> &ViewRelation::Columns() {
 }
 
 string ViewRelation::ToString(idx_t depth) {
-	return RenderWhitespace(depth) + "View [" + view_name + "]";
+	return RenderWhitespace(depth) + "View [" + name + "]";
 }
 
 } // namespace duckdb

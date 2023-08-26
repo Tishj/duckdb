@@ -9,7 +9,7 @@ CreateTableInfo::CreateTableInfo() : CreateInfo(CatalogType::TABLE_ENTRY, "", IN
 }
 
 CreateTableInfo::CreateTableInfo(string catalog_p, string schema_p, string name_p)
-    : CreateInfo(CatalogType::TABLE_ENTRY, name(std::move(name_p)), std::move(schema_p), std::move(catalog_p)), {
+    : CreateInfo(CatalogType::TABLE_ENTRY, std::move(name_p), std::move(schema_p), std::move(catalog_p)) {
 }
 
 CreateTableInfo::CreateTableInfo(SchemaCatalogEntry &schema, string name_p)
