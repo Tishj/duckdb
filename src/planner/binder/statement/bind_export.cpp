@@ -14,6 +14,7 @@
 
 #include "duckdb/common/string_util.hpp"
 #include <algorithm>
+#include "duckdb/common/queue.hpp"
 
 namespace duckdb {
 
@@ -41,50 +42,64 @@ string SanitizeExportIdentifier(const string &str) {
 	return result;
 }
 
-bool IsExistMainKeyTable(string &table_name, vector<reference<TableCatalogEntry>> &unordered) {
-	for (idx_t i = 0; i < unordered.size(); i++) {
-		if (unordered[i].get().name == table_name) {
+bool IsExistMainKeyTable(string &table_name, catalog_entry_vector_t &unordered) {
+	for (auto &entry : unordered) {
+		auto &table_entry = entry.get().Cast<TableCatalogEntry>();
+		if (table_entry.name == table_name) {
 			return true;
 		}
 	}
 	return false;
 }
 
-void ScanForeignKeyTable(vector<reference<TableCatalogEntry>> &ordered, vector<reference<TableCatalogEntry>> &unordered,
-                         bool move_only_pk_table) {
-	for (auto i = unordered.begin(); i != unordered.end();) {
-		auto table_entry = *i;
+catalog_entry_vector_t ScanForeignKeyTable(catalog_entry_vector_t &unordered, bool move_only_pk_table) {
+	catalog_entry_vector_t result;
+	queue<reference<CatalogEntry>> to_order;
+
+	for (auto &entry : unordered) {
+		to_order.push(entry);
+	}
+
+	while (!to_order.empty()) {
+		auto &ref = to_order.front();
+		to_order.pop();
+
+		auto &table_entry = ref.get().Cast<TableCatalogEntry>();
 		bool move_to_ordered = true;
-		auto &constraints = table_entry.get().GetConstraints();
+		auto &constraints = table_entry.GetConstraints();
+
 		for (idx_t j = 0; j < constraints.size(); j++) {
 			auto &cond = constraints[j];
-			if (cond->type == ConstraintType::FOREIGN_KEY) {
-				auto &fk = cond->Cast<ForeignKeyConstraint>();
-				if ((move_only_pk_table && fk.info.type == ForeignKeyType::FK_TYPE_FOREIGN_KEY_TABLE) ||
-				    (!move_only_pk_table && fk.info.type == ForeignKeyType::FK_TYPE_FOREIGN_KEY_TABLE &&
-				     IsExistMainKeyTable(fk.info.table, unordered))) {
-					move_to_ordered = false;
-					break;
-				}
+			if (cond->type != ConstraintType::FOREIGN_KEY) {
+				continue;
+			}
+			auto &fk = cond->Cast<ForeignKeyConstraint>();
+			if (fk.info.type != ForeignKeyType::FK_TYPE_FOREIGN_KEY_TABLE) {
+				continue;
+			}
+
+			if (move_only_pk_table) {
+				move_to_ordered = false;
+				break;
+			}
+
+			if (!move_only_pk_table && IsExistMainKeyTable(fk.info.table, unordered)) {
+				move_to_ordered = false;
+				break;
 			}
 		}
+
 		if (move_to_ordered) {
-			ordered.push_back(table_entry);
-			i = unordered.erase(i);
+			result.push_back(table_entry);
 		} else {
-			i++;
+			to_order.push(table_entry);
 		}
 	}
+	return result;
 }
 
-void ReorderTableEntries(vector<reference<TableCatalogEntry>> &tables) {
-	vector<reference<TableCatalogEntry>> ordered;
-	vector<reference<TableCatalogEntry>> unordered = tables;
-	ScanForeignKeyTable(ordered, unordered, true);
-	while (!unordered.empty()) {
-		ScanForeignKeyTable(ordered, unordered, false);
-	}
-	tables = ordered;
+void ReorderTableEntries(catalog_entry_vector_t &tables) {
+	tables = ScanForeignKeyTable(tables, true);
 }
 
 string CreateFileName(const string &id_suffix, TableCatalogEntry &table, const string &extension) {
@@ -115,7 +130,7 @@ BoundStatement Binder::Bind(ExportStatement &stmt) {
 
 	// gather a list of all the tables
 	string catalog = stmt.database.empty() ? INVALID_CATALOG : stmt.database;
-	vector<reference<TableCatalogEntry>> tables;
+	catalog_entry_vector_t tables;
 	auto schemas = Catalog::GetSchemas(context, catalog);
 	for (auto &schema : schemas) {
 		schema.get().Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
@@ -136,7 +151,7 @@ BoundStatement Binder::Bind(ExportStatement &stmt) {
 
 	unordered_set<string> table_name_index;
 	for (auto &t : tables) {
-		auto &table = t.get();
+		auto &table = t.get().Cast<TableCatalogEntry>();
 		auto info = make_uniq<CopyInfo>();
 		// we copy the options supplied to the EXPORT
 		info->format = stmt.info->format;
