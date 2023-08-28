@@ -14,6 +14,7 @@
 
 #include "duckdb/common/string_util.hpp"
 #include <algorithm>
+#include "duckdb/common/queue.hpp"
 
 namespace duckdb {
 
@@ -211,6 +212,7 @@ BoundStatement Binder::Bind(ExportStatement &stmt) {
 		fs.CreateDirectory(stmt.info->file_path);
 	}
 
+	stmt.info->catalog = catalog;
 	// create the export node
 	auto export_node = make_uniq<LogicalExport>(copy_function.function, std::move(stmt.info), exported_tables);
 

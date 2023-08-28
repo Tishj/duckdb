@@ -16,6 +16,7 @@
 #include "duckdb/common/types/string_type.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 
 namespace duckdb {
 
@@ -80,6 +81,24 @@ protected:
 	template <typename T>
 	void WriteValue(const unique_ptr<T> &ptr) {
 		WriteValue(ptr.get());
+	}
+
+	template <typename T>
+	typename std::enable_if<std::is_same<typename is_reference<reference<T>>::ELEMENT_TYPE, // Use ELEMENT_TYPE
+	                                     CatalogEntry>::value,
+	                        void>::type
+	WriteValue(const reference<T> &ref) {
+		CatalogEntry &entry = ref.get();
+		auto catalog = entry.ParentCatalog().GetName();
+		auto schema = entry.ParentSchema().name;
+		auto name = entry.name;
+
+		BeginObject(0, "catalog_entry_reference");
+		WriteProperty(0, "catalog", catalog);
+		WriteProperty(1, "schema", schema);
+		WriteProperty(2, "name", name);
+		WriteProperty(3, "type", entry.type);
+		EndObject();
 	}
 
 	// Pointer
