@@ -23,10 +23,10 @@ namespace duckdb {
 class CatalogEntry;
 
 struct BoundCreateTableInfo {
-	explicit BoundCreateTableInfo(SchemaCatalogEntry &schema, unique_ptr<CreateInfo> base_p)
+	explicit BoundCreateTableInfo(SchemaCatalogEntry &schema, unique_ptr<CreateInfo> base_p, ClientContext &context)
 	    : schema(schema), base(std::move(base_p)) {
 		D_ASSERT(base);
-		dependencies = base->dependencies;
+		dependencies = base->dependencies.GetPhysical(context);
 	}
 
 	//! The schema to create the table in
@@ -42,7 +42,7 @@ struct BoundCreateTableInfo {
 	//! Bound default values
 	vector<unique_ptr<Expression>> bound_defaults;
 	//! Dependents of the table (in e.g. default values)
-	LogicalDependencyList dependencies;
+	PhysicalDependencyList dependencies;
 	//! The existing table data on disk (if any)
 	unique_ptr<PersistentTableData> data;
 	//! CREATE TABLE from QUERY

@@ -18,6 +18,7 @@ class CatalogEntry;
 struct CreateInfo;
 class SchemaCatalogEntry;
 struct CatalogTransaction;
+class LogicalDependencyList;
 
 //! The DependencyList containing CatalogEntry references, looked up in the catalog
 class PhysicalDependencyList {
@@ -29,6 +30,8 @@ public:
 	DUCKDB_API void VerifyDependencies(Catalog &catalog, const string &name);
 
 	DUCKDB_API bool Contains(CatalogEntry &entry);
+
+	DUCKDB_API LogicalDependencyList GetLogical() const;
 
 private:
 	catalog_entry_set_t set;
@@ -65,6 +68,7 @@ public:
 	DUCKDB_API void AddDependency(CatalogEntry &entry);
 	DUCKDB_API bool Contains(LogicalDependency &entry);
 	DUCKDB_API PhysicalDependencyList GetPhysical(ClientContext &context) const;
+	DUCKDB_API PhysicalDependencyList GetPhysical(optional_ptr<ClientContext> context) const;
 
 public:
 	void Serialize(Serializer &serializer) const;

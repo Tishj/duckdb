@@ -26,7 +26,7 @@ namespace duckdb {
 struct AlterInfo;
 
 class ClientContext;
-class LogicalDependencyList;
+class PhysicalDependencyList;
 struct MappingValue;
 struct EntryIndex;
 
@@ -75,9 +75,9 @@ public:
 	//! Create an entry in the catalog set. Returns whether or not it was
 	//! successful.
 	DUCKDB_API bool CreateEntry(CatalogTransaction transaction, const string &name, unique_ptr<CatalogEntry> value,
-	                            LogicalDependencyList &dependencies);
+	                            PhysicalDependencyList &dependencies);
 	DUCKDB_API bool CreateEntry(ClientContext &context, const string &name, unique_ptr<CatalogEntry> value,
-	                            LogicalDependencyList &dependencies);
+	                            PhysicalDependencyList &dependencies);
 
 	DUCKDB_API bool AlterEntry(CatalogTransaction transaction, const string &name, AlterInfo &alter_info);
 

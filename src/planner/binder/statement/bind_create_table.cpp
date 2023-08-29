@@ -227,7 +227,7 @@ void Binder::BindDefaultValues(const ColumnList &columns, vector<unique_ptr<Expr
 	}
 }
 
-static void ExtractExpressionDependencies(Expression &expr, LogicalDependencyList &dependencies) {
+static void ExtractExpressionDependencies(Expression &expr, PhysicalDependencyList &dependencies) {
 	if (expr.type == ExpressionType::BOUND_FUNCTION) {
 		auto &function = expr.Cast<BoundFunctionExpression>();
 		if (function.function.dependency) {
@@ -254,7 +254,7 @@ static void ExtractDependencies(BoundCreateTableInfo &info) {
 
 unique_ptr<BoundCreateTableInfo> Binder::BindCreateTableInfo(unique_ptr<CreateInfo> info, SchemaCatalogEntry &schema) {
 	auto &base = info->Cast<CreateTableInfo>();
-	auto result = make_uniq<BoundCreateTableInfo>(schema, std::move(info));
+	auto result = make_uniq<BoundCreateTableInfo>(schema, std::move(info), context);
 	auto &dependencies = base.dependencies;
 	if (base.query) {
 		// construct the result object

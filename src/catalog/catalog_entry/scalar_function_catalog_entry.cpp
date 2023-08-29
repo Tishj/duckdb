@@ -5,7 +5,7 @@ namespace duckdb {
 
 ScalarFunctionCatalogEntry::ScalarFunctionCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema,
                                                        CreateScalarFunctionInfo &info)
-    : FunctionEntry(CatalogType::SCALAR_FUNCTION_ENTRY, catalog, schema, info), functions(info.functions) {
+    : FunctionEntry(CatalogType::SCALAR_FUNCTION_ENTRY, catalog, schema, info, nullptr), functions(info.functions) {
 }
 
 unique_ptr<CatalogEntry> ScalarFunctionCatalogEntry::AlterEntry(ClientContext &context, AlterInfo &info) {

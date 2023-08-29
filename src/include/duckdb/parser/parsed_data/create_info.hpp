@@ -35,7 +35,7 @@ public:
 public:
 	explicit CreateInfo(CatalogType type, const string &name, string schema = DEFAULT_SCHEMA,
 	                    string catalog_p = INVALID_CATALOG)
-	    : ParseInfo(TYPE), type(type), catalog(std::move(catalog_p)), schema(schema),
+	    : ParseInfo(TYPE), name(name), type(type), catalog(std::move(catalog_p)), schema(schema),
 	      on_conflict(OnCreateConflict::ERROR_ON_CONFLICT), temporary(false), internal(false) {
 	}
 	~CreateInfo() override {

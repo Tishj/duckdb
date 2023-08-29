@@ -27,6 +27,14 @@ void PhysicalDependencyList::VerifyDependencies(Catalog &catalog, const string &
 	}
 }
 
+LogicalDependencyList PhysicalDependencyList::GetLogical() const {
+	LogicalDependencyList result;
+	for (auto &entry : set) {
+		result.AddDependency(entry);
+	}
+	return result;
+}
+
 bool PhysicalDependencyList::Contains(CatalogEntry &entry) {
 	return set.count(entry);
 }
@@ -76,7 +84,14 @@ void LogicalDependencyList::AddDependency(LogicalDependency entry) {
 }
 
 void LogicalDependencyList::AddDependency(CatalogEntry &entry) {
-	LogicalDependency dependency = {entry.name, entry.ParentSchema().name, entry.ParentCatalog().GetName(), entry.type};
+	LogicalDependency dependency;
+	dependency.name = entry.name;
+	dependency.schema = INVALID_SCHEMA;
+	if (entry.type != CatalogType::SCHEMA_ENTRY) {
+		dependency.schema = entry.ParentSchema().name;
+	}
+	dependency.catalog = entry.ParentCatalog().GetName();
+	dependency.type = entry.type;
 	set.insert(dependency);
 }
 
@@ -96,6 +111,17 @@ PhysicalDependencyList LogicalDependencyList::GetPhysical(ClientContext &context
 		dependencies.AddDependency(*catalog_entry);
 	}
 	return dependencies;
+}
+
+PhysicalDependencyList LogicalDependencyList::GetPhysical(optional_ptr<ClientContext> context_p) const {
+	if (set.empty()) {
+		return PhysicalDependencyList();
+	}
+	if (!context_p) {
+		throw InternalException("ClientContext is required to convert logical to physical dependency!");
+	}
+	auto &context = *context_p;
+	return GetPhysical(context);
 }
 
 void LogicalDependencyList::Serialize(Serializer &writer) const {
