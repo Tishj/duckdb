@@ -37,6 +37,25 @@ public:
 	unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory;
 };
 
+// This is not safe because we can't check if the connection is still open
+// before we try to access the variables
+struct PyConnectionOptions {
+public:
+	PyConnectionOptions(ClientConfig &config) : config(config) {
+	}
+
+public:
+	bool GetScanVariables() {
+		return config.scan_python_variables;
+	}
+	void SetScanVariables(bool value) {
+		config.scan_python_variables = value;
+	}
+
+private:
+	ClientConfig &config;
+};
+
 struct DuckDBPyConnection : public std::enable_shared_from_this<DuckDBPyConnection> {
 public:
 	shared_ptr<DuckDB> database;
@@ -67,6 +86,8 @@ public:
 	static shared_ptr<DuckDBPyConnection> DefaultConnection();
 	static PythonImportCache *ImportCache();
 	static bool IsInteractive();
+
+	PyConnectionOptions GetOptions();
 
 	unique_ptr<DuckDBPyRelation>
 	ReadCSV(const py::object &name, const py::object &header = py::none(), const py::object &compression = py::none(),

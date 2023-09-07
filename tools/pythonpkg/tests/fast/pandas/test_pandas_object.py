@@ -35,9 +35,10 @@ class TestPandasObject(object):
         res = duckdb_cursor.table('test').fetchall()
         assert res == [([1, 2, 3],), ([4, 5, 6],)]
 
-    def test_2273(self, duckdb_cursor):
+    def test_2273(self):
+        con = duckdb.connect()
         df_in = pd.DataFrame([[datetime.date(1992, 7, 30)]])
-        assert duckdb.query("Select * from df_in").fetchall() == [(datetime.date(1992, 7, 30),)]
+        assert con.query("Select * from df_in").fetchall() == [(datetime.date(1992, 7, 30),)]
 
     def test_object_to_string_with_stride(self, duckdb_cursor):
         data = np.array([["a", "b", "c"], [1, 2, 3], [1, 2, 3], [11, 22, 33]])
