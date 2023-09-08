@@ -68,7 +68,8 @@ struct TimezoneTypeInfo : public ExtraTypeInfo {
 	TimezoneTypeInfo(LogicalTypeId original_unit);
 
 	//! Used to store information about the original time unit
-	//! Since we only support US unit for the TIMESTAMP_TZ type
+	//! When receiving types from outside sources that support non-us timestamp values we would otherwise lose the
+	//! original unit information
 	LogicalTypeId unit;
 
 public:

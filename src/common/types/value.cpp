@@ -606,8 +606,8 @@ Value Value::TIMESTAMP(timestamp_t value) {
 	return result;
 }
 
-Value Value::TIMESTAMPTZ(timestamp_t value) {
-	Value result(LogicalType::TIMESTAMP_TZ);
+Value Value::TIMESTAMPTZ(timestamp_t value, LogicalTypeId original_unit) {
+	Value result(LogicalType::TIMESTAMP_TIMEZONE(original_unit));
 	result.value_.timestamp = value;
 	result.is_null = false;
 	return result;

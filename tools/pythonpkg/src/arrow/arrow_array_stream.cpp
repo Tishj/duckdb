@@ -147,6 +147,36 @@ void PythonTableArrowArrayStreamFactory::GetSchema(uintptr_t factory_ptr, ArrowS
 	}
 }
 
+string TimeUnitToString(LogicalTypeId time_unit) {
+	switch (time_unit) {
+	case LogicalTypeId::TIMESTAMP:
+		return "us";
+	case LogicalTypeId::TIMESTAMP_MS:
+		return "ms";
+	case LogicalTypeId::TIMESTAMP_NS:
+		return "ns";
+	case LogicalTypeId::TIMESTAMP_SEC:
+		return "s";
+	default:
+		throw InternalException("Unsupported time unit '%s'", LogicalTypeIdToString(time_unit));
+	}
+}
+
+int64_t ConvertTimestampTZValue(timestamp_t value, LogicalTypeId unit) {
+	switch (unit) {
+	case LogicalTypeId::TIMESTAMP:
+		return Timestamp::GetEpochMicroSeconds(value);
+	case LogicalTypeId::TIMESTAMP_MS:
+		return Timestamp::GetEpochMicroSeconds(value);
+	case LogicalTypeId::TIMESTAMP_NS:
+		return Timestamp::GetEpochNanoSeconds(value);
+	case LogicalTypeId::TIMESTAMP_SEC:
+		return Timestamp::GetEpochSeconds(value);
+	default:
+		throw InternalException("Unsupported time unit");
+	}
+}
+
 py::object GetScalar(Value &constant, const string &timezone_config) {
 	py::object scalar = py::module_::import("pyarrow").attr("scalar");
 	py::object dataset_scalar = py::module_::import("pyarrow.dataset").attr("scalar");
@@ -187,8 +217,15 @@ py::object GetScalar(Value &constant, const string &timezone_config) {
 		return dataset_scalar(scalar(constant.GetValue<int64_t>(), date_type("s")));
 	}
 	case LogicalTypeId::TIMESTAMP_TZ: {
+		auto original_unit = TimestampTZType::GetOriginalUnit(constant.type());
+		auto unit_string = TimeUnitToString(original_unit);
 		py::object date_type = py::module_::import("pyarrow").attr("timestamp");
-		return dataset_scalar(scalar(constant.GetValue<int64_t>(), date_type("us", py::arg("tz") = timezone_config)));
+		auto tz_value = constant.GetValue<timestamp_t>();
+		auto timestamp_value = ConvertTimestampTZValue(tz_value, original_unit);
+		auto result = dataset_scalar(scalar(timestamp_value, date_type(unit_string, py::arg("tz") = timezone_config)));
+		Printer::Print(StringUtil::Format("tz_value: %d | converted_value: %d", tz_value, timestamp_value));
+		Printer::Print(std::string(pybind11::str(result)));
+		return result;
 	}
 	case LogicalTypeId::UTINYINT:
 		return dataset_scalar(constant.GetValue<uint8_t>());

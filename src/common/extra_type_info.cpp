@@ -73,6 +73,9 @@ shared_ptr<ExtraTypeInfo> ExtraTypeInfo::Deserialize(FieldReader &reader) {
 	case ExtraTypeInfoType::DECIMAL_TYPE_INFO:
 		extra_info = DecimalTypeInfo::Deserialize(reader);
 		break;
+	case ExtraTypeInfoType::TIMEZONE_TYPE_INFO:
+		extra_info = TimezoneTypeInfo::Deserialize(reader);
+		break;
 	case ExtraTypeInfoType::STRING_TYPE_INFO:
 		extra_info = StringTypeInfo::Deserialize(reader);
 		break;

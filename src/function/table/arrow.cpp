@@ -169,13 +169,17 @@ unique_ptr<ArrowType> ArrowTableFunction::GetArrowLogicalType(ArrowSchema &schem
 		// Timestamp with Timezone
 		// TODO right now we just get the UTC value. We probably want to support this properly in the future
 		if (format[2] == 'n') {
-			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TZ, ArrowDateTimeType::NANOSECONDS);
+			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TIMEZONE(LogicalTypeId::TIMESTAMP_NS),
+			                            ArrowDateTimeType::NANOSECONDS);
 		} else if (format[2] == 'u') {
-			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TZ, ArrowDateTimeType::MICROSECONDS);
+			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TIMEZONE(LogicalTypeId::TIMESTAMP),
+			                            ArrowDateTimeType::MICROSECONDS);
 		} else if (format[2] == 'm') {
-			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TZ, ArrowDateTimeType::MILLISECONDS);
+			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TIMEZONE(LogicalTypeId::TIMESTAMP_MS),
+			                            ArrowDateTimeType::MILLISECONDS);
 		} else if (format[2] == 's') {
-			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TZ, ArrowDateTimeType::SECONDS);
+			return make_uniq<ArrowType>(LogicalType::TIMESTAMP_TIMEZONE(LogicalTypeId::TIMESTAMP_SEC),
+			                            ArrowDateTimeType::SECONDS);
 		} else {
 			throw NotImplementedException(" Timestamptz precision of not accepted");
 		}

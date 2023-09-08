@@ -496,8 +496,10 @@ Value Vector::GetValueInternal(const Vector &v_p, idx_t index_p) {
 		return Value::TIMESTAMPMS(reinterpret_cast<timestamp_t *>(data)[index]);
 	case LogicalTypeId::TIMESTAMP_SEC:
 		return Value::TIMESTAMPSEC(reinterpret_cast<timestamp_t *>(data)[index]);
-	case LogicalTypeId::TIMESTAMP_TZ:
-		return Value::TIMESTAMPTZ(reinterpret_cast<timestamp_t *>(data)[index]);
+	case LogicalTypeId::TIMESTAMP_TZ: {
+		auto original_unit = TimestampTZType::GetOriginalUnit(vector->GetType());
+		return Value::TIMESTAMPTZ(reinterpret_cast<timestamp_t *>(data)[index], original_unit);
+	}
 	case LogicalTypeId::HUGEINT:
 		return Value::HUGEINT(reinterpret_cast<hugeint_t *>(data)[index]);
 	case LogicalTypeId::UUID:

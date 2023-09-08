@@ -801,6 +801,20 @@ bool LogicalType::HasAlias() const {
 }
 
 //===--------------------------------------------------------------------===//
+// TimestampTZ Type
+//===--------------------------------------------------------------------===//
+
+LogicalTypeId TimestampTZType::GetOriginalUnit(const LogicalType &type) {
+	D_ASSERT(type.id() == LogicalTypeId::TIMESTAMP_TZ);
+	auto info = type.AuxInfo();
+	if (!info) {
+		return LogicalTypeId::TIMESTAMP;
+	}
+	D_ASSERT(info);
+	return info->Cast<TimezoneTypeInfo>().unit;
+}
+
+//===--------------------------------------------------------------------===//
 // Decimal Type
 //===--------------------------------------------------------------------===//
 uint8_t DecimalType::GetWidth(const LogicalType &type) {
@@ -825,6 +839,14 @@ LogicalType LogicalType::DECIMAL(int width, int scale) {
 	D_ASSERT(width >= scale);
 	auto type_info = make_shared<DecimalTypeInfo>(width, scale);
 	return LogicalType(LogicalTypeId::DECIMAL, std::move(type_info));
+}
+
+LogicalType LogicalType::TIMESTAMP_TIMEZONE(LogicalTypeId unit) {
+	if (unit == LogicalTypeId::TIMESTAMP) {
+		return LogicalType(LogicalTypeId::TIMESTAMP_TZ, nullptr);
+	}
+	auto type_info = make_shared<TimezoneTypeInfo>(unit);
+	return LogicalType(LogicalTypeId::TIMESTAMP_TZ, std::move(type_info));
 }
 
 //===--------------------------------------------------------------------===//

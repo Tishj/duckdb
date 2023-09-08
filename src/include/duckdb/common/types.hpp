@@ -366,6 +366,7 @@ public:
 
 	// explicitly allowing these functions to be capitalized to be in-line with the remaining functions
 	DUCKDB_API static LogicalType DECIMAL(int width, int scale);                 // NOLINT
+	DUCKDB_API static LogicalType TIMESTAMP_TIMEZONE(LogicalTypeId unit = LogicalTypeId::TIMESTAMP);                 // NOLINT
 	DUCKDB_API static LogicalType VARCHAR_COLLATION(string collation);           // NOLINT
 	DUCKDB_API static LogicalType LIST(const LogicalType &child);                       // NOLINT
 	DUCKDB_API static LogicalType STRUCT(child_list_t<LogicalType> children);    // NOLINT
@@ -389,6 +390,10 @@ struct DecimalType {
 	DUCKDB_API static uint8_t GetWidth(const LogicalType &type);
 	DUCKDB_API static uint8_t GetScale(const LogicalType &type);
 	DUCKDB_API static uint8_t MaxWidth();
+};
+
+struct TimestampTZType {
+	DUCKDB_API static LogicalTypeId GetOriginalUnit(const LogicalType &type);
 };
 
 struct StringType {
