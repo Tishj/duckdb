@@ -42,6 +42,9 @@ shared_ptr<ExtraTypeInfo> ExtraTypeInfo::FormatDeserialize(FormatDeserializer &d
 	case ExtraTypeInfoType::STRUCT_TYPE_INFO:
 		result = StructTypeInfo::FormatDeserialize(deserializer);
 		break;
+	case ExtraTypeInfoType::TIMEZONE_TYPE_INFO:
+		result = TimezoneTypeInfo::FormatDeserialize(deserializer);
+		break;
 	case ExtraTypeInfoType::USER_TYPE_INFO:
 		result = UserTypeInfo::FormatDeserialize(deserializer);
 		break;
@@ -110,6 +113,17 @@ void StructTypeInfo::FormatSerialize(FormatSerializer &serializer) const {
 shared_ptr<ExtraTypeInfo> StructTypeInfo::FormatDeserialize(FormatDeserializer &deserializer) {
 	auto result = duckdb::shared_ptr<StructTypeInfo>(new StructTypeInfo());
 	deserializer.ReadProperty(200, "child_types", result->child_types);
+	return std::move(result);
+}
+
+void TimezoneTypeInfo::FormatSerialize(FormatSerializer &serializer) const {
+	ExtraTypeInfo::FormatSerialize(serializer);
+	serializer.WriteProperty(200, "unit", unit);
+}
+
+shared_ptr<ExtraTypeInfo> TimezoneTypeInfo::FormatDeserialize(FormatDeserializer &deserializer) {
+	auto result = duckdb::shared_ptr<TimezoneTypeInfo>(new TimezoneTypeInfo());
+	deserializer.ReadProperty(200, "unit", result->unit);
 	return std::move(result);
 }
 

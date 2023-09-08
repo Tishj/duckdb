@@ -37,6 +37,18 @@
     ]
   },
   {
+    "class": "TimezoneTypeInfo",
+    "base": "ExtraTypeInfo",
+    "enum": "TIMEZONE_TYPE_INFO",
+    "members": [
+      {
+        "id": 200,
+        "name": "unit",
+        "type": "LogicalTypeId"
+      }
+    ]
+  },
+  {
     "class": "StringTypeInfo",
     "base": "ExtraTypeInfo",
     "enum": "STRING_TYPE_INFO",

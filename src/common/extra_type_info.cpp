@@ -105,6 +105,47 @@ bool ExtraTypeInfo::EqualsInternal(ExtraTypeInfo *other_p) const {
 }
 
 //===--------------------------------------------------------------------===//
+// Timezone Type Info
+//===--------------------------------------------------------------------===//
+TimezoneTypeInfo::TimezoneTypeInfo() : ExtraTypeInfo(ExtraTypeInfoType::DECIMAL_TYPE_INFO) {
+}
+
+static bool IsValidTimezoneUnit(LogicalTypeId unit) {
+	if (unit == LogicalTypeId::TIMESTAMP_MS) {
+		return true;
+	}
+	if (unit == LogicalTypeId::TIMESTAMP_SEC) {
+		return true;
+	}
+	if (unit == LogicalTypeId::TIMESTAMP_NS) {
+		return true;
+	}
+	if (unit == LogicalTypeId::TIMESTAMP) {
+		return true;
+	}
+	return false;
+}
+
+TimezoneTypeInfo::TimezoneTypeInfo(LogicalTypeId unit)
+    : ExtraTypeInfo(ExtraTypeInfoType::TIMEZONE_TYPE_INFO), unit(unit) {
+	D_ASSERT(IsValidTimezoneUnit(unit));
+}
+
+void TimezoneTypeInfo::Serialize(FieldWriter &writer) const {
+	writer.WriteField<LogicalTypeId>(unit);
+}
+
+shared_ptr<ExtraTypeInfo> TimezoneTypeInfo::Deserialize(FieldReader &reader) {
+	auto unit = reader.ReadRequired<LogicalTypeId>();
+	return make_shared<TimezoneTypeInfo>(unit);
+}
+
+bool TimezoneTypeInfo::EqualsInternal(ExtraTypeInfo *other_p) const {
+	auto &other = other_p->Cast<TimezoneTypeInfo>();
+	return unit == other.unit;
+}
+
+//===--------------------------------------------------------------------===//
 // Decimal Type Info
 //===--------------------------------------------------------------------===//
 DecimalTypeInfo::DecimalTypeInfo() : ExtraTypeInfo(ExtraTypeInfoType::DECIMAL_TYPE_INFO) {

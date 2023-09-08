@@ -25,7 +25,8 @@ enum class ExtraTypeInfoType : uint8_t {
 	STRUCT_TYPE_INFO = 5,
 	ENUM_TYPE_INFO = 6,
 	USER_TYPE_INFO = 7,
-	AGGREGATE_STATE_TYPE_INFO = 8
+	AGGREGATE_STATE_TYPE_INFO = 8,
+	TIMEZONE_TYPE_INFO = 9
 };
 
 struct ExtraTypeInfo {
@@ -61,6 +62,27 @@ public:
 
 protected:
 	virtual bool EqualsInternal(ExtraTypeInfo *other_p) const;
+};
+
+struct TimezoneTypeInfo : public ExtraTypeInfo {
+	TimezoneTypeInfo(LogicalTypeId original_unit);
+
+	//! Used to store information about the original time unit
+	//! Since we only support US unit for the TIMESTAMP_TZ type
+	LogicalTypeId unit;
+
+public:
+	void Serialize(FieldWriter &writer) const override;
+	void FormatSerialize(FormatSerializer &serializer) const override;
+
+	static shared_ptr<ExtraTypeInfo> FormatDeserialize(FormatDeserializer &source);
+	static shared_ptr<ExtraTypeInfo> Deserialize(FieldReader &reader);
+
+protected:
+	bool EqualsInternal(ExtraTypeInfo *other_p) const override;
+
+private:
+	TimezoneTypeInfo();
 };
 
 struct DecimalTypeInfo : public ExtraTypeInfo {
