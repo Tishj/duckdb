@@ -35,15 +35,15 @@ SinkCombineResultType PhysicalNumpyCollector::Combine(ExecutionContext &context,
                                                       OperatorSinkCombineInput &input) const {
 	auto &gstate = input.global_state.Cast<NumpyCollectorGlobalState>();
 	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
-	if (lstate.collection->Count() == 0) {
-		py::gil_scoped_acquire gil;
-		lstate.collection.reset();
-		return SinkCombineResultType::FINISHED;
-	}
+	//if (lstate.collection->Count() == 0) {
+	//	py::gil_scoped_acquire gil;
+	//	lstate.collection.reset();
+	//	return SinkCombineResultType::FINISHED;
+	//}
 
-	// Collect all the collections
-	lock_guard<mutex> l(gstate.glock);
-	gstate.batches[gstate.batch_index++] = std::move(lstate.collection);
+	//// Collect all the collections
+	//lock_guard<mutex> l(gstate.glock);
+	//gstate.batches[gstate.batch_index++] = std::move(lstate.collection);
 	return SinkCombineResultType::FINISHED;
 }
 
@@ -56,6 +56,13 @@ unique_ptr<GlobalSinkState> PhysicalNumpyCollector::GetGlobalSinkState(ClientCon
 	return make_uniq<NumpyCollectorGlobalState>();
 }
 
+SinkResultType PhysicalNumpyCollector::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
+	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
+	chunk.SetCardinality(0);
+	lstate.collection->Append(lstate.append_state, chunk);
+	return SinkResultType::NEED_MORE_INPUT;
+}
+
 SinkFinalizeType PhysicalNumpyCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                                   OperatorSinkFinalizeInput &input) const {
 	auto &gstate = input.global_state.Cast<NumpyCollectorGlobalState>();
@@ -63,29 +70,28 @@ SinkFinalizeType PhysicalNumpyCollector::Finalize(Pipeline &pipeline, Event &eve
 
 	gstate.collection = make_uniq<BatchedDataCollection>(context, types, std::move(gstate.batches), true);
 
-	// Pre-allocate the conversion result
+	//// Pre-allocate the conversion result
 	unique_ptr<NumpyResultConversion> result;
-	auto total_tuple_count = gstate.collection->Count();
+	//auto total_tuple_count = gstate.collection->Count();
 	auto &types = gstate.collection->Types();
 	{
 		py::gil_scoped_acquire gil;
-		result = make_uniq<NumpyResultConversion>(types, total_tuple_count, context.GetClientProperties());
-		result->SetCardinality(total_tuple_count);
+		result = make_uniq<NumpyResultConversion>(types, 0, context.GetClientProperties());
+		result->SetCardinality(0);
 	}
-	if (total_tuple_count == 0) {
-		// Create the result containing a single empty numpy result
-		gstate.result = make_uniq<NumpyQueryResult>(statement_type, properties, names, std::move(result),
-		                                            context.GetClientProperties());
-		return SinkFinalizeType::READY;
-	}
+	//if (total_tuple_count == 0) {
+	//	// Create the result containing a single empty numpy result
+	gstate.result = make_uniq<NumpyQueryResult>(statement_type, properties, names, std::move(result), context.GetClientProperties());
+	//	return SinkFinalizeType::READY;
+	//}
 
-	// Spawn an event that will populate the conversion result
-	auto new_event = make_shared<NumpyMergeEvent>(*result, *gstate.collection, pipeline);
-	event.InsertEvent(std::move(new_event));
+	//// Spawn an event that will populate the conversion result
+	//auto new_event = make_shared<NumpyMergeEvent>(*result, *gstate.collection, pipeline);
+	//event.InsertEvent(std::move(new_event));
 
-	// Already create the final query result
-	gstate.result = make_uniq<NumpyQueryResult>(statement_type, properties, names, std::move(result),
-	                                            context.GetClientProperties());
+	//// Already create the final query result
+	//gstate.result = make_uniq<NumpyQueryResult>(statement_type, properties, names, std::move(result),
+	//                                            context.GetClientProperties());
 
 	return SinkFinalizeType::READY;
 }

@@ -849,6 +849,10 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Query(const string &view_name, co
 
 DuckDBPyRelation &DuckDBPyRelation::Execute() {
 	AssertRelation();
+	auto &context = *rel->context.GetContext();
+	ScopedConfigSetting setting(
+		context.config, [](ClientConfig &config) { config.result_collector = PhysicalNumpyCollector::Create; },
+		[](ClientConfig &config) { config.result_collector = nullptr; });
 	ExecuteOrThrow();
 	return *this;
 }
