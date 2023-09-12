@@ -19,6 +19,7 @@
 #include "duckdb/main/relation/value_relation.hpp"
 #include "duckdb/main/relation/filter_relation.hpp"
 #include "duckdb_python/expression/pyexpression.hpp"
+#include "duckdb_python/pyutil.hpp"
 
 namespace duckdb {
 
@@ -710,12 +711,14 @@ static unique_ptr<QueryResult> PyExecuteRelation(const shared_ptr<Relation> &rel
 	auto context = rel->context.GetContext();
 	py::gil_scoped_release release;
 	auto pending_query = context->PendingQuery(rel, stream_result);
-	return DuckDBPyConnection::CompletePendingQuery(*pending_query);
+	auto result = DuckDBPyConnection::CompletePendingQuery(*pending_query);
+	return result;
 }
 
 unique_ptr<QueryResult> DuckDBPyRelation::ExecuteInternal(bool stream_result) {
 	this->executed = true;
-	return PyExecuteRelation(rel, stream_result);
+	auto result = PyExecuteRelation(rel, stream_result);
+	return result;
 }
 
 void DuckDBPyRelation::ExecuteOrThrow(bool stream_result) {
@@ -1135,6 +1138,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Query(const string &view_name, co
 DuckDBPyRelation &DuckDBPyRelation::Execute() {
 	AssertRelation();
 	ExecuteOrThrow();
+
 	return *this;
 }
 
@@ -1246,7 +1250,7 @@ py::list DuckDBPyRelation::ColumnTypes() {
 	return res;
 }
 
-bool DuckDBPyRelation::IsRelation(const py::object &object) {
+bool DuckDBPyRelation::IsRelation(const py::handle &object) {
 	return py::isinstance<DuckDBPyRelation>(object);
 }
 

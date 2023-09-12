@@ -32,13 +32,13 @@ public:
 	LogicalType DictToMap(const PyDictionary &dict, bool &can_convert);
 	LogicalType DictToStruct(const PyDictionary &dict, bool &can_convert);
 	LogicalType GetItemType(py::object ele, bool &can_convert);
-	bool Analyze(py::object column);
+	bool Analyze(py::handle column);
 	LogicalType AnalyzedType() {
 		return analyzed_type;
 	}
 
 private:
-	LogicalType InnerAnalyze(py::object column, bool &can_convert, bool sample = true, idx_t increment = 1);
+	LogicalType InnerAnalyze(py::handle column, bool &can_convert, bool sample = true, idx_t increment = 1);
 	uint64_t GetSampleIncrement(idx_t rows);
 
 private:

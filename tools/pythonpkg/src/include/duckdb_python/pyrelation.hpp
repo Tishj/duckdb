@@ -253,7 +253,7 @@ public:
 
 	string Explain(ExplainType type);
 
-	static bool IsRelation(const py::object &object);
+	static bool IsRelation(const py::handle &object);
 
 	Relation &GetRel();
 

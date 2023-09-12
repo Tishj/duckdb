@@ -49,7 +49,7 @@ public:
 	                                     LocalTableFunctionState *local_state, GlobalTableFunctionState *global_state);
 
 	// Helper function that transform pandas df names to make them work with our binder
-	static py::object PandasReplaceCopiedNames(const py::object &original_df);
+	static py::object PandasReplaceCopiedNames(const py::handle &original_df);
 
 	static void PandasBackendScanSwitch(PandasColumnBindData &bind_data, idx_t count, idx_t offset, Vector &out);
 

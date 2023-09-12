@@ -7,7 +7,7 @@ namespace duckdb {
 
 class PandasNumpyColumn : public PandasColumn {
 public:
-	PandasNumpyColumn(py::array array_p) : PandasColumn(PandasColumnBackend::NUMPY), array(std::move(array_p)) {
+	PandasNumpyColumn(py::array &&array_p) : PandasColumn(PandasColumnBackend::NUMPY), array(std::move(array_p)) {
 		D_ASSERT(py::hasattr(array, "strides"));
 		stride = array.attr("strides").attr("__getitem__")(0).cast<idx_t>();
 	}

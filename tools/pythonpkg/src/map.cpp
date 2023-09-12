@@ -195,7 +195,7 @@ OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, Table
 	auto df_columns = py::list(df.attr("columns"));
 	auto get_fun = df.attr("__getitem__");
 
-	idx_t row_count = py::len(get_fun(df_columns[0]));
+	idx_t row_count = py::len(get_fun(df_columns[0].attr("view")()));
 	if (row_count > STANDARD_VECTOR_SIZE) {
 		throw InvalidInputException("UDF returned more than %llu rows, which is not allowed.", STANDARD_VECTOR_SIZE);
 	}

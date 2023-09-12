@@ -113,7 +113,7 @@ public:
 
 	shared_ptr<DuckDBPyConnection> Append(const string &name, const PandasDataFrame &value, bool by_name);
 
-	shared_ptr<DuckDBPyConnection> RegisterPythonObject(const string &name, const py::object &python_object);
+	shared_ptr<DuckDBPyConnection> RegisterPythonObject(const string &name, py::object python_object);
 
 	void InstallExtension(const string &extension, bool force_install = false);
 
@@ -206,10 +206,10 @@ public:
 	//! Caches and provides an interface to get frequently used modules+subtypes
 	static shared_ptr<PythonImportCache> import_cache;
 
-	static bool IsPandasDataframe(const py::object &object);
-	static bool IsPolarsDataframe(const py::object &object);
-	static bool IsAcceptedArrowObject(const py::object &object);
-	static NumpyObjectType IsAcceptedNumpyObject(const py::object &object);
+	static bool IsPandasDataframe(const py::handle &object);
+	static bool IsPolarsDataframe(const py::handle &object);
+	static bool IsAcceptedArrowObject(const py::handle &object);
+	static NumpyObjectType IsAcceptedNumpyObject(const py::handle &object);
 
 	static unique_ptr<QueryResult> CompletePendingQuery(PendingQueryResult &pending_query);
 

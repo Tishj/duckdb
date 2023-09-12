@@ -363,7 +363,7 @@ uint64_t PandasAnalyzer::GetSampleIncrement(idx_t rows) {
 	return rows / sample;
 }
 
-LogicalType PandasAnalyzer::InnerAnalyze(py::object column, bool &can_convert, bool sample, idx_t increment) {
+LogicalType PandasAnalyzer::InnerAnalyze(py::handle column, bool &can_convert, bool sample, idx_t increment) {
 	idx_t rows = py::len(column);
 
 	if (!rows) {
@@ -407,13 +407,13 @@ LogicalType PandasAnalyzer::InnerAnalyze(py::object column, bool &can_convert, b
 	return item_type;
 }
 
-bool PandasAnalyzer::Analyze(py::object column) {
+bool PandasAnalyzer::Analyze(py::handle column) {
 	// Disable analyze
 	if (sample_size == 0) {
 		return false;
 	}
 	bool can_convert = true;
-	LogicalType type = InnerAnalyze(std::move(column), can_convert);
+	LogicalType type = InnerAnalyze(column, can_convert);
 	if (can_convert) {
 		analyzed_type = type;
 	}

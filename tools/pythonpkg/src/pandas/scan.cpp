@@ -7,8 +7,9 @@
 #include "duckdb_python/numpy/numpy_bind.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb_python/pandas/column/pandas_numpy_column.hpp"
-
+#include "duckdb_python/pyconnection/pyconnection.hpp"
 #include "duckdb/common/atomic.hpp"
+#include "duckdb_python/pyutil.hpp"
 
 namespace duckdb {
 
@@ -87,7 +88,7 @@ unique_ptr<FunctionData> PandasScanFunction::PandasScanBind(ClientContext &conte
 	auto df_columns = py::list(df.attr("keys")());
 
 	auto get_fun = df.attr("__getitem__");
-	idx_t row_count = py::len(get_fun(df_columns[0]));
+	idx_t row_count = py::len(get_fun(df_columns[0]).attr("view")());
 	return make_uniq<PandasScanFunctionData>(df, row_count, std::move(pandas_bind_data), return_types);
 }
 
@@ -167,6 +168,8 @@ void PandasScanFunction::PandasScanFunc(ClientContext &context, TableFunctionInp
 	auto &data = data_p.bind_data->CastNoConst<PandasScanFunctionData>();
 	auto &state = data_p.local_state->Cast<PandasScanLocalState>();
 
+	PyUtil::CheckMemoryUsage();
+
 	if (state.start >= state.end) {
 		if (!PandasScanParallelStateNext(context, data_p.bind_data.get(), data_p.local_state.get(),
 		                                 data_p.global_state.get())) {
@@ -185,6 +188,8 @@ void PandasScanFunction::PandasScanFunc(ClientContext &context, TableFunctionInp
 	}
 	state.start += this_count;
 	data.lines_read += this_count;
+	PyUtil::CheckMemoryUsage();
+	Printer::Print("");
 }
 
 unique_ptr<NodeStatistics> PandasScanFunction::PandasScanCardinality(ClientContext &context,
@@ -193,8 +198,7 @@ unique_ptr<NodeStatistics> PandasScanFunction::PandasScanCardinality(ClientConte
 	return make_uniq<NodeStatistics>(data.row_count, data.row_count);
 }
 
-py::object PandasScanFunction::PandasReplaceCopiedNames(const py::object &original_df) {
-	auto copy_df = original_df.attr("copy")(false);
+py::object PandasScanFunction::PandasReplaceCopiedNames(const py::handle &original_df) {
 	unordered_map<string, idx_t> name_map;
 	unordered_set<string> columns_seen;
 	py::list column_name_list;
@@ -230,6 +234,7 @@ py::object PandasScanFunction::PandasReplaceCopiedNames(const py::object &origin
 		}
 	}
 
+	py::object copy_df = original_df.attr("copy")(false);
 	copy_df.attr("columns") = column_name_list;
 	return copy_df;
 }

@@ -4,6 +4,7 @@
 #include "duckdb_python/pandas/column/pandas_numpy_column.hpp"
 #include "duckdb_python/pandas/pandas_bind.hpp"
 #include "duckdb_python/numpy/numpy_type.hpp"
+#include "duckdb_python/pyutil.hpp"
 
 namespace duckdb {
 
@@ -31,8 +32,8 @@ void NumpyBind::Bind(const ClientContext &context, py::handle df, vector<PandasC
 		names.emplace_back(py::str(df_columns[col_idx]));
 		bind_data.numpy_type = ConvertNumpyType(df_types[col_idx]);
 
-		auto column = get_fun(df_columns[col_idx]);
-
+		py::array column = get_fun(df_columns[col_idx]).attr("view")();
+		D_ASSERT(!column.owndata());
 		if (bind_data.numpy_type.type == NumpyNullableType::FLOAT_16) {
 			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(py::array(column.attr("astype")("float32")));
 			bind_data.numpy_type.type = NumpyNullableType::FLOAT_32;
@@ -55,15 +56,15 @@ void NumpyBind::Bind(const ClientContext &context, py::handle df, vector<PandasC
 			duckdb_col_type = LogicalType::ENUM(enum_entries_vec, size);
 			auto pandas_col = uniq.attr("__getitem__")(1);
 			bind_data.internal_categorical_type = string(py::str(pandas_col.attr("dtype")));
-			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(pandas_col);
+			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(std::move(pandas_col));
 		} else {
-			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(column);
+			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(std::move(column));
 			duckdb_col_type = NumpyToLogicalType(bind_data.numpy_type);
 		}
 
 		if (bind_data.numpy_type.type == NumpyNullableType::OBJECT) {
 			PandasAnalyzer analyzer(config);
-			if (analyzer.Analyze(get_fun(df_columns[col_idx]))) {
+			if (analyzer.Analyze(column)) {
 				duckdb_col_type = analyzer.AnalyzedType();
 			}
 		}

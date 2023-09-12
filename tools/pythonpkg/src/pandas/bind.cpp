@@ -1,6 +1,7 @@
 #include "duckdb_python/pandas/pandas_bind.hpp"
 #include "duckdb_python/pandas/pandas_analyzer.hpp"
 #include "duckdb_python/pandas/column/pandas_numpy_column.hpp"
+#include "duckdb_python/pyutil.hpp"
 
 namespace duckdb {
 
@@ -78,11 +79,11 @@ static LogicalType BindColumn(PandasBindColumn &column_p, PandasColumnBindData &
 			column_type = LogicalType::ENUM(enum_entries_vec, size);
 			auto pandas_col = py::array(column.attr("cat").attr("codes"));
 			bind_data.internal_categorical_type = string(py::str(pandas_col.attr("dtype")));
-			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(pandas_col);
+			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(std::move(pandas_col));
 		} else {
 			auto pandas_col = py::array(column.attr("to_numpy")());
 			auto numpy_type = pandas_col.attr("dtype");
-			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(pandas_col);
+			bind_data.pandas_col = make_uniq<PandasNumpyColumn>(std::move(pandas_col));
 			// for category types (non-strings), we use the converted numpy type
 			bind_data.numpy_type = ConvertNumpyType(numpy_type);
 			column_type = NumpyToLogicalType(bind_data.numpy_type);
