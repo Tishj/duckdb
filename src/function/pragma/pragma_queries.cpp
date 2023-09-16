@@ -191,10 +191,15 @@ string PragmaMetadataInfo(ClientContext &context, const FunctionParameters &para
 	return "SELECT * FROM pragma_metadata_info();";
 }
 
+string PragmaDependencyInfo(ClientContext &context, const FunctionParameters &parameters) {
+	return "SELECT * FROM pragma_dependency_info();";
+}
+
 void PragmaQueries::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaCall("table_info", PragmaTableInfo, {LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaCall("storage_info", PragmaStorageInfo, {LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaCall("metadata_info", PragmaMetadataInfo, {}));
+	set.AddFunction(PragmaFunction::PragmaCall("dependency_info", PragmaDependencyInfo, {LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaStatement("show_tables", PragmaShowTables));
 	set.AddFunction(PragmaFunction::PragmaStatement("show_tables_expanded", PragmaShowTablesExpanded));
 	set.AddFunction(PragmaFunction::PragmaStatement("show_databases", PragmaShowDatabases));
