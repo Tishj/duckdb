@@ -47,6 +47,7 @@
 #include "duckdb_python/pybind11/conversions/exception_handling_enum.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
+#include "duckdb/main/stream_query_result.hpp"
 
 #include <random>
 
@@ -500,6 +501,11 @@ unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(const string &query,
 
 			if (res->HasError()) {
 				res->ThrowError();
+			}
+			// Materialize to execute the result, but throw away the contents
+			if (many && res->type == QueryResultType::STREAM_RESULT) {
+				auto &stream_result = res->Cast<StreamQueryResult>();
+				stream_result.Materialize();
 			}
 		}
 
