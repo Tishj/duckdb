@@ -1,7 +1,7 @@
 #include "duckdb_python/map.hpp"
 #include "duckdb_python/numpy/numpy_scan.hpp"
 #include "duckdb_python/pandas/pandas_bind.hpp"
-#include "duckdb_python/numpy/array_wrapper.hpp"
+#include "duckdb_python/numpy/numpy_result_conversion.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb_python/pandas/column/pandas_numpy_column.hpp"
 #include "duckdb_python/pandas/pandas_scan.hpp"
@@ -168,7 +168,7 @@ OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, Table
 	auto &data = data_p.bind_data->Cast<MapFunctionData>();
 
 	NumpyResultConversion conversion(data.in_types, input.size(), context.client.GetClientProperties());
-	conversion.Append(input, data.in_types.size());
+	conversion.Append(input);
 
 	auto df = FunctionCall(conversion, data.in_names, data.function);
 
