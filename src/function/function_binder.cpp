@@ -134,16 +134,13 @@ idx_t FunctionBinder::BindFunctionFromArguments(const string &name, FunctionSet<
 	}
 	if (candidate_functions.size() > 1) {
 		// multiple candidates, check if there are any unknown arguments
-		bool has_parameters = false;
 		for (auto &arg_type : arguments) {
 			if (arg_type.id() == LogicalTypeId::UNKNOWN) {
 				//! there are! we could not resolve parameters in this case
 				throw ParameterNotResolvedException();
 			}
 		}
-		if (!has_parameters) {
-			return MultipleCandidateException(name, functions, candidate_functions, arguments, error);
-		}
+		return MultipleCandidateException(name, functions, candidate_functions, arguments, error);
 	}
 	return candidate_functions[0];
 }

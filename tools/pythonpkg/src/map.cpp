@@ -11,9 +11,8 @@
 
 namespace duckdb {
 
-MapFunction::MapFunction()
-    : TableFunction("python_map_function", {LogicalType::TABLE, LogicalType::POINTER, LogicalType::POINTER}, nullptr,
-                    MapFunctionBind) {
+MapFunction::MapFunction() : TableFunction("python_map_function", {}, nullptr, MapFunctionBind) {
+	varargs = LogicalType::ANY;
 	in_out_function = MapFunctionExec;
 }
 
@@ -131,15 +130,16 @@ unique_ptr<FunctionData> MapFunction::MapFunctionBind(ClientContext &context, Ta
 
 	auto data_uptr = make_uniq<MapFunctionData>();
 	auto &data = *data_uptr;
-	data.function = reinterpret_cast<PyObject *>(input.inputs[1].GetPointer());
-	auto explicit_schema = reinterpret_cast<PyObject *>(input.inputs[2].GetPointer());
+	data.function = reinterpret_cast<PyObject *>(input.inputs[0].GetPointer());
+	auto explicit_schema = reinterpret_cast<PyObject *>(input.inputs[1].GetPointer());
 
-	data.in_names = input.input_table_names;
 	data.in_types = input.input_table_types;
+	data.in_names = input.input_table_names;
 
 	if (explicit_schema != Py_None) {
 		return BindExplicitSchema(std::move(data_uptr), explicit_schema, return_types, names);
 	}
+
 	NumpyResultConversion conversion(data.in_types, 0, context.GetClientProperties());
 	auto df = FunctionCall(conversion, data.in_names, data.function);
 	vector<PandasColumnBindData> pandas_bind_data; // unused
@@ -167,7 +167,6 @@ OperatorResultType MapFunction::MapFunctionExec(ExecutionContext &context, Table
 
 	auto &data = data_p.bind_data->Cast<MapFunctionData>();
 
-	D_ASSERT(input.GetTypes() == data.in_types);
 	NumpyResultConversion conversion(data.in_types, input.size(), context.client.GetClientProperties());
 	conversion.Append(input);
 

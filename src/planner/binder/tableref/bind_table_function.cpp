@@ -8,6 +8,7 @@
 #include "duckdb/parser/expression/subquery_expression.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/tableref/emptytableref.hpp"
+#include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
@@ -19,50 +20,45 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/parser/expression/cast_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/function/table/read_csv.hpp"
 
 namespace duckdb {
 
-static bool IsTableInTableOutFunction(TableFunctionCatalogEntry &table_function) {
-	auto fun = table_function.functions.GetFunctionByOffset(0);
-	return table_function.functions.Size() == 1 && fun.arguments.size() == 1 &&
-	       fun.arguments[0].id() == LogicalTypeId::TABLE;
+namespace {
+enum class BindTableFunctionType : uint8_t {
+	REGULAR_TABLE_FUNCTION,
+	TABLE_IN_OUT_FUNCTION,
+	// If the function_set contains both types
+	AMBIGIOUS
+};
 }
 
-bool Binder::BindTableInTableOutFunction(vector<unique_ptr<ParsedExpression>> &expressions,
-                                         unique_ptr<BoundSubqueryRef> &subquery, string &error) {
-	auto binder = Binder::CreateBinder(this->context, this, true);
-	unique_ptr<QueryNode> subquery_node;
-	if (expressions.size() == 1 && expressions[0]->type == ExpressionType::SUBQUERY) {
-		// general case: argument is a subquery, bind it as part of the node
-		auto &se = expressions[0]->Cast<SubqueryExpression>();
-		subquery_node = std::move(se.subquery->node);
-	} else {
-		// special case: non-subquery parameter to table-in table-out function
-		// generate a subquery and bind that (i.e. UNNEST([1,2,3]) becomes UNNEST((SELECT [1,2,3]))
-		auto select_node = make_uniq<SelectNode>();
-		select_node->select_list = std::move(expressions);
-		select_node->from_table = make_uniq<EmptyTableRef>();
-		subquery_node = std::move(select_node);
-	}
-	auto node = binder->BindNode(*subquery_node);
-	subquery = make_uniq<BoundSubqueryRef>(std::move(binder), std::move(node));
-	MoveCorrelatedExpressions(*subquery->binder);
-	return true;
+static BindTableFunctionType GetBindFunctionType(const TableFunction &fun) {
+	return fun.in_out_function ? BindTableFunctionType::TABLE_IN_OUT_FUNCTION
+	                           : BindTableFunctionType::REGULAR_TABLE_FUNCTION;
 }
 
-bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_function,
-                                         vector<unique_ptr<ParsedExpression>> &expressions,
-                                         vector<LogicalType> &arguments, vector<Value> &parameters,
-                                         named_parameter_map_t &named_parameters,
-                                         unique_ptr<BoundSubqueryRef> &subquery, string &error) {
-	if (IsTableInTableOutFunction(table_function)) {
-		// special case binding for table-in table-out function
-		arguments.emplace_back(LogicalTypeId::TABLE);
-		return BindTableInTableOutFunction(expressions, subquery, error);
+static BindTableFunctionType AnalyzeBindFunctionType(const TableFunctionCatalogEntry &table_function) {
+	auto &functions = table_function.functions.functions;
+	if (functions.empty()) {
+		return BindTableFunctionType::REGULAR_TABLE_FUNCTION;
 	}
-	bool seen_subquery = false;
-	for (auto &child : expressions) {
+	auto type = GetBindFunctionType(functions[0]);
+	for (idx_t i = 1; i < functions.size(); i++) {
+		auto new_type = GetBindFunctionType(functions[i]);
+		if (new_type != type) {
+			return BindTableFunctionType::AMBIGIOUS;
+		}
+	}
+	return type;
+}
+
+string Binder::BindTableFunctionExpressions(vector<unique_ptr<ParsedExpression>> &expressions,
+                                            vector<Value> &parameters, named_parameter_map_t &named_parameters) {
+	for (idx_t param_idx = 0; param_idx < expressions.size(); param_idx++) {
+		auto &child = expressions[param_idx];
 		string parameter_name;
 
 		// hack to make named parameters work
@@ -78,33 +74,13 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 			}
 		}
 		if (child->type == ExpressionType::SUBQUERY) {
-			auto fun = table_function.functions.GetFunctionByOffset(0);
-			if (table_function.functions.Size() != 1 || fun.arguments.empty() ||
-			    fun.arguments[0].id() != LogicalTypeId::TABLE) {
-				throw BinderException(
-				    "Only table-in-out functions can have subquery parameters - %s only accepts constant parameters",
-				    fun.name);
-			}
-			// this separate subquery binding path is only used by python_map
-			// FIXME: this should be unified with `BindTableInTableOutFunction` above
-			if (seen_subquery) {
-				error = "Table function can have at most one subquery parameter ";
-				return false;
-			}
-			auto binder = Binder::CreateBinder(this->context, this, true);
-			auto &se = child->Cast<SubqueryExpression>();
-			auto node = binder->BindNode(*se.subquery->node);
-			subquery = make_uniq<BoundSubqueryRef>(std::move(binder), std::move(node));
-			seen_subquery = true;
-			arguments.emplace_back(LogicalTypeId::TABLE);
-			parameters.emplace_back(
-			    Value(LogicalType::INVALID)); // this is a dummy value so the lengths of arguments and parameter match
-			continue;
+			return "Only table-in-out functions can have subquery parameters";
 		}
 
 		TableFunctionBinder binder(*this, context);
 		LogicalType sql_type;
-		auto expr = binder.Bind(child, &sql_type);
+		auto copied_expr = child->Copy();
+		auto expr = binder.Bind(copied_expr, &sql_type);
 		if (expr->HasParameter()) {
 			throw ParameterNotResolvedException();
 		}
@@ -116,14 +92,89 @@ bool Binder::BindTableFunctionParameters(TableFunctionCatalogEntry &table_functi
 		if (parameter_name.empty()) {
 			// unnamed parameter
 			if (!named_parameters.empty()) {
-				error = "Unnamed parameters cannot come after named parameters";
-				return false;
+				return "Unnamed parameters cannot come after named parameters";
 			}
-			arguments.emplace_back(sql_type);
 			parameters.emplace_back(std::move(constant));
 		} else {
 			named_parameters[parameter_name] = std::move(constant);
 		}
+	}
+	return string();
+}
+
+static bool ParameterIsInternal(ParsedExpression &expr) {
+	if (expr.expression_class != ExpressionClass::CONSTANT) {
+		return false;
+	}
+	auto &value_expr = expr.Cast<ConstantExpression>();
+	if (value_expr.value.type() != LogicalType::POINTER) {
+		return false;
+	}
+	return true;
+}
+
+static vector<unique_ptr<ParsedExpression>>
+ExtractInternalParameters(vector<unique_ptr<ParsedExpression>> &expressions) {
+	vector<unique_ptr<ParsedExpression>> internal_parameters;
+	vector<unique_ptr<ParsedExpression>> remaining_parameters;
+	for (auto &expr : expressions) {
+		if (ParameterIsInternal(*expr)) {
+			internal_parameters.push_back(std::move(expr));
+		} else {
+			remaining_parameters.push_back(std::move(expr));
+		}
+	}
+	expressions = std::move(remaining_parameters);
+	return internal_parameters;
+}
+
+bool Binder::BindTableInTableOutFunctionParameters(vector<unique_ptr<ParsedExpression>> &expressions,
+                                                   vector<LogicalType> &arguments,
+                                                   unique_ptr<BoundSubqueryRef> &subquery, string &error) {
+	auto binder = Binder::CreateBinder(this->context, this, true);
+	unique_ptr<QueryNode> subquery_node;
+	if (expressions.size() == 1 && expressions[0]->type == ExpressionType::SUBQUERY) {
+		// general case: argument is a subquery, bind it as part of the node
+
+		auto original_subquery = std::move(expressions[0]);
+		auto &subquery_expression = original_subquery->Cast<SubqueryExpression>();
+
+		// NOTE: 'child' of SubqueryExpression gets lost here
+		// Wrap the existing subquery in a new subquery: (select * from <existing_subquery>)
+		auto subquery_ref =
+		    make_uniq<SubqueryRef>(std::move(subquery_expression.subquery), "__unnamed_subquery_bind__");
+
+		auto select_node = make_uniq<SelectNode>();
+		select_node->select_list.push_back(make_uniq_base<ParsedExpression, StarExpression>());
+		select_node->from_table = std::move(subquery_ref);
+
+		subquery_node = std::move(select_node);
+	} else {
+		// special case: non-subquery parameter to table-in table-out function
+		// generate a subquery and bind that (i.e. UNNEST([1,2,3]) becomes UNNEST((SELECT [1,2,3]))
+		auto select_node = make_uniq<SelectNode>();
+		select_node->select_list = std::move(expressions);
+		select_node->from_table = make_uniq<EmptyTableRef>();
+		subquery_node = std::move(select_node);
+	}
+	auto node = binder->BindNode(*subquery_node);
+	subquery = make_uniq<BoundSubqueryRef>(std::move(binder), std::move(node));
+	arguments.clear();
+	for (auto &type : subquery->subquery->types) {
+		arguments.push_back(type);
+	}
+	return true;
+}
+
+bool Binder::BindTableFunctionParameters(vector<unique_ptr<ParsedExpression>> &expressions,
+                                         vector<LogicalType> &arguments, vector<Value> &parameters,
+                                         named_parameter_map_t &named_parameters, string &error) {
+	error = BindTableFunctionExpressions(expressions, parameters, named_parameters);
+	if (!error.empty()) {
+		return false;
+	}
+	for (auto &param : parameters) {
+		arguments.push_back(param.type());
 	}
 	return true;
 }
@@ -211,6 +262,32 @@ unique_ptr<LogicalOperator> Binder::BindTableFunction(TableFunction &function, v
 	                                 nullptr);
 }
 
+static bool CanCastFromType(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::ANY:
+	case LogicalTypeId::TABLE:
+	case LogicalTypeId::POINTER:
+	case LogicalTypeId::LIST:
+		return false;
+	default:
+		return true;
+	}
+}
+
+bool SubqueryRequiresCast(const vector<LogicalType> &function_args, const vector<LogicalType> &subquery_types) {
+	if (function_args.empty()) {
+		// This function takes varargs, no need to cast anything
+		return false;
+	}
+	D_ASSERT(function_args.size() == subquery_types.size());
+	for (idx_t i = 0; i < function_args.size(); i++) {
+		if (function_args[i] != subquery_types[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
 unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	QueryErrorContext error_context(root_statement, ref.query_location);
 
@@ -251,9 +328,40 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	named_parameter_map_t named_parameters;
 	unique_ptr<BoundSubqueryRef> subquery;
 	string error;
-	if (!BindTableFunctionParameters(function, fexpr.children, arguments, parameters, named_parameters, subquery,
-	                                 error)) {
-		throw BinderException(FormatError(ref, error));
+
+	auto table_function_type = AnalyzeBindFunctionType(function);
+	if (table_function_type != BindTableFunctionType::REGULAR_TABLE_FUNCTION) {
+		vector<unique_ptr<ParsedExpression>> expressions;
+		if (table_function_type == BindTableFunctionType::AMBIGIOUS) {
+			// Make a copy of the expressions, we might need them later to rebind
+			// if the selected_type is not TABLE_IN_OUT_FUNCTION
+			for (auto &expr : fexpr.children) {
+				expressions.push_back(expr->Copy());
+			}
+		} else {
+			expressions = std::move(fexpr.children);
+		}
+
+		// We don't want to bundle these into the subquery because they are required at bind time
+		auto internal_expressions = ExtractInternalParameters(expressions);
+		if (!BindTableInTableOutFunctionParameters(expressions, arguments, subquery, error)) {
+			throw BinderException(FormatError(ref, error));
+		}
+		if (!internal_expressions.empty()) {
+			// We have parameters that we use internally to provide extra data to a function, such as POINTER
+			error = BindTableFunctionExpressions(internal_expressions, parameters, named_parameters);
+			if (!error.empty()) {
+				throw BinderException(FormatError(ref, error));
+			}
+			for (auto &param : parameters) {
+				arguments.push_back(param.type());
+			}
+		}
+		D_ASSERT(subquery);
+	} else {
+		if (!BindTableFunctionParameters(fexpr.children, arguments, parameters, named_parameters, error)) {
+			throw BinderException(FormatError(ref, error));
+		}
 	}
 
 	// select the function based on the input parameters
@@ -264,26 +372,69 @@ unique_ptr<BoundTableRef> Binder::Bind(TableFunctionRef &ref) {
 	}
 	auto table_function = function.functions.GetFunctionByOffset(best_function_idx);
 
+	auto selected_type = GetBindFunctionType(table_function);
+	if (table_function_type == BindTableFunctionType::AMBIGIOUS) {
+		// We weren't sure if the function was a table in-out function or not, we bound the parameters as a table in-out
+		// so now we might have to rebind the parameters
+		if (selected_type == BindTableFunctionType::TABLE_IN_OUT_FUNCTION) {
+			// Finalize the bind of the parameters
+			MoveCorrelatedExpressions(*subquery->binder);
+		} else {
+			D_ASSERT(selected_type == BindTableFunctionType::REGULAR_TABLE_FUNCTION);
+			subquery = nullptr;
+			arguments.clear();
+			parameters.clear();
+			named_parameters.clear();
+			if (!BindTableFunctionParameters(fexpr.children, arguments, parameters, named_parameters, error)) {
+				throw BinderException(FormatError(ref, error));
+			}
+		}
+	} else if (table_function_type == BindTableFunctionType::TABLE_IN_OUT_FUNCTION) {
+		// Finalize the bind of the parameters
+		MoveCorrelatedExpressions(*subquery->binder);
+	}
+
 	// now check the named parameters
 	BindNamedParameters(table_function.named_parameters, named_parameters, error_context, table_function.name);
 
-	// cast the parameters to the type of the function
-	for (idx_t i = 0; i < arguments.size(); i++) {
-		auto target_type = i < table_function.arguments.size() ? table_function.arguments[i] : table_function.varargs;
+	vector<LogicalType> input_table_types;
+	vector<string> input_table_names;
+	if (selected_type == BindTableFunctionType::REGULAR_TABLE_FUNCTION) {
+		D_ASSERT(!subquery);
+		// cast the parameters to the type of the function
+		D_ASSERT(parameters.size() >= arguments.size());
+		for (idx_t i = 0; i < arguments.size() && i < table_function.arguments.size(); i++) {
+			auto &target_type =
+			    i < table_function.arguments.size() ? table_function.arguments[i] : table_function.varargs;
+			if (CanCastFromType(target_type)) {
+				parameters[i] = parameters[i].CastAs(context, target_type);
+			}
+		}
+	} else {
+		D_ASSERT(selected_type == BindTableFunctionType::TABLE_IN_OUT_FUNCTION);
+		D_ASSERT(subquery);
+		auto subquery_requires_cast = SubqueryRequiresCast(table_function.arguments, subquery->subquery->types);
+		input_table_types = subquery->subquery->types;
+		input_table_names = subquery->subquery->names;
+		if (subquery_requires_cast) {
+			// We have ensured before that the subquery is a plain SELECT before
+			D_ASSERT(subquery->subquery->type == QueryNodeType::SELECT_NODE);
+			auto &select_node = (BoundSelectNode &)*subquery->subquery;
+			auto &select_list = select_node.select_list;
 
-		if (target_type != LogicalType::ANY && target_type != LogicalType::TABLE &&
-		    target_type != LogicalType::POINTER && target_type.id() != LogicalTypeId::LIST) {
-			parameters[i] = parameters[i].CastAs(context, target_type);
+			// Take the original expressions, apply the cast
+			for (idx_t i = 0; i < select_list.size(); i++) {
+				auto &source_expr = select_list[i];
+				auto &target_type =
+				    i < table_function.arguments.size() ? table_function.arguments[i] : table_function.varargs;
+				source_expr = BoundCastExpression::AddCastToType(context, std::move(source_expr), target_type, false);
+
+				// Update the expected types of the subquery
+				input_table_types[i] = target_type;
+			}
 		}
 	}
 
-	vector<LogicalType> input_table_types;
-	vector<string> input_table_names;
-
-	if (subquery) {
-		input_table_types = subquery->subquery->types;
-		input_table_names = subquery->subquery->names;
-	}
 	auto get = BindTableFunctionInternal(table_function, ref.alias.empty() ? fexpr.function_name : ref.alias,
 	                                     std::move(parameters), std::move(named_parameters),
 	                                     std::move(input_table_types), std::move(input_table_names),

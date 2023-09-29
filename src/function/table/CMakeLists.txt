@@ -1,4 +1,5 @@
 add_subdirectory(system)
+add_subdirectory(range)
 add_subdirectory(version)
 add_subdirectory(arrow)
 add_library_unity(
