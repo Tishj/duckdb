@@ -14,6 +14,10 @@
 
 namespace duckdb {
 
+class TableInOutLocalState;
+class TableInOutGlobalState;
+
+//! PhysicalWindow implements window functions
 class PhysicalTableInOutFunction : public PhysicalOperator {
 public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::INOUT_FUNCTION;
@@ -38,6 +42,15 @@ public:
 	bool RequiresFinalExecute() const override {
 		return function.in_out_function_final;
 	}
+
+private:
+	OperatorResultType ExecuteWithMapping(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                      TableInOutLocalState &state, TableFunctionInput &data) const;
+	OperatorResultType ExecuteWithoutMapping(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                         TableInOutGlobalState &gstate, TableInOutLocalState &state,
+	                                         TableFunctionInput &data) const;
+	void AddProjectedColumnsFromConstantMapping(idx_t map_idx, DataChunk &input, DataChunk &intermediate,
+	                                            DataChunk &out) const;
 
 private:
 	//! The table function
