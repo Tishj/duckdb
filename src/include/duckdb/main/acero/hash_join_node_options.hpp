@@ -20,7 +20,7 @@ public:
 	static constexpr const char *default_output_suffix_for_left = "";
 	static constexpr const char *default_output_suffix_for_right = "";
 	/// \brief create an instance from values that outputs all columns
-	HashJoinNodeOptions(JoinType in_join_type, std::vector<string> in_left_keys, std::vector<string> in_right_keys,
+	HashJoinNodeOptions(JoinType in_join_type, vector<string> in_left_keys, vector<string> in_right_keys,
 	                    cp::Expression filter = cp::literal(true),
 	                    std::string output_suffix_for_left = default_output_suffix_for_left,
 	                    std::string output_suffix_for_right = default_output_suffix_for_right,
@@ -42,7 +42,7 @@ public:
 	/// `in_left_keys` should have the same length and types as `in_right_keys`
 	/// @param in_left_keys the keys in the left input
 	/// @param in_right_keys the keys in the right input
-	HashJoinNodeOptions(std::vector<string> in_left_keys, std::vector<string> in_right_keys)
+	HashJoinNodeOptions(vector<string> in_left_keys, vector<string> in_right_keys)
 	    : base(base::OptionType::HASH_JOIN_NODE), left_keys(std::move(in_left_keys)),
 	      right_keys(std::move(in_right_keys)) {
 		this->join_type = JoinType::INNER;
@@ -56,8 +56,8 @@ public:
 		this->filter = cp::literal(true);
 	}
 	/// \brief create an instance from values using JoinKeyCmp::EQ for all comparisons
-	HashJoinNodeOptions(JoinType join_type, std::vector<string> left_keys, std::vector<string> right_keys,
-	                    std::vector<string> left_output, std::vector<string> right_output,
+	HashJoinNodeOptions(JoinType join_type, vector<string> left_keys, vector<string> right_keys,
+	                    vector<string> left_output, vector<string> right_output,
 	                    cp::Expression filter = cp::literal(true),
 	                    std::string output_suffix_for_left = default_output_suffix_for_left,
 	                    std::string output_suffix_for_right = default_output_suffix_for_right,
@@ -73,9 +73,9 @@ public:
 		}
 	}
 	/// \brief create an instance from values
-	HashJoinNodeOptions(JoinType join_type, std::vector<string> left_keys, std::vector<string> right_keys,
-	                    std::vector<string> left_output, std::vector<string> right_output,
-	                    std::vector<JoinKeyCmp> key_cmp, cp::Expression filter = cp::literal(true),
+	HashJoinNodeOptions(JoinType join_type, vector<string> left_keys, vector<string> right_keys,
+	                    vector<string> left_output, vector<string> right_output, vector<JoinKeyCmp> key_cmp,
+	                    cp::Expression filter = cp::literal(true),
 	                    std::string output_suffix_for_left = default_output_suffix_for_left,
 	                    std::string output_suffix_for_right = default_output_suffix_for_right,
 	                    bool disable_bloom_filter = false)
@@ -93,19 +93,19 @@ public:
 	// type of join (inner, left, semi...)
 	JoinType join_type = JoinType::INNER;
 	// key fields from left input
-	std::vector<string> left_keys;
+	vector<string> left_keys;
 	// key fields from right input
-	std::vector<string> right_keys;
+	vector<string> right_keys;
 	// if set all valid fields from both left and right input will be output
 	// (and field ref vectors for output fields will be ignored)
 	bool output_all = false;
 	// output fields passed from left input
-	std::vector<string> left_output;
+	vector<string> left_output;
 	// output fields passed from right input
-	std::vector<string> right_output;
+	vector<string> right_output;
 	// key comparison function (determines whether a null key is equal another null
 	// key or not)
-	std::vector<JoinKeyCmp> key_cmp;
+	vector<JoinKeyCmp> key_cmp;
 	// suffix added to names of output fields coming from left input (used to distinguish,
 	// if necessary, between fields of the same name in left and right input and can be left
 	// empty if there are no name collisions)
