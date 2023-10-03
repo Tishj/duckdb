@@ -16,10 +16,19 @@ public:
 	Expression() {
 	}
 	Expression(const Expression &other) {
-		expression = other.expression->Copy();
+		*this = other;
 	}
+	unique_ptr<ParsedExpression> InternalExpression() const {
+		return expression->Copy();
+	}
+
 	Expression &operator=(const Expression &other) {
-		expression = other.expression->Copy();
+		if (other.expression) {
+			expression = other.expression->Copy();
+		} else {
+			expression = nullptr;
+		}
+		return *this;
 	}
 
 private:
@@ -46,6 +55,22 @@ private:
 private:
 	unique_ptr<ParsedExpression> expression;
 };
+
+Expression project(std::vector<bool> unused_one, std::vector<bool> unused_two) {
+	return Expression();
+}
+
+Expression call(std::string function_name, std::vector<Expression> inputs) {
+	return Expression::Function(function_name, std::move(inputs));
+}
+
+Expression field_ref(std::string field_name) {
+	return Expression::ColumnRef(field_name);
+}
+
+Expression literal(int value) {
+	return Expression::Constant(value);
+}
 
 } // namespace cp
 } // namespace duckdb

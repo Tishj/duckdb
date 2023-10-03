@@ -66,7 +66,7 @@ public:
 	std::string label;
 };
 
-static shared_ptr<arrow::Table> DeclarationToTable(shared_ptr<Declaration> plan);
+shared_ptr<arrow::Table> DeclarationToTable(Declaration plan);
 
 } // namespace ac
 } // namespace duckdb
