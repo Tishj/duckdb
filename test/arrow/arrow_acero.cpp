@@ -19,8 +19,9 @@ using namespace std;
 
 void ExecutePlanAndCollectAsTable(ac::Declaration plan) {
 	// collect sink_reader into a Table
-	std::shared_ptr<arrow::Table> response_table;
-	ARROW_ASSIGN_OR_RAISE(response_table, ac::DeclarationToTable(std::move(plan)));
+	auto result = ac::DeclarationToTable(std::move(plan));
+
+
 
 	std::cout << "Results : " << response_table->ToString() << std::endl;
 
@@ -35,6 +36,7 @@ std::shared_ptr<arrow::dataset::Dataset> GetDataset() {
 
 	auto ds = make_shared<arrow::dataset::Dataset>();
 	auto &dataset = *ds;
+
 
 	return ds;
 }
