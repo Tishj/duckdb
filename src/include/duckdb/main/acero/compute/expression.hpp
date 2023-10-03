@@ -9,7 +9,7 @@ namespace cp {
 
 struct Expression {
 	friend Expression field_ref(std::string field_name);
-	friend Expression literal(int value);
+	friend Expression literal(Value value);
 	friend Expression call(std::string name, std::vector<Expression> inputs);
 
 public:
@@ -46,7 +46,7 @@ private:
 		expr.expression = make_uniq<ColumnRefExpression>(name);
 		return expr;
 	}
-	static Expression Constant(int value) {
+	static Expression Constant(Value value) {
 		auto expr = Expression();
 		expr.expression = make_uniq<ConstantExpression>(value);
 		return expr;
@@ -68,8 +68,13 @@ Expression field_ref(std::string field_name) {
 	return Expression::ColumnRef(field_name);
 }
 
-Expression literal(int value) {
+Expression literal(Value value) {
 	return Expression::Constant(value);
+}
+
+template <typename Arg>
+Expression literal(Arg &&arg) {
+	return literal(Value(std::forward<Arg>(arg)));
 }
 
 } // namespace cp
