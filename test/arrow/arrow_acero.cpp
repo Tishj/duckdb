@@ -17,31 +17,36 @@
 using namespace duckdb;
 using namespace std;
 
-// arrow::Status ExecutePlanAndCollectAsTable(ac::Declaration plan) {
-//	// collect sink_reader into a Table
-//	std::shared_ptr<arrow::Table> response_table;
-//	ARROW_ASSIGN_OR_RAISE(response_table, ac::DeclarationToTable(std::move(plan)));
+void ExecutePlanAndCollectAsTable(ac::Declaration plan) {
+	// collect sink_reader into a Table
+	std::shared_ptr<arrow::Table> response_table;
+	ARROW_ASSIGN_OR_RAISE(response_table, ac::DeclarationToTable(std::move(plan)));
 
-//	std::cout << "Results : " << response_table->ToString() << std::endl;
+	std::cout << "Results : " << response_table->ToString() << std::endl;
 
-//	return arrow::Status::OK();
-//}
+	return arrow::Status::OK();
+}
 
-TEST_CASE("Test Acero Mock", "[api]") {
-	// Create a connection
+std::shared_ptr<arrow::dataset::Dataset> GetDataset() {
+	// Create a result and create an arrow dataset on top of the result
 	DuckDB db(nullptr);
 	Connection con(db);
 	con.Query("select * from range(1000)");
 
-	auto &config = DBConfig::GetConfig(*db.instance);
-	// Get all configuration options
-	auto config_options = config.GetOptions();
+	auto ds = make_shared<arrow::dataset::Dataset>();
+	auto &dataset = *ds;
+
+	return ds;
+}
+
+TEST_CASE("Test Acero Mock", "[api]") {
 
 	// TODO: create the arrow object to scan
 
 	// Create a scan over the dataset
 	auto options = std::make_shared<arrow::dataset::ScanOptions>();
 	options->projection = cp::project({}, {});
+	auto dataset = GetDataset();
 	auto scan_node_options = arrow::dataset::ScanNodeOptions {dataset, options};
 	ac::Declaration scan {"scan", std::move(scan_node_options)};
 

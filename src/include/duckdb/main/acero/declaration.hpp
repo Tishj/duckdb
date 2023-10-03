@@ -2,6 +2,8 @@
 
 #include "duckdb/main/acero/dataset/exec_node_options.hpp"
 #include "duckdb/main/acero/options.hpp"
+#include "duckdb/main/acero/dataset/table.hpp"
+#include "duckdb/common/shared_ptr.hpp"
 
 #include <string>
 #include <vector>
@@ -63,6 +65,8 @@ public:
 	/// \brief a label to give the node in the plan
 	std::string label;
 };
+
+static shared_ptr<arrow::Table> DeclarationToTable(shared_ptr<Declaration> plan);
 
 } // namespace ac
 } // namespace duckdb
