@@ -22,6 +22,9 @@
 #include "duckdb/main/acero/util/arrow_stream_factory.hpp"
 #include "duckdb/main/acero/util/arrow_test_factory.hpp"
 
+#include "duckdb/main/acero/arrow_conversion.hpp"
+#include <chrono>
+
 namespace duckdb {
 namespace ac {
 
@@ -141,16 +144,36 @@ static unique_ptr<QueryResult> CompletePendingQuery(PendingQueryResult &pending_
 shared_ptr<arrow::Table> DeclarationToTable(Declaration plan) {
 	DuckDB db(nullptr);
 	Connection con(db);
+	Printer::Print("\n");
 
+    long long combined = 0;
+
+	auto start_time = std::chrono::high_resolution_clock::now();
 	auto rel = ConvertDeclaration(con.context, std::move(plan));
+	auto end_time = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+	Printer::Print(StringUtil::Format("Plan conversion | time elapsed us): %d\n", duration.count()));
+    combined += duration.count();
 
 	auto &context = con.context;
+
+	start_time = std::chrono::high_resolution_clock::now();
 	auto pending_query = context->PendingQuery(rel, false);
 	auto result = CompletePendingQuery(*pending_query);
-	auto stringified = result->ToString();
+	end_time = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+	Printer::Print(StringUtil::Format("Plan execution | time elapsed (us): %d\n", duration.count()));
+    combined += duration.count();
 
-	// create an arrow table from the arrow query result
-	auto table = make_shared<arrow::Table>();
+	start_time = std::chrono::high_resolution_clock::now();
+	auto table = ArrowConversion::ConvertToTable(std::move(result));
+	end_time = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+	Printer::Print(StringUtil::Format("Result conversion (to arrow) | time elapsed (us): %d\n", duration.count()));
+    combined += duration.count();
+
+    Printer::Print(StringUtil::Format("Combined | time elapsed (us): %d", combined));
+
 	return table;
 }
 

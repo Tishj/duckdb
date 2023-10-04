@@ -3,11 +3,12 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/connection.hpp"
 #include "duckdb/main/acero/util/arrow_test_factory.hpp"
-#include "duckdb/main/acero/schema.hpp"
 
 namespace duckdb {
 namespace arrow {
 namespace dataset {
+
+using Schema = ArrowSchemaWrapper;
 
 // This wraps a C-data interface arrow array
 struct Dataset {
@@ -21,7 +22,7 @@ public:
 	unique_ptr<ac::ArrowTestFactory> factory;
 	unique_ptr<DuckDB> db;
 	unique_ptr<Connection> conn;
-	shared_ptr<arrow::Schema> schema;
+	shared_ptr<Schema> schema;
 };
 
 } // namespace dataset

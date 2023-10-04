@@ -4,6 +4,8 @@ namespace duckdb {
 namespace arrow {
 namespace dataset {
 
+using Schema = ArrowSchemaWrapper;
+
 Dataset::Dataset(unique_ptr<DuckDB> db_p, unique_ptr<Connection> conn_p, const string &query)
     : db(std::move(db_p)), conn(std::move(conn_p)) {
 
@@ -13,8 +15,8 @@ Dataset::Dataset(unique_ptr<DuckDB> db_p, unique_ptr<Connection> conn_p, const s
 	auto names = initial_result->names;
 	this->factory = make_uniq<ac::ArrowTestFactory>(std::move(types), std::move(names), std::move(initial_result),
 	                                                false, client_properties);
-	schema = make_shared<arrow::Schema>();
-	factory->GetSchema((uintptr_t)factory.get(), schema->wrapped);
+	schema = make_shared<Schema>();
+	factory->GetSchema((uintptr_t)factory.get(), *schema);
 }
 
 uintptr_t Dataset::ArrowObject() {
