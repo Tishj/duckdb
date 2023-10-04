@@ -52,22 +52,27 @@ std::shared_ptr<arrow::dataset::Dataset> MakeGroupableBatches(int multiplicity =
 	auto db = make_uniq<DuckDB>(nullptr);
 	auto con = make_uniq<Connection>(*db);
 	con->Query("CREATE TABLE my_table (i32 INT, str VARCHAR)");
-	auto insert_query = R"EOF(
+	string insert_query = R"EOF(
 		INSERT INTO my_table (i32, str) VALUES
-			(12, 'alpha'),
-			(7, 'beta'),
-			(3, 'alpha'),
-			(-2, 'alpha'),
-			(-1, 'gamma'),
-			(3, 'alpha'),
-			(5, 'gamma'),
-			(3, 'beta'),
-			(-8, 'alpha')
+	)EOF";
+
+	string data = R"EOF(
+		(12, 'alpha'),
+		(7, 'beta'),
+		(3, 'alpha'),
+		(-2, 'alpha'),
+		(-1, 'gamma'),
+		(3, 'alpha'),
+		(5, 'gamma'),
+		(3, 'beta'),
+		(-8, 'alpha'),
 	)EOF";
 
 	for (int repeat = 0; repeat < multiplicity; ++repeat) {
-		con->Query(insert_query);
+		insert_query += data;
 	}
+
+	con->Query(insert_query);
 
 	auto ds = make_shared<arrow::dataset::Dataset>(std::move(db), std::move(con), "select * from my_table");
 	return ds;
@@ -91,10 +96,12 @@ TEST_CASE("Test Acero Mock - Projection", "[api]") {
 }
 
 TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
-	auto input = MakeGroupableBatches(1);
+	const idx_t multiplicity = 400;
+	auto input_l = MakeGroupableBatches(multiplicity);
+	auto input_r = MakeGroupableBatches(multiplicity);
 
-	ac::Declaration left {"source", ac::SourceNodeOptions {input->schema, input}};
-	ac::Declaration right {"source", ac::SourceNodeOptions {input->schema, input}};
+	ac::Declaration left {"source", ac::SourceNodeOptions {input_l->schema, input_l}};
+	ac::Declaration right {"source", ac::SourceNodeOptions {input_r->schema, input_r}};
 
 	ac::HashJoinNodeOptions join_opts {ac::JoinType::INNER,
 	                                   /*left_keys=*/ {"str"},

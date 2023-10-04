@@ -147,7 +147,7 @@ shared_ptr<arrow::Table> DeclarationToTable(Declaration plan) {
 	auto &context = con.context;
 	auto pending_query = context->PendingQuery(rel, false);
 	auto result = CompletePendingQuery(*pending_query);
-	result->Print();
+	auto stringified = result->ToString();
 
 	// create an arrow table from the arrow query result
 	auto table = make_shared<arrow::Table>();
