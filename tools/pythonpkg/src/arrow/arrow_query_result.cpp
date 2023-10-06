@@ -2,6 +2,7 @@
 #include "duckdb/common/to_string.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/box_renderer.hpp"
+#include "duckdb/common/arrow/arrow_converter.hpp"
 
 namespace duckdb {
 
@@ -11,6 +12,8 @@ ArrowQueryResult::ArrowQueryResult(StatementType statement_type, StatementProper
     : QueryResult(QueryResultType::ARROW_RESULT, statement_type, std::move(properties), std::move(types_p),
                   std::move(names_p), std::move(client_properties)),
       row_count(row_count), batch_size(batch_size) {
+	schema = make_uniq<ArrowSchemaWrapper>();
+	ArrowConverter::ToArrowSchema(&schema.arrow_schema, types, names, client_properties);
 }
 
 ArrowQueryResult::ArrowQueryResult(PreservedError error)
@@ -43,7 +46,6 @@ vector<unique_ptr<ArrowArrayWrapper>> ArrowQueryResult::ConsumeArrays() {
 		throw InvalidInputException("Attempting to fetch ArrowArrays from an unsuccessful query result\n: Error %s",
 		                            GetError());
 	}
-	D_ASSERT(arrays);
 	return std::move(arrays);
 }
 
@@ -56,11 +58,10 @@ unique_ptr<ArrowSchemaWrapper> ArrowQueryResult::ConsumeSchema() {
 	return std::move(schema);
 }
 
-void ArrowQueryResult::SetArrowData(unique_ptr<ArrowSchemaWrapper> schema, vector<unique_ptr<ArrowArrayWrapper>> arrays) {
+void ArrowQueryResult::SetArrowData(vector<unique_ptr<ArrowArrayWrapper>> arrays) {
 	D_ASSERT(!this->arrays);
 	D_ASSERT(!this->schema);
 	this->arrays = std::move(arrays);
-	this->schema = std::move(schema);
 }
 
 idx_t ArrowQueryResult::BatchSize() const {

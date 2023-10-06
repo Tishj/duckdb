@@ -70,12 +70,6 @@ SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &eve
 	if (total_tuple_count == 0) {
 		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
 		                                            context.GetClientProperties(), 0, record_batch_size);
-		{
-			py::gil_scoped_acquire gil;
-			// This result is empty, add an empty list of record batches
-			auto &arrow_result = (ArrowQueryResult &)*gstate.result;
-			arrow_result.SetRecordBatches(make_uniq<py::list>(0));
-		}
 		return SinkFinalizeType::READY;
 	}
 

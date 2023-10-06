@@ -335,11 +335,6 @@ duckdb::pyarrow::Table DuckDBPyResult::FetchArrowTable(idx_t rows_per_batch) {
 	if (!result) {
 		throw InvalidInputException("There is no query result");
 	}
-	if (result->type == QueryResultType::ARROW_RESULT) {
-		auto &arrow_result = result->Cast<ArrowQueryResult>();
-		auto &batches = arrow_result.GetRecordBatches();
-		return pyarrow::ToArrowTable(result->types, result->names, batches, result->client_properties);
-	}
 	return pyarrow::ToArrowTable(result->types, result->names, FetchAllArrowChunks(rows_per_batch),
 	                             result->client_properties);
 }
