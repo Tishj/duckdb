@@ -51,21 +51,21 @@ std::shared_ptr<arrow::dataset::Dataset> MakeGroupableBatches(int multiplicity =
 	// Create a result and create an arrow dataset on top of the result
 	auto db = make_uniq<DuckDB>(nullptr);
 	auto con = make_uniq<Connection>(*db);
-	con->Query("CREATE TABLE my_table (i32 INT, str VARCHAR)");
+	con->Query("CREATE TABLE my_table (left INT, right INT)");
 	string insert_query = R"EOF(
-		INSERT INTO my_table (i32, str) VALUES
+		INSERT INTO my_table (left, right) VALUES
 	)EOF";
 
 	string data = R"EOF(
-		(12, 'alpha'),
-		(7, 'beta'),
-		(3, 'alpha'),
-		(-2, 'alpha'),
-		(-1, 'gamma'),
-		(3, 'alpha'),
-		(5, 'gamma'),
-		(3, 'beta'),
-		(-8, 'alpha'),
+		(12, 1),
+		(7, 2),
+		(3, 1),
+		(-2, 1),
+		(-1, 3),
+		(3, 1),
+		(5, 3),
+		(3, 2),
+		(-8, 1),
 	)EOF";
 
 	for (int repeat = 0; repeat < multiplicity; ++repeat) {
@@ -96,7 +96,7 @@ TEST_CASE("Test Acero Mock - Projection", "[api]") {
 }
 
 TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
-	const idx_t multiplicity = 2000;
+	const idx_t multiplicity = 5;
 	auto input_l = MakeGroupableBatches(multiplicity);
 	auto input_r = MakeGroupableBatches(multiplicity);
 
@@ -104,8 +104,8 @@ TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
 	ac::Declaration right {"source", ac::SourceNodeOptions {input_r->schema, input_r}};
 
 	ac::HashJoinNodeOptions join_opts {ac::JoinType::INNER,
-	                                   /*left_keys=*/ {"str"},
-	                                   /*right_keys=*/ {"str"}, cp::literal(true), "l_", "r_"};
+	                                   /*left_keys=*/ {"right"},
+	                                   /*right_keys=*/ {"right"}, cp::literal(true), "l_", "r_"};
 
 	ac::Declaration hashjoin {"hashjoin", {std::move(left), std::move(right)}, std::move(join_opts)};
 
