@@ -38,18 +38,29 @@ idx_t ArrowQueryResult::RowCount() const {
 	return row_count;
 }
 
-const py::list &ArrowQueryResult::GetRecordBatches() {
+vector<unique_ptr<ArrowArrayWrapper>> ArrowQueryResult::ConsumeArrays() {
 	if (HasError()) {
-		throw InvalidInputException("Attempting to get collection from an unsuccessful query result\n: Error %s",
+		throw InvalidInputException("Attempting to fetch ArrowArrays from an unsuccessful query result\n: Error %s",
 		                            GetError());
 	}
-	D_ASSERT(record_batches);
-	return *record_batches;
+	D_ASSERT(arrays);
+	return std::move(arrays);
 }
 
-void ArrowQueryResult::SetRecordBatches(unique_ptr<py::list> record_batches) {
-	D_ASSERT(!this->record_batches);
-	this->record_batches = std::move(record_batches);
+unique_ptr<ArrowSchemaWrapper> ArrowQueryResult::ConsumeSchema() {
+	if (HasError()) {
+		throw InvalidInputException("Attempting to fetch ArrowSchema from an unsuccessful query result\n: Error %s",
+		                            GetError());
+	}
+	D_ASSERT(schema);
+	return std::move(schema);
+}
+
+void ArrowQueryResult::SetArrowData(unique_ptr<ArrowSchemaWrapper> schema, vector<unique_ptr<ArrowArrayWrapper>> arrays) {
+	D_ASSERT(!this->arrays);
+	D_ASSERT(!this->schema);
+	this->arrays = std::move(arrays);
+	this->schema = std::move(schema);
 }
 
 idx_t ArrowQueryResult::BatchSize() const {

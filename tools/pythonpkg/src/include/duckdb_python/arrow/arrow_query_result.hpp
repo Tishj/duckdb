@@ -13,6 +13,7 @@
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/common/preserved_error.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/arrow/arrow_wrapper.hpp"
 
 namespace duckdb {
 
@@ -43,12 +44,14 @@ public:
 	DUCKDB_API idx_t RowCount() const;
 
 public:
-	const py::list &GetRecordBatches();
-	void SetRecordBatches(unique_ptr<py::list> record_batches);
+	vector<unique_ptr<ArrowArrayWrapper>> ConsumeArrays();
+	unique_ptr<ArrowSchemaWrapper>> ConsumeSchema();
+	void SetArrowData(unique_ptr<ArrowSchemaWrapper> schema, vector<unique_ptr<ArrowArrayWrapper>> arrays);
 	idx_t BatchSize() const;
 
 private:
-	unique_ptr<py::list> record_batches;
+	vector<unique_ptr<ArrowArrayWrapper>> arrays;
+	unique_ptr<ArrowSchemaWrapper> schema;
 	idx_t row_count;
 	idx_t batch_size;
 };
