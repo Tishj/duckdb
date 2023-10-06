@@ -45,13 +45,11 @@ public:
 public:
 	vector<unique_ptr<ArrowArrayWrapper>> ConsumeArrays();
 	vector<unique_ptr<ArrowArrayWrapper>> &Arrays();
-	unique_ptr<ArrowSchemaWrapper> ConsumeSchema();
 	void SetArrowData(vector<unique_ptr<ArrowArrayWrapper>> arrays);
 	idx_t BatchSize() const;
 
 private:
 	vector<unique_ptr<ArrowArrayWrapper>> arrays;
-	unique_ptr<ArrowSchemaWrapper> schema;
 	idx_t row_count;
 	idx_t batch_size;
 };
