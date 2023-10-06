@@ -4641,12 +4641,9 @@ QueryResultType EnumUtil::FromString<QueryResultType>(const char *value) {
 	if (StringUtil::Equals(value, "NUMPY_RESULT")) {
 		return QueryResultType::NUMPY_RESULT;
 	}
-<<<<<<< HEAD
 	if (StringUtil::Equals(value, "ARROW_RESULT")) {
 		return QueryResultType::ARROW_RESULT;
 	}
-=======
->>>>>>> python_batched_df_collector
 	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented", value));
 }
 
