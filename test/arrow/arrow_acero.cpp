@@ -97,6 +97,7 @@ TEST_CASE("Test Acero Mock - Projection", "[api]") {
 
 TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
 	const idx_t multiplicity = 2000;
+	//const idx_t multiplicity = 5;
 	auto input_l = MakeGroupableBatches(multiplicity);
 	auto input_r = MakeGroupableBatches(multiplicity);
 

@@ -23,6 +23,7 @@
 #include "duckdb/main/acero/util/arrow_test_factory.hpp"
 
 #include "duckdb/main/acero/arrow_conversion.hpp"
+#include "duckdb/common/arrow/physical_arrow_collector.hpp"
 #include <chrono>
 
 namespace duckdb {
@@ -157,6 +158,9 @@ shared_ptr<arrow::Table> DeclarationToTable(Declaration plan) {
 
 	auto &context = con.context;
 
+	context->config.result_collector = [](ClientContext &context, PreparedStatementData &data) {
+		return PhysicalArrowCollector::Create(context, data, 2048);
+	};
 	start_time = std::chrono::high_resolution_clock::now();
 	auto pending_query = context->PendingQuery(rel, false);
 	auto result = CompletePendingQuery(*pending_query);
