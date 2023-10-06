@@ -45,7 +45,7 @@ public:
 
 public:
 	vector<unique_ptr<ArrowArrayWrapper>> ConsumeArrays();
-	unique_ptr<ArrowSchemaWrapper>> ConsumeSchema();
+	unique_ptr<ArrowSchemaWrapper> > ConsumeSchema();
 	void SetArrowData(unique_ptr<ArrowSchemaWrapper> schema, vector<unique_ptr<ArrowArrayWrapper>> arrays);
 	idx_t BatchSize() const;
 
