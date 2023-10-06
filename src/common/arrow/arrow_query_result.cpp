@@ -1,4 +1,4 @@
-#include "duckdb_python/arrow/arrow_query_result.hpp"
+#include "duckdb/common/arrow/arrow_query_result.hpp"
 #include "duckdb/common/to_string.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/box_renderer.hpp"
@@ -13,7 +13,7 @@ ArrowQueryResult::ArrowQueryResult(StatementType statement_type, StatementProper
                   std::move(names_p), std::move(client_properties)),
       row_count(row_count), batch_size(batch_size) {
 	schema = make_uniq<ArrowSchemaWrapper>();
-	ArrowConverter::ToArrowSchema(&schema.arrow_schema, types, names, client_properties);
+	ArrowConverter::ToArrowSchema(&schema->arrow_schema, types, names, client_properties);
 }
 
 ArrowQueryResult::ArrowQueryResult(PreservedError error)
@@ -49,6 +49,14 @@ vector<unique_ptr<ArrowArrayWrapper>> ArrowQueryResult::ConsumeArrays() {
 	return std::move(arrays);
 }
 
+vector<unique_ptr<ArrowArrayWrapper>> &ArrowQueryResult::Arrays() {
+	if (HasError()) {
+		throw InvalidInputException("Attempting to fetch ArrowArrays from an unsuccessful query result\n: Error %s",
+		                            GetError());
+	}
+	return arrays;
+}
+
 unique_ptr<ArrowSchemaWrapper> ArrowQueryResult::ConsumeSchema() {
 	if (HasError()) {
 		throw InvalidInputException("Attempting to fetch ArrowSchema from an unsuccessful query result\n: Error %s",
@@ -59,8 +67,7 @@ unique_ptr<ArrowSchemaWrapper> ArrowQueryResult::ConsumeSchema() {
 }
 
 void ArrowQueryResult::SetArrowData(vector<unique_ptr<ArrowArrayWrapper>> arrays) {
-	D_ASSERT(!this->arrays);
-	D_ASSERT(!this->schema);
+	D_ASSERT(arrays.empty());
 	this->arrays = std::move(arrays);
 }
 

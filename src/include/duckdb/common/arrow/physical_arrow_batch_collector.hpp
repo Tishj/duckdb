@@ -1,6 +1,5 @@
 #pragma once
 
-#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb/execution/operator/helper/physical_batch_collector.hpp"
 
 namespace duckdb {
@@ -9,15 +8,6 @@ class ArrowBatchGlobalState : public BatchCollectorGlobalState {
 public:
 	ArrowBatchGlobalState(ClientContext &context, const PhysicalBatchCollector &op)
 	    : BatchCollectorGlobalState(context, op) {
-	}
-	~ArrowBatchGlobalState() override {
-		if (!py::gil_check()) {
-			// If an exception occurred, we need to grab the gil so we can destroy this
-			py::gil_scoped_acquire gil;
-			result.reset();
-			return;
-		}
-		result.reset();
 	}
 };
 

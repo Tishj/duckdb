@@ -1,6 +1,5 @@
 #pragma once
 
-#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb/execution/operator/helper/physical_materialized_collector.hpp"
 #include "duckdb/common/arrow/arrow.hpp"
 #include "duckdb/common/types/batched_data_collection.hpp"
@@ -10,15 +9,6 @@ namespace duckdb {
 
 class ArrowCollectorGlobalState : public MaterializedCollectorGlobalState {
 public:
-	~ArrowCollectorGlobalState() override {
-		py::gil_scoped_acquire gil;
-		result.reset();
-		batches.clear();
-	}
-
-public:
-	//! The list of batches produced
-	vector<py::object> record_batches;
 	//! The result returned by GetResult
 	unique_ptr<QueryResult> result;
 	//! The unordered batches

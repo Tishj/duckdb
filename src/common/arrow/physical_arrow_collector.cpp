@@ -1,9 +1,9 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
-#include "duckdb_python/arrow/physical_arrow_collector.hpp"
-#include "duckdb_python/arrow/arrow_query_result.hpp"
+#include "duckdb/common/arrow/physical_arrow_collector.hpp"
+#include "duckdb/common/arrow/arrow_query_result.hpp"
 #include "duckdb/main/prepared_statement_data.hpp"
-#include "duckdb_python/arrow/physical_arrow_batch_collector.hpp"
-#include "duckdb_python/arrow/arrow_merge_event.hpp"
+#include "duckdb/common/arrow/physical_arrow_batch_collector.hpp"
+#include "duckdb/common/arrow/arrow_merge_event.hpp"
 #include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
@@ -15,10 +15,6 @@ unique_ptr<PhysicalResultCollector> PhysicalArrowCollector::Create(ClientContext
 	// The creation of the record batches requires this module, and when this is imported for the first time from a
 	// thread that is not the main execution thread this might cause a crash. So we import it here while we're still in
 	// the main thread.
-	{
-		py::gil_scoped_acquire gil;
-		auto pyarrow_lib_module = py::module::import("pyarrow").attr("lib");
-	}
 
 	if (!PhysicalPlanGenerator::PreserveInsertionOrder(context, *data.plan)) {
 		// the plan is not order preserving, so we just use the parallel materialized collector
@@ -38,8 +34,6 @@ SinkCombineResultType PhysicalArrowCollector::Combine(ExecutionContext &context,
 	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
 	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
 	if (lstate.collection->Count() == 0) {
-		py::gil_scoped_acquire gil;
-		lstate.collection.reset();
 		return SinkCombineResultType::FINISHED;
 	}
 

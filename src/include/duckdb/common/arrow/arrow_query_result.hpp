@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb/common/winapi.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/common/preserved_error.hpp"
@@ -45,8 +44,9 @@ public:
 
 public:
 	vector<unique_ptr<ArrowArrayWrapper>> ConsumeArrays();
-	unique_ptr<ArrowSchemaWrapper> > ConsumeSchema();
-	void SetArrowData(unique_ptr<ArrowSchemaWrapper> schema, vector<unique_ptr<ArrowArrayWrapper>> arrays);
+	vector<unique_ptr<ArrowArrayWrapper>> &Arrays();
+	unique_ptr<ArrowSchemaWrapper> ConsumeSchema();
+	void SetArrowData(vector<unique_ptr<ArrowArrayWrapper>> arrays);
 	idx_t BatchSize() const;
 
 private:

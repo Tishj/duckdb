@@ -1,9 +1,9 @@
-#include "duckdb_python/arrow/physical_arrow_batch_collector.hpp"
+#include "duckdb/common/arrow/physical_arrow_batch_collector.hpp"
 #include "duckdb/common/types/batched_data_collection.hpp"
-#include "duckdb_python/arrow/arrow_query_result.hpp"
-#include "duckdb_python/arrow/arrow_merge_event.hpp"
+#include "duckdb/common/arrow/arrow_query_result.hpp"
+#include "duckdb/common/arrow/arrow_merge_event.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb_python/arrow/physical_arrow_collector.hpp"
+#include "duckdb/common/arrow/physical_arrow_collector.hpp"
 
 namespace duckdb {
 
@@ -20,12 +20,6 @@ SinkFinalizeType PhysicalArrowBatchCollector::Finalize(Pipeline &pipeline, Event
 		// Create the result containing a single empty result conversion
 		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
 		                                            context.GetClientProperties(), 0, record_batch_size);
-		{
-			py::gil_scoped_acquire gil;
-			// This result is empty, add an empty list of record batches
-			auto &arrow_result = (ArrowQueryResult &)*gstate.result;
-			arrow_result.SetRecordBatches(make_uniq<py::list>(0));
-		}
 		return SinkFinalizeType::READY;
 	}
 

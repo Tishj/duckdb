@@ -9,12 +9,11 @@
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/main/chunk_scan_state/batched_data_collection.hpp"
-#include "duckdb_python/arrow/arrow_array_stream.hpp"
 #include "duckdb/execution/executor.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/helper.hpp"
-#include "duckdb_python/arrow/arrow_query_result.hpp"
+#include "duckdb/common/arrow/arrow_query_result.hpp"
 
 namespace duckdb {
 
@@ -30,20 +29,15 @@ public:
 	}
 
 	void ProduceRecordBatches() {
-		auto &list = result.GetRecordBatches();
+		auto &arrays = result.Arrays();
 		auto arrow_options = executor.context.GetClientProperties();
 		for (auto &index : record_batch_indices) {
-			ArrowArray data;
+			auto &array = arrays[index];
+			D_ASSERT(array);
 			idx_t count;
-			count = ArrowUtil::FetchChunk(scan_state, arrow_options, batch_size, &data);
+			count = ArrowUtil::FetchChunk(scan_state, arrow_options, batch_size, &array->arrow_array);
+			(void)count;
 			D_ASSERT(count != 0);
-			ArrowSchema arrow_schema;
-			ArrowConverter::ToArrowSchema(&arrow_schema, scan_state.Types(), names, arrow_options);
-
-			py::gil_scoped_acquire gil;
-			// Insert the finished record batch in the index where it's supposed to be
-			D_ASSERT(index < list.size());
-			list[index] = CreatePyArrowRecordBatch(arrow_schema, data);
 		}
 	}
 
@@ -104,9 +98,12 @@ public:
 		}
 		// Allocate the list of record batches inside the query result
 		{
-			py::gil_scoped_acquire gil;
-			auto record_batches = make_uniq<py::list>(record_batch_index);
-			result.SetRecordBatches(std::move(record_batches));
+			vector<unique_ptr<ArrowArrayWrapper>> arrays;
+			arrays.resize(record_batch_index);
+			for (idx_t i = 0; i < record_batch_index; i++) {
+				arrays[i] = make_uniq<ArrowArrayWrapper>();
+			}
+			result.SetArrowData(std::move(arrays));
 		}
 		D_ASSERT(!tasks.empty());
 		SetTasks(std::move(tasks));
