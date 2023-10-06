@@ -12,8 +12,6 @@ ArrowQueryResult::ArrowQueryResult(StatementType statement_type, StatementProper
     : QueryResult(QueryResultType::ARROW_RESULT, statement_type, std::move(properties), std::move(types_p),
                   std::move(names_p), std::move(client_properties)),
       row_count(row_count), batch_size(batch_size) {
-	schema = make_uniq<ArrowSchemaWrapper>();
-	ArrowConverter::ToArrowSchema(&schema->arrow_schema, types, names, client_properties);
 }
 
 ArrowQueryResult::ArrowQueryResult(PreservedError error)
@@ -57,17 +55,8 @@ vector<unique_ptr<ArrowArrayWrapper>> &ArrowQueryResult::Arrays() {
 	return arrays;
 }
 
-unique_ptr<ArrowSchemaWrapper> ArrowQueryResult::ConsumeSchema() {
-	if (HasError()) {
-		throw InvalidInputException("Attempting to fetch ArrowSchema from an unsuccessful query result\n: Error %s",
-		                            GetError());
-	}
-	D_ASSERT(schema);
-	return std::move(schema);
-}
-
 void ArrowQueryResult::SetArrowData(vector<unique_ptr<ArrowArrayWrapper>> arrays) {
-	D_ASSERT(arrays.empty());
+	D_ASSERT(this->arrays.empty());
 	this->arrays = std::move(arrays);
 }
 
