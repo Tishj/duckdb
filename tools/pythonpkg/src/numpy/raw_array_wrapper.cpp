@@ -13,32 +13,43 @@
 
 namespace duckdb {
 
-idx_t RawArrayWrapper::DuckDBToNumpyTypeWidth(const LogicalType &type) {
+RawArrayWrapper::RawArrayWrapper(const LogicalType &type) : data(nullptr), type(type), count(0) {
 	switch (type.id()) {
 	case LogicalTypeId::BOOLEAN:
-		return sizeof(bool);
+		type_width = sizeof(bool);
+		break;
 	case LogicalTypeId::UTINYINT:
-		return sizeof(uint8_t);
+		type_width = sizeof(uint8_t);
+		break;
 	case LogicalTypeId::USMALLINT:
-		return sizeof(uint16_t);
+		type_width = sizeof(uint16_t);
+		break;
 	case LogicalTypeId::UINTEGER:
-		return sizeof(uint32_t);
+		type_width = sizeof(uint32_t);
+		break;
 	case LogicalTypeId::UBIGINT:
-		return sizeof(uint64_t);
+		type_width = sizeof(uint64_t);
+		break;
 	case LogicalTypeId::TINYINT:
-		return sizeof(int8_t);
+		type_width = sizeof(int8_t);
+		break;
 	case LogicalTypeId::SMALLINT:
-		return sizeof(int16_t);
+		type_width = sizeof(int16_t);
+		break;
 	case LogicalTypeId::INTEGER:
-		return sizeof(int32_t);
+		type_width = sizeof(int32_t);
+		break;
 	case LogicalTypeId::BIGINT:
-		return sizeof(int64_t);
+		type_width = sizeof(int64_t);
+		break;
 	case LogicalTypeId::FLOAT:
-		return sizeof(float);
+		type_width = sizeof(float);
+		break;
 	case LogicalTypeId::HUGEINT:
 	case LogicalTypeId::DOUBLE:
 	case LogicalTypeId::DECIMAL:
-		return sizeof(double);
+		type_width = sizeof(double);
+		break;
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_SEC:
 	case LogicalTypeId::TIMESTAMP_MS:
@@ -46,7 +57,8 @@ idx_t RawArrayWrapper::DuckDBToNumpyTypeWidth(const LogicalType &type) {
 	case LogicalTypeId::DATE:
 	case LogicalTypeId::INTERVAL:
 	case LogicalTypeId::TIMESTAMP_TZ:
-		return sizeof(int64_t);
+		type_width = sizeof(int64_t);
+		break;
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIME_TZ:
 	case LogicalTypeId::VARCHAR:
@@ -58,19 +70,11 @@ idx_t RawArrayWrapper::DuckDBToNumpyTypeWidth(const LogicalType &type) {
 	case LogicalTypeId::STRUCT:
 	case LogicalTypeId::UNION:
 	case LogicalTypeId::UUID:
-		return sizeof(PyObject *);
+		type_width = sizeof(PyObject *);
+		break;
 	default:
 		throw NotImplementedException("Unsupported type \"%s\" for DuckDB -> NumPy conversion", type.ToString());
 	}
-}
-
-RawArrayWrapper::RawArrayWrapper(py::array array_p, const LogicalType &type)
-    : array(std::move(array_p)), data(data_ptr_cast(array.mutable_data())), type(type) {
-	type_width = DuckDBToNumpyTypeWidth(type);
-}
-
-RawArrayWrapper::RawArrayWrapper(const LogicalType &type) : array(), data(nullptr), type(type) {
-	type_width = DuckDBToNumpyTypeWidth(type);
 }
 
 string RawArrayWrapper::DuckDBToNumpyDtype(const LogicalType &type) {
@@ -143,7 +147,6 @@ string RawArrayWrapper::DuckDBToNumpyDtype(const LogicalType &type) {
 }
 
 void RawArrayWrapper::Initialize(idx_t capacity) {
-	D_ASSERT(py::gil_check());
 	string dtype = DuckDBToNumpyDtype(type);
 
 	array = py::array(py::dtype(dtype), capacity);
@@ -151,13 +154,7 @@ void RawArrayWrapper::Initialize(idx_t capacity) {
 }
 
 void RawArrayWrapper::Resize(idx_t new_capacity) {
-	D_ASSERT(py::gil_check());
 	vector<py::ssize_t> new_shape {py::ssize_t(new_capacity)};
-	const auto current_shape = array.shape();
-	if (current_shape && static_cast<idx_t>(*current_shape) == new_capacity) {
-		// Already correct shape
-		return;
-	}
 	array.resize(new_shape, false);
 	data = data_ptr_cast(array.mutable_data());
 }

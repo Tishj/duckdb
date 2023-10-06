@@ -16,9 +16,6 @@
 #include "duckdb_python/numpy/array_wrapper.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb_python/arrow/arrow_export_utils.hpp"
-#include "duckdb_python/numpy/numpy_query_result.hpp"
-#include "duckdb/main/chunk_scan_state/query_result.hpp"
-#include "duckdb_python/arrow/arrow_query_result.hpp"
 #include "duckdb/main/chunk_scan_state/query_result.hpp"
 
 namespace duckdb {
@@ -135,39 +132,40 @@ py::dict DuckDBPyResult::FetchNumpy() {
 }
 
 void DuckDBPyResult::FillNumpy(py::dict &res, idx_t col_idx, NumpyResultConversion &conversion, const char *name) {
-	res[name] = conversion.ToArray(col_idx);
+	if (result->types[col_idx].id() == LogicalTypeId::ENUM) {
+		// first we (might) need to create the categorical type
+		if (categories_type.find(col_idx) == categories_type.end()) {
+			// Equivalent to: pandas.CategoricalDtype(['a', 'b'], ordered=True)
+			categories_type[col_idx] = py::module::import("pandas").attr("CategoricalDtype")(categories[col_idx], true);
+		}
+		// Equivalent to: pandas.Categorical.from_codes(codes=[0, 1, 0, 1], dtype=dtype)
+		res[name] = py::module::import("pandas")
+		                .attr("Categorical")
+		                .attr("from_codes")(conversion.ToArray(col_idx), py::arg("dtype") = categories_type[col_idx]);
+	} else {
+		res[name] = conversion.ToArray(col_idx);
+	}
 }
 
-py::dict DuckDBPyResult::FillDictionary(NumpyResultConversion &conversion) {
-	// now that we have materialized the result in contiguous arrays, construct the actual NumPy arrays or categorical
-	// types
-	py::dict res;
-	unordered_map<string, idx_t> names;
-	for (idx_t col_idx = 0; col_idx < result->types.size(); col_idx++) {
-		if (names[result->names[col_idx]]++ == 0) {
-			FillNumpy(res, col_idx, conversion, result->names[col_idx].c_str());
-		} else {
-			auto name = result->names[col_idx] + "_" + to_string(names[result->names[col_idx]]);
-			while (names[name] > 0) {
-				// This entry already exists
-				name += "_" + to_string(names[name]);
+void InsertCategory(QueryResult &result, unordered_map<idx_t, py::list> &categories) {
+	for (idx_t col_idx = 0; col_idx < result.types.size(); col_idx++) {
+		auto &type = result.types[col_idx];
+		if (type.id() == LogicalTypeId::ENUM) {
+			// It's an ENUM type, in addition to converting the codes we must convert the categories
+			if (categories.find(col_idx) == categories.end()) {
+				auto &categories_list = EnumType::GetValuesInsertOrder(type);
+				auto categories_size = EnumType::GetSize(type);
+				for (idx_t i = 0; i < categories_size; i++) {
+					categories[col_idx].append(py::cast(categories_list.GetValue(i).ToString()));
+				}
 			}
-			names[name]++;
-			FillNumpy(res, col_idx, conversion, name.c_str());
 		}
 	}
-	return res;
 }
 
 unique_ptr<NumpyResultConversion> DuckDBPyResult::InitializeNumpyConversion(bool pandas) {
 	if (!result) {
 		throw InvalidInputException("result closed");
-	}
-	D_ASSERT(py::gil_check());
-
-	if (result->type == QueryResultType::NUMPY_RESULT) {
-		// We have already created a numpy result, it's owned by the QueryResult
-		return nullptr;
 	}
 
 	idx_t initial_capacity = STANDARD_VECTOR_SIZE * 2ULL;
@@ -187,15 +185,6 @@ py::dict DuckDBPyResult::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk
 	if (!result) {
 		throw InvalidInputException("result closed");
 	}
-	if (result->type == QueryResultType::NUMPY_RESULT) {
-		D_ASSERT(!conversion_p);
-		D_ASSERT(!stream);
-		// The numpy result conversion was already created
-		auto &numpy_result = result->Cast<NumpyQueryResult>();
-		auto &conversion = numpy_result.Collection();
-		return FillDictionary(conversion);
-	}
-
 	if (!conversion_p) {
 		conversion_p = InitializeNumpyConversion();
 	}
@@ -206,6 +195,7 @@ py::dict DuckDBPyResult::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk
 		for (auto &chunk : materialized.Collection().Chunks()) {
 			conversion.Append(chunk);
 		}
+		InsertCategory(materialized, categories);
 		materialized.Collection().Reset();
 	} else {
 		D_ASSERT(result->type == QueryResultType::STREAM_RESULT);
@@ -227,10 +217,28 @@ py::dict DuckDBPyResult::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk
 				break;
 			}
 			conversion.Append(*chunk);
+			InsertCategory(stream_result, categories);
 		}
 	}
 
-	return FillDictionary(conversion);
+	// now that we have materialized the result in contiguous arrays, construct the actual NumPy arrays or categorical
+	// types
+	py::dict res;
+	unordered_map<string, idx_t> names;
+	for (idx_t col_idx = 0; col_idx < result->types.size(); col_idx++) {
+		if (names[result->names[col_idx]]++ == 0) {
+			FillNumpy(res, col_idx, conversion, result->names[col_idx].c_str());
+		} else {
+			auto name = result->names[col_idx] + "_" + to_string(names[result->names[col_idx]]);
+			while (names[name] > 0) {
+				// This entry already exists
+				name += "_" + to_string(names[name]);
+			}
+			names[name]++;
+			FillNumpy(res, col_idx, conversion, name.c_str());
+		}
+	}
+	return res;
 }
 
 // TODO: unify these with an enum/flag to indicate which conversions to do
@@ -254,10 +262,7 @@ void DuckDBPyResult::ChangeDateToDatetime(PandasDataFrame &df) {
 }
 
 PandasDataFrame DuckDBPyResult::FrameFromNumpy(bool date_as_object, const py::handle &o) {
-	D_ASSERT(py::gil_check());
 	auto df = py::cast<PandasDataFrame>(py::module::import("pandas").attr("DataFrame").attr("from_dict")(o));
-	// auto df = py::cast<PandasDataFrame>(py::module::import("pandas").attr("DataFrame")(o, py::arg("copy") =
-	// py::bool_(false)));
 	// Unfortunately we have to do a type change here for timezones since these types are not supported by numpy
 	ChangeToTZType(df);
 	if (date_as_object) {

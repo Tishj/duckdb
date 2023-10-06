@@ -749,9 +749,6 @@ PandasDataFrame DuckDBPyRelation::FetchDF(bool date_as_object) {
 			return py::none();
 		}
 		auto &context = *rel->context.GetContext();
-		ScopedConfigSetting setting(
-		    context.config, [](ClientConfig &config) { config.result_collector = PhysicalNumpyCollector::Create; },
-		    [](ClientConfig &config) { config.result_collector = nullptr; });
 		ExecuteOrThrow();
 	}
 	if (result->IsClosed()) {
@@ -810,9 +807,6 @@ py::dict DuckDBPyRelation::FetchNumpy() {
 			return py::none();
 		}
 		auto &context = *rel->context.GetContext();
-		ScopedConfigSetting setting(
-		    context.config, [](ClientConfig &config) { config.result_collector = PhysicalNumpyCollector::Create; },
-		    [](ClientConfig &config) { config.result_collector = nullptr; });
 		ExecuteOrThrow();
 	}
 	if (result->IsClosed()) {

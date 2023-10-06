@@ -347,16 +347,8 @@ double IntegralConvert::ConvertValue(hugeint_t val) {
 
 } // namespace duckdb_py_convert
 
-static bool IsVarcharDictionary(const NumpyAppendData &input) {
-	auto &vec = input.input;
-	if (vec.GetType().id() != LogicalTypeId::VARCHAR) {
-		return false;
-	}
-	return (vec.GetVectorType() == VectorType::DICTIONARY_VECTOR);
-}
-
-template <class DUCKDB_T, class NUMPY_T, class CONVERT, bool ALL_VALID>
-static bool ConvertColumnTemplated(NumpyAppendData &append_data) {
+template <class DUCKDB_T, class NUMPY_T, class CONVERT>
+static bool ConvertColumn(NumpyAppendData &append_data) {
 	auto target_offset = append_data.target_offset;
 	auto target_data = append_data.target_data;
 	auto target_mask = append_data.target_mask;
@@ -365,86 +357,32 @@ static bool ConvertColumnTemplated(NumpyAppendData &append_data) {
 
 	auto src_ptr = UnifiedVectorFormat::GetData<DUCKDB_T>(idata);
 	auto out_ptr = reinterpret_cast<NUMPY_T *>(target_data);
-
-	const bool is_dictionary = IsVarcharDictionary(append_data);
-
-	bool mask_is_set = false;
-	for (idx_t i = 0; i < count; i++) {
-		idx_t src_idx = idata.sel->get_index(i);
-		idx_t offset = target_offset + i;
-		if (!ALL_VALID && !idata.validity.RowIsValidUnsafe(src_idx)) {
-			if (append_data.pandas) {
-				out_ptr[offset] = CONVERT::template NullValue<NUMPY_T, true>(target_mask[offset]);
+	if (!idata.validity.AllValid()) {
+		bool mask_is_set = false;
+		for (idx_t i = 0; i < count; i++) {
+			idx_t src_idx = idata.sel->get_index(i);
+			idx_t offset = target_offset + i;
+			if (!idata.validity.RowIsValidUnsafe(src_idx)) {
+				if (append_data.pandas) {
+					out_ptr[offset] = CONVERT::template NullValue<NUMPY_T, true>(target_mask[offset]);
+				} else {
+					out_ptr[offset] = CONVERT::template NullValue<NUMPY_T, false>(target_mask[offset]);
+				}
+				mask_is_set = mask_is_set || target_mask[offset];
 			} else {
-				out_ptr[offset] = CONVERT::template NullValue<NUMPY_T, false>(target_mask[offset]);
+				out_ptr[offset] = CONVERT::template ConvertValue<DUCKDB_T, NUMPY_T>(src_ptr[src_idx]);
+				target_mask[offset] = false;
 			}
-			mask_is_set = mask_is_set || target_mask[offset];
-		} else {
+		}
+		return mask_is_set;
+	} else {
+		for (idx_t i = 0; i < count; i++) {
+			idx_t src_idx = idata.sel->get_index(i);
+			idx_t offset = target_offset + i;
 			out_ptr[offset] = CONVERT::template ConvertValue<DUCKDB_T, NUMPY_T>(src_ptr[src_idx]);
 			target_mask[offset] = false;
 		}
-	}
-	return mask_is_set;
-}
-
-template <class DUCKDB_T, class NUMPY_T, class CONVERT, bool ALL_VALID>
-static bool ConvertColumnDictionary(NumpyAppendData &append_data) {
-	auto target_offset = append_data.target_offset;
-	auto target_data = append_data.target_data;
-	auto target_mask = append_data.target_mask;
-	auto &idata = append_data.idata;
-	auto count = append_data.count;
-
-	D_ASSERT(append_data.input.GetVectorType() == VectorType::DICTIONARY_VECTOR);
-
-	auto src_ptr = UnifiedVectorFormat::GetData<DUCKDB_T>(idata);
-	auto out_ptr = reinterpret_cast<NUMPY_T *>(target_data);
-
-	// TODO: Maybe just a vector would be more efficient, since it's only 2048 values max
-	unordered_map<idx_t, NUMPY_T> cache;
-
-	bool mask_is_set = false;
-	for (idx_t i = 0; i < count; i++) {
-		idx_t src_idx = idata.sel->get_index(i);
-		idx_t offset = target_offset + i;
-		if (!ALL_VALID && !idata.validity.RowIsValidUnsafe(src_idx)) {
-			if (append_data.pandas) {
-				out_ptr[offset] = CONVERT::template NullValue<NUMPY_T, true>(target_mask[offset]);
-			} else {
-				out_ptr[offset] = CONVERT::template NullValue<NUMPY_T, false>(target_mask[offset]);
-			}
-			mask_is_set = mask_is_set || target_mask[offset];
-		} else {
-			auto it = cache.find(src_idx);
-			if (it == cache.end()) {
-				// We have not converted this value yet
-				auto value = CONVERT::template ConvertValue<DUCKDB_T, NUMPY_T>(src_ptr[src_idx]);
-				cache.emplace(std::make_pair(src_idx, value));
-			}
-			out_ptr[offset] = cache.at(src_idx);
-			target_mask[offset] = false;
-		}
-	}
-	return mask_is_set;
-}
-
-template <class DUCKDB_T, class NUMPY_T, class CONVERT>
-static bool ConvertColumn(NumpyAppendData &append_data) {
-	auto &idata = append_data.idata;
-
-	const bool is_dictionary = IsVarcharDictionary(append_data);
-	if (is_dictionary) {
-		if (!idata.validity.AllValid()) {
-			return ConvertColumnDictionary<DUCKDB_T, NUMPY_T, CONVERT, false>(append_data);
-		} else {
-			return ConvertColumnDictionary<DUCKDB_T, NUMPY_T, CONVERT, true>(append_data);
-		}
-	}
-
-	if (!idata.validity.AllValid()) {
-		return ConvertColumnTemplated<DUCKDB_T, NUMPY_T, CONVERT, false>(append_data);
-	} else {
-		return ConvertColumnTemplated<DUCKDB_T, NUMPY_T, CONVERT, true>(append_data);
+		return false;
 	}
 }
 
@@ -586,12 +524,6 @@ static bool ConvertDecimal(NumpyAppendData &append_data) {
 	}
 }
 
-ArrayWrapper::ArrayWrapper(unique_ptr<RawArrayWrapper> data_p, unique_ptr<RawArrayWrapper> mask_p, bool requires_mask,
-                           ClientProperties client_properties_p, bool pandas)
-    : data(std::move(data_p)), mask(std::move(mask_p)), requires_mask(requires_mask),
-      client_properties(std::move(client_properties_p)), pandas(pandas) {
-}
-
 ArrayWrapper::ArrayWrapper(const LogicalType &type, const ClientProperties &client_properties_p, bool pandas)
     : requires_mask(false), client_properties(client_properties_p), pandas(pandas) {
 	data = make_uniq<RawArrayWrapper>(type);
@@ -628,7 +560,6 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 
 	switch (input.GetType().id()) {
 	case LogicalTypeId::ENUM: {
-		py::gil_scoped_acquire gil;
 		auto size = EnumType::GetSize(input.GetType());
 		append_data.physical_type = input.GetType().InternalType();
 		if (size <= (idx_t)NumericLimits<int8_t>::Maximum()) {
@@ -640,8 +571,7 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 		} else {
 			throw InternalException("Size not supported on ENUM types");
 		}
-		break;
-	}
+	} break;
 	case LogicalTypeId::BOOLEAN:
 		may_have_null = ConvertColumnRegular<bool>(append_data);
 		break;
@@ -691,74 +621,54 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t count) {
 	case LogicalTypeId::DATE:
 		may_have_null = ConvertColumn<date_t, int64_t, duckdb_py_convert::DateConvert>(append_data);
 		break;
-	case LogicalTypeId::TIME: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::TIME:
 		may_have_null = ConvertColumn<dtime_t, PyObject *, duckdb_py_convert::TimeConvert>(append_data);
 		break;
-	}
 	case LogicalTypeId::INTERVAL:
 		may_have_null = ConvertColumn<interval_t, int64_t, duckdb_py_convert::IntervalConvert>(append_data);
 		break;
-	case LogicalTypeId::VARCHAR: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::VARCHAR:
 		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::StringConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::BLOB: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::BLOB:
 		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::BlobConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::BIT: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::BIT:
 		may_have_null = ConvertColumn<string_t, PyObject *, duckdb_py_convert::BitConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::LIST: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::LIST:
 		may_have_null = ConvertNested<py::list, duckdb_py_convert::ListConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::MAP: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::MAP:
 		may_have_null = ConvertNested<py::dict, duckdb_py_convert::MapConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::UNION: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::UNION:
 		may_have_null = ConvertNested<py::object, duckdb_py_convert::UnionConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::STRUCT: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::STRUCT:
 		may_have_null = ConvertNested<py::dict, duckdb_py_convert::StructConvert>(append_data);
 		break;
-	}
-	case LogicalTypeId::UUID: {
-		py::gil_scoped_acquire gil;
+	case LogicalTypeId::UUID:
 		may_have_null = ConvertColumn<hugeint_t, PyObject *, duckdb_py_convert::UUIDConvert>(append_data);
 		break;
-	}
+
 	default:
 		throw NotImplementedException("Unsupported type \"%s\"", input.GetType().ToString());
 	}
 	if (may_have_null) {
 		requires_mask = true;
 	}
-}
-
-const LogicalType &ArrayWrapper::Type() const {
-	return data->type;
+	data->count += count;
+	mask->count += count;
 }
 
 py::object ArrayWrapper::ToArray(idx_t count) const {
-	D_ASSERT(py::gil_check());
 	D_ASSERT(data->array && mask->array);
-	data->Resize(count);
+	data->Resize(data->count);
 	if (!requires_mask) {
 		return std::move(data->array);
 	}
-	mask->Resize(count);
+	mask->Resize(mask->count);
 	// construct numpy arrays from the data and the mask
 	auto values = std::move(data->array);
 	auto nullmask = std::move(mask->array);
