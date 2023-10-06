@@ -51,9 +51,9 @@ std::shared_ptr<arrow::dataset::Dataset> MakeGroupableBatches(int multiplicity =
 	// Create a result and create an arrow dataset on top of the result
 	auto db = make_uniq<DuckDB>(nullptr);
 	auto con = make_uniq<Connection>(*db);
-	con->Query("CREATE TABLE my_table (left INT, right INT)");
+	con->Query("CREATE TABLE my_table (\"left\" INT, \"right\" INT)");
 	string insert_query = R"EOF(
-		INSERT INTO my_table (left, right) VALUES
+		INSERT INTO my_table ("left", "right") VALUES
 	)EOF";
 
 	string data = R"EOF(
@@ -96,7 +96,7 @@ TEST_CASE("Test Acero Mock - Projection", "[api]") {
 }
 
 TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
-	const idx_t multiplicity = 5;
+	const idx_t multiplicity = 2000;
 	auto input_l = MakeGroupableBatches(multiplicity);
 	auto input_r = MakeGroupableBatches(multiplicity);
 
