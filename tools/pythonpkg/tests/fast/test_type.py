@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import pytest
 from typing import Union
+from textwrap import dedent
 
 from duckdb.typing import (
     SQLNULL,
@@ -187,3 +188,40 @@ class TestType(object):
 
         child_type = type.v2.child
         assert str(child_type) == 'MAP(BLOB, BIT)'
+
+    def test_custom_type(self, duckdb_cursor):
+        import io
+
+        ## Setup
+
+        csv = io.StringIO(
+            dedent(
+                """
+        col1, col2
+        1,Y
+        2,N
+        """
+            )
+        )
+        duckdb_cursor.execute("CREATE TYPE yesno AS ENUM ('Y', 'N')")
+
+        ## From DuckDBPyType directly
+        yesno = duckdb_cursor.dtype('yesno')
+        rel = duckdb_cursor.read_csv(csv, dtype={"col2": yesno})
+        assert rel.types == ["BIGINT", "ENUM('Y', 'N')"]
+        res = rel.fetchall()
+        assert res == [(1, 'Y'), (2, 'N')]
+
+        # Non-existant type (from DuckDBPyType)
+        with pytest.raises(duckdb.CatalogException, match="Type with name noyes does not exist"):
+            noyes = duckdb_cursor.dtype('noyes')
+
+        ## From string
+        rel = duckdb_cursor.read_csv(csv, dtype={"col2": 'yesno'})
+        assert rel.types == ["BIGINT", "ENUM('Y', 'N')"]
+        res = rel.fetchall()
+        assert res == [(1, 'Y'), (2, 'N')]
+
+        # Non-existant type (from string)
+        with pytest.raises(duckdb.CatalogException, match="Type with name noyes does not exist"):
+            rel = duckdb_cursor.read_csv(csv, dtype={"col2": 'noyes'})

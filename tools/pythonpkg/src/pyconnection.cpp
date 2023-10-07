@@ -701,6 +701,27 @@ PathLike DuckDBPyConnection::GetPathLike(const py::object &object) {
 	return PathLike::Create(object, *this);
 }
 
+static shared_ptr<DuckDBPyType> GetType(unique_ptr<Connection> &connection, py::object obj) {
+	if (py::isinstance<py::str>(obj)) {
+		// Could be a user type, use the connection to retrieve the type from the catalog
+		if (!connection) {
+			throw ConnectionException("Connection already closed!");
+		}
+		std::string type_str = py::str(obj);
+		auto &context = *connection->context;
+		LogicalType type;
+		context.RunFunctionInTransaction(
+		    [&]() { type = TransformStringToLogicalType(type_str, *connection->context); });
+		return make_shared<DuckDBPyType>(type);
+	} else {
+		shared_ptr<DuckDBPyType> sql_type;
+		if (!py::try_cast(obj, sql_type)) {
+			throw py::value_error("The types provided to 'dtype' have to be DuckDBPyType or str");
+		}
+		return sql_type;
+	}
+}
+
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
     const py::object &name_p, const py::object &header, const py::object &compression, const py::object &sep,
     const py::object &delimiter, const py::object &dtype, const py::object &na_values, const py::object &skiprows,
@@ -750,10 +771,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
 			child_list_t<Value> struct_fields;
 			py::dict dtype_dict = dtype;
 			for (auto &kv : dtype_dict) {
-				shared_ptr<DuckDBPyType> sql_type;
-				if (!py::try_cast(kv.second, sql_type)) {
-					throw py::value_error("The types provided to 'dtype' have to be DuckDBPyType");
-				}
+				shared_ptr<DuckDBPyType> sql_type = GetType(connection, py::reinterpret_borrow<py::object>(kv.second));
 				struct_fields.emplace_back(py::str(kv.first), Value(sql_type->ToString()));
 			}
 			auto dtype_struct = Value::STRUCT(std::move(struct_fields));
@@ -762,10 +780,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
 			vector<Value> list_values;
 			py::list dtype_list = dtype;
 			for (auto &child : dtype_list) {
-				shared_ptr<DuckDBPyType> sql_type;
-				if (!py::try_cast(child, sql_type)) {
-					throw py::value_error("The types provided to 'dtype' have to be DuckDBPyType");
-				}
+				shared_ptr<DuckDBPyType> sql_type = GetType(connection, py::reinterpret_borrow<py::object>(child));
 				list_values.push_back(sql_type->ToString());
 			}
 			bind_parameters["dtypes"] = Value::LIST(LogicalType::VARCHAR, std::move(list_values));
