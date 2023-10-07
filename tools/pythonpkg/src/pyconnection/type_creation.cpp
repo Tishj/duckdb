@@ -1,4 +1,6 @@
 #include "duckdb_python/pyconnection/pyconnection.hpp"
+#include "duckdb/main/connection.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
@@ -91,7 +93,10 @@ shared_ptr<DuckDBPyType> DuckDBPyConnection::Type(const string &type_str) {
 	if (!connection) {
 		throw ConnectionException("Connection already closed!");
 	}
-	return make_shared<DuckDBPyType>(TransformStringToLogicalType(type_str, *connection->context));
+	auto &context = *connection->context;
+	LogicalType type;
+	context.RunFunctionInTransaction([&]() { type = TransformStringToLogicalType(type_str, *connection->context); });
+	return make_shared<DuckDBPyType>(type);
 }
 
 } // namespace duckdb
