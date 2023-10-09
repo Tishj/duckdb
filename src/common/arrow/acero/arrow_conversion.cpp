@@ -16,7 +16,8 @@ public:
 	}
 
 public:
-	void AddChunk(ArrowArray &&array) {
+	void AddChunk(ArrowArrayWrapper &array_wrapper) {
+		auto &array = array_wrapper.arrow_array;
 		if (arrays.empty()) {
 			for (int64_t i = 0; i < array.n_children; i++) {
 				arrays.push_back(make_shared<arrow::ChunkedArray>());
@@ -70,7 +71,7 @@ shared_ptr<arrow::Table> ArrowConversion::ConvertToTable(unique_ptr<QueryResult>
 	ArrowConversionResult conversion(arrow_result.client_properties);
 	auto arrays = arrow_result.ConsumeArrays();
 	for (auto &array : arrays) {
-		conversion.AddChunk(std::move(array->arrow_array));
+		conversion.AddChunk(*array);
 	}
 
 	auto &schema = conversion.schema->arrow_schema;
