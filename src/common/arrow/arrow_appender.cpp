@@ -39,18 +39,32 @@ void ArrowAppender::ReleaseArray(ArrowArray *array) {
 	if (!array || !array->release) {
 		return;
 	}
-	array->release = nullptr;
 	auto holder = static_cast<ArrowAppendData *>(array->private_data);
+	for (int64_t i = 0; i < array->n_children; i++) {
+		auto child = array->children[i];
+		D_ASSERT(child);
+		if (!child || !child->release) {
+			// Child was moved out of the array
+			continue;
+		}
+		child->release(child);
+		array->children[i] = nullptr;
+	}
+	if (array->dictionary && array->dictionary->release) {
+		array->dictionary->release(array->dictionary);
+	}
+	array->release = nullptr;
 	delete holder;
 }
 
 //===--------------------------------------------------------------------===//
 // Finalize Arrow Child
 //===--------------------------------------------------------------------===//
-ArrowArray *ArrowAppender::FinalizeChild(const LogicalType &type, ArrowAppendData &append_data) {
+ArrowArray *ArrowAppender::FinalizeChild(const LogicalType &type, unique_ptr<ArrowAppendData> append_data_p) {
 	auto result = make_uniq<ArrowArray>();
 
-	result->private_data = nullptr;
+	auto &append_data = *append_data_p;
+	result->private_data = append_data_p.release();
 	result->release = ArrowAppender::ReleaseArray;
 	result->n_children = 0;
 	result->null_count = 0;
@@ -88,10 +102,8 @@ ArrowArray ArrowAppender::Finalize() {
 	result.dictionary = nullptr;
 	root_holder->child_data = std::move(root_data);
 
-	// FIXME: this violates a property of the arrow format, if root owns all the child memory then consumers can't move
-	// child arrays https://arrow.apache.org/docs/format/CDataInterface.html#moving-child-arrays
 	for (idx_t i = 0; i < root_holder->child_data.size(); i++) {
-		root_holder->child_pointers[i] = ArrowAppender::FinalizeChild(types[i], *root_holder->child_data[i]);
+		root_holder->child_pointers[i] = ArrowAppender::FinalizeChild(types[i], std::move(root_holder->child_data[i]));
 	}
 
 	// Release ownership to caller
