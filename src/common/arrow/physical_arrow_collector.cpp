@@ -10,12 +10,6 @@ namespace duckdb {
 
 unique_ptr<PhysicalResultCollector> PhysicalArrowCollector::Create(ClientContext &context, PreparedStatementData &data,
                                                                    idx_t batch_size) {
-	(void)context;
-
-	// The creation of the record batches requires this module, and when this is imported for the first time from a
-	// thread that is not the main execution thread this might cause a crash. So we import it here while we're still in
-	// the main thread.
-
 	if (!PhysicalPlanGenerator::PreserveInsertionOrder(context, *data.plan)) {
 		// the plan is not order preserving, so we just use the parallel materialized collector
 		return make_uniq_base<PhysicalResultCollector, PhysicalArrowCollector>(data, true, batch_size);
@@ -29,17 +23,62 @@ unique_ptr<PhysicalResultCollector> PhysicalArrowCollector::Create(ClientContext
 	}
 }
 
+SinkResultType PhysicalArrowCollector::Sink(ExecutionContext &context, DataChunk &chunk,
+                                            OperatorSinkInput &input) const {
+	auto &lstate = input.local_state.Cast<ArrowCollectorLocalState>();
+	// Append to the appender, up to chunk size
+
+	auto count = chunk.size();
+	auto &appender = lstate.appender;
+	D_ASSERT(count != 0);
+
+	idx_t processed = 0;
+	do {
+		if (!appender) {
+			// Create the appender if we haven't started this chunk yet
+			auto properties = context.client.GetClientProperties();
+			D_ASSERT(processed < count);
+			auto initial_capacity = MinValue(record_batch_size, count - processed);
+			appender = make_uniq<ArrowAppender>(types, initial_capacity, properties);
+		}
+
+		// Figure out how much we can still append to this chunk
+		auto row_count = appender->RowCount();
+		D_ASSERT(record_batch_size > row_count);
+		auto to_append = MinValue(record_batch_size - row_count, chunk.size());
+
+		// Append and check if the chunk is finished
+		appender->Append(chunk, processed, processed + to_append, count);
+		processed += to_append;
+		row_count = appender->RowCount();
+		if (row_count >= record_batch_size) {
+			lstate.FinishArray();
+		}
+	} while (processed < count);
+}
+
 SinkCombineResultType PhysicalArrowCollector::Combine(ExecutionContext &context,
                                                       OperatorSinkCombineInput &input) const {
 	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
-	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
-	if (lstate.collection->Count() == 0) {
+	auto &lstate = input.local_state.Cast<ArrowCollectorLocalState>();
+	auto &last_appender = lstate.appender;
+	auto &arrays = lstate.finished_arrays;
+	if (arrays.size() == 0 && !last_appender) {
+		// Nothing to do
 		return SinkCombineResultType::FINISHED;
 	}
-
-	// Collect all the collections
+	if (last_appender) {
+		// FIXME: we could set these aside and merge them in a finalize event in an effort to create more balanced
+		// chunks out of these remnants
+		lstate.FinishArray();
+	}
+	// Collect all the finished arrays
 	lock_guard<mutex> l(gstate.glock);
-	gstate.batches[gstate.batch_index++] = std::move(lstate.collection);
+	// Move the arrays from our local state into the global state
+	gstate.chunks.insert(gstate.chunks.end(), std::make_move_iterator(arrays.begin()),
+	                     std::make_move_iterator(arrays.end()));
+	arrays.clear();
+	gstate.tuple_count += lstate.tuple_count;
 	return SinkCombineResultType::FINISHED;
 }
 
@@ -52,31 +91,36 @@ unique_ptr<GlobalSinkState> PhysicalArrowCollector::GetGlobalSinkState(ClientCon
 	return make_uniq<ArrowCollectorGlobalState>();
 }
 
+unique_ptr<LocalSinkState> PhysicalArrowCollector::GetLocalSinkState(ExecutionContext &context) const {
+	return make_uniq<ArrowCollectorLocalState>();
+}
+
 SinkFinalizeType PhysicalArrowCollector::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                                   OperatorSinkFinalizeInput &input) const {
 	auto &gstate = input.global_state.Cast<ArrowCollectorGlobalState>();
-	D_ASSERT(gstate.collection == nullptr);
 
-	gstate.collection = make_uniq<BatchedDataCollection>(context, types, std::move(gstate.batches), true);
-
-	auto total_tuple_count = gstate.collection->Count();
-	auto &types = gstate.collection->Types();
-	if (total_tuple_count == 0) {
+	if (gstate.chunks.empty()) {
+		D_ASSERT(gstate.tuple_count == 0);
 		gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types,
 		                                            context.GetClientProperties(), 0, record_batch_size);
 		return SinkFinalizeType::READY;
 	}
 
-	// Already create the final query result
+	auto tuple_count = gstate.tuple_count;
 	gstate.result = make_uniq<ArrowQueryResult>(statement_type, properties, names, types, context.GetClientProperties(),
-	                                            total_tuple_count, record_batch_size);
-
+	                                            tuple_count, record_batch_size);
 	auto &arrow_result = (ArrowQueryResult &)*gstate.result;
-	// Spawn an event that will populate the batches in the arrow result
-	auto new_event = make_shared<ArrowMergeEvent>(arrow_result, *gstate.collection, pipeline);
-	event.InsertEvent(std::move(new_event));
+	arrow_result.SetArrowData(std::move(gstate.chunks));
 
 	return SinkFinalizeType::READY;
+}
+
+bool PhysicalArrowCollector::ParallelSink() const {
+	return parallel;
+}
+
+bool PhysicalArrowCollector::SinkOrderDependent() const {
+	return true;
 }
 
 } // namespace duckdb

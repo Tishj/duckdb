@@ -82,6 +82,10 @@ ArrowArray *ArrowAppender::FinalizeChild(const LogicalType &type, unique_ptr<Arr
 	return append_data.array.get();
 }
 
+idx_t ArrowAppender::RowCount() const {
+	return row_count;
+}
+
 //! Returns the underlying arrow array
 ArrowArray ArrowAppender::Finalize() {
 	D_ASSERT(root_data.size() == types.size());
