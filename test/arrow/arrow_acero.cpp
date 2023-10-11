@@ -15,6 +15,7 @@
 #include "duckdb/main/acero/compute/expression.hpp"
 #include "duckdb/main/acero/compute/compute.hpp"
 #include "duckdb/main/acero/source_node_options.hpp"
+#include "duckdb/main/acero/util/array_vector_stream.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -97,7 +98,7 @@ TEST_CASE("Test Acero Mock - Projection", "[api]") {
 
 TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
 	const idx_t multiplicity = 2000;
-	//const idx_t multiplicity = 5;
+	// const idx_t multiplicity = 5;
 	auto input_l = MakeGroupableBatches(multiplicity);
 	auto input_r = MakeGroupableBatches(multiplicity);
 
