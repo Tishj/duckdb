@@ -55,6 +55,7 @@ SinkResultType PhysicalArrowCollector::Sink(ExecutionContext &context, DataChunk
 			lstate.FinishArray();
 		}
 	} while (processed < count);
+	return SinkResultType::NEED_MORE_INPUT;
 }
 
 SinkCombineResultType PhysicalArrowCollector::Combine(ExecutionContext &context,
