@@ -9,7 +9,10 @@ int ArrayVectorStream::GetSchema(struct ArrowArrayStream *stream, struct ArrowSc
 		return -1;
 	}
 	auto data = reinterpret_cast<ArrayVectorStream *>(stream->private_data);
-	ArrowConverter::ToArrowSchema(out, data->types, data->names, data->properties);
+	auto &types = data->table.types;
+	auto &names = data->table.names;
+	auto &properties = data->table.properties;
+	ArrowConverter::ToArrowSchema(out, types, names, properties);
 	return 0;
 }
 
@@ -61,11 +64,12 @@ int ArrayVectorStream::GetNext(struct ArrowArrayStream *stream, struct ArrowArra
 
 	out->n_children = artificial_struct->child_pointers.size();
 	out->children = (ArrowArray **)artificial_struct->child_pointers.data();
-	for (idx_t i = 0; table.arrays.size(); i++) {
+	for (idx_t i = 0; i < table.arrays.size(); i++) {
 		auto &col = table.arrays[i];
 		auto array = col->TakeChunk(chunk_index);
 		out->length = array.length;
 		artificial_struct->children[i] = array;
+		artificial_struct->child_pointers[i] = &artificial_struct->children[i];
 	}
 	chunk_index++;
 	out->private_data = artificial_struct.release();
@@ -86,9 +90,8 @@ const char *ArrayVectorStream::GetLastError(struct ArrowArrayStream *stream) {
 	return nullptr;
 }
 
-ArrayVectorStream::ArrayVectorStream(Table &&table, vector<LogicalType> types, vector<string> names,
-                                     ClientProperties properties)
-    : table(std::move(table)), types(std::move(types)), names(std::move(names)), properties(std::move(properties)) {
+ArrayVectorStream::ArrayVectorStream(Table &&table)
+    : table(std::move(table)) {
 	//! We first initialize the private data of the stream
 	stream.private_data = this;
 	//! We initialize the stream functions

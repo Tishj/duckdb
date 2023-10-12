@@ -18,16 +18,12 @@ namespace arrow {
 
 class ArrayVectorStream {
 public:
-	explicit ArrayVectorStream(Table &&table, vector<LogicalType> types, vector<string> names,
-	                           ClientProperties properties);
+	explicit ArrayVectorStream(Table &&table);
 
 public:
 	Table table;
 	ArrowArrayStream stream;
 	idx_t chunk_index = 0;
-	vector<LogicalType> types;
-	vector<string> names;
-	ClientProperties properties;
 
 private:
 	static int GetSchema(struct ArrowArrayStream *stream, struct ArrowSchema *out);

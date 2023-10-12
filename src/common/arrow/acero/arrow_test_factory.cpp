@@ -51,6 +51,7 @@ void ArrowTestFactory::ArrowArrayStreamRelease(struct ArrowArrayStream *stream) 
 	}
 	auto data = (ArrowArrayStreamData *)stream->private_data;
 	delete data;
+	stream->release = nullptr;
 	stream->private_data = nullptr;
 }
 
