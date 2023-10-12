@@ -38,7 +38,8 @@ public:
 
 public:
 	shared_ptr<arrow::Table> ToTable(vector<LogicalType> types, vector<string> names) {
-		auto table = make_shared<arrow::Table>(std::move(arrays), std::move(schema), std::move(types), std::move(names), properties);
+		auto table = make_shared<arrow::Table>(std::move(arrays), std::move(schema), std::move(types), std::move(names),
+		                                       properties);
 		return table;
 	}
 

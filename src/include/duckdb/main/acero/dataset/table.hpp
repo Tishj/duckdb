@@ -35,8 +35,10 @@ private:
 // This wraps a C-data interface arrow array
 struct Table {
 public:
-	Table(vector<unique_ptr<ChunkedArray>> arrays, unique_ptr<Schema> schema, vector<LogicalType> types, vector<string> names, ClientProperties properties)
-	    : arrays(std::move(arrays)), schema(std::move(schema)), types(std::move(types)), names(std::move(names)), properties(properties) {
+	Table(vector<unique_ptr<ChunkedArray>> arrays, unique_ptr<Schema> schema, vector<LogicalType> types,
+	      vector<string> names, ClientProperties properties)
+	    : arrays(std::move(arrays)), schema(std::move(schema)), types(std::move(types)), names(std::move(names)),
+	      properties(properties) {
 	}
 
 public:

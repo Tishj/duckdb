@@ -90,8 +90,7 @@ const char *ArrayVectorStream::GetLastError(struct ArrowArrayStream *stream) {
 	return nullptr;
 }
 
-ArrayVectorStream::ArrayVectorStream(Table &&table)
-    : table(std::move(table)) {
+ArrayVectorStream::ArrayVectorStream(Table &&table) : table(std::move(table)) {
 	//! We first initialize the private data of the stream
 	stream.private_data = this;
 	//! We initialize the stream functions

@@ -6,8 +6,7 @@ add_library_unity(
   arrow_stream_factory.cpp
   dataset.cpp
   arrow_conversion.cpp
-  array_vector_stream.cpp
-)
+  array_vector_stream.cpp)
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_common_arrow_acero>
     PARENT_SCOPE)

@@ -28,16 +28,16 @@ void VerifyResult(arrow::Table &table) {
 	Connection conn(db);
 	auto params = ArrowTestHelper::ConstructArrowScan(stream);
 	auto result = ArrowTestHelper::ScanArrowObject(conn, params);
-	idx_t tuple_count = 0;
-	while (true) {
-		auto chunk = result->Fetch();
-		if (!chunk) {
-			break;
-		}
-		tuple_count += chunk->size();
-	}
-	Printer::Print(StringUtil::Format("Produced tuples: %d\n", tuple_count));
-	//result->Print();
+	// idx_t tuple_count = 0;
+	// while (true) {
+	//	auto chunk = result->Fetch();
+	//	if (!chunk) {
+	//		break;
+	//	}
+	//	tuple_count += chunk->size();
+	//}
+	// Printer::Print(StringUtil::Format("Produced tuples: %d\n", tuple_count));
+	result->Print();
 }
 
 void ExecutePlanAndCollectAsTable(ac::Declaration plan) {
