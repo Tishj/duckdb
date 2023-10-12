@@ -5,6 +5,7 @@ add_library_unity(
   arrow_test_factory.cpp
   arrow_stream_factory.cpp
   dataset.cpp
+  array_vector_stream.cpp
   arrow_conversion.cpp)
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_common_arrow_acero>

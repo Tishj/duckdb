@@ -16,12 +16,35 @@
 #include "duckdb/main/acero/compute/compute.hpp"
 #include "duckdb/main/acero/source_node_options.hpp"
 
+#include "duckdb/main/acero/util/array_vector_stream.hpp"
+
 using namespace duckdb;
 using namespace std;
+
+void VerifyResult(arrow::Table &table) {
+	auto array_vector_stream = new arrow::ArrayVectorStream(std::move(table));
+	auto &stream = array_vector_stream->stream;
+
+	DuckDB db(nullptr);
+	Connection conn(db);
+	auto params = ArrowTestHelper::ConstructArrowScan(stream);
+	auto result = ArrowTestHelper::ScanArrowObject(conn, params);
+	idx_t tuple_count = 0;
+	while (true) {
+		auto chunk = result->Fetch();
+		if (!chunk) {
+			break;
+		}
+		tuple_count += chunk->size();
+	}
+	Printer::Print(StringUtil::Format("Produced tuples: %d\n", tuple_count));
+	// result->Print();
+}
 
 void ExecutePlanAndCollectAsTable(ac::Declaration plan) {
 	// collect sink_reader into a Table
 	auto result = ac::DeclarationToTable(std::move(plan));
+	VerifyResult(*result);
 }
 
 std::shared_ptr<arrow::dataset::Dataset> GetDataset() {
@@ -97,7 +120,7 @@ TEST_CASE("Test Acero Mock - Projection", "[api]") {
 
 TEST_CASE("Test Acero Mock - Hash Join", "[api]") {
 	const idx_t multiplicity = 2000;
-	//const idx_t multiplicity = 5;
+	// const idx_t multiplicity = 5;
 	auto input_l = MakeGroupableBatches(multiplicity);
 	auto input_r = MakeGroupableBatches(multiplicity);
 

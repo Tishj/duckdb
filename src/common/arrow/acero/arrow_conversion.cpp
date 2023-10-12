@@ -33,12 +33,13 @@ public:
 			auto &chunked_array = arrays[i];
 			chunked_array->AddChunk(std::move(wrapper));
 		}
-		//array.release = nullptr;
+		// array.release = nullptr;
 	}
 
 public:
-	shared_ptr<arrow::Table> ToTable() {
-		auto table = make_shared<arrow::Table>(std::move(arrays), std::move(schema));
+	shared_ptr<arrow::Table> ToTable(vector<LogicalType> types, vector<string> names) {
+		auto table = make_shared<arrow::Table>(std::move(arrays), std::move(schema), std::move(types), std::move(names),
+		                                       properties);
 		return table;
 	}
 
@@ -51,7 +52,7 @@ public:
 
 } // namespace
 
-//static bool FetchArrowChunk(ArrowConversionResult &result, ChunkScanState &scan_state) {
+// static bool FetchArrowChunk(ArrowConversionResult &result, ChunkScanState &scan_state) {
 //	auto rows_per_batch = result.rows_per_batch;
 //	auto properties = result.properties;
 
@@ -73,9 +74,7 @@ shared_ptr<arrow::Table> ArrowConversion::ConvertToTable(unique_ptr<QueryResult>
 	for (auto &array : arrays) {
 		conversion.AddChunk(*array);
 	}
-
-	auto &schema = conversion.schema->arrow_schema;
-	return conversion.ToTable();
+	return conversion.ToTable(result->types, result->names);
 }
 
 } // namespace ac

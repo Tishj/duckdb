@@ -42,13 +42,12 @@ void ArrowAppender::ReleaseArray(ArrowArray *array) {
 	auto holder = static_cast<ArrowAppendData *>(array->private_data);
 	for (int64_t i = 0; i < array->n_children; i++) {
 		auto child = array->children[i];
-		D_ASSERT(child);
-		if (!child || !child->release) {
+		if (!child->release) {
 			// Child was moved out of the array
 			continue;
 		}
 		child->release(child);
-		array->children[i] = nullptr;
+		D_ASSERT(!child->release);
 	}
 	if (array->dictionary && array->dictionary->release) {
 		array->dictionary->release(array->dictionary);
@@ -89,7 +88,7 @@ ArrowArray ArrowAppender::Finalize() {
 	auto root_holder = make_uniq<ArrowAppendData>(options);
 
 	ArrowArray result;
-	root_holder->child_pointers.resize(types.size());
+	AddChildren(*root_holder, types.size());
 	result.children = root_holder->child_pointers.data();
 	result.n_children = types.size();
 
@@ -103,7 +102,7 @@ ArrowArray ArrowAppender::Finalize() {
 	root_holder->child_data = std::move(root_data);
 
 	for (idx_t i = 0; i < root_holder->child_data.size(); i++) {
-		root_holder->child_pointers[i] = ArrowAppender::FinalizeChild(types[i], std::move(root_holder->child_data[i]));
+		root_holder->child_arrays[i] = *ArrowAppender::FinalizeChild(types[i], std::move(root_holder->child_data[i]));
 	}
 
 	// Release ownership to caller
@@ -248,6 +247,14 @@ unique_ptr<ArrowAppendData> ArrowAppender::InitializeChild(const LogicalType &ty
 	result->validity.reserve(byte_count);
 	result->initialize(*result, type, capacity);
 	return result;
+}
+
+void ArrowAppender::AddChildren(ArrowAppendData &data, idx_t count) {
+	data.child_pointers.resize(count);
+	data.child_arrays.resize(count);
+	for (idx_t i = 0; i < count; i++) {
+		data.child_pointers[i] = &data.child_arrays[i];
+	}
 }
 
 } // namespace duckdb
