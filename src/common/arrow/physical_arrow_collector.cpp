@@ -45,7 +45,7 @@ SinkResultType PhysicalArrowCollector::Sink(ExecutionContext &context, DataChunk
 		// Figure out how much we can still append to this chunk
 		auto row_count = appender->RowCount();
 		D_ASSERT(record_batch_size > row_count);
-		auto to_append = MinValue(record_batch_size - row_count, chunk.size());
+		auto to_append = MinValue(record_batch_size - row_count, count - processed);
 
 		// Append and check if the chunk is finished
 		appender->Append(chunk, processed, processed + to_append, count);
