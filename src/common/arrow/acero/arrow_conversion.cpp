@@ -34,8 +34,8 @@ public:
 	}
 
 public:
-	shared_ptr<arrow::Table> ToTable() {
-		auto table = make_shared<arrow::Table>(std::move(arrays), std::move(schema));
+	shared_ptr<arrow::Table> ToTable(vector<LogicalType> types, vector<string> names) {
+		auto table = make_shared<arrow::Table>(std::move(arrays), std::move(schema), std::move(types), std::move(names), properties);
 		return table;
 	}
 
@@ -76,7 +76,7 @@ shared_ptr<arrow::Table> ArrowConversion::ConvertToTable(unique_ptr<QueryResult>
 
 	while (FetchArrowChunk(conversion, scan_state)) {
 	}
-	return conversion.ToTable();
+	return conversion.ToTable(result->types, result->names);
 }
 
 } // namespace ac
