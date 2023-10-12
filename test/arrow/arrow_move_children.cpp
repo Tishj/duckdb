@@ -36,7 +36,7 @@ void AssertExpectedResult(ArrowSchema *schema, ArrowArrayWrapper &array, T expec
 	auto params = ArrowTestHelper::ConstructArrowScan(stream);
 
 	auto result = ArrowTestHelper::ScanArrowObject(conn, params);
-	unique_ptr<DataChunk> chunk;
+	duckdb::unique_ptr<DataChunk> chunk;
 	while (true) {
 		chunk = result->Fetch();
 		if (!chunk) {
@@ -60,9 +60,9 @@ void AssertExpectedResult(ArrowSchema *schema, ArrowArrayWrapper &array, T expec
 	}
 }
 
-vector<ArrowArrayWrapper> FetchChildrenFromArray(shared_ptr<ArrowArrayWrapper> parent) {
+duckdb::vector<ArrowArrayWrapper> FetchChildrenFromArray(shared_ptr<ArrowArrayWrapper> parent) {
 	D_ASSERT(parent->arrow_array.release);
-	vector<ArrowArrayWrapper> children;
+	duckdb::vector<ArrowArrayWrapper> children;
 	children.resize(parent->arrow_array.n_children);
 	for (int64_t i = 0; i < parent->arrow_array.n_children; i++) {
 		auto child = parent->arrow_array.children[i];
@@ -119,8 +119,8 @@ TEST_CASE("Test move children", "[arrow]") {
 		D_ASSERT(children.size() == 5);
 		for (idx_t i = 0; i < children.size(); i++) {
 			ArrowSchema schema;
-			vector<LogicalType> single_type {res_types[i]};
-			vector<string> single_name {res_names[i]};
+			duckdb::vector<LogicalType> single_type {res_types[i]};
+			duckdb::vector<string> single_name {res_names[i]};
 			ArrowConverter::ToArrowSchema(&schema, single_type, single_name, res_properties);
 
 			if (i == 0) {
