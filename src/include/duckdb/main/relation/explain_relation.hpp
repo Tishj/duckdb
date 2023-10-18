@@ -21,6 +21,7 @@ public:
 	ExplainType type;
 
 public:
+	void Verify() override;
 	BoundStatement Bind(Binder &binder) override;
 	const vector<ColumnDefinition> &Columns() override;
 	string ToString(idx_t depth) override;

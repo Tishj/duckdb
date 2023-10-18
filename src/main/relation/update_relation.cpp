@@ -13,7 +13,11 @@ UpdateRelation::UpdateRelation(ClientContextWrapper &context, unique_ptr<ParsedE
       schema_name(std::move(schema_name_p)), table_name(std::move(table_name_p)),
       update_columns(std::move(update_columns_p)), expressions(std::move(expressions_p)) {
 	D_ASSERT(update_columns.size() == expressions.size());
+}
+
+void UpdateRelation::Verify() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
+	verified = true;
 }
 
 BoundStatement UpdateRelation::Bind(Binder &binder) {

@@ -13,7 +13,11 @@ CrossProductRelation::CrossProductRelation(shared_ptr<Relation> left_p, shared_p
 	if (left->context.GetContext() != right->context.GetContext()) {
 		throw Exception("Cannot combine LEFT and RIGHT relations of different connections!");
 	}
+}
+
+void CrossProductRelation::Verify() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
+	verified = true;
 }
 
 unique_ptr<QueryNode> CrossProductRelation::GetQueryNode() {

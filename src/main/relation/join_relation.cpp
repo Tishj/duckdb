@@ -14,7 +14,12 @@ JoinRelation::JoinRelation(shared_ptr<Relation> left_p, shared_ptr<Relation> rig
 	if (left->context.GetContext() != right->context.GetContext()) {
 		throw Exception("Cannot combine LEFT and RIGHT relations of different connections!");
 	}
-	context.GetContext()->TryBindRelation(*this, this->columns);
+}
+
+void JoinRelation::Verify() {
+	vector<ColumnDefinition> dummy_columns;
+	context.GetContext()->TryBindRelation(*this, dummy_columns);
+	verified = true;
 }
 
 JoinRelation::JoinRelation(shared_ptr<Relation> left_p, shared_ptr<Relation> right_p, vector<string> using_columns_p,
@@ -24,7 +29,6 @@ JoinRelation::JoinRelation(shared_ptr<Relation> left_p, shared_ptr<Relation> rig
 	if (left->context.GetContext() != right->context.GetContext()) {
 		throw Exception("Cannot combine LEFT and RIGHT relations of different connections!");
 	}
-	context.GetContext()->TryBindRelation(*this, this->columns);
 }
 
 unique_ptr<QueryNode> JoinRelation::GetQueryNode() {

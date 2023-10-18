@@ -696,6 +696,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 
 	auto read_json_relation = make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect);
 	if (read_json_relation == nullptr) {
+		// FIXME: make_shared will never return nullptr ??
 		throw BinderException("read_json can only be used when the JSON extension is (statically) loaded");
 	}
 	return make_uniq<DuckDBPyRelation>(std::move(read_json_relation));
@@ -1322,7 +1323,7 @@ static unique_ptr<Relation> CreateArrowScan(const shared_ptr<ClientContext> &con
 	children.push_back(Value::POINTER(CastPointerToValue(stream_factory_produce)));
 	children.push_back(Value::POINTER(CastPointerToValue(stream_factory_get_schema)));
 
-	auto table_function = make_uniq<TableFunctionRelation>(context, "arrow_scan", std::move(children), nullptr, false);
+	auto table_function = make_uniq<TableFunctionRelation>(context, "arrow_scan", std::move(children), nullptr);
 	table_function->extra_dependencies =
 	    make_shared<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), entry));
 	return std::move(table_function);
@@ -1349,7 +1350,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		children.push_back(Value::POINTER(CastPointerToValue(new_df.ptr())));
 
 		auto table_function =
-		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr, false);
+		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
 		table_function->extra_dependencies =
 		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(new_df));
 		return std::move(table_function);
@@ -1364,7 +1365,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		auto rel = pyrel->GetRelPtr();
 		// create a subquery relation from the underlying relation object
 		string alias = "subquery_relation" + StringUtil::GenerateRandomName(16);
-		auto subquery_rel = make_uniq<SubqueryRelation>(std::move(rel), alias, false);
+		auto subquery_rel = make_uniq<SubqueryRelation>(std::move(rel), alias);
 		return std::move(subquery_rel);
 	}
 
@@ -1413,7 +1414,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		children.push_back(Value::POINTER(CastPointerToValue(data.ptr())));
 
 		auto table_function =
-		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr, false);
+		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
 		table_function->extra_dependencies =
 		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(data));
 		return std::move(table_function);

@@ -20,14 +20,17 @@ ValueRelation::ValueRelation(const std::shared_ptr<ClientContext> &context, cons
 		}
 		this->expressions.push_back(std::move(expressions));
 	}
-	context->TryBindRelation(*this, this->columns);
+}
+
+void ValueRelation::Verify() {
+	context.GetContext()->TryBindRelation(*this, this->columns);
+	verified = true;
 }
 
 ValueRelation::ValueRelation(const std::shared_ptr<ClientContext> &context, const string &values_list,
                              vector<string> names_p, string alias_p)
     : Relation(context, RelationType::VALUE_LIST_RELATION), names(std::move(names_p)), alias(std::move(alias_p)) {
 	this->expressions = Parser::ParseValuesList(values_list, context->GetParserOptions());
-	context->TryBindRelation(*this, this->columns);
 }
 
 unique_ptr<QueryNode> ValueRelation::GetQueryNode() {

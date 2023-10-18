@@ -10,10 +10,14 @@ QueryRelation::QueryRelation(const std::shared_ptr<ClientContext> &context, uniq
                              string alias_p)
     : Relation(context, RelationType::QUERY_RELATION), select_stmt(std::move(select_stmt_p)),
       alias(std::move(alias_p)) {
-	context->TryBindRelation(*this, this->columns);
 }
 
 QueryRelation::~QueryRelation() {
+}
+
+void QueryRelation::Verify() {
+	context.GetContext()->TryBindRelation(*this, columns);
+	verified = true;
 }
 
 unique_ptr<SelectStatement> QueryRelation::ParseStatement(ClientContext &context, const string &query,

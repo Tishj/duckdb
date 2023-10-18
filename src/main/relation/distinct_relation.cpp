@@ -7,8 +7,12 @@ namespace duckdb {
 DistinctRelation::DistinctRelation(shared_ptr<Relation> child_p)
     : Relation(child_p->context, RelationType::DISTINCT_RELATION), child(std::move(child_p)) {
 	D_ASSERT(child.get() != this);
+}
+
+void DistinctRelation::Verify() {
 	vector<ColumnDefinition> dummy_columns;
 	context.GetContext()->TryBindRelation(*this, dummy_columns);
+	verified = true;
 }
 
 unique_ptr<QueryNode> DistinctRelation::GetQueryNode() {
@@ -28,7 +32,6 @@ const vector<ColumnDefinition> &DistinctRelation::Columns() {
 string DistinctRelation::ToString(idx_t depth) {
 	string str = RenderWhitespace(depth) + "Distinct\n";
 	return str + child->ToString(depth + 1);
-	;
 }
 
 } // namespace duckdb

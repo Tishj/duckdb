@@ -11,8 +11,12 @@ FilterRelation::FilterRelation(shared_ptr<Relation> child_p, unique_ptr<ParsedEx
     : Relation(child_p->context, RelationType::FILTER_RELATION), condition(std::move(condition_p)),
       child(std::move(child_p)) {
 	D_ASSERT(child.get() != this);
+}
+
+void FilterRelation::Verify() {
 	vector<ColumnDefinition> dummy_columns;
 	context.GetContext()->TryBindRelation(*this, dummy_columns);
+	verified = true;
 }
 
 unique_ptr<QueryNode> FilterRelation::GetQueryNode() {

@@ -26,6 +26,8 @@ DuckDBPyRelation::DuckDBPyRelation(shared_ptr<Relation> rel_p) : rel(std::move(r
 	if (!rel) {
 		throw InternalException("DuckDBPyRelation created without a relation");
 	}
+	rel = Relation::EnsureVerified(rel);
+
 	this->executed = false;
 	auto &columns = rel->Columns();
 	for (auto &col : columns) {
@@ -38,6 +40,7 @@ DuckDBPyRelation::DuckDBPyRelation(unique_ptr<DuckDBPyResult> result_p) : rel(nu
 	if (!result) {
 		throw InternalException("DuckDBPyRelation created without a result");
 	}
+
 	this->executed = true;
 	this->types = result->GetTypes();
 	this->names = result->GetNames();
@@ -140,7 +143,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::EmptyResult(const std::shared_ptr
 	}
 	vector<vector<Value>> single_row(1, dummy_values);
 	auto values_relation =
-	    make_uniq<DuckDBPyRelation>(make_shared<ValueRelation>(context, single_row, std::move(names)));
+	    make_uniq<DuckDBPyRelation>(Relation::EnsureVerified(make_shared<ValueRelation>(context, single_row, std::move(names))));
 	// Add a filter on an impossible condition
 	return values_relation->FilterFromExpression("true = false");
 }

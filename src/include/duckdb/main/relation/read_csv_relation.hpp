@@ -26,6 +26,7 @@ public:
 	bool auto_detect;
 
 public:
+	void Verify() override;
 	string GetAlias() override;
 };
 

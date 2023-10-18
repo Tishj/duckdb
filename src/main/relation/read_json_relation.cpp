@@ -13,6 +13,11 @@ ReadJSONRelation::ReadJSONRelation(const shared_ptr<ClientContext> &context, str
 	}
 }
 
+void ReadJSONRelation::Verify() {
+	context.GetContext()->TryBindRelation(*this, columns);
+	verified = true;
+}
+
 string ReadJSONRelation::GetAlias() {
 	return alias;
 }

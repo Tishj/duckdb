@@ -9,16 +9,18 @@ AggregateRelation::AggregateRelation(shared_ptr<Relation> child_p,
                                      vector<unique_ptr<ParsedExpression>> parsed_expressions)
     : Relation(child_p->context, RelationType::AGGREGATE_RELATION), expressions(std::move(parsed_expressions)),
       child(std::move(child_p)) {
+}
+
+void AggregateRelation::Verify() {
 	// bind the expressions
 	context.GetContext()->TryBindRelation(*this, this->columns);
+	verified = true;
 }
 
 AggregateRelation::AggregateRelation(shared_ptr<Relation> child_p,
                                      vector<unique_ptr<ParsedExpression>> parsed_expressions, GroupByNode groups_p)
     : Relation(child_p->context, RelationType::AGGREGATE_RELATION), expressions(std::move(parsed_expressions)),
       groups(std::move(groups_p)), child(std::move(child_p)) {
-	// bind the expressions
-	context.GetContext()->TryBindRelation(*this, this->columns);
 }
 
 AggregateRelation::AggregateRelation(shared_ptr<Relation> child_p,
@@ -35,8 +37,6 @@ AggregateRelation::AggregateRelation(shared_ptr<Relation> child_p,
 		}
 		groups.grouping_sets.push_back(std::move(grouping_set));
 	}
-	// bind the expressions
-	context.GetContext()->TryBindRelation(*this, this->columns);
 }
 
 unique_ptr<QueryNode> AggregateRelation::GetQueryNode() {

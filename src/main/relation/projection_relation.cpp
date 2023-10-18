@@ -17,8 +17,11 @@ ProjectionRelation::ProjectionRelation(shared_ptr<Relation> child_p,
 			expressions[i]->alias = aliases[i];
 		}
 	}
-	// bind the expressions
-	context.GetContext()->TryBindRelation(*this, this->columns);
+}
+
+void ProjectionRelation::Verify() {
+	context.GetContext()->TryBindRelation(*this, columns);
+	verified = true;
 }
 
 unique_ptr<QueryNode> ProjectionRelation::GetQueryNode() {

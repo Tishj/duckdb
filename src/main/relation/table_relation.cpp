@@ -20,6 +20,11 @@ unique_ptr<QueryNode> TableRelation::GetQueryNode() {
 	return std::move(result);
 }
 
+void TableRelation::Verify() {
+	// FIXME: Does this not need verification ?
+	verified = true;
+}
+
 unique_ptr<TableRef> TableRelation::GetTableRef() {
 	auto table_ref = make_uniq<BaseTableRef>();
 	table_ref->schema_name = description->schema;
