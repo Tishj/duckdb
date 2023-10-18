@@ -701,7 +701,7 @@ PathLike DuckDBPyConnection::GetPathLike(const py::object &object) {
 	return PathLike::Create(object, *this);
 }
 
-static shared_ptr<DuckDBPyType> GetType(unique_ptr<Connection> &connection, py::object obj) {
+static shared_ptr<DuckDBPyType> GetType(unique_ptr<Connection> &connection, const py::object &obj) {
 	if (py::isinstance<py::str>(obj)) {
 		// Could be a user type, use the connection to retrieve the type from the catalog
 		if (!connection) {
