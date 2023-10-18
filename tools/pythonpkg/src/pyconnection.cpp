@@ -962,17 +962,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const string &query, s
 	return make_uniq<DuckDBPyRelation>(make_uniq<ValueRelation>(connection->context, values, names, alias));
 }
 
-unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
-	auto qualified_name = QualifiedName::Parse(tname);
-	if (qualified_name.schema.empty()) {
-		qualified_name.schema = DEFAULT_SCHEMA;
-	}
-	return make_uniq<DuckDBPyRelation>(connection->Table(qualified_name.schema, qualified_name.name));
-}
-
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Values(py::object params) {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
@@ -1469,6 +1458,57 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 	}
 	// Not found :(
 	return nullptr;
+}
+
+static unique_ptr<Relation> ScanReplacementRelation(ClientContext &context, const string &table_name) {
+	py::gil_scoped_acquire acquire;
+	auto py_table_name = py::str(table_name);
+	// Here we do an exhaustive search on the frame lineage
+	auto current_frame = py::module::import("inspect").attr("currentframe")();
+	auto client_properties = context.GetClientProperties();
+	while (hasattr(current_frame, "f_locals")) {
+		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
+		// search local dictionary
+		if (local_dict) {
+			auto result = TryReplaceWithRelation(context, local_dict, py_table_name, client_properties, current_frame);
+			if (result) {
+				return result;
+			}
+		}
+		// search global dictionary
+		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
+		if (global_dict) {
+			auto result = TryReplaceWithRelation(context, global_dict, py_table_name, client_properties, current_frame);
+			if (result) {
+				return result;
+			}
+		}
+		current_frame = current_frame.attr("f_back");
+	}
+	// Not found :(
+	return nullptr;
+}
+
+unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
+	if (!connection) {
+		throw ConnectionException("Connection has already been closed");
+	}
+	auto qualified_name = QualifiedName::Parse(tname);
+	if (qualified_name.schema.empty()) {
+		qualified_name.schema = DEFAULT_SCHEMA;
+	}
+	auto table_info = connection->TableInfo(qualified_name.schema, qualified_name.name);
+	if (!table_info) {
+		// Try to do a replacement scan
+		auto relation = ScanReplacementRelation(*connection->context, tname);
+		if (relation) {
+			return make_uniq<DuckDBPyRelation>(std::move(relation));
+		}
+		throw CatalogException(
+		    "Provided name has to be either a table/view or be a valid candidate for replacement scans");
+	} else {
+		return make_uniq<DuckDBPyRelation>(connection->Table(qualified_name.schema, qualified_name.name));
+	}
 }
 
 unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_dict) {

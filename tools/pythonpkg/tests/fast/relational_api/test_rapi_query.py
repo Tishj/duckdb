@@ -35,7 +35,12 @@ class TestRAPIQuery(object):
         result = rel.execute()
         assert result.fetchall() == [tuple([x]) for x in input]
 
-    def test_query_table_unrelated(self, tbl_table):
+    def test_table_replacement_scan(self, duckdb_cursor):
+        df = duckdb_cursor.values([1, 2, 3]).df()
+        res = duckdb_cursor.table("df").fetchall()
+        assert res == [(1, 2, 3)]
+
+    def test_query_table_tbl(self, tbl_table):
         con = duckdb.default_connection
         rel = con.table("tbl")
         # Querying a table relation
