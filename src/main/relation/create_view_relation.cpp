@@ -18,9 +18,8 @@ CreateViewRelation::CreateViewRelation(shared_ptr<Relation> child_p, string sche
       temporary(temporary_p) {
 }
 
-void CreateViewRelation::Verify() {
+void CreateViewRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 BoundStatement CreateViewRelation::Bind(Binder &binder) {

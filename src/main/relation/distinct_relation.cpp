@@ -9,10 +9,9 @@ DistinctRelation::DistinctRelation(shared_ptr<Relation> child_p)
 	D_ASSERT(child.get() != this);
 }
 
-void DistinctRelation::Verify() {
+void DistinctRelation::VerifyRelation() {
 	vector<ColumnDefinition> dummy_columns;
 	context.GetContext()->TryBindRelation(*this, dummy_columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> DistinctRelation::GetQueryNode() {

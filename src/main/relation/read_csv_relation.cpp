@@ -36,9 +36,8 @@ ReadCSVRelation::ReadCSVRelation(const shared_ptr<ClientContext> &context, const
 	AddNamedParameter("columns", Value::STRUCT(std::move(column_names)));
 }
 
-void ReadCSVRelation::Verify() {
-	// No need to verify, we already have the columns
-	verified = true;
+void ReadCSVRelation::VerifyRelation() {
+	// no-op, just override parent behavior
 }
 
 ReadCSVRelation::ReadCSVRelation(const std::shared_ptr<ClientContext> &context, const string &csv_file,

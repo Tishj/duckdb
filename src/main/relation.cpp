@@ -211,6 +211,13 @@ shared_ptr<Relation> Relation::Aggregate(vector<unique_ptr<ParsedExpression>> ex
 	    make_shared<AggregateRelation>(shared_from_this(), std::move(expressions), std::move(groups)));
 }
 
+void Relation::Verify() {
+	if (!verified) {
+		VerifyRelation();
+	}
+	verified = true;
+}
+
 string Relation::GetAlias() {
 	return "relation";
 }

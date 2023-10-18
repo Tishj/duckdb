@@ -12,9 +12,8 @@ DeleteRelation::DeleteRelation(ClientContextWrapper &context, unique_ptr<ParsedE
       schema_name(std::move(schema_name_p)), table_name(std::move(table_name_p)) {
 }
 
-void DeleteRelation::Verify() {
+void DeleteRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 BoundStatement DeleteRelation::Bind(Binder &binder) {

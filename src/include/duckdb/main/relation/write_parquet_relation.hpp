@@ -23,7 +23,7 @@ public:
 	case_insensitive_map_t<vector<Value>> options;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	BoundStatement Bind(Binder &binder) override;
 	const vector<ColumnDefinition> &Columns() override;
 	string ToString(idx_t depth) override;

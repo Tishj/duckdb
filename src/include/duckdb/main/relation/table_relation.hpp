@@ -20,7 +20,7 @@ public:
 	unique_ptr<TableDescription> description;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	unique_ptr<QueryNode> GetQueryNode() override;
 
 	const vector<ColumnDefinition> &Columns() override;

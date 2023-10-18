@@ -12,9 +12,8 @@ WriteParquetRelation::WriteParquetRelation(shared_ptr<Relation> child_p, string 
       parquet_file(std::move(parquet_file_p)), options(std::move(options_p)) {
 }
 
-void WriteParquetRelation::Verify() {
+void WriteParquetRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 BoundStatement WriteParquetRelation::Bind(Binder &binder) {

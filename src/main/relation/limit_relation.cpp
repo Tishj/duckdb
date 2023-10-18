@@ -12,11 +12,10 @@ LimitRelation::LimitRelation(shared_ptr<Relation> child_p, int64_t limit, int64_
 	D_ASSERT(child.get() != this);
 }
 
-void LimitRelation::Verify() {
+void LimitRelation::VerifyRelation() {
 	if (!child->verified) {
-		child->Verify();
+		child->VerifyRelation();
 	}
-	verified = true;
 }
 
 unique_ptr<QueryNode> LimitRelation::GetQueryNode() {

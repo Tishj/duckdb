@@ -27,7 +27,7 @@ public:
 	shared_ptr<Relation> input_relation;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	unique_ptr<QueryNode> GetQueryNode() override;
 	unique_ptr<TableRef> GetTableRef() override;
 

@@ -24,7 +24,7 @@ public:
 	vector<ColumnDefinition> columns;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	static unique_ptr<SelectStatement> ParseStatement(ClientContext &context, const string &query, const string &error);
 	unique_ptr<QueryNode> GetQueryNode() override;
 	unique_ptr<TableRef> GetTableRef() override;

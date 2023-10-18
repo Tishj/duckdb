@@ -17,7 +17,7 @@ public:
 	string alias;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	string GetAlias() override;
 };
 

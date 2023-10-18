@@ -13,10 +13,9 @@ FilterRelation::FilterRelation(shared_ptr<Relation> child_p, unique_ptr<ParsedEx
 	D_ASSERT(child.get() != this);
 }
 
-void FilterRelation::Verify() {
+void FilterRelation::VerifyRelation() {
 	vector<ColumnDefinition> dummy_columns;
 	context.GetContext()->TryBindRelation(*this, dummy_columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> FilterRelation::GetQueryNode() {

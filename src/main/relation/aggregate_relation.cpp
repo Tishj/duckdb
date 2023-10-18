@@ -11,10 +11,9 @@ AggregateRelation::AggregateRelation(shared_ptr<Relation> child_p,
       child(std::move(child_p)) {
 }
 
-void AggregateRelation::Verify() {
+void AggregateRelation::VerifyRelation() {
 	// bind the expressions
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 AggregateRelation::AggregateRelation(shared_ptr<Relation> child_p,

@@ -21,9 +21,8 @@ unique_ptr<QueryNode> TableRelation::GetQueryNode() {
 	return std::move(result);
 }
 
-void TableRelation::Verify() {
+void TableRelation::VerifyRelation() {
 	// FIXME: Does this not need verification ?
-	verified = true;
 }
 
 unique_ptr<TableRef> TableRelation::GetTableRef() {

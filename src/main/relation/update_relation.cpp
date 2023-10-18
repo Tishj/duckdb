@@ -15,9 +15,8 @@ UpdateRelation::UpdateRelation(ClientContextWrapper &context, unique_ptr<ParsedE
 	D_ASSERT(update_columns.size() == expressions.size());
 }
 
-void UpdateRelation::Verify() {
+void UpdateRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 BoundStatement UpdateRelation::Bind(Binder &binder) {

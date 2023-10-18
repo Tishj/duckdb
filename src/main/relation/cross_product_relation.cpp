@@ -15,9 +15,8 @@ CrossProductRelation::CrossProductRelation(shared_ptr<Relation> left_p, shared_p
 	}
 }
 
-void CrossProductRelation::Verify() {
+void CrossProductRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> CrossProductRelation::GetQueryNode() {

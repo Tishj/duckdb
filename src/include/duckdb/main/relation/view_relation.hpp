@@ -21,7 +21,7 @@ public:
 	vector<ColumnDefinition> columns;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	unique_ptr<QueryNode> GetQueryNode() override;
 	unique_ptr<TableRef> GetTableRef() override;
 

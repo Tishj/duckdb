@@ -36,9 +36,8 @@ TableFunctionRelation::TableFunctionRelation(const shared_ptr<ClientContext> &co
       parameters(std::move(parameters_p)), input_relation(std::move(input_relation_p)) {
 }
 
-void TableFunctionRelation::Verify() {
+void TableFunctionRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> TableFunctionRelation::GetQueryNode() {

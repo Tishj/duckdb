@@ -24,7 +24,7 @@ public:
 	string table_name;
 
 public:
-	void Verify() override;
+	void VerifyRelation() override;
 	BoundStatement Bind(Binder &binder) override;
 	const vector<ColumnDefinition> &Columns() override;
 	string ToString(idx_t depth) override;

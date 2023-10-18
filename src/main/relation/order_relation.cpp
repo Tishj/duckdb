@@ -11,9 +11,8 @@ OrderRelation::OrderRelation(shared_ptr<Relation> child_p, vector<OrderByNode> o
 	D_ASSERT(child.get() != this);
 }
 
-void OrderRelation::Verify() {
+void OrderRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> OrderRelation::GetQueryNode() {

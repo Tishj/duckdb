@@ -12,9 +12,8 @@ WriteCSVRelation::WriteCSVRelation(shared_ptr<Relation> child_p, string csv_file
       csv_file(std::move(csv_file_p)), options(std::move(options_p)) {
 }
 
-void WriteCSVRelation::Verify() {
+void WriteCSVRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 BoundStatement WriteCSVRelation::Bind(Binder &binder) {

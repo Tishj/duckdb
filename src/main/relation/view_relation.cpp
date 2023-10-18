@@ -12,9 +12,8 @@ ViewRelation::ViewRelation(const std::shared_ptr<ClientContext> &context, string
       view_name(std::move(view_name_p)) {
 }
 
-void ViewRelation::Verify() {
+void ViewRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> ViewRelation::GetQueryNode() {

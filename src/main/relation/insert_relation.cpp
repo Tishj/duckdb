@@ -12,9 +12,8 @@ InsertRelation::InsertRelation(shared_ptr<Relation> child_p, string schema_name,
       schema_name(std::move(schema_name)), table_name(std::move(table_name)) {
 }
 
-void InsertRelation::Verify() {
+void InsertRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, columns);
-	verified = true;
 }
 
 BoundStatement InsertRelation::Bind(Binder &binder) {

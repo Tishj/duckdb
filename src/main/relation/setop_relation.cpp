@@ -24,9 +24,8 @@ unique_ptr<QueryNode> SetOpRelation::GetQueryNode() {
 	return std::move(result);
 }
 
-void SetOpRelation::Verify() {
+void SetOpRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, columns);
-	verified = true;
 }
 
 string SetOpRelation::GetAlias() {

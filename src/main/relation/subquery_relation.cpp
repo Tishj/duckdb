@@ -10,10 +10,9 @@ SubqueryRelation::SubqueryRelation(shared_ptr<Relation> child_p, string alias_p,
 	D_ASSERT(child.get() != this);
 }
 
-void SubqueryRelation::Verify() {
+void SubqueryRelation::VerifyRelation() {
 	vector<ColumnDefinition> dummy_columns;
 	context.GetContext()->TryBindRelation(*this, dummy_columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> SubqueryRelation::GetQueryNode() {

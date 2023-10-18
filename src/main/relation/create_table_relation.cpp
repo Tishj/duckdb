@@ -11,9 +11,8 @@ CreateTableRelation::CreateTableRelation(shared_ptr<Relation> child_p, string sc
       schema_name(std::move(schema_name)), table_name(std::move(table_name)) {
 }
 
-void CreateTableRelation::Verify() {
+void CreateTableRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 BoundStatement CreateTableRelation::Bind(Binder &binder) {

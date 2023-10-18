@@ -22,9 +22,8 @@ ValueRelation::ValueRelation(const std::shared_ptr<ClientContext> &context, cons
 	}
 }
 
-void ValueRelation::Verify() {
+void ValueRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
-	verified = true;
 }
 
 ValueRelation::ValueRelation(const std::shared_ptr<ClientContext> &context, const string &values_list,

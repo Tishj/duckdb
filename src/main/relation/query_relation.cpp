@@ -15,9 +15,8 @@ QueryRelation::QueryRelation(const std::shared_ptr<ClientContext> &context, uniq
 QueryRelation::~QueryRelation() {
 }
 
-void QueryRelation::Verify() {
+void QueryRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, columns);
-	verified = true;
 }
 
 unique_ptr<SelectStatement> QueryRelation::ParseStatement(ClientContext &context, const string &query,

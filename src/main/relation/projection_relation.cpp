@@ -19,9 +19,8 @@ ProjectionRelation::ProjectionRelation(shared_ptr<Relation> child_p,
 	}
 }
 
-void ProjectionRelation::Verify() {
+void ProjectionRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, columns);
-	verified = true;
 }
 
 unique_ptr<QueryNode> ProjectionRelation::GetQueryNode() {

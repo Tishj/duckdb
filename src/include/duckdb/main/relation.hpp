@@ -51,7 +51,8 @@ public:
 	bool verified = false;
 
 public:
-	DUCKDB_API virtual void Verify() = 0;
+	DUCKDB_API virtual void VerifyRelation() = 0;
+	DUCKDB_API virtual void Verify();
 	DUCKDB_API virtual const vector<ColumnDefinition> &Columns() = 0;
 	DUCKDB_API virtual unique_ptr<QueryNode> GetQueryNode();
 	DUCKDB_API virtual BoundStatement Bind(Binder &binder);
