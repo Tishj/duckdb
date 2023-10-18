@@ -34,6 +34,8 @@ DuckDBPyRelation::DuckDBPyRelation(shared_ptr<Relation> rel_p) : rel(std::move(r
 		names.push_back(col.GetName());
 		types.push_back(col.GetType());
 	}
+	D_ASSERT(!types.empty());
+	D_ASSERT(!names.empty());
 }
 
 DuckDBPyRelation::DuckDBPyRelation(unique_ptr<DuckDBPyResult> result_p) : rel(nullptr), result(std::move(result_p)) {
@@ -142,8 +144,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::EmptyResult(const std::shared_ptr
 		dummy_values.emplace_back(type);
 	}
 	vector<vector<Value>> single_row(1, dummy_values);
-	auto values_relation =
-	    make_uniq<DuckDBPyRelation>(Relation::EnsureVerified(make_shared<ValueRelation>(context, single_row, std::move(names))));
+	auto values_relation = make_uniq<DuckDBPyRelation>(
+	    Relation::EnsureVerified(make_shared<ValueRelation>(context, single_row, std::move(names))));
 	// Add a filter on an impossible condition
 	return values_relation->FilterFromExpression("true = false");
 }
@@ -1178,8 +1180,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Query(const string &view_name, co
 	auto &statement = *parser.statements[0];
 	if (statement.type == StatementType::SELECT_STATEMENT) {
 		auto select_statement = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(parser.statements[0]));
-		auto query_relation =
-		    make_shared<QueryRelation>(rel->context.GetContext(), std::move(select_statement), "query_relation");
+		auto query_relation = Relation::EnsureVerified(
+		    make_shared<QueryRelation>(rel->context.GetContext(), std::move(select_statement), "query_relation"));
 		return make_uniq<DuckDBPyRelation>(std::move(query_relation));
 	} else if (IsDescribeStatement(statement)) {
 		FunctionParameters parameters;

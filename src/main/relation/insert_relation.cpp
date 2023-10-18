@@ -13,8 +13,7 @@ InsertRelation::InsertRelation(shared_ptr<Relation> child_p, string schema_name,
 }
 
 void InsertRelation::Verify() {
-	vector<ColumnDefinition> dummy_columns;
-	context.GetContext()->TryBindRelation(*this, dummy_columns);
+	context.GetContext()->TryBindRelation(*this, columns);
 	verified = true;
 }
 

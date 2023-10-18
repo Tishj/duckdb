@@ -17,8 +17,7 @@ JoinRelation::JoinRelation(shared_ptr<Relation> left_p, shared_ptr<Relation> rig
 }
 
 void JoinRelation::Verify() {
-	vector<ColumnDefinition> dummy_columns;
-	context.GetContext()->TryBindRelation(*this, dummy_columns);
+	context.GetContext()->TryBindRelation(*this, columns);
 	verified = true;
 }
 

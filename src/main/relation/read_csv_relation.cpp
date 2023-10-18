@@ -37,7 +37,7 @@ ReadCSVRelation::ReadCSVRelation(const shared_ptr<ClientContext> &context, const
 }
 
 void ReadCSVRelation::Verify() {
-	context.GetContext()->TryBindRelation(*this, columns);
+	// No need to verify, we already have the columns
 	verified = true;
 }
 

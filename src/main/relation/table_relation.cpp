@@ -6,6 +6,7 @@
 #include "duckdb/main/relation/update_relation.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/relation.hpp"
 
 namespace duckdb {
 
@@ -61,14 +62,16 @@ void TableRelation::Update(const string &update_list, const string &condition) {
 	vector<unique_ptr<ParsedExpression>> expressions;
 	auto cond = ParseCondition(*context.GetContext(), condition);
 	Parser::ParseUpdateList(update_list, update_columns, expressions, context.GetContext()->GetParserOptions());
-	auto update = make_shared<UpdateRelation>(context, std::move(cond), description->schema, description->table,
-	                                          std::move(update_columns), std::move(expressions));
+	auto update = Relation::EnsureVerified(make_shared<UpdateRelation>(context, std::move(cond), description->schema,
+	                                                                   description->table, std::move(update_columns),
+	                                                                   std::move(expressions)));
 	update->Execute();
 }
 
 void TableRelation::Delete(const string &condition) {
 	auto cond = ParseCondition(*context.GetContext(), condition);
-	auto del = make_shared<DeleteRelation>(context, std::move(cond), description->schema, description->table);
+	auto del = Relation::EnsureVerified(
+	    make_shared<DeleteRelation>(context, std::move(cond), description->schema, description->table));
 	del->Execute();
 }
 

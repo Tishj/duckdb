@@ -694,7 +694,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 		auto_detect = true;
 	}
 
-	auto read_json_relation = make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect);
+	auto read_json_relation = Relation::EnsureVerified(
+	    make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect));
 	if (read_json_relation == nullptr) {
 		// FIXME: make_shared will never return nullptr ??
 		throw BinderException("read_json can only be used when the JSON extension is (statically) loaded");
@@ -1349,8 +1350,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		vector<Value> children;
 		children.push_back(Value::POINTER(CastPointerToValue(new_df.ptr())));
 
-		auto table_function =
-		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
+		auto table_function = make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
 		table_function->extra_dependencies =
 		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(new_df));
 		return std::move(table_function);
@@ -1413,8 +1413,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		vector<Value> children;
 		children.push_back(Value::POINTER(CastPointerToValue(data.ptr())));
 
-		auto table_function =
-		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
+		auto table_function = make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
 		table_function->extra_dependencies =
 		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(data));
 		return std::move(table_function);

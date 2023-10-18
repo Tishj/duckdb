@@ -149,10 +149,12 @@ shared_ptr<Relation> Relation::Join(const shared_ptr<Relation> &other,
 			}
 			using_columns.push_back(colref.column_names[0]);
 		}
-		return EnsureVerified(make_shared<JoinRelation>(shared_from_this(), other, std::move(using_columns), type, ref_type));
+		return EnsureVerified(
+		    make_shared<JoinRelation>(shared_from_this(), other, std::move(using_columns), type, ref_type));
 	} else {
 		// single expression that is not a column reference: use the expression as a join condition
-		return EnsureVerified(make_shared<JoinRelation>(shared_from_this(), other, std::move(expression_list[0]), type, ref_type));
+		return EnsureVerified(
+		    make_shared<JoinRelation>(shared_from_this(), other, std::move(expression_list[0]), type, ref_type));
 	}
 }
 
@@ -188,7 +190,8 @@ shared_ptr<Relation> Relation::Aggregate(const string &aggregate_list) {
 shared_ptr<Relation> Relation::Aggregate(const string &aggregate_list, const string &group_list) {
 	auto expression_list = Parser::ParseExpressionList(aggregate_list, context.GetContext()->GetParserOptions());
 	auto groups = Parser::ParseGroupByList(group_list, context.GetContext()->GetParserOptions());
-	return EnsureVerified(make_shared<AggregateRelation>(shared_from_this(), std::move(expression_list), std::move(groups)));
+	return EnsureVerified(
+	    make_shared<AggregateRelation>(shared_from_this(), std::move(expression_list), std::move(groups)));
 }
 
 shared_ptr<Relation> Relation::Aggregate(const vector<string> &aggregates) {
@@ -204,7 +207,8 @@ shared_ptr<Relation> Relation::Aggregate(const vector<string> &aggregates, const
 
 shared_ptr<Relation> Relation::Aggregate(vector<unique_ptr<ParsedExpression>> expressions, const string &group_list) {
 	auto groups = Parser::ParseGroupByList(group_list, context.GetContext()->GetParserOptions());
-	return EnsureVerified(make_shared<AggregateRelation>(shared_from_this(), std::move(expressions), std::move(groups)));
+	return EnsureVerified(
+	    make_shared<AggregateRelation>(shared_from_this(), std::move(expressions), std::move(groups)));
 }
 
 string Relation::GetAlias() {
@@ -218,6 +222,9 @@ unique_ptr<TableRef> Relation::GetTableRef() {
 }
 
 unique_ptr<QueryResult> Relation::Execute() {
+	if (!verified) {
+		Verify();
+	}
 	return context.GetContext()->Execute(shared_from_this());
 }
 
@@ -255,7 +262,8 @@ void Relation::Insert(const string &schema_name, const string &table_name) {
 
 void Relation::Insert(const vector<vector<Value>> &values) {
 	vector<string> column_names;
-	auto rel = EnsureVerified(make_shared<ValueRelation>(context.GetContext(), values, std::move(column_names), "values"));
+	auto rel =
+	    EnsureVerified(make_shared<ValueRelation>(context.GetContext(), values, std::move(column_names), "values"));
 	rel->Insert(GetAlias());
 }
 
@@ -310,8 +318,8 @@ shared_ptr<Relation> Relation::CreateView(const string &name, bool replace, bool
 }
 
 shared_ptr<Relation> Relation::CreateView(const string &schema_name, const string &name, bool replace, bool temporary) {
-	auto view = EnsureVerified(make_shared<CreateViewRelation>(shared_from_this(), schema_name, name, replace, temporary));
-	view->Verify();
+	auto view =
+	    EnsureVerified(make_shared<CreateViewRelation>(shared_from_this(), schema_name, name, replace, temporary));
 	auto res = view->Execute();
 	if (res->HasError()) {
 		const string prepended_message = "Failed to create view '" + name + "': ";
@@ -344,7 +352,8 @@ void Relation::Delete(const string &condition) {
 
 shared_ptr<Relation> Relation::TableFunction(const std::string &fname, const vector<Value> &values,
                                              const named_parameter_map_t &named_parameters) {
-	return EnsureVerified(make_shared<TableFunctionRelation>(context.GetContext(), fname, values, named_parameters, shared_from_this()));
+	return EnsureVerified(
+	    make_shared<TableFunctionRelation>(context.GetContext(), fname, values, named_parameters, shared_from_this()));
 }
 
 shared_ptr<Relation> Relation::TableFunction(const std::string &fname, const vector<Value> &values) {
