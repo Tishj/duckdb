@@ -308,7 +308,7 @@ shared_ptr<Relation> Relation::WriteParquetRel(const string &parquet_file,
                                                case_insensitive_map_t<vector<Value>> options) {
 	auto write_parquet =
 	    EnsureVerified(make_shared<duckdb::WriteParquetRelation>(shared_from_this(), parquet_file, std::move(options)));
-	return std::move(write_parquet);
+	return write_parquet;
 }
 
 void Relation::WriteParquet(const string &parquet_file, case_insensitive_map_t<vector<Value>> options) {
