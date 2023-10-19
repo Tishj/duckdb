@@ -36,10 +36,6 @@ public:
 	string GetAlias() override;
 	void AddNamedParameter(const string &name, Value argument);
 	void SetNamedParameters(named_parameter_map_t &&named_parameters);
-
-private:
-	//! Whether or not to auto initialize the columns on construction
-	bool auto_initialize;
 };
 
 } // namespace duckdb
