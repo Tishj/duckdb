@@ -44,7 +44,7 @@
 
 namespace duckdb {
 
-const std::thread::id ClientContextLock::INVALID_THREAD = std::thread::id();
+const std::thread::id LockedClientContextLock::INVALID_THREAD = std::thread::id();
 
 struct ActiveQueryContext {
 	//! The query that is currently being executed
@@ -71,6 +71,20 @@ ClientContext::~ClientContext() {
 	// destroy the client context and rollback if there is an active transaction
 	// but only if we are not destroying this client context as part of an exception stack unwind
 	Destroy();
+}
+
+unique_ptr<ClientContextLock> ClientContextLock::Lock(ClientContext &context) {
+	auto can_lock = context.context_lock.try_lock();
+	if (!can_lock) {
+		if (context.thread_id == std::this_thread::get_id()) {
+			// This thread already holds the lock
+			// Whatever it's scope is, it will always be a subset of the already held lock's scope
+			return unique_ptr<NoOpClientContextLock>();
+		}
+	} else {
+		context.context_lock.unlock();
+	}
+	return make_uniq<LockedClientContextLock>(context.context_lock, context.thread_id);
 }
 
 unique_ptr<ClientContextLock> ClientContext::LockContext() {
