@@ -23,6 +23,7 @@
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
+#include "duckdb/parser/tableref.hpp"
 #include "duckdb_python/arrow/arrow_array_stream.hpp"
 #include "duckdb_python/map.hpp"
 #include "duckdb_python/pandas/pandas_scan.hpp"
@@ -47,7 +48,9 @@
 #include "duckdb_python/pybind11/conversions/exception_handling_enum.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
-#include "duckdb/main/pending_query_result.hpp"
+#include "duckdb/main/relation.hpp"
+#include "duckdb/main/relation/table_function_relation.hpp"
+#include "duckdb/main/relation/subquery_relation.hpp"
 
 #include <random>
 
@@ -695,8 +698,10 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(const string &name, co
 		auto_detect = true;
 	}
 
-	auto read_json_relation = make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect);
+	auto read_json_relation = Relation::EnsureVerified(
+	    make_shared<ReadJSONRelation>(connection->context, name, std::move(options), auto_detect));
 	if (read_json_relation == nullptr) {
+		// FIXME: make_shared will never return nullptr ??
 		throw BinderException("read_json can only be used when the JSON extension is (statically) loaded");
 	}
 	return make_uniq<DuckDBPyRelation>(std::move(read_json_relation));
@@ -959,22 +964,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const string &query, s
 		}
 	}
 	return make_uniq<DuckDBPyRelation>(make_uniq<ValueRelation>(connection->context, values, names, alias));
-}
-
-unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
-	auto qualified_name = QualifiedName::Parse(tname);
-	if (qualified_name.schema.empty()) {
-		qualified_name.schema = DEFAULT_SCHEMA;
-	}
-	auto table_info = connection->TableInfo(qualified_name.schema, qualified_name.name);
-	if (table_info) {
-		return make_uniq<DuckDBPyRelation>(connection->Table(qualified_name.schema, qualified_name.name));
-	}
-	// Not a table in the database, make a query relation that can perform replacement scans
-	return RunQuery(StringUtil::Format("from %s", tname), tname);
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Values(py::object params) {
@@ -1316,67 +1305,80 @@ duckdb::pyarrow::RecordBatchReader DuckDBPyConnection::FetchRecordBatchReader(co
 	return result->FetchRecordBatchReader(rows_per_batch);
 }
 
-static void CreateArrowScan(py::object entry, TableFunctionRef &table_function,
-                            vector<unique_ptr<ParsedExpression>> &children, ClientProperties &client_properties) {
+static unique_ptr<Relation> CreateArrowScan(const shared_ptr<ClientContext> &context, py::object entry,
+                                            ClientProperties &client_properties) {
 	string name = "arrow_" + StringUtil::GenerateRandomName();
 	auto stream_factory = make_uniq<PythonTableArrowArrayStreamFactory>(entry.ptr(), client_properties);
 	auto stream_factory_produce = PythonTableArrowArrayStreamFactory::Produce;
 	auto stream_factory_get_schema = PythonTableArrowArrayStreamFactory::GetSchema;
 
-	children.push_back(make_uniq<ConstantExpression>(Value::POINTER(CastPointerToValue(stream_factory.get()))));
-	children.push_back(make_uniq<ConstantExpression>(Value::POINTER(CastPointerToValue(stream_factory_produce))));
-	children.push_back(make_uniq<ConstantExpression>(Value::POINTER(CastPointerToValue(stream_factory_get_schema))));
+	vector<Value> children;
+	children.push_back(Value::POINTER(CastPointerToValue(stream_factory.get())));
+	children.push_back(Value::POINTER(CastPointerToValue(stream_factory_produce)));
+	children.push_back(Value::POINTER(CastPointerToValue(stream_factory_get_schema)));
 
-	table_function.function = make_uniq<FunctionExpression>("arrow_scan", std::move(children));
-	table_function.external_dependency =
-	    make_uniq<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), entry));
+	auto table_function = make_uniq<TableFunctionRelation>(context, "arrow_scan", std::move(children), nullptr);
+	table_function->extra_dependencies =
+	    make_shared<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), entry));
+	return std::move(table_function);
 }
 
-static unique_ptr<TableRef> TryReplacement(py::dict &dict, py::str &table_name, ClientProperties &client_properties,
-                                           py::object &current_frame) {
+static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py::dict &dict, py::str &table_name,
+                                                   ClientProperties &client_properties, py::object &current_frame) {
 	if (!dict.contains(table_name)) {
 		// not present in the globals
 		return nullptr;
 	}
 	auto entry = dict[table_name];
-	auto table_function = make_uniq<TableFunctionRef>();
-	vector<unique_ptr<ParsedExpression>> children;
-	NumpyObjectType numpytype; // Identify the type of accepted numpy objects.
+
+	auto context = context_p.shared_from_this();
 	if (DuckDBPyConnection::IsPandasDataframe(entry)) {
 		if (PandasDataFrame::IsPyArrowBacked(entry)) {
 			auto table = ArrowTableFromDataframe(entry);
-			CreateArrowScan(table, *table_function, children, client_properties);
-		} else {
-			string name = "df_" + StringUtil::GenerateRandomName();
-			auto new_df = PandasScanFunction::PandasReplaceCopiedNames(entry);
-			children.push_back(make_uniq<ConstantExpression>(Value::POINTER(CastPointerToValue(new_df.ptr()))));
-			table_function->function = make_uniq<FunctionExpression>("pandas_scan", std::move(children));
-			table_function->external_dependency =
-			    make_uniq<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(new_df));
+			return CreateArrowScan(context, table, client_properties);
 		}
+		string name = "df_" + StringUtil::GenerateRandomName();
+		auto new_df = PandasScanFunction::PandasReplaceCopiedNames(entry);
 
-	} else if (DuckDBPyConnection::IsAcceptedArrowObject(entry)) {
-		CreateArrowScan(entry, *table_function, children, client_properties);
-	} else if (DuckDBPyRelation::IsRelation(entry)) {
+		vector<Value> children;
+		children.push_back(Value::POINTER(CastPointerToValue(new_df.ptr())));
+
+		auto table_function = make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
+		table_function->extra_dependencies =
+		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(new_df));
+		return std::move(table_function);
+	}
+
+	if (DuckDBPyConnection::IsAcceptedArrowObject(entry)) {
+		return CreateArrowScan(context, entry, client_properties);
+	}
+
+	if (DuckDBPyRelation::IsRelation(entry)) {
 		auto pyrel = py::cast<DuckDBPyRelation *>(entry);
-		// create a subquery from the underlying relation object
-		auto select = make_uniq<SelectStatement>();
-		select->node = pyrel->GetRel().GetQueryNode();
+		auto rel = pyrel->GetRelPtr();
+		// create a subquery relation from the underlying relation object
+		string alias = "subquery_relation" + StringUtil::GenerateRandomName(16);
+		auto subquery_rel = make_uniq<SubqueryRelation>(std::move(rel), alias);
+		return std::move(subquery_rel);
+	}
 
-		auto subquery = make_uniq<SubqueryRef>(std::move(select));
-		return std::move(subquery);
-	} else if (PolarsDataFrame::IsDataFrame(entry)) {
+	if (PolarsDataFrame::IsDataFrame(entry)) {
 		auto arrow_dataset = entry.attr("to_arrow")();
-		CreateArrowScan(arrow_dataset, *table_function, children, client_properties);
-	} else if (PolarsDataFrame::IsLazyFrame(entry)) {
+		return CreateArrowScan(context, arrow_dataset, client_properties);
+	}
+
+	if (PolarsDataFrame::IsLazyFrame(entry)) {
 		auto materialized = entry.attr("collect")();
 		auto arrow_dataset = materialized.attr("to_arrow")();
-		CreateArrowScan(arrow_dataset, *table_function, children, client_properties);
-	} else if ((numpytype = DuckDBPyConnection::IsAcceptedNumpyObject(entry)) != NumpyObjectType::INVALID) {
+		return CreateArrowScan(context, arrow_dataset, client_properties);
+	}
+
+	auto numpy_type = DuckDBPyConnection::IsAcceptedNumpyObject(entry);
+	if (numpy_type != NumpyObjectType::INVALID) {
 		string name = "np_" + StringUtil::GenerateRandomName();
 		py::dict data; // we will convert all the supported format to dict{"key": np.array(value)}.
 		size_t idx = 0;
-		switch (numpytype) {
+		switch (numpy_type) {
 		case NumpyObjectType::NDARRAY1D:
 			data["column0"] = entry;
 			break;
@@ -1401,24 +1403,35 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, py::str &table_name, 
 			throw NotImplementedException("Unsupported Numpy object");
 			break;
 		}
-		children.push_back(make_uniq<ConstantExpression>(Value::POINTER(CastPointerToValue(data.ptr()))));
-		table_function->function = make_uniq<FunctionExpression>("pandas_scan", std::move(children));
-		table_function->external_dependency =
-		    make_uniq<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(data));
-	} else {
-		std::string location = py::cast<py::str>(current_frame.attr("f_code").attr("co_filename"));
-		location += ":";
-		location += py::cast<py::str>(current_frame.attr("f_lineno"));
-		std::string cpp_table_name = table_name;
-		auto py_object_type = string(py::str(entry.get_type().attr("__name__")));
+		vector<Value> children;
+		children.push_back(Value::POINTER(CastPointerToValue(data.ptr())));
 
-		throw InvalidInputException(
-		    "Python Object \"%s\" of type \"%s\" found on line \"%s\" not suitable for replacement scans.\nMake sure "
-		    "that \"%s\" is either a pandas.DataFrame, duckdb.DuckDBPyRelation, pyarrow Table, Dataset, "
-		    "RecordBatchReader, Scanner, or NumPy ndarrays with supported format",
-		    cpp_table_name, py_object_type, location, cpp_table_name);
+		auto table_function = make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
+		table_function->extra_dependencies =
+		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(data));
+		return std::move(table_function);
 	}
-	return std::move(table_function);
+
+	std::string location = py::cast<py::str>(current_frame.attr("f_code").attr("co_filename"));
+	location += ":";
+	location += py::cast<py::str>(current_frame.attr("f_lineno"));
+	std::string cpp_table_name = table_name;
+	auto py_object_type = string(py::str(entry.get_type().attr("__name__")));
+
+	throw InvalidInputException(
+	    "Python Object \"%s\" of type \"%s\" found on line \"%s\" not suitable for replacement scans.\nMake sure "
+	    "that \"%s\" is either a pandas.DataFrame, duckdb.DuckDBPyRelation, pyarrow Table, Dataset, "
+	    "RecordBatchReader, Scanner, or NumPy ndarrays with supported format",
+	    cpp_table_name, py_object_type, location, cpp_table_name);
+}
+
+static unique_ptr<TableRef> TryReplacement(ClientContext &context, py::dict &dict, py::str &table_name,
+                                           ClientProperties &client_properties, py::object &current_frame) {
+	auto relation = TryReplaceWithRelation(context, dict, table_name, client_properties, current_frame);
+	if (!relation) {
+		return nullptr;
+	}
+	return relation->GetTableRef();
 }
 
 static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string &table_name,
@@ -1432,7 +1445,7 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
 		// search local dictionary
 		if (local_dict) {
-			auto result = TryReplacement(local_dict, py_table_name, client_properties, current_frame);
+			auto result = TryReplacement(context, local_dict, py_table_name, client_properties, current_frame);
 			if (result) {
 				return result;
 			}
@@ -1440,7 +1453,7 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 		// search global dictionary
 		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
 		if (global_dict) {
-			auto result = TryReplacement(global_dict, py_table_name, client_properties, current_frame);
+			auto result = TryReplacement(context, global_dict, py_table_name, client_properties, current_frame);
 			if (result) {
 				return result;
 			}
@@ -1449,6 +1462,57 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 	}
 	// Not found :(
 	return nullptr;
+}
+
+static unique_ptr<Relation> ScanReplacementRelation(ClientContext &context, const string &table_name) {
+	py::gil_scoped_acquire acquire;
+	auto py_table_name = py::str(table_name);
+	// Here we do an exhaustive search on the frame lineage
+	auto current_frame = py::module::import("inspect").attr("currentframe")();
+	auto client_properties = context.GetClientProperties();
+	while (hasattr(current_frame, "f_locals")) {
+		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
+		// search local dictionary
+		if (local_dict) {
+			auto result = TryReplaceWithRelation(context, local_dict, py_table_name, client_properties, current_frame);
+			if (result) {
+				return result;
+			}
+		}
+		// search global dictionary
+		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
+		if (global_dict) {
+			auto result = TryReplaceWithRelation(context, global_dict, py_table_name, client_properties, current_frame);
+			if (result) {
+				return result;
+			}
+		}
+		current_frame = current_frame.attr("f_back");
+	}
+	// Not found :(
+	return nullptr;
+}
+
+unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
+	if (!connection) {
+		throw ConnectionException("Connection has already been closed");
+	}
+	auto qualified_name = QualifiedName::Parse(tname);
+	if (qualified_name.schema.empty()) {
+		qualified_name.schema = DEFAULT_SCHEMA;
+	}
+	auto table_info = connection->TableInfo(qualified_name.schema, qualified_name.name);
+	if (!table_info) {
+		// Try to do a replacement scan
+		auto relation = ScanReplacementRelation(*connection->context, tname);
+		if (relation) {
+			return make_uniq<DuckDBPyRelation>(std::move(relation));
+		}
+		throw CatalogException(
+		    "Provided name has to be either a table/view or be a valid candidate for replacement scans");
+	} else {
+		return make_uniq<DuckDBPyRelation>(connection->Table(qualified_name.schema, qualified_name.name));
+	}
 }
 
 unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_dict) {

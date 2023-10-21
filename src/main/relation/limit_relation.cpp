@@ -12,6 +12,12 @@ LimitRelation::LimitRelation(shared_ptr<Relation> child_p, int64_t limit, int64_
 	D_ASSERT(child.get() != this);
 }
 
+void LimitRelation::VerifyRelation() {
+	if (!child->verified) {
+		child->VerifyRelation();
+	}
+}
+
 unique_ptr<QueryNode> LimitRelation::GetQueryNode() {
 	auto child_node = child->GetQueryNode();
 	auto limit_node = make_uniq<LimitModifier>();

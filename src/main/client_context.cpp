@@ -1083,6 +1083,7 @@ unique_ptr<PendingQueryResult> ClientContext::PendingQuery(const shared_ptr<Rela
 }
 
 unique_ptr<QueryResult> ClientContext::Execute(const shared_ptr<Relation> &relation) {
+	D_ASSERT(relation->verified);
 	auto lock = LockContext();
 	auto &expected_columns = relation->Columns();
 	auto pending = PendingQueryInternal(*lock, relation, false);

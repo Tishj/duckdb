@@ -14,12 +14,13 @@ namespace duckdb {
 
 class SubqueryRelation : public Relation {
 public:
-	SubqueryRelation(shared_ptr<Relation> child, string alias);
+	SubqueryRelation(shared_ptr<Relation> child, string alias, bool auto_init = true);
 
 	shared_ptr<Relation> child;
 	string alias;
 
 public:
+	void VerifyRelation() override;
 	unique_ptr<QueryNode> GetQueryNode() override;
 
 	const vector<ColumnDefinition> &Columns() override;

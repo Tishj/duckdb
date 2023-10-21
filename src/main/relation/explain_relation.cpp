@@ -9,6 +9,9 @@ namespace duckdb {
 
 ExplainRelation::ExplainRelation(shared_ptr<Relation> child_p, ExplainType type)
     : Relation(child_p->context, RelationType::EXPLAIN_RELATION), child(std::move(child_p)), type(type) {
+}
+
+void ExplainRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
 }
 

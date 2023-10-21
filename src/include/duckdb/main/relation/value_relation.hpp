@@ -26,6 +26,7 @@ public:
 	string alias;
 
 public:
+	void VerifyRelation() override;
 	unique_ptr<QueryNode> GetQueryNode() override;
 
 	const vector<ColumnDefinition> &Columns() override;

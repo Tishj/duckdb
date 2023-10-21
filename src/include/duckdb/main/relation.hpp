@@ -43,13 +43,16 @@ public:
 	virtual ~Relation() {
 	}
 
+	// The connection that produced the Relation, used for verification
 	ClientContextWrapper context;
-
 	RelationType type;
-
 	shared_ptr<ExternalDependency> extra_dependencies;
+	// The relation has been checked to be valid at the time it was made
+	bool verified = false;
 
 public:
+	DUCKDB_API virtual void VerifyRelation() = 0;
+	DUCKDB_API virtual void Verify();
 	DUCKDB_API virtual const vector<ColumnDefinition> &Columns() = 0;
 	DUCKDB_API virtual unique_ptr<QueryNode> GetQueryNode();
 	DUCKDB_API virtual BoundStatement Bind(Binder &binder);
@@ -75,6 +78,14 @@ public:
 	DUCKDB_API virtual unique_ptr<TableRef> GetTableRef();
 	virtual bool IsReadOnly() {
 		return true;
+	}
+
+	static shared_ptr<Relation> EnsureVerified(shared_ptr<Relation> rel) {
+		// Call verify to make
+		if (!rel->verified) {
+			rel->Verify();
+		}
+		return rel;
 	}
 
 public:

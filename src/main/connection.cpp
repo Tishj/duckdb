@@ -173,7 +173,7 @@ shared_ptr<Relation> Connection::Table(const string &schema_name, const string &
 	if (!table_info) {
 		throw CatalogException("Table '%s' does not exist!", table_name);
 	}
-	return make_shared<TableRelation>(context, std::move(table_info));
+	return Relation::EnsureVerified(make_shared<TableRelation>(context, std::move(table_info)));
 }
 
 shared_ptr<Relation> Connection::View(const string &tname) {
@@ -181,7 +181,7 @@ shared_ptr<Relation> Connection::View(const string &tname) {
 }
 
 shared_ptr<Relation> Connection::View(const string &schema_name, const string &table_name) {
-	return make_shared<ViewRelation>(context, schema_name, table_name);
+	return Relation::EnsureVerified(make_shared<ViewRelation>(context, schema_name, table_name));
 }
 
 shared_ptr<Relation> Connection::TableFunction(const string &fname) {
@@ -192,11 +192,11 @@ shared_ptr<Relation> Connection::TableFunction(const string &fname) {
 
 shared_ptr<Relation> Connection::TableFunction(const string &fname, const vector<Value> &values,
                                                const named_parameter_map_t &named_parameters) {
-	return make_shared<TableFunctionRelation>(context, fname, values, named_parameters);
+	return Relation::EnsureVerified(make_shared<TableFunctionRelation>(context, fname, values, named_parameters));
 }
 
 shared_ptr<Relation> Connection::TableFunction(const string &fname, const vector<Value> &values) {
-	return make_shared<TableFunctionRelation>(context, fname, values);
+	return Relation::EnsureVerified(make_shared<TableFunctionRelation>(context, fname, values));
 }
 
 shared_ptr<Relation> Connection::Values(const vector<vector<Value>> &values) {
@@ -206,7 +206,7 @@ shared_ptr<Relation> Connection::Values(const vector<vector<Value>> &values) {
 
 shared_ptr<Relation> Connection::Values(const vector<vector<Value>> &values, const vector<string> &column_names,
                                         const string &alias) {
-	return make_shared<ValueRelation>(context, values, column_names, alias);
+	return Relation::EnsureVerified(make_shared<ValueRelation>(context, values, column_names, alias));
 }
 
 shared_ptr<Relation> Connection::Values(const string &values) {
@@ -215,7 +215,7 @@ shared_ptr<Relation> Connection::Values(const string &values) {
 }
 
 shared_ptr<Relation> Connection::Values(const string &values, const vector<string> &column_names, const string &alias) {
-	return make_shared<ValueRelation>(context, values, column_names, alias);
+	return Relation::EnsureVerified(make_shared<ValueRelation>(context, values, column_names, alias));
 }
 
 shared_ptr<Relation> Connection::ReadCSV(const string &csv_file) {
@@ -223,13 +223,8 @@ shared_ptr<Relation> Connection::ReadCSV(const string &csv_file) {
 	return ReadCSV(csv_file, std::move(options));
 }
 
-shared_ptr<Relation> Connection::ReadCSV(const vector<string> &csv_input, named_parameter_map_t &&options) {
-	return make_shared<ReadCSVRelation>(context, csv_input, std::move(options));
-}
-
-shared_ptr<Relation> Connection::ReadCSV(const string &csv_input, named_parameter_map_t &&options) {
-	vector<string> csv_files = {csv_input};
-	return ReadCSV(csv_files, std::move(options));
+shared_ptr<Relation> Connection::ReadCSV(const string &csv_file, named_parameter_map_t &&options) {
+	return Relation::EnsureVerified(make_shared<ReadCSVRelation>(context, csv_file, std::move(options)));
 }
 
 shared_ptr<Relation> Connection::ReadCSV(const string &csv_file, const vector<string> &columns) {
@@ -244,8 +239,12 @@ shared_ptr<Relation> Connection::ReadCSV(const string &csv_file, const vector<st
 		auto &col_def = col_list.GetColumnMutable(LogicalIndex(0));
 		column_list.push_back({col_def.GetName(), col_def.GetType().ToString()});
 	}
+<<<<<<< HEAD
 	vector<string> files {csv_file};
 	return make_shared<ReadCSVRelation>(context, files, std::move(options));
+=======
+	return Relation::EnsureVerified(make_shared<ReadCSVRelation>(context, csv_file, std::move(column_list)));
+>>>>>>> e45d049aa13d9bcd6d57900085fc293e01e66ac2
 }
 
 shared_ptr<Relation> Connection::ReadParquet(const string &parquet_file, bool binary_as_string) {
@@ -264,7 +263,7 @@ shared_ptr<Relation> Connection::RelationFromQuery(const string &query, const st
 }
 
 shared_ptr<Relation> Connection::RelationFromQuery(unique_ptr<SelectStatement> select_stmt, const string &alias) {
-	return make_shared<QueryRelation>(context, std::move(select_stmt), alias);
+	return Relation::EnsureVerified(make_shared<QueryRelation>(context, std::move(select_stmt), alias));
 }
 
 void Connection::BeginTransaction() {

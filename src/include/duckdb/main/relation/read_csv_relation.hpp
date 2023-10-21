@@ -26,6 +26,7 @@ protected:
 	void InitializeAlias(const vector<string> &input);
 
 public:
+	void VerifyRelation() override;
 	string GetAlias() override;
 };
 

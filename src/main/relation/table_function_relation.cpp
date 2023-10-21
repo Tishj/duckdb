@@ -24,25 +24,19 @@ void TableFunctionRelation::SetNamedParameters(named_parameter_map_t &&options) 
 
 TableFunctionRelation::TableFunctionRelation(const shared_ptr<ClientContext> &context, string name_p,
                                              vector<Value> parameters_p, named_parameter_map_t named_parameters,
-                                             shared_ptr<Relation> input_relation_p, bool auto_init)
+                                             shared_ptr<Relation> input_relation_p)
     : Relation(context, RelationType::TABLE_FUNCTION_RELATION), name(std::move(name_p)),
       parameters(std::move(parameters_p)), named_parameters(std::move(named_parameters)),
-      input_relation(std::move(input_relation_p)), auto_initialize(auto_init) {
-	InitializeColumns();
+      input_relation(std::move(input_relation_p)) {
 }
 
 TableFunctionRelation::TableFunctionRelation(const shared_ptr<ClientContext> &context, string name_p,
-                                             vector<Value> parameters_p, shared_ptr<Relation> input_relation_p,
-                                             bool auto_init)
+                                             vector<Value> parameters_p, shared_ptr<Relation> input_relation_p)
     : Relation(context, RelationType::TABLE_FUNCTION_RELATION), name(std::move(name_p)),
-      parameters(std::move(parameters_p)), input_relation(std::move(input_relation_p)), auto_initialize(auto_init) {
-	InitializeColumns();
+      parameters(std::move(parameters_p)), input_relation(std::move(input_relation_p)) {
 }
 
-void TableFunctionRelation::InitializeColumns() {
-	if (!auto_initialize) {
-		return;
-	}
+void TableFunctionRelation::VerifyRelation() {
 	context.GetContext()->TryBindRelation(*this, this->columns);
 }
 
@@ -80,6 +74,7 @@ unique_ptr<TableRef> TableFunctionRelation::GetTableRef() {
 	auto table_function = make_uniq<TableFunctionRef>();
 	auto function = make_uniq<FunctionExpression>(name, std::move(children));
 	table_function->function = std::move(function);
+	table_function->external_dependency = this->extra_dependencies;
 	return std::move(table_function);
 }
 

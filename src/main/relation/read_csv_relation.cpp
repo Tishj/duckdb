@@ -17,16 +17,36 @@
 
 namespace duckdb {
 
-void ReadCSVRelation::InitializeAlias(const vector<string> &input) {
-	D_ASSERT(!input.empty());
-	const auto &csv_file = input[0];
-	alias = StringUtil::Split(csv_file, ".")[0];
+ReadCSVRelation::ReadCSVRelation(const shared_ptr<ClientContext> &context, const string &csv_file,
+                                 vector<ColumnDefinition> columns_p, string alias_p)
+    : TableFunctionRelation(context, "read_csv", {Value(csv_file)}, nullptr), alias(std::move(alias_p)),
+      auto_detect(false) {
+
+	if (alias.empty()) {
+		alias = StringUtil::Split(csv_file, ".")[0];
+	}
+
+	columns = std::move(columns_p);
+
+	child_list_t<Value> column_names;
+	for (idx_t i = 0; i < columns.size(); i++) {
+		column_names.push_back(make_pair(columns[i].Name(), Value(columns[i].Type().ToString())));
+	}
+
+	AddNamedParameter("columns", Value::STRUCT(std::move(column_names)));
 }
 
-static Value CreateValueFromFileList(const vector<string> &file_list) {
-	vector<Value> files;
-	for (auto &file : file_list) {
-		files.push_back(file);
+void ReadCSVRelation::VerifyRelation() {
+	// no-op, just override parent behavior
+}
+
+ReadCSVRelation::ReadCSVRelation(const std::shared_ptr<ClientContext> &context, const string &csv_file,
+                                 named_parameter_map_t &&options, string alias_p)
+    : TableFunctionRelation(context, "read_csv_auto", {Value(csv_file)}, nullptr), alias(std::move(alias_p)),
+      auto_detect(true) {
+
+	if (alias.empty()) {
+		alias = StringUtil::Split(csv_file, ".")[0];
 	}
 	return Value::LIST(std::move(files));
 }
