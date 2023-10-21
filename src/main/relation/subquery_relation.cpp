@@ -4,14 +4,12 @@
 
 namespace duckdb {
 
-SubqueryRelation::SubqueryRelation(shared_ptr<Relation> child_p, string alias_p, bool auto_init)
+SubqueryRelation::SubqueryRelation(shared_ptr<Relation> child_p, string alias_p)
     : Relation(child_p->context, RelationType::SUBQUERY_RELATION), child(std::move(child_p)),
       alias(std::move(alias_p)) {
 	D_ASSERT(child.get() != this);
 	vector<ColumnDefinition> dummy_columns;
-	if (auto_init) {
-		context.GetContext()->TryBindRelation(*this, dummy_columns);
-	}
+	context.GetContext()->TryBindRelation(*this, dummy_columns);
 }
 
 unique_ptr<QueryNode> SubqueryRelation::GetQueryNode() {

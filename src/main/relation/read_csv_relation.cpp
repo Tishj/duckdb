@@ -19,7 +19,7 @@ namespace duckdb {
 
 ReadCSVRelation::ReadCSVRelation(const shared_ptr<ClientContext> &context, const string &csv_file,
                                  vector<ColumnDefinition> columns_p, string alias_p)
-    : TableFunctionRelation(context, "read_csv", {Value(csv_file)}, nullptr, false), alias(std::move(alias_p)),
+    : TableFunctionRelation(context, "read_csv", {Value(csv_file)}, nullptr), alias(std::move(alias_p)),
       auto_detect(false) {
 
 	if (alias.empty()) {
@@ -38,7 +38,7 @@ ReadCSVRelation::ReadCSVRelation(const shared_ptr<ClientContext> &context, const
 
 ReadCSVRelation::ReadCSVRelation(const std::shared_ptr<ClientContext> &context, const string &csv_file,
                                  named_parameter_map_t &&options, string alias_p)
-    : TableFunctionRelation(context, "read_csv_auto", {Value(csv_file)}, nullptr, false), alias(std::move(alias_p)),
+    : TableFunctionRelation(context, "read_csv_auto", {Value(csv_file)}, nullptr), alias(std::move(alias_p)),
       auto_detect(true) {
 
 	if (alias.empty()) {

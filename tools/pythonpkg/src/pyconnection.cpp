@@ -960,17 +960,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const string &query, s
 	return make_uniq<DuckDBPyRelation>(make_uniq<ValueRelation>(connection->context, values, names, alias));
 }
 
-unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
-	auto qualified_name = QualifiedName::Parse(tname);
-	if (qualified_name.schema.empty()) {
-		qualified_name.schema = DEFAULT_SCHEMA;
-	}
-	return make_uniq<DuckDBPyRelation>(connection->Table(qualified_name.schema, qualified_name.name));
-}
-
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Values(py::object params) {
 	if (!connection) {
 		throw ConnectionException("Connection has already been closed");
@@ -1322,7 +1311,7 @@ static unique_ptr<Relation> CreateArrowScan(const shared_ptr<ClientContext> &con
 	children.push_back(Value::POINTER(CastPointerToValue(stream_factory_produce)));
 	children.push_back(Value::POINTER(CastPointerToValue(stream_factory_get_schema)));
 
-	auto table_function = make_uniq<TableFunctionRelation>(context, "arrow_scan", std::move(children), nullptr, false);
+	auto table_function = make_uniq<TableFunctionRelation>(context, "arrow_scan", std::move(children), nullptr);
 	table_function->extra_dependencies =
 	    make_shared<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), entry));
 	return std::move(table_function);
@@ -1349,7 +1338,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		children.push_back(Value::POINTER(CastPointerToValue(new_df.ptr())));
 
 		auto table_function =
-		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr, false);
+		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
 		table_function->extra_dependencies =
 		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(new_df));
 		return std::move(table_function);
@@ -1364,7 +1353,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		auto rel = pyrel->GetRelPtr();
 		// create a subquery relation from the underlying relation object
 		string alias = "subquery_relation" + StringUtil::GenerateRandomName(16);
-		auto subquery_rel = make_uniq<SubqueryRelation>(std::move(rel), alias, false);
+		auto subquery_rel = make_uniq<SubqueryRelation>(std::move(rel), alias);
 		return std::move(subquery_rel);
 	}
 
@@ -1413,7 +1402,7 @@ static unique_ptr<Relation> TryReplaceWithRelation(ClientContext &context_p, py:
 		children.push_back(Value::POINTER(CastPointerToValue(data.ptr())));
 
 		auto table_function =
-		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr, false);
+		    make_uniq<TableFunctionRelation>(context, "pandas_scan", std::move(children), nullptr);
 		table_function->extra_dependencies =
 		    make_shared<PythonDependencies>(make_uniq<RegisteredObject>(entry), make_uniq<RegisteredObject>(data));
 		return std::move(table_function);
@@ -1469,6 +1458,57 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 	}
 	// Not found :(
 	return nullptr;
+}
+
+static unique_ptr<Relation> ScanReplacementRelation(ClientContext &context, const string &table_name) {
+	py::gil_scoped_acquire acquire;
+	auto py_table_name = py::str(table_name);
+	// Here we do an exhaustive search on the frame lineage
+	auto current_frame = py::module::import("inspect").attr("currentframe")();
+	auto client_properties = context.GetClientProperties();
+	while (hasattr(current_frame, "f_locals")) {
+		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
+		// search local dictionary
+		if (local_dict) {
+			auto result = TryReplaceWithRelation(context, local_dict, py_table_name, client_properties, current_frame);
+			if (result) {
+				return result;
+			}
+		}
+		// search global dictionary
+		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
+		if (global_dict) {
+			auto result = TryReplaceWithRelation(context, global_dict, py_table_name, client_properties, current_frame);
+			if (result) {
+				return result;
+			}
+		}
+		current_frame = current_frame.attr("f_back");
+	}
+	// Not found :(
+	return nullptr;
+}
+
+unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
+	if (!connection) {
+		throw ConnectionException("Connection has already been closed");
+	}
+	auto qualified_name = QualifiedName::Parse(tname);
+	if (qualified_name.schema.empty()) {
+		qualified_name.schema = DEFAULT_SCHEMA;
+	}
+	auto table_info = connection->TableInfo(qualified_name.schema, qualified_name.name);
+	if (!table_info) {
+		// Try to do a replacement scan
+		auto relation = ScanReplacementRelation(*connection->context, tname);
+		if (relation) {
+			return make_uniq<DuckDBPyRelation>(std::move(relation));
+		}
+		throw CatalogException(
+		    "Provided name has to be either a table/view or be a valid candidate for replacement scans");
+	} else {
+		return make_uniq<DuckDBPyRelation>(connection->Table(qualified_name.schema, qualified_name.name));
+	}
 }
 
 unordered_map<string, string> TransformPyConfigDict(const py::dict &py_config_dict) {
