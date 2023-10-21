@@ -60,7 +60,8 @@ struct ActiveQueryContext {
 };
 
 ClientContext::ClientContext(shared_ptr<DatabaseInstance> database)
-    : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this), thread_id(std::thread::id()) {
+    : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this),
+      thread_id(std::thread::id()) {
 }
 
 ClientContext::~ClientContext() {

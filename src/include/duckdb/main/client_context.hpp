@@ -274,16 +274,20 @@ class ClientContextLock {
 private:
 	// The identifier for an invalid thread
 	static const std::thread::id INVALID_THREAD;
+
 private:
-	explicit ClientContextLock(mutex &context_lock, atomic<std::thread::id> &marker) : client_guard(context_lock), marker(marker) {
+	explicit ClientContextLock(mutex &context_lock, atomic<std::thread::id> &marker)
+	    : client_guard(context_lock), marker(marker) {
 		// Set the current thread so lock attempts by the same thread don't result in a deadlock
 		marker = std::this_thread::get_id();
 	}
+
 public:
 	~ClientContextLock() {
 		// Unset the current thread before unlocking the client_guard
 		marker = INVALID_THREAD;
 	}
+
 public:
 	static unique_ptr<ClientContextLock> Lock(ClientContext &context) {
 		auto can_lock = context.context_lock.try_lock();
