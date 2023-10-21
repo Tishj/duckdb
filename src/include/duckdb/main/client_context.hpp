@@ -25,6 +25,7 @@
 #include "duckdb/main/external_dependencies.hpp"
 #include "duckdb/common/preserved_error.hpp"
 #include "duckdb/main/client_properties.hpp"
+#include <thread>
 
 namespace duckdb {
 class Appender;
@@ -60,12 +61,15 @@ public:
 	virtual void QueryEnd() = 0;
 };
 
+class ClientContextLock;
+
 //! The ClientContext holds information relevant to the current client session
 //! during execution
 class ClientContext : public std::enable_shared_from_this<ClientContext> {
 	friend class PendingQueryResult;
 	friend class StreamQueryResult;
 	friend class DuckTransactionManager;
+	friend class ClientContextLock;
 
 public:
 	DUCKDB_API explicit ClientContext(shared_ptr<DatabaseInstance> db);
@@ -258,6 +262,8 @@ private:
 private:
 	//! Lock on using the ClientContext in parallel
 	mutex context_lock;
+	//! The thread that currently holds the lock
+	atomic<std::thread::id> thread_id;
 	//! The currently active query context
 	unique_ptr<ActiveQueryContext> active_query;
 	//! The current query progress
@@ -265,15 +271,38 @@ private:
 };
 
 class ClientContextLock {
-public:
-	explicit ClientContextLock(mutex &context_lock) : client_guard(context_lock) {
+private:
+	// The identifier for an invalid thread
+	static const std::thread::id INVALID_THREAD;
+private:
+	explicit ClientContextLock(mutex &context_lock, atomic<std::thread::id> &marker) : client_guard(context_lock), marker(marker) {
+		// Set the current thread so lock attempts by the same thread don't result in a deadlock
+		marker = std::this_thread::get_id();
 	}
-
+public:
 	~ClientContextLock() {
+		// Unset the current thread before unlocking the client_guard
+		marker = INVALID_THREAD;
+	}
+public:
+	static unique_ptr<ClientContextLock> Lock(ClientContext &context) {
+		auto can_lock = context.context_lock.try_lock();
+		if (!can_lock) {
+			if (context.thread_id == std::this_thread::get_id()) {
+				// This thread already holds the lock
+				// Whatever it's scope is, it will always be a subset of the already held lock's scope
+				return nullptr;
+			}
+		} else {
+			context.context_lock.unlock();
+		}
+		return unique_ptr<ClientContextLock>(new ClientContextLock(context.context_lock, context.thread_id));
 	}
 
 private:
 	lock_guard<mutex> client_guard;
+	// Used to set and unset the current threads ID
+	atomic<std::thread::id> &marker;
 };
 
 class ClientContextWrapper {

@@ -44,6 +44,8 @@
 
 namespace duckdb {
 
+const std::thread::id ClientContextLock::INVALID_THREAD = std::thread::id();
+
 struct ActiveQueryContext {
 	//! The query that is currently being executed
 	string query;
@@ -58,7 +60,7 @@ struct ActiveQueryContext {
 };
 
 ClientContext::ClientContext(shared_ptr<DatabaseInstance> database)
-    : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this) {
+    : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this), thread_id(std::thread::id()) {
 }
 
 ClientContext::~ClientContext() {
@@ -71,7 +73,7 @@ ClientContext::~ClientContext() {
 }
 
 unique_ptr<ClientContextLock> ClientContext::LockContext() {
-	return make_uniq<ClientContextLock>(context_lock);
+	return ClientContextLock::Lock(*this);
 }
 
 void ClientContext::Destroy() {
