@@ -155,13 +155,20 @@ void DependencyManager::EraseObjectInternal(CatalogEntry &object) {
 	dependencies_map.erase(object);
 }
 
-void DependencyManager::Scan(const std::function<void(CatalogEntry &, CatalogEntry &, DependencyType)> &callback) {
+void DependencyManager::Scan(ClientContext &context,
+                             const std::function<void(CatalogEntry &, CatalogEntry &, DependencyType)> &callback) {
 	lock_guard<mutex> write_lock(catalog.GetWriteLock());
-	for (auto &entry : dependents_map) {
-		for (auto &dependent : entry.second) {
-			// FIXME: don't have a CatalogTransaction here, can't do a lookup to get the entry??
-			throw NotImplementedException("FIXME");
-			// callback(entry.first, dependent.entry, dependent.dependency_type);
+	auto transaction = catalog.GetCatalogTransaction(context);
+	for (auto &object : dependents_map) {
+		for (auto &dependent_p : object.second) {
+			auto lookup = LookupEntry(object.first, catalog, transaction);
+			D_ASSERT(lookup.entry);
+			auto &entry = *lookup.entry;
+
+			lookup = LookupEntry(dependent_p, catalog, transaction);
+			D_ASSERT(lookup.entry);
+			auto &dependent = *lookup.entry;
+			callback(entry, dependent, dependent_p.dependency_type);
 		}
 	}
 }
