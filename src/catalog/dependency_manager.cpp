@@ -14,21 +14,26 @@ namespace duckdb {
 DependencyManager::DependencyManager(DuckCatalog &catalog) : catalog(catalog) {
 }
 
+static CatalogEntryLookup LookupEntry(const Dependency &dep, Catalog &catalog, CatalogTransaction &transaction) {
+	auto &entry = dep.entry;
+	auto &name = entry.name;
+	auto &schema = entry.schema;
+	auto &type = entry.type;
+
+	if (entry.type == CatalogType::SCHEMA_ENTRY /*|| entry.type == CatalogType::DATABASE_ENTRY */) {
+		auto schema = catalog.GetSchema(transaction, name, OnEntryNotFound::THROW_EXCEPTION);
+		auto entry = optional_ptr<CatalogEntry>(schema.get());
+		return CatalogEntryLookup {nullptr, entry, PreservedError()};
+	} else {
+		return catalog.TryLookupEntryInternal(transaction, type, schema, name);
+	}
+}
+
 void DependencyManager::AddObject(CatalogTransaction transaction, CatalogEntry &object, DependencyList &dependencies) {
 	// check for each object in the sources if they were not deleted yet
 	for (auto &dep : dependencies.set) {
-		auto &dependency = dep.get();
-		if (&dependency.ParentCatalog() != &object.ParentCatalog()) {
-			throw DependencyException(
-			    "Error adding dependency for object \"%s\" - dependency \"%s\" is in catalog "
-			    "\"%s\", which does not match the catalog \"%s\".\nCross catalog dependencies are not supported.",
-			    object.name, dependency.name, dependency.ParentCatalog().GetName(), object.ParentCatalog().GetName());
-		}
-		if (!dependency.set) {
-			throw InternalException("Dependency has no set");
-		}
-		auto catalog_entry = dependency.set->GetEntryInternal(transaction, dependency.name, nullptr);
-		if (!catalog_entry) {
+		auto catalog_entry = LookupEntry(dep, catalog, transaction);
+		if (!catalog_entry.entry) {
 			throw InternalException("Dependency has already been deleted?");
 		}
 	}
@@ -46,28 +51,31 @@ void DependencyManager::AddObject(CatalogTransaction transaction, CatalogEntry &
 }
 
 void DependencyManager::DropObject(CatalogTransaction transaction, CatalogEntry &object, bool cascade) {
-	D_ASSERT(dependents_map.find(object) != dependents_map.end());
+	auto dep_entry = Dependency(object);
+	D_ASSERT(dependents_map.find(dep_entry) != dependents_map.end());
 
 	// first check the objects that depend on this object
-	auto &dependent_objects = dependents_map[object];
+	auto &dependent_objects = dependents_map.at(object);
 	for (auto &dep : dependent_objects) {
 		// look up the entry in the catalog set
-		auto &entry = dep.entry.get();
-		auto &catalog_set = *entry.set;
-		auto mapping_value = catalog_set.GetMapping(transaction, entry.name, true /* get_latest */);
-		if (mapping_value == nullptr) {
+		auto lookup = LookupEntry(dep, catalog, transaction);
+		D_ASSERT(!lookup.error);
+		if (!lookup.entry) {
+			// the dependent object was already deleted, no conflict
 			continue;
 		}
-		auto dependency_entry = catalog_set.GetEntryInternal(transaction, mapping_value->index);
-		if (!dependency_entry) {
-			// the dependent object was already deleted, no conflict
+		auto &dependency_entry = *lookup.entry;
+		D_ASSERT(dependency_entry.set);
+		auto &catalog_set = *dependency_entry.set;
+		auto mapping_value = catalog_set.GetMapping(transaction, dep.entry.name, /* get_latest = */ true);
+		if (mapping_value == nullptr) {
 			continue;
 		}
 		// conflict: attempting to delete this object but the dependent object still exists
 		if (cascade || dep.dependency_type == DependencyType::DEPENDENCY_AUTOMATIC ||
 		    dep.dependency_type == DependencyType::DEPENDENCY_OWNS) {
 			// cascade: drop the dependent object
-			catalog_set.DropEntryInternal(transaction, mapping_value->index.Copy(), *dependency_entry, cascade);
+			catalog_set.DropEntryInternal(transaction, mapping_value->index.Copy(), dependency_entry, cascade);
 		} else {
 			// no cascade and there are objects that depend on this object: throw error
 			throw DependencyException("Cannot drop entry \"%s\" because there are entries that "
@@ -82,20 +90,19 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 	D_ASSERT(dependencies_map.find(old_obj) != dependencies_map.end());
 
 	// first check the objects that depend on this object
-	catalog_entry_vector_t owned_objects_to_add;
-	auto &dependent_objects = dependents_map[old_obj];
+	dependency_set_t owned_objects_to_add;
+	auto &dependent_objects = dependents_map.at(old_obj);
 	for (auto &dep : dependent_objects) {
 		// look up the entry in the catalog set
-		auto &entry = dep.entry.get();
-		auto &catalog_set = *entry.set;
-		auto dependency_entry = catalog_set.GetEntryInternal(transaction, entry.name, nullptr);
-		if (!dependency_entry) {
+		auto lookup = LookupEntry(dep, catalog, transaction);
+		D_ASSERT(!lookup.error);
+		if (!lookup.entry) {
 			// the dependent object was already deleted, no conflict
 			continue;
 		}
 		if (dep.dependency_type == DependencyType::DEPENDENCY_OWNS) {
 			// the dependent object is owned by the current object
-			owned_objects_to_add.push_back(dep.entry);
+			owned_objects_to_add.insert(dep);
 			continue;
 		}
 		// conflict: attempting to alter this object but the dependent object still exists
@@ -107,7 +114,7 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 	// add the new object to the dependents_map of each object that it depends on
 	auto &old_dependencies = dependencies_map[old_obj];
 	for (auto &dep : old_dependencies) {
-		auto &dependency = dep.get();
+		auto &dependency = dep;
 		dependents_map[dependency].insert(new_obj);
 	}
 
@@ -117,7 +124,7 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 	dependencies_map[new_obj] = old_dependencies;
 
 	for (auto &dependency : owned_objects_to_add) {
-		dependents_map[new_obj].insert(Dependency(dependency, DependencyType::DEPENDENCY_OWNS));
+		dependents_map[new_obj].insert(dependency);
 		dependents_map[dependency].insert(Dependency(new_obj, DependencyType::DEPENDENCY_OWNED_BY));
 		dependencies_map[new_obj].insert(dependency);
 	}
@@ -152,31 +159,34 @@ void DependencyManager::Scan(const std::function<void(CatalogEntry &, CatalogEnt
 	lock_guard<mutex> write_lock(catalog.GetWriteLock());
 	for (auto &entry : dependents_map) {
 		for (auto &dependent : entry.second) {
-			callback(entry.first, dependent.entry, dependent.dependency_type);
+			// FIXME: don't have a CatalogTransaction here, can't do a lookup to get the entry??
+			throw NotImplementedException("FIXME");
+			// callback(entry.first, dependent.entry, dependent.dependency_type);
 		}
 	}
 }
 
-void DependencyManager::AddOwnership(CatalogTransaction transaction, CatalogEntry &owner, CatalogEntry &entry) {
+void DependencyManager::AddOwnership(CatalogTransaction transaction, CatalogEntry &owner_p, CatalogEntry &entry) {
 	// lock the catalog for writing
 	lock_guard<mutex> write_lock(catalog.GetWriteLock());
 
 	// If the owner is already owned by something else, throw an error
-	for (auto &dep : dependents_map[owner]) {
+	for (auto &dep : dependents_map[owner_p]) {
 		if (dep.dependency_type == DependencyType::DEPENDENCY_OWNED_BY) {
-			throw DependencyException(owner.name + " already owned by " + dep.entry.get().name);
+			throw DependencyException(owner_p.name + " already owned by " + dep.entry.name);
 		}
 	}
 
 	// If the entry is already owned, throw an error
+	auto owner = Dependency(owner_p);
 	for (auto &dep : dependents_map[entry]) {
 		// if the entry is already owned, throw error
-		if (&dep.entry.get() != &owner) {
-			throw DependencyException(entry.name + " already depends on " + dep.entry.get().name);
+		if (dep.entry != owner.entry) {
+			throw DependencyException(entry.name + " already depends on " + dep.entry.name);
 		}
 		// if the entry owns the owner, throw error
-		if (&dep.entry.get() == &owner && dep.dependency_type == DependencyType::DEPENDENCY_OWNS) {
-			throw DependencyException(entry.name + " already owns " + owner.name +
+		if (dep.entry == owner.entry && dep.dependency_type == DependencyType::DEPENDENCY_OWNS) {
+			throw DependencyException(entry.name + " already owns " + owner.entry.name +
 			                          ". Cannot have circular dependencies");
 		}
 	}
@@ -185,7 +195,7 @@ void DependencyManager::AddOwnership(CatalogTransaction transaction, CatalogEntr
 	// In the case AddOwnership is called twice, because of emplace, the object will not be repeated in the set.
 	// We use an automatic dependency because if the Owner gets deleted, then the owned objects are also deleted
 	dependents_map[owner].emplace(entry, DependencyType::DEPENDENCY_OWNS);
-	dependents_map[entry].emplace(owner, DependencyType::DEPENDENCY_OWNED_BY);
+	dependents_map[entry].emplace(owner.entry, DependencyType::DEPENDENCY_OWNED_BY);
 	dependencies_map[owner].emplace(entry);
 }
 

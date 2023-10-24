@@ -15,6 +15,7 @@ add_library_unity(
   catalog_set.cpp
   catalog_transaction.cpp
   duck_catalog.cpp
+  dependency.cpp
   dependency_list.cpp
   dependency_manager.cpp
   similar_catalog_entry.cpp)

@@ -16,6 +16,7 @@
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/enums/on_entry_not_found.hpp"
+#include "duckdb/common/preserved_error.hpp"
 #include <functional>
 
 namespace duckdb {
@@ -66,6 +67,17 @@ class LogicalInsert;
 class LogicalDelete;
 class LogicalUpdate;
 class CreateStatement;
+
+//! Return value of Catalog::LookupEntry
+struct CatalogEntryLookup {
+	optional_ptr<SchemaCatalogEntry> schema;
+	optional_ptr<CatalogEntry> entry;
+	PreservedError error;
+
+	DUCKDB_API bool Found() const {
+		return entry;
+	}
+};
 
 //! The Catalog object represents the catalog of the database.
 class Catalog {
@@ -309,14 +321,15 @@ public:
 	static bool AutoLoadExtensionByCatalogEntry(ClientContext &context, CatalogType type, const string &entry_name);
 	DUCKDB_API static bool TryAutoLoad(ClientContext &context, const string &extension_name) noexcept;
 
+	//! Lookup an entry in the schema, returning a lookup with the entry and schema if they exist
+	CatalogEntryLookup TryLookupEntryInternal(CatalogTransaction transaction, CatalogType type, const string &schema,
+	                                          const string &name);
+
 protected:
 	//! Reference to the database
 	AttachedDatabase &db;
 
 private:
-	//! Lookup an entry in the schema, returning a lookup with the entry and schema if they exist
-	CatalogEntryLookup TryLookupEntryInternal(CatalogTransaction transaction, CatalogType type, const string &schema,
-	                                          const string &name);
 	//! Calls LookupEntryInternal on the schema, trying other schemas if the schema is invalid. Sets
 	//! CatalogEntryLookup->error depending on if_not_found when no entry is found
 	CatalogEntryLookup TryLookupEntry(ClientContext &context, CatalogType type, const string &schema,

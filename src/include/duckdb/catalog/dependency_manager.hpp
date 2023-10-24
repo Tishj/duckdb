@@ -40,10 +40,10 @@ private:
 	DuckCatalog &catalog;
 	//! Map of objects that DEPEND on [object], i.e. [object] can only be deleted when all entries in the dependency map
 	//! are deleted.
-	catalog_entry_map_t<dependency_set_t> dependents_map;
+	dependency_map_t<dependency_set_t> dependents_map;
 	//! Map of objects that the source object DEPENDS on, i.e. when any of the entries in the vector perform a CASCADE
 	//! drop then [object] is deleted as well
-	catalog_entry_map_t<catalog_entry_set_t> dependencies_map;
+	dependency_map_t<dependency_set_t> dependencies_map;
 
 private:
 	void AddObject(CatalogTransaction transaction, CatalogEntry &object, DependencyList &dependencies);
