@@ -87,14 +87,23 @@ bool CatalogSet::CreateEntry(CatalogTransaction transaction, const string &name,
 			throw InvalidInputException("Cannot create non-temporary entry \"%s\" in temporary catalog", name);
 		}
 	}
+
+	// create a new entry and replace the currently stored one
+	// set the timestamp to the timestamp of the current transaction
+	// and point it at the dummy node
+	value->timestamp = transaction.transaction_id;
+	value->set = this;
+	// Add the dependency set of this object to the dependency manager
+	catalog.GetDependencyManager().AddObject(transaction, *value, dependencies);
+
 	// lock the catalog for writing
 	lock_guard<mutex> write_lock(catalog.GetWriteLock());
 	// lock this catalog set to disallow reading
 	unique_lock<mutex> read_lock(catalog_lock);
 
 	// first check if the entry exists in the unordered set
-	idx_t index;
-	auto mapping_value = GetMapping(transaction, name);
+	catalog_entry_t index;
+	auto mapping_value = GetMapping(transaction, name, /*get_latest = */false);
 	if (mapping_value == nullptr || mapping_value->deleted) {
 		// if it does not: entry has never been created
 
@@ -130,14 +139,6 @@ bool CatalogSet::CreateEntry(CatalogTransaction transaction, const string &name,
 			return false;
 		}
 	}
-	// create a new entry and replace the currently stored one
-	// set the timestamp to the timestamp of the current transaction
-	// and point it at the dummy node
-	value->timestamp = transaction.transaction_id;
-	value->set = this;
-
-	// now add the dependency set of this object to the dependency manager
-	catalog.GetDependencyManager().AddObject(transaction, *value, dependencies);
 
 	auto value_ptr = value.get();
 	EntryIndex entry_index(*this, index);
@@ -296,6 +297,7 @@ void CatalogSet::DropEntryInternal(CatalogTransaction transaction, EntryIndex en
                                    bool cascade) {
 	DropEntryDependencies(transaction, entry_index, entry, cascade);
 
+	lock_guard<mutex> read_lock(catalog_lock);
 	// create a new entry and replace the currently stored one
 	// set the timestamp to the timestamp of the current transaction
 	// and point it at the dummy node
@@ -326,7 +328,6 @@ bool CatalogSet::DropEntry(CatalogTransaction transaction, const string &name, b
 		throw CatalogException("Cannot drop entry \"%s\" because it is an internal system entry", entry->name);
 	}
 
-	lock_guard<mutex> read_lock(catalog_lock);
 	DropEntryInternal(transaction, std::move(entry_index), *entry, cascade);
 	return true;
 }
@@ -379,6 +380,7 @@ optional_ptr<MappingValue> CatalogSet::GetMapping(CatalogTransaction transaction
 	if (get_latest) {
 		return mapping_value;
 	}
+	// Traverse the linked list of mapping values to find the right one
 	while (mapping_value->child) {
 		if (UseTimestamp(transaction, mapping_value->timestamp)) {
 			break;
