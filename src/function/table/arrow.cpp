@@ -291,12 +291,12 @@ bool ArrowTableFunction::ArrowScanParallelStateNext(ClientContext &context, cons
 	while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release) {
 		current_chunk = parallel_state.stream->GetNextChunk();
 	}
-	state.chunk = std::move(current_chunk);
 	//! have we run out of chunks? we are done
-	if (!state.chunk->arrow_array.release) {
+	if (!current_chunk->arrow_array.release) {
 		parallel_state.done = true;
 		return false;
 	}
+	state.SetChunk(std::move(current_chunk));
 	return true;
 }
 
@@ -352,12 +352,12 @@ void ArrowTableFunction::ArrowScanFunction(ClientContext &context, TableFunction
 	auto &global_state = data_p.global_state->Cast<ArrowScanGlobalState>();
 
 	//! Out of tuples in this chunk
-	if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length) {
+	if (state.chunk_offset >= (idx_t)state.Chunk().length) {
 		if (!ArrowScanParallelStateNext(context, data_p.bind_data.get(), state, global_state)) {
 			return;
 		}
 	}
-	int64_t output_size = MinValue<int64_t>(STANDARD_VECTOR_SIZE, state.chunk->arrow_array.length - state.chunk_offset);
+	int64_t output_size = MinValue<int64_t>(STANDARD_VECTOR_SIZE, state.Chunk().length - state.chunk_offset);
 	data.lines_read += output_size;
 	if (global_state.CanRemoveFilterColumns()) {
 		state.all_columns.Reset();

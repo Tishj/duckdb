@@ -35,6 +35,9 @@ public:
 		arrow_array.length = 0;
 		arrow_array.release = nullptr;
 	}
+	ArrowArrayWrapper(const ArrowArrayWrapper &other) = delete;
+	ArrowArrayWrapper &operator=(const ArrowArrayWrapper &other) = delete;
+	ArrowArrayWrapper &operator=(ArrowArrayWrapper &&other) = delete;
 	ArrowArrayWrapper(ArrowArrayWrapper &&other) : arrow_array(other.arrow_array) {
 		other.arrow_array.release = nullptr;
 	}
@@ -53,10 +56,14 @@ public:
 
 	const char *GetError();
 
+public:
 	~ArrowArrayStreamWrapper();
 	ArrowArrayStreamWrapper() {
 		arrow_array_stream.release = nullptr;
 	}
+	ArrowArrayStreamWrapper(const ArrowArrayStreamWrapper &other) = delete;
+	ArrowArrayStreamWrapper &operator=(const ArrowArrayStreamWrapper &other) = delete;
+	ArrowArrayStreamWrapper &operator=(ArrowArrayStreamWrapper &&other) = delete;
 };
 
 class ArrowUtil {

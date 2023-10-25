@@ -88,7 +88,6 @@ public:
 
 public:
 	unique_ptr<ArrowArrayStreamWrapper> stream;
-	shared_ptr<ArrowArrayWrapper> chunk;
 	// This vector hold the Arrow Vectors owned by DuckDB to allow for zero-copy
 	// Note that only DuckDB can release these vectors
 	unordered_map<idx_t, shared_ptr<ArrowArrayWrapper>> arrow_owned_data;
@@ -101,6 +100,19 @@ public:
 	DataChunk all_columns;
 
 public:
+	const ArrowArray &Chunk() const {
+		D_ASSERT(chunk);
+		D_ASSERT(chunk->arrow_array.release);
+		return chunk->arrow_array;
+	}
+	void SetChunk(shared_ptr<ArrowArrayWrapper> chunk_p) {
+		chunk = std::move(chunk_p);
+	}
+	shared_ptr<ArrowArrayWrapper> ShareChunk() {
+		D_ASSERT(chunk);
+		D_ASSERT(chunk->arrow_array.release);
+		return chunk;
+	}
 	ArrowArrayScanState &GetState(idx_t child_idx) {
 		auto it = array_states.find(child_idx);
 		if (it == array_states.end()) {
@@ -111,6 +123,9 @@ public:
 		}
 		return *it->second;
 	}
+
+private:
+	shared_ptr<ArrowArrayWrapper> chunk;
 };
 
 struct ArrowScanGlobalState : public GlobalTableFunctionState {

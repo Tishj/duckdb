@@ -864,22 +864,15 @@ void ArrowTableFunction::ArrowToDuckDB(ArrowScanLocalState &scan_state, const ar
 			continue;
 		}
 
-		auto &array = *scan_state.chunk->arrow_array.children[arrow_array_idx];
+		auto &array = *scan_state.Chunk().children[arrow_array_idx];
 		if (!array.release) {
 			throw InvalidInputException("arrow_scan: released array passed");
 		}
-		if (array.length != scan_state.chunk->arrow_array.length) {
+		if (array.length != scan_state.Chunk().length) {
 			throw InvalidInputException("arrow_scan: array length mismatch");
 		}
 		// Make sure this Vector keeps the Arrow chunk alive in case we can zero-copy the data
-		if (scan_state.arrow_owned_data.find(idx) == scan_state.arrow_owned_data.end()) {
-			auto arrow_data = make_shared<ArrowArrayWrapper>();
-			arrow_data->arrow_array = scan_state.chunk->arrow_array;
-			scan_state.chunk->arrow_array.release = nullptr;
-			scan_state.arrow_owned_data[idx] = arrow_data;
-		}
-
-		output.data[idx].GetBuffer()->SetAuxiliaryData(make_uniq<ArrowAuxiliaryData>(scan_state.arrow_owned_data[idx]));
+		output.data[idx].GetBuffer()->SetAuxiliaryData(make_uniq<ArrowAuxiliaryData>(scan_state.ShareChunk()));
 
 		D_ASSERT(arrow_convert_data.find(col_idx) != arrow_convert_data.end());
 		auto &arrow_type = *arrow_convert_data.at(col_idx);
