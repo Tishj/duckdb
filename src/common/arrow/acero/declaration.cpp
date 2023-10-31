@@ -24,6 +24,7 @@
 
 #include "duckdb/main/acero/arrow_conversion.hpp"
 #include "duckdb/common/arrow/physical_arrow_collector.hpp"
+#include "duckdb/main/acero/tpch_nodes.hpp"
 #include <chrono>
 
 namespace duckdb {
@@ -150,11 +151,13 @@ shared_ptr<arrow::Table> DeclarationToTable(Declaration plan) {
 	long long combined = 0;
 
 	auto start_time = std::chrono::high_resolution_clock::now();
-	auto rel = ConvertDeclaration(con.context, std::move(plan));
+	auto rel = AceroTPCHNodes::DuckDBTpchQuery6(con.context);
+	//auto rel = ConvertDeclaration(con.context, std::move(plan));
 	auto end_time = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 	Printer::Print(StringUtil::Format("Plan conversion | time elapsed us): %d\n", duration.count()));
 	combined += duration.count();
+
 
 	auto &context = con.context;
 

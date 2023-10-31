@@ -1,8 +1,3 @@
-#include "catch.hpp"
-#include "test_helpers.hpp"
-
-#include "arrow/arrow_test_helper.hpp"
-
 #include <iostream>
 #include <map>
 #include <set>
@@ -54,12 +49,10 @@ vector<ColumnDefinition> LineItemColumns() {
 	return columns;
 }
 
-shared_ptr<Relation> AceroTPCHNodes::DuckDBTpchQuery6() {
-	DuckDB db;
-	Connection conn(db);
-	auto &context = conn.context;
-
+shared_ptr<Relation> AceroTPCHNodes::DuckDBTpchQuery6(shared_ptr<ClientContext> &context) {
 	shared_ptr<Relation> plan;
+
+	context->Query("call dbgen(sf=0.1)", false);
 
 	// root source: LogicalGet
 	auto table_description = make_uniq<TableDescription>(
@@ -183,6 +176,21 @@ shared_ptr<Relation> AceroTPCHNodes::DuckDBTpchQuery6() {
 		}
 	);
 	return plan;
+}
+shared_ptr<Relation> AceroTPCHNodes::DuckDBTpchQuery1(shared_ptr<ClientContext> &context) {
+	return nullptr;
+}
+
+// Acero
+
+shared_ptr<Relation> AceroTPCHNodes::AceroTpchQuery6(shared_ptr<ClientContext> &context) {
+	return nullptr;
+}
+
+shared_ptr<Relation> AceroTPCHNodes::AceroTpchQuery1(shared_ptr<ClientContext> &context) {
+	// generate tpch and convert it to arrow so we can feed it to a SourceNode
+	ac::Declaration lineitem {"source", ac::SourceNodeOptions {input_l->schema, input_l}};
+	
 }
 
 } // namespace ac
