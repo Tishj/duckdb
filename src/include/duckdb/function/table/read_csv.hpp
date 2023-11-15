@@ -25,6 +25,8 @@ class ReadCSV {
 public:
 	static unique_ptr<CSVFileHandle> OpenCSV(const string &file_path, FileCompressionType compression,
 	                                         ClientContext &context);
+	static unique_ptr<TableRef> ReplacementScan(ClientContext &context, const string &table_name,
+	                                            ReplacementScanData *data);
 };
 
 struct BaseCSVData : public TableFunctionData {

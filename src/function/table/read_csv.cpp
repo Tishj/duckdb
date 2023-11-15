@@ -990,7 +990,8 @@ void ReadCSVTableFunction::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(MultiFileReader::CreateFunctionSet(ReadCSVTableFunction::GetAutoFunction()));
 }
 
-unique_ptr<TableRef> ReadCSVReplacement(ClientContext &context, const string &table_name, ReplacementScanData *data) {
+unique_ptr<TableRef> ReadCSV::ReplacementScan(ClientContext &context, const string &table_name,
+                                              ReplacementScanData *data) {
 	auto lower_name = StringUtil::Lower(table_name);
 	// remove any compression
 	if (StringUtil::EndsWith(lower_name, ".gz")) {
@@ -1022,7 +1023,7 @@ void BuiltinFunctions::RegisterReadFunctions() {
 	CSVCopyFunction::RegisterFunction(*this);
 	ReadCSVTableFunction::RegisterFunction(*this);
 	auto &config = DBConfig::GetConfig(*transaction.db);
-	config.replacement_scans.emplace_back(ReadCSVReplacement);
+	config.replacement_scans.emplace_back(ReadCSV::ReplacementScan);
 }
 
 } // namespace duckdb
