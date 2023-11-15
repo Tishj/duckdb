@@ -995,9 +995,17 @@ from_clause:
 			| /*EMPTY*/								{ $$ = NIL; }
 		;
 
+from_elem:
+			table_ref								{ $$ = $1}
+			| '[' opt_expr_list_opt_comma ']' {
+				PGFuncCall *n = makeFuncCall(SystemFuncName("list_value"), $2, @2);
+				$$ = (PGNode *) n;
+			}
+		;
+
 from_list:
-			table_ref								{ $$ = list_make1($1); }
-			| from_list ',' table_ref				{ $$ = lappend($1, $3); }
+			from_elem								{ $$ = list_make1($1); }
+			| from_list ',' from_elem				{ $$ = lappend($1, $3); }
 		;
 
 from_list_opt_comma:

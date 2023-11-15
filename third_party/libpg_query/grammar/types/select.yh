@@ -78,7 +78,7 @@
 %type <list>	func_alias_clause
 %type <sortby>	sortby
 
-%type <node>	table_ref
+%type <node>	table_ref from_elem
 %type <jexpr>	joined_table
 %type <range>	relation_expr
 
