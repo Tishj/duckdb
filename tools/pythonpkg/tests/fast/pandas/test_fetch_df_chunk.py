@@ -48,38 +48,38 @@ class TestType(object):
         size = 10000
         con = duckdb.connect()
         con.execute(f"CREATE table t as select range a from range({size});")
-        query = con.execute("SELECT a FROM t")
+        con.execute("SELECT a FROM t")
 
         # Return 2 vectors
-        cur_chunk = query.fetch_df_chunk(2)
+        cur_chunk = con.fetch_df_chunk(2)
         assert cur_chunk['a'][0] == 0
         assert len(cur_chunk) == VECTOR_SIZE * 2
 
         # Return Default 1 vector
-        cur_chunk = query.fetch_df_chunk()
+        cur_chunk = con.fetch_df_chunk()
         assert cur_chunk['a'][0] == VECTOR_SIZE * 2
         assert len(cur_chunk) == VECTOR_SIZE
 
         # Return 0 vectors
-        cur_chunk = query.fetch_df_chunk(0)
+        cur_chunk = con.fetch_df_chunk(0)
         assert len(cur_chunk) == 0
 
         fetched = VECTOR_SIZE * 3
         expected = size - fetched
 
         # Return more vectors than we have remaining
-        cur_chunk = query.fetch_df_chunk(3)
+        cur_chunk = con.fetch_df_chunk(3)
         assert cur_chunk['a'][0] == fetched
         assert len(cur_chunk) == expected
 
         # These shouldn't throw errors (Just emmit empty chunks)
-        cur_chunk = query.fetch_df_chunk(100)
+        cur_chunk = con.fetch_df_chunk(100)
         assert len(cur_chunk) == 0
 
-        cur_chunk = query.fetch_df_chunk(0)
+        cur_chunk = con.fetch_df_chunk(0)
         assert len(cur_chunk) == 0
 
-        cur_chunk = query.fetch_df_chunk()
+        cur_chunk = con.fetch_df_chunk()
         assert len(cur_chunk) == 0
 
     def test_fetch_df_chunk_negative_parameter(self):

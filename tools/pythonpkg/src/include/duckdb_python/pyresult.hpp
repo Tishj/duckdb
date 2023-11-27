@@ -16,6 +16,8 @@
 
 namespace duckdb {
 
+enum class ResultStatus { OPEN, DEPLETED, INVALIDATED };
+
 struct DuckDBPyResult {
 public:
 	explicit DuckDBPyResult(unique_ptr<QueryResult> result);
@@ -48,7 +50,8 @@ public:
 
 	void Close();
 
-	bool IsClosed() const;
+	bool IsInvalidated();
+	bool IsDepleted() const;
 
 	unique_ptr<DataChunk> FetchChunk();
 
@@ -66,9 +69,12 @@ private:
 
 	void ChangeToTZType(PandasDataFrame &df);
 	void ChangeDateToDatetime(PandasDataFrame &df);
+	using get_chunk_func_t = std::function<unique_ptr<DataChunk>(QueryResult &result)>;
+	unique_ptr<DataChunk> FetchChunkInternal(QueryResult &result, get_chunk_func_t func);
 	unique_ptr<DataChunk> FetchNext(QueryResult &result);
 	unique_ptr<DataChunk> FetchNextRaw(QueryResult &result);
 	unique_ptr<NumpyResultConversion> InitializeNumpyConversion(bool pandas = false);
+	bool IsInvalidatedInternal();
 
 private:
 	idx_t chunk_offset = 0;
@@ -79,7 +85,7 @@ private:
 	unordered_map<idx_t, py::list> categories;
 	// Holds the categorical type of Categorical/ENUM types
 	unordered_map<idx_t, py::object> categories_type;
-	bool result_closed = false;
+	ResultStatus result_status;
 };
 
 } // namespace duckdb

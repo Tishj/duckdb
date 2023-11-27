@@ -92,7 +92,10 @@ bool StreamQueryResult::IsOpenInternal(ClientContextLock &lock) {
 	if (!invalidated) {
 		invalidated = !context->IsActiveResult(lock, this);
 	}
-	return !invalidated;
+	if (invalidated) {
+		return false;
+	}
+	return true;
 }
 
 bool StreamQueryResult::IsOpen() {
