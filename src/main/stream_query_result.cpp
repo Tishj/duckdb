@@ -61,6 +61,13 @@ unique_ptr<DataChunk> StreamQueryResult::FetchRaw() {
 		Close();
 		return nullptr;
 	}
+	// Perform a copy to make sure the chunks don't rely on memory held by the executor/connection
+	for (idx_t i = 0; i < chunk->ColumnCount(); i++) {
+		auto &result = chunk->data[i];
+		if (result.GetVectorType() == VectorType::FLAT_VECTOR) {
+			VectorOperations::Copy(result, result, chunk->size(), 0, 0);
+		}
+	}
 	return chunk;
 }
 
