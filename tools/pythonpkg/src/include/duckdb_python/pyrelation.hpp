@@ -251,6 +251,7 @@ public:
 	py::str Type();
 	py::list Columns();
 	py::list ColumnTypes();
+	bool IsClosed() const;
 
 	string ToString();
 	void Print(const Optional<py::int_> &max_width, const Optional<py::int_> &max_rows,
@@ -260,6 +261,7 @@ public:
 	string Explain(ExplainType type);
 
 	static bool IsRelation(const py::object &object);
+	static unique_ptr<QueryResult> ExecuteRelation(const shared_ptr<Relation> &rel, bool stream_result = false);
 
 	Relation &GetRel();
 
@@ -294,6 +296,7 @@ private:
 	vector<string> names;
 	unique_ptr<DuckDBPyResult> result;
 	std::string rendered_result;
+	bool closed = false;
 };
 
 } // namespace duckdb

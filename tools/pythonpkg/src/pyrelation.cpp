@@ -22,6 +22,10 @@
 
 namespace duckdb {
 
+bool DuckDBPyRelation::IsClosed() const {
+	return closed;
+}
+
 DuckDBPyRelation::DuckDBPyRelation(shared_ptr<Relation> rel_p) : rel(std::move(rel_p)) {
 	if (!rel) {
 		throw InternalException("DuckDBPyRelation created without a relation");
@@ -204,21 +208,9 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Aggregate(const string &expr, con
 	return make_uniq<DuckDBPyRelation>(rel->Aggregate(expr));
 }
 
-void DuckDBPyRelation::AssertResult() const {
-	if (!result) {
-		throw InvalidInputException("No open result set");
-	}
-}
-
 void DuckDBPyRelation::AssertRelation() const {
 	if (!rel) {
 		throw InvalidInputException("This relation was created from a result");
-	}
-}
-
-void DuckDBPyRelation::AssertResultOpen() const {
-	if (!result || result->IsClosed()) {
-		throw InvalidInputException("No open result set");
 	}
 }
 
@@ -233,6 +225,8 @@ Relation &DuckDBPyRelation::GetRel() {
 	return *rel;
 }
 
+namespace {
+
 struct DescribeAggregateInfo {
 	explicit DescribeAggregateInfo(string name_p, bool numeric_only = false)
 	    : name(std::move(name_p)), numeric_only(numeric_only) {
@@ -242,8 +236,8 @@ struct DescribeAggregateInfo {
 	bool numeric_only;
 };
 
-vector<string> CreateExpressionList(const vector<ColumnDefinition> &columns,
-                                    const vector<DescribeAggregateInfo> &aggregates) {
+static vector<string> CreateExpressionList(const vector<ColumnDefinition> &columns,
+                                           const vector<DescribeAggregateInfo> &aggregates) {
 	vector<string> expressions;
 	expressions.reserve(columns.size());
 
@@ -286,6 +280,8 @@ vector<string> CreateExpressionList(const vector<ColumnDefinition> &columns,
 	}
 	return expressions;
 }
+
+} // namespace
 
 unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Describe() {
 	auto &columns = rel->Columns();
@@ -714,193 +710,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Distinct() {
 	return make_uniq<DuckDBPyRelation>(rel->Distinct());
 }
 
-duckdb::pyarrow::RecordBatchReader DuckDBPyRelation::FetchRecordBatchReader(idx_t rows_per_batch) {
-	AssertResult();
-	return result->FetchRecordBatchReader(rows_per_batch);
-}
-
-static unique_ptr<QueryResult> PyExecuteRelation(const shared_ptr<Relation> &rel, bool stream_result = false) {
-	if (!rel) {
-		return nullptr;
-	}
-	auto context = rel->context.GetContext();
-	py::gil_scoped_release release;
-	auto pending_query = context->PendingQuery(rel, stream_result);
-	return DuckDBPyConnection::CompletePendingQuery(*pending_query);
-}
-
-unique_ptr<QueryResult> DuckDBPyRelation::ExecuteInternal(bool stream_result) {
-	this->executed = true;
-	return PyExecuteRelation(rel, stream_result);
-}
-
-void DuckDBPyRelation::ExecuteOrThrow(bool stream_result) {
-	auto query_result = ExecuteInternal(stream_result);
-	if (!query_result) {
-		throw InternalException("ExecuteOrThrow - no query available to execute");
-	}
-	if (query_result->HasError()) {
-		query_result->ThrowError();
-	}
-	result = make_uniq<DuckDBPyResult>(std::move(query_result));
-}
-
-PandasDataFrame DuckDBPyRelation::FetchDF(bool date_as_object) {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow();
-	}
-	if (result->IsClosed()) {
-		return py::none();
-	}
-	auto df = result->FetchDF(date_as_object);
-	result = nullptr;
-	return df;
-}
-
-Optional<py::tuple> DuckDBPyRelation::FetchOne() {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow(true);
-	}
-	if (result->IsClosed()) {
-		return py::none();
-	}
-	return result->Fetchone();
-}
-
-py::list DuckDBPyRelation::FetchMany(idx_t size) {
-	if (!result) {
-		if (!rel) {
-			return py::list();
-		}
-		ExecuteOrThrow(true);
-		D_ASSERT(result);
-	}
-	if (result->IsClosed()) {
-		return py::list();
-	}
-	return result->Fetchmany(size);
-}
-
-py::list DuckDBPyRelation::FetchAll() {
-	if (!result) {
-		if (!rel) {
-			return py::list();
-		}
-		ExecuteOrThrow();
-	}
-	if (result->IsClosed()) {
-		return py::list();
-	}
-	auto res = result->Fetchall();
-	result = nullptr;
-	return res;
-}
-
-py::dict DuckDBPyRelation::FetchNumpy() {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow();
-	}
-	if (result->IsClosed()) {
-		return py::none();
-	}
-	auto res = result->FetchNumpy();
-	result = nullptr;
-	return res;
-}
-
-py::dict DuckDBPyRelation::FetchPyTorch() {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow();
-	}
-	if (result->IsClosed()) {
-		return py::none();
-	}
-	auto res = result->FetchPyTorch();
-	result = nullptr;
-	return res;
-}
-
-py::dict DuckDBPyRelation::FetchTF() {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow();
-	}
-	if (result->IsClosed()) {
-		return py::none();
-	}
-	auto res = result->FetchTF();
-	result = nullptr;
-	return res;
-}
-
-py::dict DuckDBPyRelation::FetchNumpyInternal(bool stream, idx_t vectors_per_chunk) {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow();
-	}
-	AssertResultOpen();
-	auto res = result->FetchNumpyInternal(stream, vectors_per_chunk);
-	result = nullptr;
-	return res;
-}
-
-//! Should this also keep track of when the result is empty and set result->result_closed accordingly?
-PandasDataFrame DuckDBPyRelation::FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object) {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow(true);
-	}
-	AssertResultOpen();
-	return result->FetchDFChunk(vectors_per_chunk, date_as_object);
-}
-
-duckdb::pyarrow::Table DuckDBPyRelation::ToArrowTable(idx_t batch_size) {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow();
-	}
-	AssertResultOpen();
-	auto res = result->FetchArrowTable(batch_size);
-	result = nullptr;
-	return res;
-}
-
-PolarsDataFrame DuckDBPyRelation::ToPolars(idx_t batch_size) {
-	auto arrow = ToArrowTable(batch_size);
-	return py::cast<PolarsDataFrame>(pybind11::module_::import("polars").attr("DataFrame")(arrow));
-}
-
-duckdb::pyarrow::RecordBatchReader DuckDBPyRelation::ToRecordBatch(idx_t batch_size) {
-	if (!result) {
-		if (!rel) {
-			return py::none();
-		}
-		ExecuteOrThrow(true);
-	}
-	AssertResultOpen();
-	return result->FetchRecordBatchReader(batch_size);
-}
-
 void DuckDBPyRelation::Close() {
 	// We always want to execute the query at least once, for side-effect purposes.
 	// if it has already been executed, we don't need to do it again.
@@ -910,6 +719,7 @@ void DuckDBPyRelation::Close() {
 		}
 		ExecuteOrThrow();
 	}
+	closed = true;
 	if (result) {
 		result->Close();
 	}
@@ -1042,7 +852,7 @@ void DuckDBPyRelation::ToParquet(const string &filename, const py::object &compr
 	}
 
 	auto write_parquet = rel->WriteParquetRel(filename, std::move(options));
-	PyExecuteRelation(write_parquet);
+	DuckDBPyRelation::ExecuteRelation(write_parquet);
 }
 
 void DuckDBPyRelation::ToCSV(const string &filename, const py::object &sep, const py::object &na_rep,
@@ -1140,7 +950,7 @@ void DuckDBPyRelation::ToCSV(const string &filename, const py::object &sep, cons
 	}
 
 	auto write_csv = rel->WriteCSVRel(filename, std::move(options));
-	PyExecuteRelation(write_csv);
+	DuckDBPyRelation::ExecuteRelation(write_csv);
 }
 
 // should this return a rel with the new view?
@@ -1208,7 +1018,7 @@ void DuckDBPyRelation::InsertInto(const string &table) {
 	AssertRelation();
 	auto parsed_info = QualifiedName::Parse(table);
 	auto insert = rel->InsertRel(parsed_info.schema, parsed_info.name);
-	PyExecuteRelation(insert);
+	DuckDBPyRelation::ExecuteRelation(insert);
 }
 
 static bool IsAcceptedInsertRelationType(const Relation &relation) {
@@ -1230,7 +1040,7 @@ void DuckDBPyRelation::Create(const string &table) {
 	AssertRelation();
 	auto parsed_info = QualifiedName::Parse(table);
 	auto create = rel->CreateRel(parsed_info.schema, parsed_info.name);
-	PyExecuteRelation(create);
+	DuckDBPyRelation::ExecuteRelation(create);
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Map(py::function fun, Optional<py::object> schema) {
@@ -1351,6 +1161,16 @@ py::list DuckDBPyRelation::ColumnTypes() {
 
 bool DuckDBPyRelation::IsRelation(const py::object &object) {
 	return py::isinstance<DuckDBPyRelation>(object);
+}
+
+unique_ptr<QueryResult> DuckDBPyRelation::ExecuteRelation(const shared_ptr<Relation> &rel, bool stream_result) {
+	if (!rel) {
+		return nullptr;
+	}
+	auto context = rel->context.GetContext();
+	py::gil_scoped_release release;
+	auto pending_query = context->PendingQuery(rel, stream_result);
+	return DuckDBPyConnection::CompletePendingQuery(*pending_query);
 }
 
 } // namespace duckdb

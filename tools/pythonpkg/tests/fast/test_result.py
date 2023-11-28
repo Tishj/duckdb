@@ -12,15 +12,15 @@ class TestPythonResult(object):
         rel = connection.table("integers")
         res = rel.aggregate("sum(i)").execute()
         res.close()
-        with pytest.raises(duckdb.InvalidInputException, match='result closed'):
+        with pytest.raises(duckdb.InvalidInputException, match='Relation has already been closed'):
             res.fetchone()
-        with pytest.raises(duckdb.InvalidInputException, match='result closed'):
+        with pytest.raises(duckdb.InvalidInputException, match='Relation has already been closed'):
             res.fetchall()
-        with pytest.raises(duckdb.InvalidInputException, match='result closed'):
+        with pytest.raises(duckdb.InvalidInputException, match='Relation has already been closed'):
             res.fetchnumpy()
-        with pytest.raises(duckdb.InvalidInputException, match='There is no query result'):
+        with pytest.raises(duckdb.InvalidInputException, match='Relation has already been closed'):
             res.fetch_arrow_table()
-        with pytest.raises(duckdb.InvalidInputException, match='There is no query result'):
+        with pytest.raises(duckdb.InvalidInputException, match='Relation has already been closed'):
             res.fetch_arrow_reader(1)
 
     def test_result_describe_types(self, duckdb_cursor):
@@ -35,6 +35,28 @@ class TestPythonResult(object):
             ('j', 'Time', None, None, None, None, None),
             ('k', 'STRING', None, None, None, None, None),
         ]
+
+    def test_result_invalidated(self, duckdb_cursor):
+        duckdb_cursor.execute(r'CREATE TABLE test(id INTEGER , name VARCHAR NOT NULL);')
+
+        words = ['aaaaaaaaaaaaaaaaaaaaaaa', 'bbbb', 'ccccccccc', 'ííííííííí']
+        lines = [(i, words[i % 4]) for i in range(1000)]
+        duckdb_cursor.executemany("INSERT INTO TEST (id, name) VALUES (?, ?)", lines)
+
+        rel1 = duckdb_cursor.sql(
+            """
+            SELECT id, name FROM test ORDER BY id DESC
+        """
+        )
+        result = rel1.fetchmany(size=5)
+        result = duckdb_cursor.sql("SELECT name from test order by id desc limit 1").fetchone()
+        with pytest.raises(
+            duckdb.InvalidInputException,
+            match='This relation is no longer valid, it can no longer be fetched from. Try re-executing the relation',
+        ):
+            # On the same connection, it's not possible to fetch from one relation, then fetch from another, then attempt to continue fetching from the first relation
+            # The internal result will be invalid
+            result = rel1.fetchmany(size=5)
 
     def test_result_timestamps(self, duckdb_cursor):
         connection = duckdb.connect('')

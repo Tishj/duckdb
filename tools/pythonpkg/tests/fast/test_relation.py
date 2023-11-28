@@ -308,6 +308,7 @@ class TestRelation(object):
         assert counter.count == 1
         # Close the result
         rel.close()
+        rel = conn.sql('select my_counter()')
         # Verify that the query was not run again
         assert counter.count == 1
         rel.fetchall()

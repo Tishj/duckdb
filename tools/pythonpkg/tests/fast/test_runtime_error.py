@@ -43,7 +43,7 @@ class TestRuntimeError(object):
         arrow_relation = con.from_arrow(arrow_object)
         res = arrow_relation.execute()
         res.close()
-        with pytest.raises(duckdb.InvalidInputException, match='There is no query result'):
+        with pytest.raises(duckdb.InvalidInputException, match='Relation has already been closed'):
             res.fetch_arrow_table()
 
     def test_arrow_record_batch_reader_error(self):
@@ -54,7 +54,7 @@ class TestRuntimeError(object):
         arrow_relation = con.from_arrow(arrow_object)
         res = arrow_relation.execute()
         res.close()
-        with pytest.raises(duckdb.ProgrammingError, match='There is no query result'):
+        with pytest.raises(duckdb.ProgrammingError, match='Relation has already been closed'):
             res.fetch_arrow_reader(1)
 
     @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])

@@ -47,47 +47,46 @@ unique_ptr<DataChunk> DuckDBPyResult::FetchChunk() {
 	return FetchNext(*result);
 }
 
-unique_ptr<DataChunk> DuckDBPyResult::FetchNext(QueryResult &query_result) {
-	if (!result_closed && query_result.type == QueryResultType::STREAM_RESULT &&
-	    !query_result.Cast<StreamQueryResult>().IsOpen()) {
-		result_closed = true;
+unique_ptr<DataChunk> DuckDBPyResult::FetchChunkInternal(QueryResult &query_result, get_chunk_func_t func) {
+	D_ASSERT(!IsInvalidated());
+	if (IsDepleted()) {
 		return nullptr;
 	}
-	auto chunk = query_result.Fetch();
+	auto chunk = func(query_result);
 	if (query_result.HasError()) {
 		query_result.ThrowError();
+	}
+	if (!chunk || chunk->size() == 0) {
+		result_status = ResultStatus::DEPLETED;
 	}
 	return chunk;
 }
 
+unique_ptr<DataChunk> DuckDBPyResult::FetchNext(QueryResult &query_result) {
+	return FetchChunkInternal(query_result, [](QueryResult &result) { return result.Fetch(); });
+}
+
 unique_ptr<DataChunk> DuckDBPyResult::FetchNextRaw(QueryResult &query_result) {
-	if (!result_closed && query_result.type == QueryResultType::STREAM_RESULT &&
-	    !query_result.Cast<StreamQueryResult>().IsOpen()) {
-		result_closed = true;
-		return nullptr;
-	}
-	auto chunk = query_result.FetchRaw();
-	if (query_result.HasError()) {
-		query_result.ThrowError();
-	}
-	return chunk;
+	return FetchChunkInternal(query_result, [](QueryResult &result) { return result.FetchRaw(); });
 }
 
 Optional<py::tuple> DuckDBPyResult::Fetchone() {
 	{
 		py::gil_scoped_release release;
-		if (!result) {
-			throw InvalidInputException("result closed");
+		if (!result || IsInvalidated()) {
+			throw InvalidInputException("Result has already been closed");
 		}
 		if (!current_chunk || chunk_offset >= current_chunk->size()) {
+			// First fetch or the last chunk has been depleted
 			current_chunk = FetchNext(*result);
 			chunk_offset = 0;
 		}
 	}
 
-	if (!current_chunk || current_chunk->size() == 0) {
+	if (IsDepleted()) {
 		return py::none();
 	}
+
 	py::tuple res(result->types.size());
 
 	for (idx_t col_idx = 0; col_idx < result->types.size(); col_idx++) {
@@ -104,6 +103,7 @@ Optional<py::tuple> DuckDBPyResult::Fetchone() {
 }
 
 py::list DuckDBPyResult::Fetchmany(idx_t size) {
+	D_ASSERT(!IsInvalidated());
 	py::list res;
 	for (idx_t i = 0; i < size; i++) {
 		auto fres = Fetchone();
@@ -116,6 +116,7 @@ py::list DuckDBPyResult::Fetchmany(idx_t size) {
 }
 
 py::list DuckDBPyResult::Fetchall() {
+	D_ASSERT(!IsInvalidated());
 	py::list res;
 	while (true) {
 		auto fres = Fetchone();
@@ -418,10 +419,50 @@ py::list DuckDBPyResult::GetDescription(const vector<string> &names, const vecto
 
 void DuckDBPyResult::Close() {
 	result = nullptr;
+	result_status = ResultStatus::INVALIDATED;
 }
 
-bool DuckDBPyResult::IsClosed() const {
-	return result_closed;
+bool DuckDBPyResult::IsInvalidatedInternal() {
+	if (!result) {
+		return true;
+	}
+	auto &query_result = *result;
+	if (query_result.type == QueryResultType::STREAM_RESULT) {
+		auto &stream_result = query_result.Cast<StreamQueryResult>();
+		if (!stream_result.IsOpen()) {
+			// This result is no longer valid, the result has been invalidated
+			return true;
+		}
+	}
+	return false;
+}
+
+bool DuckDBPyResult::IsInvalidated() {
+	if (result_status == ResultStatus::INVALIDATED) {
+		// Cache the result
+		return true;
+	}
+	if (IsInvalidatedInternal()) {
+		result_status = ResultStatus::INVALIDATED;
+		return true;
+	}
+	return false;
+}
+
+bool DuckDBPyResult::IsDepleted() const {
+	if (result_status == ResultStatus::DEPLETED) {
+		return true;
+	}
+	auto &query_result = *result;
+	if (query_result.type == QueryResultType::STREAM_RESULT) {
+		auto &stream_result = query_result.Cast<StreamQueryResult>();
+		if (!stream_result.context) {
+			// This result has been fetched to completion, it's depleted
+			result_status == ResultStatus::DEPLETED;
+			return true;
+		}
+	}
+	return false;
 }
 
 } // namespace duckdb
