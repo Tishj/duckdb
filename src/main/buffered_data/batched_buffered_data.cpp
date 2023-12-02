@@ -1,4 +1,4 @@
-#include "duckdb/main/buffered_data.hpp"
+#include "duckdb/main/buffered_data/batched_buffered_data.hpp"
 #include "duckdb/common/printer.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/buffered_query_result.hpp"
@@ -6,16 +6,16 @@
 
 namespace duckdb {
 
-void BufferedData::AddToBacklog(BlockedSink blocked_sink) {
+void BatchedBufferedData::AddToBacklog(BlockedSink blocked_sink) {
 	lock_guard<mutex> lock(glock);
 	blocked_sinks.push(blocked_sink);
 }
 
-bool BufferedData::BufferIsFull() const {
+bool BatchedBufferedData::BufferIsFull() const {
 	return buffered_count >= BUFFER_SIZE;
 }
 
-void BufferedData::UnblockSinks(idx_t &estimated_tuples) {
+void BatchedBufferedData::UnblockSinks(idx_t &estimated_tuples) {
 	if (buffered_count + estimated_tuples >= BUFFER_SIZE) {
 		return;
 	}
@@ -33,7 +33,7 @@ void BufferedData::UnblockSinks(idx_t &estimated_tuples) {
 	}
 }
 
-void BufferedData::ReplenishBuffer(BufferedQueryResult &result) {
+void BatchedBufferedData::ReplenishBuffer(BufferedQueryResult &result) {
 	if (!context) {
 		// Result has already been closed
 		return;
@@ -55,7 +55,7 @@ void BufferedData::ReplenishBuffer(BufferedQueryResult &result) {
 	}
 }
 
-unique_ptr<DataChunk> BufferedData::Fetch(BufferedQueryResult &result) {
+unique_ptr<DataChunk> BatchedBufferedData::Fetch(BufferedQueryResult &result) {
 	ReplenishBuffer(result);
 
 	unique_lock<mutex> lock(glock);
@@ -120,7 +120,7 @@ unique_ptr<DataChunk> BufferedData::Fetch(BufferedQueryResult &result) {
 	return chunk;
 }
 
-unique_ptr<DataChunk> BufferedData::Scan() {
+unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 	auto chunk = std::move(buffered_chunks.front());
 	buffered_chunks.pop();
 
@@ -133,7 +133,7 @@ unique_ptr<DataChunk> BufferedData::Scan() {
 	return chunk;
 }
 
-void BufferedData::Append(unique_ptr<DataChunk> chunk) {
+void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk) {
 	unique_lock<mutex> lock(glock);
 	buffered_count += chunk->size();
 	buffered_chunks.push(std::move(chunk));

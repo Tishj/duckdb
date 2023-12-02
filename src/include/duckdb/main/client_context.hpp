@@ -67,6 +67,7 @@ public:
 class ClientContext : public std::enable_shared_from_this<ClientContext> {
 	friend class PendingQueryResult;  // LockContext
 	friend class BufferedData;        // LockContext
+	friend class BatchedBufferedData; // LockContext
 	friend class BufferedQueryResult; // LockContext
 	friend class StreamQueryResult;
 	friend class DuckTransactionManager;

@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/execution/operator/helper/physical_buffered_collector.hpp
+// duckdb/execution/operator/helper/physical_buffered_batch_collector.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -9,15 +9,12 @@
 #pragma once
 
 #include "duckdb/execution/operator/helper/physical_result_collector.hpp"
-#include "duckdb/main/buffered_data/simple_buffered_data.hpp"
 
 namespace duckdb {
 
-class PhysicalBufferedCollector : public PhysicalResultCollector {
+class PhysicalBufferedBatchCollector : public PhysicalResultCollector {
 public:
-	PhysicalBufferedCollector(PreparedStatementData &data, bool parallel);
-
-	bool parallel;
+	PhysicalBufferedBatchCollector(PreparedStatementData &data);
 
 public:
 	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) override;
@@ -30,8 +27,13 @@ public:
 	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 
-	bool ParallelSink() const override;
-	bool SinkOrderDependent() const override;
+	bool RequiresBatchIndex() const override {
+		return true;
+	}
+
+	bool ParallelSink() const override {
+		return true;
+	}
 };
 
 } // namespace duckdb
