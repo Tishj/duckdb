@@ -43,7 +43,8 @@ struct CreateScalarFunctionInfo;
 class ScalarFunctionCatalogEntry;
 struct ActiveQueryContext;
 struct ParserOptions;
-class BufferedData;
+class SimpleBufferedData;
+class BatchedBufferedData;
 class BufferedQueryResult;
 struct ClientData;
 
@@ -66,8 +67,8 @@ public:
 //! during execution
 class ClientContext : public std::enable_shared_from_this<ClientContext> {
 	friend class PendingQueryResult;  // LockContext
-	friend class BufferedData;        // LockContext
 	friend class BatchedBufferedData; // LockContext
+	friend class SimpleBufferedData;  // LockContext
 	friend class BufferedQueryResult; // LockContext
 	friend class StreamQueryResult;
 	friend class DuckTransactionManager;
