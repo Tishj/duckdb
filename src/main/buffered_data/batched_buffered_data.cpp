@@ -11,6 +11,9 @@ void BatchedBufferedData::AddToBacklog(BlockedSink blocked_sink) {
 	blocked_sinks.push(blocked_sink);
 }
 
+BatchedBufferedData::BatchedBufferedData(shared_ptr<ClientContext> context) : BufferedData(std::move(context)) {
+}
+
 bool BatchedBufferedData::BufferIsFull() const {
 	return buffered_count >= BUFFER_SIZE;
 }
@@ -133,7 +136,8 @@ unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 	return chunk;
 }
 
-void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk) {
+void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk, optional_idx batch) {
+	D_ASSERT(!batch.IsValid());
 	unique_lock<mutex> lock(glock);
 	buffered_count += chunk->size();
 	buffered_chunks.push(std::move(chunk));
