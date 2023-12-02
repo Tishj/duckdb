@@ -35,13 +35,12 @@ public:
 
 public:
 	void Append(unique_ptr<DataChunk> chunk, optional_idx batch = optional_idx()) override;
-	unique_ptr<DataChunk> Fetch(BufferedQueryResult &result) override;
 	void AddToBacklog(BlockedSink blocked_sink) override;
 	bool BufferIsFull() const override;
+	void ReplenishBuffer(BufferedQueryResult &result) override;
+	unique_ptr<DataChunk> Scan() override;
 
 private:
-	void ReplenishBuffer(BufferedQueryResult &result);
-	unique_ptr<DataChunk> Scan();
 	void UnblockSinks(idx_t &estimated_tuples);
 
 private:
