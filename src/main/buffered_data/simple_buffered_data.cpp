@@ -14,7 +14,8 @@ void SimpleBufferedData::AddToBacklog(BlockedSink blocked_sink) {
 	blocked_sinks.push(blocked_sink);
 }
 
-bool SimpleBufferedData::BufferIsFull() const {
+bool SimpleBufferedData::BufferIsFull(optional_idx batch) {
+	D_ASSERT(!batch.IsValid());
 	return buffered_count >= BUFFER_SIZE;
 }
 
