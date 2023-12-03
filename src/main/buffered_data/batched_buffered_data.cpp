@@ -14,6 +14,15 @@ void BatchedBufferedData::AddToBacklog(BlockedSink blocked_sink) {
 BatchedBufferedData::BatchedBufferedData(shared_ptr<ClientContext> context) : BufferedData(std::move(context)) {
 }
 
+void BatchedBufferedData::SetPipeline(Pipeline &pipeline) {
+	lock_guard<mutex> lock(glock);
+	if (!this->pipeline) {
+		this->pipeline = &pipeline;
+	}
+	// All Sinks are assumed to be scheduled on the same pipeline
+	D_ASSERT(this->pipeline == &pipeline);
+}
+
 bool BatchedBufferedData::BufferIsFull(optional_idx batch) {
 	D_ASSERT(batch.IsValid());
 	lock_guard<mutex> lock(glock);

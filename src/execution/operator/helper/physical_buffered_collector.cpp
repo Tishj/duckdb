@@ -21,8 +21,6 @@ public:
 
 class BufferedCollectorLocalState : public LocalSinkState {
 public:
-	unique_ptr<ColumnDataCollection> collection;
-	ColumnDataAppendState append_state;
 	bool blocked = false;
 };
 
@@ -71,8 +69,6 @@ unique_ptr<GlobalSinkState> PhysicalBufferedCollector::GetGlobalSinkState(Client
 
 unique_ptr<LocalSinkState> PhysicalBufferedCollector::GetLocalSinkState(ExecutionContext &context) const {
 	auto state = make_uniq<BufferedCollectorLocalState>();
-	state->collection = make_uniq<ColumnDataCollection>(Allocator::DefaultAllocator(), types);
-	state->collection->InitializeAppend(state->append_state);
 	return std::move(state);
 }
 

@@ -46,17 +46,22 @@ public:
 	void ReplenishBuffer(BufferedQueryResult &result) override;
 	unique_ptr<DataChunk> Scan() override;
 
+public:
+	void SetPipeline(Pipeline &pipeline);
+
 private:
 	void UnblockSinks(idx_t &estimated_min, idx_t estimated_others);
 
 private:
-	unordered_map<idx_t, BlockedSink> blocked_sinks;
+	map<idx_t, BlockedSink> blocked_sinks;
 	//! The queue of chunks
-	unordered_map<idx_t, unique_ptr<BufferedDataBatch>> batches;
+	map<idx_t, unique_ptr<BufferedDataBatch>> batches;
 	//! The amount of tuples buffered for the current batch
 	atomic<idx_t> current_batch_tuple_count;
 	//! The amount of tuples buffered for the other batches
 	atomic<idx_t> other_batches_tuple_count;
+	//! The final pipeline
+	optional_ptr<Pipeline> pipeline;
 };
 
 } // namespace duckdb
