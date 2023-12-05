@@ -50,7 +50,7 @@ SinkResultType PhysicalBufferedBatchCollector::Sink(ExecutionContext &context, D
 		return SinkResultType::BLOCKED;
 	}
 
-	if (buffered_data.BufferIsFull(batch)) {
+	if (buffered_data.BufferIsFull(min)) {
 		// Block again when we've already buffered enough chunks
 		auto callback_state = input.interrupt_state;
 		auto blocked_sink = BlockedSink(callback_state, chunk.size(), min);
@@ -64,6 +64,15 @@ SinkResultType PhysicalBufferedBatchCollector::Sink(ExecutionContext &context, D
 
 	buffered_data.Append(std::move(to_append), lstate);
 	return SinkResultType::NEED_MORE_INPUT;
+}
+
+SinkNextBatchType PhysicalBufferedBatchCollector::NextBatch(ExecutionContext &context,
+                                                            OperatorSinkNextBatchInput &input) const {
+	auto &gstate = input.global_state.Cast<BufferedBatchCollectorGlobalState>();
+	auto &lstate = input.local_state.Cast<BufferedBatchCollectorLocalState>();
+
+	(void)lstate;
+	return SinkNextBatchType::READY;
 }
 
 SinkCombineResultType PhysicalBufferedBatchCollector::Combine(ExecutionContext &context,

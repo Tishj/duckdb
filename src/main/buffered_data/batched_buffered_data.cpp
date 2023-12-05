@@ -90,6 +90,7 @@ void BatchedBufferedData::ReplenishBuffer(BufferedQueryResult &result) {
 }
 
 unique_ptr<DataChunk> BatchedBufferedData::Scan() {
+	// TODO: we can safely Scan batches that are LOWER than 'minimum_batch_index', these are completed
 	lock_guard<mutex> lock(glock);
 	if (batches.empty()) {
 		context.reset();
@@ -98,8 +99,8 @@ unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 	auto chunk = std::move(batches.front());
 	batches.pop();
 
-	// auto count = buffered_count.load();
-	// Printer::Print(StringUtil::Format("Buffer capacity: %d", count));
+	auto count = current_batch_tuple_count.load();
+	Printer::Print(StringUtil::Format("Buffer capacity: %d", count));
 
 	if (chunk) {
 		current_batch_tuple_count -= chunk->size();
