@@ -20,8 +20,8 @@ class BufferedQueryResult;
 
 struct BlockedSink {
 public:
-	BlockedSink(InterruptState state, idx_t chunk_size, optional_idx batch = optional_idx())
-	    : state(state), chunk_size(chunk_size), batch(batch) {
+	BlockedSink(InterruptState state, idx_t chunk_size, bool is_minimum = true)
+	    : state(state), chunk_size(chunk_size), is_minimum(is_minimum) {
 	}
 
 public:
@@ -29,8 +29,8 @@ public:
 	InterruptState state;
 	//! The amount of tuples this sink would add
 	idx_t chunk_size;
-	//! (optional) The batch index of this sink
-	optional_idx batch;
+	// FIXME: make BlockedSink an abstract class, only BatchedBlockedSink cares about this
+	bool is_minimum;
 };
 
 class BufferedData {
@@ -45,9 +45,9 @@ public:
 	}
 
 public:
-	virtual void Append(unique_ptr<DataChunk> chunk, optional_idx batch = optional_idx()) = 0;
+	virtual void Append(unique_ptr<DataChunk> chunk) = 0;
 	virtual void AddToBacklog(BlockedSink blocked_sink) = 0;
-	virtual bool BufferIsFull(optional_idx batch = optional_idx()) = 0;
+	virtual bool BufferIsFull(bool is_minimum_batch = true) = 0;
 	virtual void ReplenishBuffer(BufferedQueryResult &result) = 0;
 	virtual unique_ptr<DataChunk> Scan() = 0;
 

@@ -14,8 +14,9 @@ void SimpleBufferedData::AddToBacklog(BlockedSink blocked_sink) {
 	blocked_sinks.push(blocked_sink);
 }
 
-bool SimpleBufferedData::BufferIsFull(optional_idx batch) {
-	D_ASSERT(!batch.IsValid());
+bool SimpleBufferedData::BufferIsFull(bool ignored) {
+	(void)ignored;
+	D_ASSERT(ignored == true);
 	return buffered_count >= BUFFER_SIZE;
 }
 
@@ -77,8 +78,7 @@ unique_ptr<DataChunk> SimpleBufferedData::Scan() {
 	return chunk;
 }
 
-void SimpleBufferedData::Append(unique_ptr<DataChunk> chunk, optional_idx batch) {
-	D_ASSERT(!batch.IsValid());
+void SimpleBufferedData::Append(unique_ptr<DataChunk> chunk) {
 	unique_lock<mutex> lock(glock);
 	buffered_count += chunk->size();
 	buffered_chunks.push(std::move(chunk));
