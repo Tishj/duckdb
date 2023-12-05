@@ -39,29 +39,32 @@ SinkResultType PhysicalBufferedBatchCollector::Sink(ExecutionContext &context, D
 	auto &lstate = input.local_state.Cast<BufferedBatchCollectorLocalState>();
 
 	lock_guard<mutex> l(gstate.glock);
+
+	auto batch = lstate.BatchIndex();
 	auto &buffered_data = dynamic_cast<BatchedBufferedData &>(*gstate.buffered_data);
-	buffered_data.SetPipeline(lstate.pipeline);
 
 	if (!lstate.blocked) {
+		buffered_data.SetPipeline(lstate.pipeline);
+
 		// Always block the first time
 		lstate.blocked = true;
 		auto callback_state = input.interrupt_state;
-		auto blocked_sink = BlockedSink(callback_state, chunk.size());
+		auto blocked_sink = BlockedSink(callback_state, chunk.size(), batch);
 		buffered_data.AddToBacklog(blocked_sink);
 		return SinkResultType::BLOCKED;
 	}
 
-	if (buffered_data.BufferIsFull()) {
+	if (buffered_data.BufferIsFull(batch)) {
 		// Block again when we've already buffered enough chunks
 		auto callback_state = input.interrupt_state;
-		auto blocked_sink = BlockedSink(callback_state, chunk.size());
+		auto blocked_sink = BlockedSink(callback_state, chunk.size(), batch);
 		buffered_data.AddToBacklog(blocked_sink);
 		return SinkResultType::BLOCKED;
 	}
 	auto to_append = make_uniq<DataChunk>();
 	to_append->InitializeEmpty(chunk.GetTypes());
 	to_append->Reference(chunk);
-	buffered_data.Append(std::move(to_append));
+	buffered_data.Append(std::move(to_append), batch);
 	return SinkResultType::NEED_MORE_INPUT;
 }
 

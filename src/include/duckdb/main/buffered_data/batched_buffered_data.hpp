@@ -22,11 +22,19 @@ struct BufferedDataBatch {
 public:
 	BufferedDataBatch() = delete;
 	BufferedDataBatch(BufferedDataBatch &other) = delete;
-	BufferedDataBatch(idx_t batch);
+	BufferedDataBatch(idx_t batch) : batch_index(batch) {
+	}
 
 public:
 	idx_t batch_index;
 	queue<unique_ptr<DataChunk>> buffered_chunks;
+	idx_t tuple_count = 0;
+};
+
+struct ReplenishBufferState {
+	idx_t min_batch;
+	idx_t estimated_min_tuples;
+	idx_t estimated_other_tuples;
 };
 
 class BatchedBufferedData : public BufferedData {
@@ -50,14 +58,17 @@ public:
 	void SetPipeline(Pipeline &pipeline);
 
 private:
-	void UnblockSinks(idx_t &estimated_min, idx_t estimated_others);
+	ReplenishBufferState InitializeState();
+	void UnblockSinks(ReplenishBufferState &state);
+	Pipeline &GetPipeline();
+	idx_t GetTuplesForBatch(idx_t batch);
+	bool BuffersAreFull(ReplenishBufferState &state);
+	bool OtherBatchesFilled() const;
 
 private:
 	map<idx_t, BlockedSink> blocked_sinks;
 	//! The queue of chunks
 	map<idx_t, unique_ptr<BufferedDataBatch>> batches;
-	//! The amount of tuples buffered for the current batch
-	atomic<idx_t> current_batch_tuple_count;
 	//! The amount of tuples buffered for the other batches
 	atomic<idx_t> other_batches_tuple_count;
 	//! The final pipeline
