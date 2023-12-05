@@ -20,6 +20,7 @@ void BatchedBufferedData::SetPipeline(Pipeline &pipeline) {
 	lock_guard<mutex> lock(glock);
 	if (!this->pipeline) {
 		this->pipeline = &pipeline;
+		min_batch_index = pipeline.GetMinimumBatchIndex();
 	}
 	// All Sinks are assumed to be scheduled on the same pipeline
 	D_ASSERT(this->pipeline == &pipeline);
@@ -50,9 +51,9 @@ bool BatchedBufferedData::OtherBatchesFilled() const {
 	return other_batches_tuple_count >= OTHER_BATCHES_BUFFER_SIZE;
 }
 
-void BatchedBufferedData::UnblockSinks(ReplenishBufferState &state) {
-	auto &estimated_min = state.estimated_min_tuples;
-	auto &estimated_others = state.estimated_other_tuples;
+void BatchedBufferedData::UnblockSinks() {
+	auto &estimated_min = replenish_state.estimated_min_tuples;
+	auto &estimated_others = replenish_state.estimated_other_tuples;
 
 	lock_guard<mutex> lock(glock);
 	auto &pipeline = GetPipeline();
@@ -95,25 +96,20 @@ void BatchedBufferedData::UnblockSinks(ReplenishBufferState &state) {
 }
 
 idx_t BatchedBufferedData::GetTuplesForBatch(idx_t index) {
-	D_ASSERT(batches.find(index) != batches.end());
-	auto &batch = *batches.at(index);
+	auto it = batches.find(index);
+	if (it == batches.end()) {
+		return 0;
+	}
+	auto &batch = *it->second;
 	return batch.tuple_count;
 }
 
-bool BatchedBufferedData::BuffersAreFull(ReplenishBufferState &state) {
-	auto &estimated_min = state.estimated_min_tuples;
-	auto &estimated_others = state.estimated_other_tuples;
+bool BatchedBufferedData::BuffersAreFull() {
+	auto &estimated_min = replenish_state.estimated_min_tuples;
+	auto &estimated_others = replenish_state.estimated_other_tuples;
 
 	lock_guard<mutex> lock(glock);
-	auto &pipeline = GetPipeline();
-	auto min_index = pipeline.GetMinimumBatchIndex();
-	if (state.min_batch != min_index) {
-		D_ASSERT(min_index > state.min_batch);
-		state.min_batch = min_index;
-		// We have no clue how many tuples are expected for this
-		estimated_min = 0;
-	}
-	bool min_filled = GetTuplesForBatch(min_index) + estimated_min >= CURRENT_BATCH_BUFFER_SIZE;
+	bool min_filled = GetTuplesForBatch(min_batch_index) + estimated_min >= CURRENT_BATCH_BUFFER_SIZE;
 	bool others_filled = other_batches_tuple_count + estimated_others >= OTHER_BATCHES_BUFFER_SIZE;
 	if (min_filled && others_filled) {
 		// Maybe stop already if only 'min_filled' is true?
@@ -122,14 +118,22 @@ bool BatchedBufferedData::BuffersAreFull(ReplenishBufferState &state) {
 	return false;
 }
 
-ReplenishBufferState BatchedBufferedData::InitializeState() {
+void BatchedBufferedData::UpdateMinBatchIndex() {
 	lock_guard<mutex> lock(glock);
 	auto &pipeline = GetPipeline();
-	ReplenishBufferState state;
-	state.min_batch = pipeline.GetMinimumBatchIndex();
-	state.estimated_min_tuples = 0;
-	state.estimated_other_tuples = 0;
-	return state;
+	auto min_index = pipeline.GetMinimumBatchIndex();
+	if (min_batch_index != min_index) {
+		D_ASSERT(min_index > min_batch_index);
+		min_batch_index = min_index;
+
+		// We can't make any assumptions about how many tuples are buffered now
+		replenish_state.estimated_min_tuples = 0;
+	}
+}
+
+void BatchedBufferedData::ResetReplenishState() {
+	replenish_state.estimated_min_tuples = 0;
+	replenish_state.estimated_other_tuples = 0;
 }
 
 void BatchedBufferedData::ReplenishBuffer(BufferedQueryResult &result) {
@@ -137,33 +141,46 @@ void BatchedBufferedData::ReplenishBuffer(BufferedQueryResult &result) {
 		// Result has already been closed
 		return;
 	}
-	auto state = InitializeState();
-	if (BuffersAreFull(state)) {
+	UpdateMinBatchIndex();
+	ResetReplenishState();
+	if (BuffersAreFull()) {
 		return;
 	}
-	UnblockSinks(state);
+	UnblockSinks();
 	// Let the executor run until the buffer is no longer empty
 	auto context_lock = context->LockContext();
 	while (!PendingQueryResult::IsFinished(context->ExecuteTaskInternal(*context_lock, result))) {
-		if (BuffersAreFull(state)) {
+		UpdateMinBatchIndex();
+		if (BuffersAreFull()) {
 			break;
 		}
 		// Check if we need to unblock more sinks to reach the buffer size
-		UnblockSinks(state);
+		UnblockSinks();
 	}
+	UpdateMinBatchIndex();
 }
 
 unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 	lock_guard<mutex> lock(glock);
 	unique_ptr<DataChunk> chunk;
-	auto &pipeline = GetPipeline();
-	auto min_batch = pipeline.GetMinimumBatchIndex();
-	auto &it = batches.at(min_batch);
+	auto it = batches.begin();
+	if (it == batches.end()) {
+		context.reset();
+		return nullptr;
+	}
 
-	chunk = std::move(it->buffered_chunks.front());
-	it->buffered_chunks.pop();
+	// Take a chunk from the current batch
+	auto &data = *it->second;
+	chunk = std::move(data.buffered_chunks.front());
+	data.buffered_chunks.pop();
+
 	if (chunk) {
-		it->tuple_count -= chunk->size();
+		Printer::Print(StringUtil::Format("Batch Index: %d | Buffer capacity: %d | Chunk size: %d", data.batch_index,
+		                                  data.tuple_count, chunk->size()));
+		data.tuple_count -= chunk->size();
+	}
+	if (data.buffered_chunks.empty()) {
+		batches.erase(it);
 	}
 	return chunk;
 }
@@ -171,13 +188,20 @@ unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk, optional_idx batch_p) {
 	auto batch = batch_p.GetIndex();
 	unique_lock<mutex> lock(glock);
+
 	auto it = batches.find(batch);
 	if (it == batches.end()) {
+		// Create the BufferedDataBatch if it doesn't exist yet
 		auto result = batches.emplace(batch, make_uniq<BufferedDataBatch>(batch));
 		D_ASSERT(result.second);
 		it = result.first;
 	}
+
 	auto &data = *it->second;
+	if (data.batch_index != min_batch_index) {
+		// Keep track of the count of tuples of "other" batches
+		other_batches_tuple_count += chunk->size();
+	}
 	data.tuple_count += chunk->size();
 	data.buffered_chunks.push(std::move(chunk));
 }

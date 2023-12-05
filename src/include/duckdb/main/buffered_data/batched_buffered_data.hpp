@@ -31,10 +31,19 @@ public:
 	idx_t tuple_count = 0;
 };
 
+// FIXME: should this be a map so we can make a "more accurate" guess as to how many tuples are expected when the min
+// batch index changes? Currently we reset the 'estimated_min_tuples' to 0 if the min batch index changes
 struct ReplenishBufferState {
-	idx_t min_batch;
-	idx_t estimated_min_tuples;
-	idx_t estimated_other_tuples;
+public:
+	ReplenishBufferState() {
+	}
+
+public:
+	void Reset();
+
+public:
+	idx_t estimated_min_tuples = 0;
+	idx_t estimated_other_tuples = 0;
 };
 
 class BatchedBufferedData : public BufferedData {
@@ -58,11 +67,12 @@ public:
 	void SetPipeline(Pipeline &pipeline);
 
 private:
-	ReplenishBufferState InitializeState();
-	void UnblockSinks(ReplenishBufferState &state);
+	void UpdateMinBatchIndex();
+	void ResetReplenishState();
+	void UnblockSinks();
 	Pipeline &GetPipeline();
 	idx_t GetTuplesForBatch(idx_t batch);
-	bool BuffersAreFull(ReplenishBufferState &state);
+	bool BuffersAreFull();
 	bool OtherBatchesFilled() const;
 
 private:
@@ -73,6 +83,11 @@ private:
 	atomic<idx_t> other_batches_tuple_count;
 	//! The final pipeline
 	optional_ptr<Pipeline> pipeline;
+	//! The estimated tuples we're expecting in ReplenishBuffer
+	//! This is an optimization to reduce the amount of times a Sink gets unblocked only to block right away
+	ReplenishBufferState replenish_state;
+	//! The minimum batch index we're scanning from
+	idx_t min_batch_index;
 };
 
 } // namespace duckdb
