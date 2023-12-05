@@ -27,7 +27,7 @@ public:
 	SimpleBufferedData(shared_ptr<ClientContext> context);
 
 public:
-	void Append(unique_ptr<DataChunk> chunk) override;
+	void Append(unique_ptr<DataChunk> chunk, LocalSinkState &state) override;
 	void AddToBacklog(BlockedSink blocked_sink) override;
 	bool BufferIsFull(bool ignored = true) override;
 	void ReplenishBuffer(BufferedQueryResult &result) override;

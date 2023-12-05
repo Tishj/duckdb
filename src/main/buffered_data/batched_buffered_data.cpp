@@ -3,6 +3,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/buffered_query_result.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/execution/operator/helper/physical_buffered_batch_collector.hpp"
 
 namespace duckdb {
 
@@ -106,10 +107,25 @@ unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 	return chunk;
 }
 
-void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk) {
-	unique_lock<mutex> lock(glock);
-	current_batch_tuple_count += chunk->size();
-	batches.push(std::move(chunk));
+void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk, LocalSinkState &lstate) {
+	auto &state = lstate.Cast<BufferedBatchCollectorLocalState>();
+	if (state.GetMinimumBatchIndex() == state.BatchIndex()) {
+		unique_lock<mutex> lock(glock);
+		while (!state.buffered_chunks.empty()) {
+			auto to_append = std::move(state.buffered_chunks.front());
+			state.buffered_chunks.pop();
+			// If the chunk was ever buffered in the local state we need to subtract the sizes of these chunks from
+			// 'other_batches_tuple_count'
+			other_batches_tuple_count -= to_append->size();
+			batches.push(std::move(to_append));
+		}
+		count += chunk->size();
+		current_batch_tuple_count += chunk->size();
+		batches.push(std::move(chunk));
+	} else {
+		other_batches_tuple_count += chunk->size();
+		state.BufferChunk(std::move(chunk));
+	}
 }
 
 } // namespace duckdb

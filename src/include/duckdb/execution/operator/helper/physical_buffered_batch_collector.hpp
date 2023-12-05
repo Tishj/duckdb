@@ -9,8 +9,22 @@
 #pragma once
 
 #include "duckdb/execution/operator/helper/physical_result_collector.hpp"
+#include "duckdb/common/queue.hpp"
 
 namespace duckdb {
+
+class BufferedBatchCollectorLocalState : public LocalSinkState {
+public:
+	BufferedBatchCollectorLocalState(Pipeline &pipeline);
+
+public:
+	void BufferChunk(unique_ptr<DataChunk> chunk);
+
+public:
+	Pipeline &pipeline;
+	bool blocked = false;
+	queue<unique_ptr<DataChunk>> buffered_chunks;
+};
 
 class PhysicalBufferedBatchCollector : public PhysicalResultCollector {
 public:

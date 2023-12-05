@@ -23,16 +23,12 @@ public:
 	shared_ptr<BufferedData> buffered_data;
 };
 
-class BufferedBatchCollectorLocalState : public LocalSinkState {
-public:
-	BufferedBatchCollectorLocalState(Pipeline &pipeline) : pipeline(pipeline) {
-	}
+BufferedBatchCollectorLocalState::BufferedBatchCollectorLocalState(Pipeline &pipeline) : pipeline(pipeline) {
+}
 
-public:
-	Pipeline &pipeline;
-	bool blocked = false;
-	queue<unique_ptr<DataChunk>> buffered_chunks;
-};
+void BufferedBatchCollectorLocalState::BufferChunk(unique_ptr<DataChunk> chunk) {
+	buffered_chunks.push(std::move(chunk));
+}
 
 SinkResultType PhysicalBufferedBatchCollector::Sink(ExecutionContext &context, DataChunk &chunk,
                                                     OperatorSinkInput &input) const {
@@ -65,16 +61,8 @@ SinkResultType PhysicalBufferedBatchCollector::Sink(ExecutionContext &context, D
 	auto to_append = make_uniq<DataChunk>();
 	to_append->InitializeEmpty(chunk.GetTypes());
 	to_append->Reference(chunk);
-	lstate.buffered_chunks.push(std::move(to_append));
 
-	if (min) {
-		// This is the minimum batch index, populate the buffer data
-		while (!lstate.buffered_chunks.empty()) {
-			auto chunk = std::move(lstate.buffered_chunks.front());
-			lstate.buffered_chunks.pop();
-			buffered_data.Append(std::move(chunk));
-		}
-	}
+	buffered_data.Append(std::move(to_append), lstate);
 	return SinkResultType::NEED_MORE_INPUT;
 }
 

@@ -44,7 +44,7 @@ public:
 	BatchedBufferedData(shared_ptr<ClientContext> context);
 
 public:
-	void Append(unique_ptr<DataChunk> chunk) override;
+	void Append(unique_ptr<DataChunk> chunk, LocalSinkState &state) override;
 	void AddToBacklog(BlockedSink blocked_sink) override;
 	bool BufferIsFull(bool is_minimum_batch) override;
 	void ReplenishBuffer(BufferedQueryResult &result) override;
@@ -69,6 +69,7 @@ private:
 	//! The estimated tuples we're expecting in ReplenishBuffer
 	//! This is an optimization to reduce the amount of times a Sink gets unblocked only to block right away
 	ReplenishBufferState replenish_state;
+	idx_t count = 0;
 };
 
 } // namespace duckdb

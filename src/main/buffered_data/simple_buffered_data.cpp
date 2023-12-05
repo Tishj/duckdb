@@ -78,7 +78,8 @@ unique_ptr<DataChunk> SimpleBufferedData::Scan() {
 	return chunk;
 }
 
-void SimpleBufferedData::Append(unique_ptr<DataChunk> chunk) {
+void SimpleBufferedData::Append(unique_ptr<DataChunk> chunk, LocalSinkState &state) {
+	(void)state;
 	unique_lock<mutex> lock(glock);
 	buffered_count += chunk->size();
 	buffered_chunks.push(std::move(chunk));
