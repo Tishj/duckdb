@@ -89,8 +89,38 @@ void BatchedBufferedData::ReplenishBuffer(BufferedQueryResult &result) {
 	}
 }
 
+void BatchedBufferedData::FlushChunks(idx_t minimum_batch_index) {
+	lock_guard<mutex> lock(glock);
+	queue<idx_t> to_remove;
+	for (auto it = in_progress_batches.begin(); it != in_progress_batches.end(); it++) {
+		auto batch = it->first;
+		if (batch >= minimum_batch_index) {
+			// These chunks are not ready to be scanned yet
+			break;
+		}
+		auto &chunks = it->second;
+		while (!chunks.empty()) {
+			// TODO: keep track of the amount of tuples in 'batches', so we don't overpopulate the buffer
+			auto chunk = std::move(chunks.front());
+			other_batches_tuple_count -= chunk->size();
+			current_batch_tuple_count += chunk->size();
+			// Add this chunk to the batches that are scanned from
+			batches.push(std::move(chunk));
+			chunks.pop();
+		}
+		to_remove.push(batch);
+	}
+
+	// FIXME: this can be more efficient, we can pass in a range of iterators to erase
+	// Clean up the emptied queues
+	while (!to_remove.empty()) {
+		auto batch = to_remove.front();
+		to_remove.pop();
+		in_progress_batches.erase(batch);
+	}
+}
+
 unique_ptr<DataChunk> BatchedBufferedData::Scan() {
-	// TODO: we can safely Scan batches that are LOWER than 'minimum_batch_index', these are completed
 	lock_guard<mutex> lock(glock);
 	if (batches.empty()) {
 		context.reset();
@@ -110,23 +140,11 @@ unique_ptr<DataChunk> BatchedBufferedData::Scan() {
 
 void BatchedBufferedData::Append(unique_ptr<DataChunk> chunk, LocalSinkState &lstate) {
 	auto &state = lstate.Cast<BufferedBatchCollectorLocalState>();
-	if (state.GetMinimumBatchIndex() == state.BatchIndex()) {
-		unique_lock<mutex> lock(glock);
-		while (!state.buffered_chunks.empty()) {
-			auto to_append = std::move(state.buffered_chunks.front());
-			state.buffered_chunks.pop();
-			// If the chunk was ever buffered in the local state we need to subtract the sizes of these chunks from
-			// 'other_batches_tuple_count'
-			other_batches_tuple_count -= to_append->size();
-			batches.push(std::move(to_append));
-		}
-		count += chunk->size();
-		current_batch_tuple_count += chunk->size();
-		batches.push(std::move(chunk));
-	} else {
-		other_batches_tuple_count += chunk->size();
-		state.BufferChunk(std::move(chunk));
-	}
+	auto batch = lstate.BatchIndex();
+	auto &chunks = in_progress_batches[batch];
+	// Push the chunk into the queue
+	other_batches_tuple_count += chunk->size();
+	chunks.push(std::move(chunk));
 }
 
 } // namespace duckdb

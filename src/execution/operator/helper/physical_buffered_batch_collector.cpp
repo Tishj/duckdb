@@ -71,7 +71,10 @@ SinkNextBatchType PhysicalBufferedBatchCollector::NextBatch(ExecutionContext &co
 	auto &gstate = input.global_state.Cast<BufferedBatchCollectorGlobalState>();
 	auto &lstate = input.local_state.Cast<BufferedBatchCollectorLocalState>();
 
-	(void)lstate;
+	lock_guard<mutex> l(gstate.glock);
+	auto &buffered_data = dynamic_cast<BatchedBufferedData &>(*gstate.buffered_data);
+
+	buffered_data.FlushChunks(lstate.GetMinimumBatchIndex());
 	return SinkNextBatchType::READY;
 }
 

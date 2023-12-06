@@ -49,6 +49,7 @@ public:
 	bool BufferIsFull(bool is_minimum_batch) override;
 	void ReplenishBuffer(BufferedQueryResult &result) override;
 	unique_ptr<DataChunk> Scan() override;
+	void FlushChunks(idx_t minimum_batch_index);
 
 private:
 	void ResetReplenishState();
@@ -60,6 +61,7 @@ private:
 	queue<BlockedSink> blocked_sinks;
 	//! The queue of chunks
 	queue<unique_ptr<DataChunk>> batches;
+	map<idx_t, queue<unique_ptr<DataChunk>>> in_progress_batches;
 
 	//! The amount of tuples buffered for the other batches
 	atomic<idx_t> other_batches_tuple_count;
@@ -69,7 +71,6 @@ private:
 	//! The estimated tuples we're expecting in ReplenishBuffer
 	//! This is an optimization to reduce the amount of times a Sink gets unblocked only to block right away
 	ReplenishBufferState replenish_state;
-	idx_t count = 0;
 };
 
 } // namespace duckdb
