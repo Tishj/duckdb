@@ -514,7 +514,8 @@ py::object PythonObject::FromValue(const Value &val, const LogicalType &type,
 			auto &child_entry = child_types[i];
 			auto &child_name = child_entry.first;
 			auto &child_type = child_entry.second;
-			py_struct[child_name.c_str()] = FromValue(struct_values[i], child_type, client_properties);
+			auto name = child_name.empty() ? StringUtil::Format("v%d", i) : child_name;
+			py_struct[name.c_str()] = FromValue(struct_values[i], child_type, client_properties);
 		}
 		return std::move(py_struct);
 	}
