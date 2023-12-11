@@ -80,3 +80,7 @@ class TestDBApiFetch(object):
         assert res.fetchone() == (1,)
         assert res.fetchone() == (2,)
         assert res.fetchone() is None
+
+    def test_fetch_unnamed_struct(self, duckdb_cursor):
+        res = duckdb_cursor.query("select (1, 2)").fetchall()
+        assert res == [({'v0': 1, 'v1': 2},)]
