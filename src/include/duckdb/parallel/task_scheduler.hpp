@@ -58,8 +58,12 @@ public:
 	//! Run tasks until `max_tasks` have been completed, or until there are no more tasks available
 	void ExecuteTasks(idx_t max_tasks);
 
-	//! Sets the amount of active threads executing tasks for the system; n-1 background threads will be launched.
+	//! Reschedules threads to match the requested 'current_thread_count'
+	//! current_thread_count-1 background threads will be launched
 	//! The main thread will also be used for execution
+	void RescheduleThreads();
+
+	//! Makes a request to set the amount of threads executing tasks for the system; .
 	void SetThreads(int32_t n);
 	//! Returns the number of threads
 	DUCKDB_API int32_t NumberOfThreads();
@@ -88,6 +92,8 @@ private:
 	vector<unique_ptr<atomic<bool>>> markers;
 	//! The threshold after which to flush the allocator after completing a task
 	atomic<idx_t> allocator_flush_threshold;
+	//! The amount of threads that are (requested) to be running
+	atomic<idx_t> current_thread_count;
 };
 
 } // namespace duckdb

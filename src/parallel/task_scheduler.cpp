@@ -97,12 +97,13 @@ ProducerToken::~ProducerToken() {
 
 TaskScheduler::TaskScheduler(DatabaseInstance &db)
     : db(db), queue(make_uniq<ConcurrentQueue>()),
-      allocator_flush_threshold(db.config.options.allocator_flush_threshold) {
+      allocator_flush_threshold(db.config.options.allocator_flush_threshold), current_thread_count(1) {
 }
 
 TaskScheduler::~TaskScheduler() {
 #ifndef DUCKDB_NO_THREADS
 	SetThreadsInternal(1);
+	RescheduleThreads();
 #endif
 }
 
@@ -236,7 +237,6 @@ int32_t TaskScheduler::NumberOfThreads() {
 
 void TaskScheduler::SetThreads(int32_t n) {
 #ifndef DUCKDB_NO_THREADS
-	lock_guard<mutex> t(thread_lock);
 	if (n < 1) {
 		throw SyntaxException("Must have at least 1 thread!");
 	}
@@ -263,12 +263,13 @@ void TaskScheduler::YieldThread() {
 #endif
 }
 
-void TaskScheduler::SetThreadsInternal(int32_t n) {
+void TaskScheduler::RescheduleThreads() {
 #ifndef DUCKDB_NO_THREADS
-	if (threads.size() == idx_t(n - 1)) {
+	lock_guard<mutex> t(thread_lock);
+	if (idx_t(current_thread_count - 1) == threads.size()) {
 		return;
 	}
-	idx_t new_thread_count = n - 1;
+	idx_t new_thread_count = current_thread_count - 1;
 	if (threads.size() > new_thread_count) {
 		// we are reducing the number of threads: clear all threads first
 		for (idx_t i = 0; i < threads.size(); i++) {
@@ -296,6 +297,13 @@ void TaskScheduler::SetThreadsInternal(int32_t n) {
 			markers.push_back(std::move(marker));
 		}
 	}
+#endif
+}
+
+void TaskScheduler::SetThreadsInternal(int32_t n) {
+#ifndef DUCKDB_NO_THREADS
+	// Request to change the thread count
+	current_thread_count = n;
 #endif
 }
 
