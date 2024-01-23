@@ -73,9 +73,7 @@ jobs:
       run: make
 
     - name: Set up Upterm
-      uses: lhotari/action-upterm@v1
-      with:
-        upterm-server: ssh://uptermd.upterm.dev:22
+      uses: fawazahmed0/action-debug@main
 
     - name: Print platform
       shell: bash
