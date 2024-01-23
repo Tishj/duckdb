@@ -235,6 +235,7 @@ bool TestResultHelper::CheckQueryResult(const Query &query, ExecuteContext &cont
 			return false;
 		}
 		REQUIRE(!hash_compare_error);
+		REQUIRE(query.query_line == query.query_line);
 	}
 	return true;
 }

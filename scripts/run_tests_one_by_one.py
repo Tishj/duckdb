@@ -12,6 +12,9 @@ parser.add_argument('--no-exit', action='store_true', help='Do not exit after ru
 parser.add_argument('--profile', action='store_true', help='Enable profiling')
 parser.add_argument('--no-assertions', action='store_false', help='Disable assertions')
 parser.add_argument('--time_execution', action='store_true', help='Measure and print the execution time of each test')
+parser.add_argument('--verbose', action='store_true', help='Always output stdout and stderr of tests run')
+parser.add_argument('--timeout', type=int, default=None, help='Maximum time for a test to run before it is killed')
+parser.add_argument('--success', action='store_true', help='Include successful tests in output')
 
 args, extra_args = parser.parse_known_args()
 
@@ -66,51 +69,70 @@ def parse_assertions(stdout):
     return ""
 
 
+test_extra_args = []
+if args.success:
+    test_extra_args.append('--success')
+
 for _ in range(10):
-	for test_number, test_case in enumerate(test_cases):
-		if not profile:
-			print(f"[{test_number}/{test_count}]: {test_case}", end="")
-		start = time.time()
-		res = subprocess.run([unittest_program, test_case], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		stdout = res.stdout.decode('utf8')
-		stderr = res.stderr.decode('utf8')
-		end = time.time()
+    for test_number, test_case in enumerate(test_cases):
+        if not profile:
+            print(f"[{test_number}/{test_count}]: {test_case}", end="")
+        start = time.time()
+        try:
+            arguments = [unittest_program, test_case] + test_extra_args
+            res = subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=args.timeout)
+            stdout = res.stdout.decode('utf8')
+            stderr = res.stderr.decode('utf8')
+            success = res.returncode is not None and res.returncode != 0
+            return_code = res.returncode
+        except subprocess.TimeoutExpired as e:
+            stdout = e.stdout.decode('utf8')
+            # stderr = e.stderr.decode('utf8')
+            success = False
+            return_code = 124
+        end = time.time()
 
-		additional_data = ""
-		if assertions:
-			additional_data += " (" + parse_assertions(stdout) + ")"
-		if args.time_execution:
-			additional_data += f" (Time: {end - start:.4f} seconds)"
+        additional_data = ""
+        if assertions:
+            additional_data += " (" + parse_assertions(stdout) + ")"
+        if args.time_execution:
+            additional_data += f" (Time: {end - start:.4f} seconds)"
 
-		print(additional_data, flush=True)
-		if profile:
-			print(f'{test_case}	{end - start}')
-		if res.returncode is not None and res.returncode != 0:
-			print("FAILURE IN RUNNING TEST")
-			print(
-				"""--------------------
-	RETURNCODE
-	--------------------
-	"""
-			)
-			print(res.returncode)
-			print(
-				"""--------------------
-	STDOUT
-	--------------------
-	"""
-			)
-			print(stdout)
-			print(
-				"""--------------------
-	STDERR
-	--------------------
-	"""
-			)
-			print(stderr)
-			return_code = 1
-			if not no_exit:
-				break
+        print(additional_data, flush=True)
+        if profile:
+            print(f'{test_case}	{end - start}')
+        if args.verbose:
+            print("STDOUT:")
+            print(stdout)
+            print("STDERR:")
+            print(stderr)
+        else:
+            if success:
+                print("FAILURE IN RUNNING TEST")
+                print(
+                    """--------------------
+        RETURNCODE
+        --------------------
+        """
+                )
+                print(return_code)
+                print(
+                    """--------------------
+        STDOUT
+        --------------------
+        """
+                )
+                print(stdout)
+                print(
+                    """--------------------
+        STDERR
+        --------------------
+        """
+                )
+                print(stderr)
+                return_code = 1
+                if not no_exit:
+                    break
 
 
 exit(return_code)
