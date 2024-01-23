@@ -82,7 +82,7 @@ for repeat in range(100):
 		if args.time_execution:
 			additional_data += f" (Time: {end - start:.4f} seconds)"
 
-		print(additional_data)
+		print(additional_data, flush=True)
 		if profile:
 			print(f'{test_case}	{end - start}')
 		if res.returncode is not None and res.returncode != 0:
