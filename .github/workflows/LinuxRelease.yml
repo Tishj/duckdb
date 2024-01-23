@@ -72,6 +72,11 @@ jobs:
       shell: bash
       run: make
 
+    - name: Set up Upterm
+      uses: lhotari/action-upterm@v1
+      with:
+        upterm-server: ssh://uptermd.upterm.dev:22
+
     - name: Print platform
       shell: bash
       run: ./build/release/duckdb -c "PRAGMA platform;"
@@ -79,17 +84,6 @@ jobs:
     - name: CPU information
       shell: bash
       run: lscpu
-
-    - name: Install sudo
-      run: |
-        apt-get update
-        apt-get install -y sudo
-
-    - name: Setup upterm session
-      uses: lhotari/action-upterm@v1
-      with:
-        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-        limit-access-to-actor: true
 
     - name: Test
       shell: bash
