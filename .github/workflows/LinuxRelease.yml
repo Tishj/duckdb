@@ -49,7 +49,6 @@ jobs:
       ENABLE_EXTENSION_AUTOINSTALL: 1
       GEN: ninja
       BUILD_BENCHMARK: 1
-      BUILD_ODBC: 1
       DEBUG_STACKTRACE: 1
       FORCE_WARN_UNUSED: 1
       DUCKDB_RUN_PARALLEL_CSV_TESTS: 1
@@ -63,7 +62,6 @@ jobs:
       with:
         ninja-build: 1
         ccache: 1
-        odbc: 1
         python_alias: 1
 
     - name: Install pytest
