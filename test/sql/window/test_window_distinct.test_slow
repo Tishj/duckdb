@@ -17,8 +17,8 @@ PRAGMA threads=4
 statement ok
 PRAGMA memory_limit='20MB'
 
-query I
-WITH t AS (
+statement error
+EXPLAIN WITH t AS (
 	SELECT range AS i, CHR((65 + i % 26)::INTEGER) AS c
 	FROM range(1e6::BIGINT) 
 )
@@ -26,4 +26,4 @@ SELECT i, c, COUNT(DISTINCT c) OVER (ORDER BY i DESC) AS n
 FROM t
 ORDER BY ALL
 ----
-3000000 values hashing to f56f9b4e62101f52951e1f01a9b5c862
+
