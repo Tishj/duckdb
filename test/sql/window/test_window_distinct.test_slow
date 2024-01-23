@@ -2,11 +2,6 @@
 # description: Windowed distinct aggregates at scale
 # group: [window]
 
-require tpch
-
-statement ok
-CALL dbgen(sf=0.1);
-
 statement ok
 PRAGMA temp_directory='__TEST_DIR__/window_distinct'
 
@@ -17,13 +12,12 @@ PRAGMA threads=4
 statement ok
 PRAGMA memory_limit='20MB'
 
-statement error
-EXPLAIN WITH t AS (
+statement ok
+WITH t AS (
 	SELECT range AS i, CHR((65 + i % 26)::INTEGER) AS c
 	FROM range(1e6::BIGINT) 
 )
 SELECT i, c, COUNT(DISTINCT c) OVER (ORDER BY i DESC) AS n
 FROM t
 ORDER BY ALL
-----
 

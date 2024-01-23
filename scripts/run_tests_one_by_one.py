@@ -66,7 +66,7 @@ def parse_assertions(stdout):
     return ""
 
 
-for repeat in range(1):
+for repeat in range(100):
 	for test_number, test_case in enumerate(test_cases):
 		if not profile:
 			print(f"[{repeat}][{test_number}/{test_count}]: {test_case}", end="")
