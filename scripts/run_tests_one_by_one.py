@@ -66,51 +66,50 @@ def parse_assertions(stdout):
     return ""
 
 
-for repeat in range(100):
-	for test_number, test_case in enumerate(test_cases):
-		if not profile:
-			print(f"[{repeat}][{test_number}/{test_count}]: {test_case}", end="")
-		start = time.time()
-		res = subprocess.run([unittest_program, test_case], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		stdout = res.stdout.decode('utf8')
-		stderr = res.stderr.decode('utf8')
-		end = time.time()
+for test_number, test_case in enumerate(test_cases):
+    if not profile:
+        print(f"[{repeat}][{test_number}/{test_count}]: {test_case}", end="")
+    start = time.time()
+    res = subprocess.run([unittest_program, test_case], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout = res.stdout.decode('utf8')
+    stderr = res.stderr.decode('utf8')
+    end = time.time()
 
-		additional_data = ""
-		if assertions:
-			additional_data += " (" + parse_assertions(stdout) + ")"
-		if args.time_execution:
-			additional_data += f" (Time: {end - start:.4f} seconds)"
+    additional_data = ""
+    if assertions:
+        additional_data += " (" + parse_assertions(stdout) + ")"
+    if args.time_execution:
+        additional_data += f" (Time: {end - start:.4f} seconds)"
 
-		print(additional_data, flush=True)
-		if profile:
-			print(f'{test_case}	{end - start}')
-		if res.returncode is not None and res.returncode != 0:
-			print("FAILURE IN RUNNING TEST")
-			print(
-				"""--------------------
-	RETURNCODE
-	--------------------
-	"""
-			)
-			print(res.returncode)
-			print(
-				"""--------------------
-	STDOUT
-	--------------------
-	"""
-			)
-			print(stdout)
-			print(
-				"""--------------------
-	STDERR
-	--------------------
-	"""
-			)
-			print(stderr)
-			return_code = 1
-			if not no_exit:
-				break
+    print(additional_data, flush=True)
+    if profile:
+        print(f'{test_case}	{end - start}')
+    if res.returncode is not None and res.returncode != 0:
+        print("FAILURE IN RUNNING TEST")
+        print(
+            """--------------------
+RETURNCODE
+--------------------
+"""
+        )
+        print(res.returncode)
+        print(
+            """--------------------
+STDOUT
+--------------------
+"""
+        )
+        print(stdout)
+        print(
+            """--------------------
+STDERR
+--------------------
+"""
+        )
+        print(stderr)
+        return_code = 1
+        if not no_exit:
+            break
 
 
 exit(return_code)
