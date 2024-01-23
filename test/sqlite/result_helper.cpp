@@ -286,6 +286,7 @@ bool TestResultHelper::CheckStatementResult(const Statement &statement, ExecuteC
 		return false;
 	}
 	REQUIRE(!error);
+	REQUIRE(query.query_line == query.query_line);
 	return true;
 }
 
