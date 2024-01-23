@@ -10,6 +10,9 @@ statement ok
 PRAGMA threads=4
 
 statement ok
+PRAGMA memory_limit='40MB'
+
+statement ok
 WITH t AS (
 	SELECT range AS i, CHR((65 + i % 26)::INTEGER) AS c
 	FROM range(1e6::BIGINT) 
