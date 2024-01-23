@@ -85,7 +85,7 @@ jobs:
       if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
       run: |
         make
-        python3 scripts/run_tests_one_by_one.py build/release/test/unittest "test/sqlite/select4.test_slow" --time_execution --order lex --start-offset 3300
+        python3 scripts/run_tests_one_by_one.py build/release/test/unittest "test/sqlite/select4.test_slow" --time_execution --order lex
 
     - name: Tools Tests
       shell: bash
