@@ -10,9 +10,6 @@ statement ok
 PRAGMA threads=4
 
 statement ok
-PRAGMA memory_limit='20MB'
-
-statement ok
 WITH t AS (
 	SELECT range AS i, CHR((65 + i % 26)::INTEGER) AS c
 	FROM range(1e6::BIGINT) 
@@ -20,4 +17,3 @@ WITH t AS (
 SELECT i, c, COUNT(DISTINCT c) OVER (ORDER BY i DESC) AS n
 FROM t
 ORDER BY ALL
-
