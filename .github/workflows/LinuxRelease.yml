@@ -58,13 +58,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    # Make sure the @v0.0.1 matches the current version of the
-    # action
-    - uses: PhutureCorp/container-ssh-agent@v0.0.1
-      with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          home-dir: "/root"
-
     - uses: ./.github/actions/manylinux_2014_setup
       with:
         ninja-build: 1
