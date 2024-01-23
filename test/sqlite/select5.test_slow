@@ -1,0 +1,446 @@
+# name: test/sqlite/select4.test_slow
+# group: [sqlite]
+
+statement ok
+CREATE TABLE t1(
+  a1 INTEGER,
+  b1 INTEGER,
+  c1 INTEGER,
+  d1 INTEGER,
+  e1 INTEGER,
+  x1 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t2(
+  a2 INTEGER,
+  b2 INTEGER,
+  c2 INTEGER,
+  d2 INTEGER,
+  e2 INTEGER,
+  x2 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t3(
+  a3 INTEGER,
+  b3 INTEGER,
+  c3 INTEGER,
+  d3 INTEGER,
+  e3 INTEGER,
+  x3 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t4(
+  a4 INTEGER,
+  b4 INTEGER,
+  c4 INTEGER,
+  d4 INTEGER,
+  e4 INTEGER,
+  x4 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t5(
+  a5 INTEGER,
+  b5 INTEGER,
+  c5 INTEGER,
+  d5 INTEGER,
+  e5 INTEGER,
+  x5 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t6(
+  a6 INTEGER,
+  b6 INTEGER,
+  c6 INTEGER,
+  d6 INTEGER,
+  e6 INTEGER,
+  x6 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t7(
+  a7 INTEGER,
+  b7 INTEGER,
+  c7 INTEGER,
+  d7 INTEGER,
+  e7 INTEGER,
+  x7 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t8(
+  a8 INTEGER,
+  b8 INTEGER,
+  c8 INTEGER,
+  d8 INTEGER,
+  e8 INTEGER,
+  x8 VARCHAR(30)
+)
+
+statement ok
+CREATE TABLE t9(
+  a9 INTEGER,
+  b9 INTEGER,
+  c9 INTEGER,
+  d9 INTEGER,
+  e9 INTEGER,
+  x9 VARCHAR(30)
+)
+
+statement ok
+INSERT INTO t1 VALUES(382,414,67,992,483,'table tn1 row 1')
+
+statement ok
+INSERT INTO t7 VALUES(31,30,931,886,590,'table tn7 row 1')
+
+statement ok
+INSERT INTO t5 VALUES(832,186,734,114,697,'table tn5 row 1')
+
+statement ok
+INSERT INTO t4 VALUES(637,907,293,264,377,'table tn4 row 1')
+
+statement ok
+INSERT INTO t5 VALUES(9,998,12,841,851,'table tn5 row 2')
+
+statement ok
+INSERT INTO t5 VALUES(53,975,196,856,144,'table tn5 row 3')
+
+statement ok
+INSERT INTO t8 VALUES(728,984,183,499,469,'table tn8 row 1')
+
+statement ok
+INSERT INTO t9 VALUES(450,95,973,389,679,'table tn9 row 1')
+
+statement ok
+INSERT INTO t1 VALUES(231,468,97,414,795,'table tn1 row 2')
+
+statement ok
+INSERT INTO t3 VALUES(777,827,486,368,602,'table tn3 row 1')
+
+statement ok
+INSERT INTO t1 VALUES(810,355,805,274,858,'table tn1 row 3')
+
+statement ok
+INSERT INTO t9 VALUES(776,680,834,960,704,'table tn9 row 2')
+
+statement ok
+INSERT INTO t1 VALUES(536,956,417,418,381,'table tn1 row 4')
+
+statement ok
+INSERT INTO t8 VALUES(239,725,431,116,223,'table tn8 row 2')
+
+statement ok
+INSERT INTO t3 VALUES(244,376,806,314,774,'table tn3 row 2')
+
+statement ok
+INSERT INTO t3 VALUES(995,632,600,508,833,'table tn3 row 3')
+
+statement ok
+INSERT INTO t2 VALUES(35,729,197,292,769,'table tn2 row 1')
+
+statement ok
+INSERT INTO t2 VALUES(308,60,557,416,115,'table tn2 row 2')
+
+statement ok
+INSERT INTO t7 VALUES(958,892,135,996,27,'table tn7 row 2')
+
+statement ok
+INSERT INTO t2 VALUES(522,640,988,577,679,'table tn2 row 3')
+
+statement ok
+INSERT INTO t7 VALUES(361,913,529,916,282,'table tn7 row 3')
+
+statement ok
+INSERT INTO t2 VALUES(471,805,161,513,812,'table tn2 row 4')
+
+statement ok
+INSERT INTO t1 VALUES(479,43,902,294,685,'table tn1 row 5')
+
+statement ok
+INSERT INTO t1 VALUES(820,242,309,492,355,'table tn1 row 6')
+
+statement ok
+INSERT INTO t3 VALUES(396,70,885,683,527,'table tn3 row 4')
+
+statement ok
+INSERT INTO t9 VALUES(685,63,151,23,418,'table tn9 row 3')
+
+statement ok
+INSERT INTO t2 VALUES(751,489,746,328,117,'table tn2 row 5')
+
+statement ok
+INSERT INTO t2 VALUES(374,376,728,14,381,'table tn2 row 6')
+
+statement ok
+INSERT INTO t5 VALUES(826,79,923,117,937,'table tn5 row 4')
+
+statement ok
+INSERT INTO t2 VALUES(725,857,103,838,564,'table tn2 row 7')
+
+statement ok
+INSERT INTO t8 VALUES(406,934,160,815,431,'table tn8 row 3')
+
+statement ok
+INSERT INTO t3 VALUES(829,595,645,607,494,'table tn3 row 5')
+
+statement ok
+INSERT INTO t3 VALUES(754,827,455,437,896,'table tn3 row 6')
+
+statement ok
+INSERT INTO t2 VALUES(98,779,996,539,698,'table tn2 row 8')
+
+statement ok
+INSERT INTO t6 VALUES(384,92,928,192,840,'table tn6 row 1')
+
+statement ok
+INSERT INTO t9 VALUES(318,127,288,909,278,'table tn9 row 4')
+
+statement ok
+INSERT INTO t1 VALUES(754,808,865,972,313,'table tn1 row 7')
+
+statement ok
+INSERT INTO t5 VALUES(242,822,599,742,327,'table tn5 row 5')
+
+statement ok
+INSERT INTO t1 VALUES(950,822,526,310,646,'table tn1 row 8')
+
+statement ok
+INSERT INTO t5 VALUES(785,951,514,818,206,'table tn5 row 6')
+
+statement ok
+INSERT INTO t4 VALUES(756,749,840,249,217,'table tn4 row 2')
+
+statement ok
+INSERT INTO t1 VALUES(607,711,870,223,14,'table tn1 row 9')
+
+statement ok
+INSERT INTO t7 VALUES(452,175,288,131,272,'table tn7 row 4')
+
+statement ok
+INSERT INTO t6 VALUES(718,989,534,147,469,'table tn6 row 2')
+
+statement ok
+INSERT INTO t8 VALUES(312,397,5,738,579,'table tn8 row 4')
+
+statement ok
+INSERT INTO t8 VALUES(347,665,354,439,14,'table tn8 row 5')
+
+statement ok
+INSERT INTO t7 VALUES(706,634,146,956,183,'table tn7 row 5')
+
+statement ok
+INSERT INTO t7 VALUES(48,867,729,687,372,'table tn7 row 6')
+
+statement ok
+INSERT INTO t4 VALUES(662,884,586,364,405,'table tn4 row 3')
+
+statement ok
+INSERT INTO t1 VALUES(75,387,530,529,228,'table tn1 row 10')
+
+statement ok
+INSERT INTO t1 VALUES(438,726,208,748,166,'table tn1 row 11')
+
+statement ok
+INSERT INTO t6 VALUES(211,463,768,500,67,'table tn6 row 3')
+
+statement ok
+INSERT INTO t3 VALUES(429,617,83,503,993,'table tn3 row 7')
+
+statement ok
+INSERT INTO t7 VALUES(62,660,709,781,561,'table tn7 row 7')
+
+statement ok
+INSERT INTO t6 VALUES(851,875,416,993,750,'table tn6 row 4')
+
+statement ok
+INSERT INTO t1 VALUES(622,853,762,172,113,'table tn1 row 12')
+
+statement ok
+INSERT INTO t9 VALUES(413,379,62,450,788,'table tn9 row 5')
+
+statement ok
+INSERT INTO t3 VALUES(696,386,247,231,848,'table tn3 row 8')
+
+statement ok
+INSERT INTO t9 VALUES(803,612,662,737,452,'table tn9 row 6')
+
+statement ok
+INSERT INTO t9 VALUES(435,171,272,464,954,'table tn9 row 7')
+
+statement ok
+INSERT INTO t4 VALUES(606,532,998,574,554,'table tn4 row 4')
+
+statement ok
+INSERT INTO t5 VALUES(540,380,723,729,104,'table tn5 row 7')
+
+statement ok
+INSERT INTO t8 VALUES(638,287,332,833,859,'table tn8 row 6')
+
+statement ok
+INSERT INTO t8 VALUES(256,870,117,192,305,'table tn8 row 7')
+
+statement ok
+INSERT INTO t8 VALUES(795,673,899,112,221,'table tn8 row 8')
+
+statement ok
+INSERT INTO t9 VALUES(879,285,257,770,860,'table tn9 row 8')
+
+statement ok
+INSERT INTO t6 VALUES(683,882,369,66,417,'table tn6 row 5')
+
+statement ok
+INSERT INTO t3 VALUES(979,701,7,782,702,'table tn3 row 9')
+
+statement ok
+INSERT INTO t7 VALUES(869,868,523,177,979,'table tn7 row 8')
+
+statement ok
+INSERT INTO t6 VALUES(392,217,446,867,31,'table tn6 row 6')
+
+statement ok
+INSERT INTO t7 VALUES(9,42,744,278,522,'table tn7 row 9')
+
+statement ok
+INSERT INTO t9 VALUES(102,818,469,926,854,'table tn9 row 9')
+
+statement ok
+INSERT INTO t4 VALUES(933,387,631,905,147,'table tn4 row 5')
+
+statement ok
+INSERT INTO t5 VALUES(342,858,37,811,271,'table tn5 row 8')
+
+statement ok
+INSERT INTO t8 VALUES(869,540,534,523,422,'table tn8 row 9')
+
+statement ok
+INSERT INTO t1 VALUES(553,762,498,467,616,'table tn1 row 13')
+
+statement ok
+INSERT INTO t1 VALUES(32,486,570,394,522,'table tn1 row 14')
+
+statement ok
+INSERT INTO t7 VALUES(452,808,94,52,826,'table tn7 row 10')
+
+statement ok
+INSERT INTO t3 VALUES(42,505,285,109,981,'table tn3 row 10')
+
+statement ok
+INSERT INTO t1 VALUES(173,523,675,86,872,'table tn1 row 15')
+
+statement ok
+INSERT INTO t5 VALUES(478,506,299,412,343,'table tn5 row 9')
+
+statement ok
+INSERT INTO t8 VALUES(838,102,196,554,423,'table tn8 row 10')
+
+statement ok
+INSERT INTO t7 VALUES(233,726,302,507,92,'table tn7 row 11')
+
+statement ok
+INSERT INTO t3 VALUES(997,998,711,399,914,'table tn3 row 11')
+
+statement ok
+INSERT INTO t1 VALUES(702,645,966,820,497,'table tn1 row 16')
+
+statement ok
+INSERT INTO t7 VALUES(952,362,467,199,319,'table tn7 row 12')
+
+statement ok
+INSERT INTO t6 VALUES(293,876,522,367,237,'table tn6 row 7')
+
+statement ok
+INSERT INTO t7 VALUES(998,202,441,722,79,'table tn7 row 13')
+
+statement ok
+INSERT INTO t2 VALUES(538,714,251,749,673,'table tn2 row 9')
+
+statement ok
+INSERT INTO t6 VALUES(116,230,506,355,731,'table tn6 row 8')
+
+statement ok
+INSERT INTO t1 VALUES(967,128,585,581,921,'table tn1 row 17')
+
+statement ok
+INSERT INTO t2 VALUES(863,311,810,743,428,'table tn2 row 10')
+
+statement ok
+INSERT INTO t2 VALUES(916,585,274,86,521,'table tn2 row 11')
+
+statement ok
+INSERT INTO t4 VALUES(825,921,660,777,376,'table tn4 row 6')
+
+statement ok
+INSERT INTO t2 VALUES(993,903,625,198,812,'table tn2 row 12')
+
+statement ok
+INSERT INTO t4 VALUES(327,323,366,511,619,'table tn4 row 7')
+
+statement ok
+INSERT INTO t8 VALUES(341,878,250,715,533,'table tn8 row 11')
+
+statement ok
+INSERT INTO t7 VALUES(386,820,853,795,844,'table tn7 row 14')
+
+statement ok
+INSERT INTO t1 VALUES(382,270,882,619,963,'table tn1 row 18')
+
+statement ok
+INSERT INTO t4 VALUES(901,389,74,429,223,'table tn4 row 8')
+
+statement ok
+INSERT INTO t3 VALUES(551,813,516,641,821,'table tn3 row 12')
+
+statement ok
+INSERT INTO t4 VALUES(708,167,806,277,358,'table tn4 row 9')
+
+statement ok
+INSERT INTO t5 VALUES(988,554,733,649,661,'table tn5 row 10')
+
+statement ok
+INSERT INTO t8 VALUES(72,359,668,805,106,'table tn8 row 12')
+
+statement ok
+INSERT INTO t3 VALUES(513,914,801,495,724,'table tn3 row 13')
+
+statement ok
+INSERT INTO t6 VALUES(238,923,4,807,353,'table tn6 row 9')
+
+statement ok
+INSERT INTO t8 VALUES(838,454,374,108,592,'table tn8 row 13')
+
+statement ok
+INSERT INTO t3 VALUES(879,355,326,184,854,'table tn3 row 14')
+
+statement ok
+INSERT INTO t5 VALUES(153,306,672,858,25,'table tn5 row 11')
+
+statement ok
+INSERT INTO t4 VALUES(997,286,403,223,575,'table tn4 row 10')
+
+statement ok
+INSERT INTO t8 VALUES(127,975,225,737,646,'table tn8 row 14')
+
+statement ok
+INSERT INTO t8 VALUES(561,1,111,2,893,'table tn8 row 15')
+
+statement ok
+INSERT INTO t3 VALUES(349,542,542,658,304,'table tn3 row 15')
+
+statement ok
+INSERT INTO t7 VALUES(433,323,589,134,462,'table tn7 row 15')
+
+statement ok
+INSERT INTO t1 VALUES(629,584,253,504,695,'table tn1 row 19')
+
+statement ok
+INSERT INTO t1 VALUES(52,132,315,25,210,'table tn1 row 20')
+
+statement ok
+INSERT INTO t7 VALUES(574,670,607,212,31,'table tn7 row 16')
+
+statement ok
+INSERT INTO t8 VALUES(578,891,521,711,41,'table tn8 row 16')
