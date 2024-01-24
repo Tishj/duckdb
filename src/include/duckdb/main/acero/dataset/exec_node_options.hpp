@@ -8,7 +8,15 @@ namespace dataset {
 
 struct ExecNodeOptions {
 public:
-	enum class OptionType { SCAN_NODE, PROJECT_NODE, HASH_JOIN_NODE, SOURCE_NODE };
+	enum class OptionType {
+		SCAN_NODE,
+		PROJECT_NODE,
+		HASH_JOIN_NODE,
+		SOURCE_NODE,
+		TABLE_SOURCE_NODE,
+		FILTER_NODE,
+		AGGREGATE_NODE
+	};
 
 public:
 	virtual ~ExecNodeOptions() = default;

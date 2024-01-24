@@ -12,10 +12,16 @@
 #include "duckdb/main/acero/dataset/dataset.hpp"
 #include "duckdb/main/acero/declaration.hpp"
 #include "duckdb/main/acero/project_node_options.hpp"
+#include "duckdb/main/acero/table_source_node_options.hpp"
+#include "duckdb/main/acero/aggregate_node_options.hpp"
+#include "duckdb/main/acero/filter_node_options.hpp"
 #include "duckdb/main/acero/compute/expression.hpp"
 #include "duckdb/main/acero/compute/compute.hpp"
 #include "duckdb/main/acero/source_node_options.hpp"
 #include "duckdb/main/acero/util/array_vector_stream.hpp"
+#include "duckdb/main/acero/arrow_conversion.hpp"
+#include "duckdb/main/acero/dataset/date32_scalar.hpp"
+#include "duckdb/main/acero/compute/scalar_aggregate_options.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -98,6 +104,53 @@ std::shared_ptr<arrow::dataset::Dataset> MakeGroupableBatches(int multiplicity =
 
 	auto ds = make_shared<arrow::dataset::Dataset>(std::move(db), std::move(con), "select * from my_table");
 	return ds;
+}
+
+shared_ptr<arrow::Table> GetLineItem() {
+	auto db = make_uniq<DuckDB>(nullptr);
+	auto con = make_uniq<Connection>(*db);
+	auto res = con->Query("from 'tmp/sf1/lineitem.parquet';");
+	return ac::ArrowConversion::ConvertToTable(std::move(res));
+};
+
+TEST_CASE("Test Acero Mock - TPCH Q06", "[api]") {
+	auto table = GetLineItem();
+	// Create a scan over the dataset
+	// declare table source
+	int max_batch_size = 1000;
+	auto table_source_options = ac::TableSourceNodeOptions {table, max_batch_size};
+	ac::Declaration source {"table_source", std::move(table_source_options)};
+
+	// declare filter operation
+	cp::Expression filter_expr = cp::call(
+	    "and",
+	    {cp::call(
+	         "and",
+	         {
+	             cp::call("and",
+	                      {
+	                          cp::greater_equal(cp::field_ref("l_shipdate"), cp::literal(arrow::Date32Scalar(8766))),
+	                          // January 1, 1994 is 8766 days after January 1, 1970
+	                          cp::less(cp::field_ref("l_shipdate"), cp::literal(arrow::Date32Scalar(9131)))
+	                          // January 1, 1995 is 9131 days after January 1, 1970
+	                      }),
+	             cp::call("and", {cp::greater_equal(cp::field_ref("l_discount"), cp::literal(0.05)),
+	                              cp::less_equal(cp::field_ref("l_discount"), cp::literal(0.07))}),
+	         }),
+	     cp::less(cp::field_ref("l_quantity"), cp::literal(24.0))});
+	auto filter_options = ac::FilterNodeOptions(filter_expr);
+	ac::Declaration filter {"filter", {std::move(source)}, std::move(filter_options)};
+
+	// declare project operation
+	auto project_options = ac::ProjectNodeOptions {
+	    {cp::call("multiply", {cp::field_ref("l_extendedprice"), cp::field_ref("l_discount")})}, {"product"}};
+	ac::Declaration project {"project", {std::move(filter)}, std::move(project_options)};
+
+	// declare aggregate operation
+	auto options = std::make_shared<cp::ScalarAggregateOptions>(/*skip_nulls=*/true, /*min_count=*/1);
+	auto aggregate_options =
+	    ac::AggregateNodeOptions {/*aggregates=*/ {{"sum", options, "product", "revenue"}}, /*keys=*/ {}};
+	ac::Declaration aggregate {"aggregate", {std::move(project)}, std::move(aggregate_options)};
 }
 
 TEST_CASE("Test Acero Mock - Projection", "[api]") {
