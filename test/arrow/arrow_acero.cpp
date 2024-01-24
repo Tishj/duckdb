@@ -22,6 +22,8 @@
 #include "duckdb/main/acero/arrow_conversion.hpp"
 #include "duckdb/main/acero/dataset/date32_scalar.hpp"
 #include "duckdb/main/acero/compute/scalar_aggregate_options.hpp"
+#include "duckdb/common/arrow/physical_arrow_collector.hpp"
+
 
 using namespace duckdb;
 using namespace std;
@@ -106,10 +108,27 @@ std::shared_ptr<arrow::dataset::Dataset> MakeGroupableBatches(int multiplicity =
 	return ds;
 }
 
+static duckdb::unique_ptr<QueryResult> CompletePendingQuery(PendingQueryResult &pending_query) {
+	PendingExecutionResult execution_result;
+	do {
+		execution_result = pending_query.ExecuteTask();
+	} while (!PendingQueryResult::IsFinished(execution_result));
+	if (execution_result == PendingExecutionResult::EXECUTION_ERROR) {
+		pending_query.ThrowError();
+	}
+	return pending_query.Execute();
+}
+
 shared_ptr<arrow::Table> GetLineItem() {
 	auto db = make_uniq<DuckDB>(nullptr);
 	auto con = make_uniq<Connection>(*db);
-	auto res = con->Query("from 'tmp/sf1/lineitem.parquet';");
+	con->context->config.result_collector = [](ClientContext &context, PreparedStatementData &data) {
+		return PhysicalArrowCollector::Create(context, data, 2048);
+	};
+
+	auto rel = con->RelationFromQuery("from '/Users/thijs/DuckDBLabs/arrow_acero/tmp/sf1/lineitem.parquet';");
+	auto pending_query = con->context->PendingQuery(rel, false);
+	auto res = CompletePendingQuery(*pending_query);
 	return ac::ArrowConversion::ConvertToTable(std::move(res));
 };
 
@@ -151,6 +170,8 @@ TEST_CASE("Test Acero Mock - TPCH Q06", "[api]") {
 	auto aggregate_options =
 	    ac::AggregateNodeOptions {/*aggregates=*/ {{"sum", options, "product", "revenue"}}, /*keys=*/ {}};
 	ac::Declaration aggregate {"aggregate", {std::move(project)}, std::move(aggregate_options)};
+
+	ExecutePlanAndCollectAsTable(std::move(aggregate));
 }
 
 TEST_CASE("Test Acero Mock - Projection", "[api]") {

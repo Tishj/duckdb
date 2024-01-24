@@ -55,6 +55,23 @@ static vector<Value> ArrowScanInput(const shared_ptr<arrow::dataset::Dataset> &d
 	return params;
 }
 
+static vector<Value> ArrowScanInput(const shared_ptr<arrow::Table> &table) {
+	vector<Value> params;
+	auto arrow_object = dataset->ArrowObject();
+	auto from_duckdb_result = true;
+
+	params.push_back(Value::POINTER(arrow_object));
+	if (from_duckdb_result) {
+		params.push_back(Value::POINTER((uintptr_t)&ArrowTestFactory::CreateStream));
+		params.push_back(Value::POINTER((uintptr_t)&ArrowTestFactory::GetSchema));
+	} else {
+		params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::CreateStream));
+		params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::GetSchema));
+	}
+
+	return params;
+}
+
 static duckdb::JoinType ConvertJoinType(ac::JoinType type) {
 	switch (type) {
 	case ac::JoinType::INNER:
@@ -125,6 +142,9 @@ static shared_ptr<Relation> ConvertDeclaration(const std::shared_ptr<ClientConte
 		right = right->Alias("right");
 		auto condition = ConvertCondition(hash_join_options.left_keys, hash_join_options.right_keys, *left, *right);
 		return make_shared<JoinRelation>(std::move(left), std::move(right), std::move(condition), join_type);
+	}
+	case OptionType::TABLE_SOURCE_NODE: {
+		auto 
 	}
 	default: {
 		throw NotImplementedException("Type not implemented for ExecNodeOptions::OptionType");
