@@ -24,13 +24,12 @@
 #include "duckdb/main/acero/compute/scalar_aggregate_options.hpp"
 #include "duckdb/common/arrow/physical_arrow_collector.hpp"
 
-
 using namespace duckdb;
 using namespace std;
 
 void VerifyResult(arrow::Table &table) {
 	auto array_vector_stream = new arrow::ArrayVectorStream(std::move(table));
-	auto &stream = array_vector_stream->stream;
+	auto &stream = array_vector_stream->stream.arrow_array_stream;
 
 	DuckDB db(nullptr);
 	Connection conn(db);
@@ -167,8 +166,8 @@ TEST_CASE("Test Acero Mock - TPCH Q06", "[api]") {
 
 	// declare aggregate operation
 	auto options = std::make_shared<cp::ScalarAggregateOptions>(/*skip_nulls=*/true, /*min_count=*/1);
-	auto aggregate_options =
-	    ac::AggregateNodeOptions {/*aggregates=*/ {{"sum", options, "product", "revenue"}}, /*keys=*/ {}};
+	auto aggregate_options = ac::AggregateNodeOptions {/*aggregates=*/ {{"sum", options, "product", "revenue"}},
+	                                                   /*keys=*/ {}};
 	ac::Declaration aggregate {"aggregate", {std::move(project)}, std::move(aggregate_options)};
 
 	ExecutePlanAndCollectAsTable(std::move(aggregate));

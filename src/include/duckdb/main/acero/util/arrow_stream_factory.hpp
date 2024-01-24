@@ -17,9 +17,13 @@ namespace ac {
 
 class ArrowStreamTestFactory {
 public:
-	static unique_ptr<ArrowArrayStreamWrapper> CreateStream(uintptr_t this_ptr, ArrowStreamParameters &parameters);
+	ArrowStreamTestFactory() = delete;
 
-	static void GetSchema(uintptr_t factory_ptr, ArrowSchemaWrapper &schema);
+public:
+	static unique_ptr<ArrowArrayStreamWrapper> CreateStream(uintptr_t stream_wrapper,
+	                                                        ArrowStreamParameters &parameters);
+
+	static void GetSchema(uintptr_t stream_wrapper, ArrowSchemaWrapper &schema);
 };
 
 } // namespace ac

@@ -14,13 +14,13 @@ using Schema = ArrowSchemaWrapper;
 class TableSourceNodeOptions : public arrow::dataset::ExecNodeOptions {
 	using base = arrow::dataset::ExecNodeOptions;
 
-
 public:
 	static constexpr int64_t kDefaultMaxBatchSize = 1 << 20;
 
 	/// Create an instance from values
 	TableSourceNodeOptions(std::shared_ptr<arrow::Table> table, int64_t max_batch_size = kDefaultMaxBatchSize)
-		: base(base::OptionType::TABLE_SOURCE_NODE), table(std::move(table)), max_batch_size(max_batch_size) {}
+	    : base(base::OptionType::TABLE_SOURCE_NODE), table(std::move(table)), max_batch_size(max_batch_size) {
+	}
 
 	/// \brief a table which acts as the data source
 	std::shared_ptr<arrow::Table> table;

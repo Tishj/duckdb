@@ -64,10 +64,13 @@ public:
 
 class ArrowStreamTestFactory {
 public:
-	static duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper> CreateStream(uintptr_t this_ptr,
+	ArrowStreamTestFactory() = delete;
+
+public:
+	static duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper> CreateStream(uintptr_t stream_wrapper,
 	                                                                        ArrowStreamParameters &parameters);
 
-	static void GetSchema(uintptr_t factory_ptr, duckdb::ArrowSchemaWrapper &schema);
+	static void GetSchema(uintptr_t stream_wrapper, duckdb::ArrowSchemaWrapper &schema);
 };
 
 class ArrowTestHelper {

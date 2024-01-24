@@ -10,23 +10,22 @@
 namespace duckdb {
 namespace ac {
 
-using cp::Aggregate;
 using arrow::FieldRef;
+using cp::Aggregate;
 
 using Schema = ArrowSchemaWrapper;
 
 // NOTE: this is modified from the original, because it's using c++17 features and async functionality
 class AggregateNodeOptions : public arrow::dataset::ExecNodeOptions {
 	using base = arrow::dataset::ExecNodeOptions;
+
 public:
 	/// \brief create an instance from values
-	explicit AggregateNodeOptions(std::vector<Aggregate> aggregates,
-									std::vector<FieldRef> keys = {},
-									std::vector<FieldRef> segment_keys = {})
-		: base(base::OptionType::AGGREGATE_NODE),
-			aggregates(std::move(aggregates)),
-			keys(std::move(keys)),
-			segment_keys(std::move(segment_keys)) {}
+	explicit AggregateNodeOptions(std::vector<Aggregate> aggregates, std::vector<FieldRef> keys = {},
+	                              std::vector<FieldRef> segment_keys = {})
+	    : base(base::OptionType::AGGREGATE_NODE), aggregates(std::move(aggregates)), keys(std::move(keys)),
+	      segment_keys(std::move(segment_keys)) {
+	}
 
 	// aggregations which will be applied to the targeted fields
 	std::vector<Aggregate> aggregates;

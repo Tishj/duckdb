@@ -17,7 +17,8 @@ class FilterNodeOptions : public arrow::dataset::ExecNodeOptions {
 public:
 	/// \brief create an instance from values
 	explicit FilterNodeOptions(duckdb::cp::Expression filter_expression)
-		: base(base::OptionType::FILTER_NODE), filter_expression(std::move(filter_expression)) {}
+	    : base(base::OptionType::FILTER_NODE), filter_expression(std::move(filter_expression)) {
+	}
 
 	/// \brief the expression to filter batches
 	///

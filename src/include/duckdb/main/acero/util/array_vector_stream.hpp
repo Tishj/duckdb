@@ -12,6 +12,7 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "duckdb/main/chunk_scan_state.hpp"
 #include "duckdb/main/acero/dataset/table.hpp"
+#include "duckdb/common/arrow/arrow_wrapper.hpp"
 
 namespace duckdb {
 namespace arrow {
@@ -22,7 +23,7 @@ public:
 
 public:
 	Table table;
-	ArrowArrayStream stream;
+	ArrowArrayStreamWrapper stream;
 	idx_t chunk_index = 0;
 
 private:
@@ -30,6 +31,11 @@ private:
 	static int GetNext(struct ArrowArrayStream *stream, struct ArrowArray *out);
 	static void Release(struct ArrowArrayStream *stream);
 	static const char *GetLastError(struct ArrowArrayStream *stream);
+
+private:
+	ArrowArrayStream &GetStream() {
+		return stream.arrow_array_stream;
+	}
 };
 
 } // namespace arrow

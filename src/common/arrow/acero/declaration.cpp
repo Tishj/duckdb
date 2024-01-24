@@ -12,15 +12,21 @@
 #include "duckdb/main/relation/projection_relation.hpp"
 #include "duckdb/main/relation/table_function_relation.hpp"
 #include "duckdb/main/relation/join_relation.hpp"
+#include "duckdb/main/relation/filter_relation.hpp"
+#include "duckdb/main/relation/aggregate_relation.hpp"
 
 #include "duckdb/main/acero/dataset/scan_node_options.hpp"
 #include "duckdb/main/acero/dataset/scan_options.hpp"
 #include "duckdb/main/acero/project_node_options.hpp"
 #include "duckdb/main/acero/source_node_options.hpp"
+#include "duckdb/main/acero/table_source_node_options.hpp"
+#include "duckdb/main/acero/filter_node_options.hpp"
+#include "duckdb/main/acero/aggregate_node_options.hpp"
 #include "duckdb/main/acero/hash_join_node_options.hpp"
 
 #include "duckdb/main/acero/util/arrow_stream_factory.hpp"
 #include "duckdb/main/acero/util/arrow_test_factory.hpp"
+#include "duckdb/main/acero/util/array_vector_stream.hpp"
 
 #include "duckdb/main/acero/arrow_conversion.hpp"
 #include "duckdb/common/arrow/physical_arrow_collector.hpp"
@@ -29,6 +35,20 @@
 
 namespace duckdb {
 namespace ac {
+
+namespace {
+
+class ArrowTableDependency : public ExternalDependency {
+public:
+	ArrowTableDependency(arrow::ArrayVectorStream &&stream)
+	    : ExternalDependency(ExternalDependenciesType::GENERIC), stream(std::move(stream)) {
+	}
+
+private:
+	arrow::ArrayVectorStream stream;
+};
+
+} // namespace
 
 static vector<unique_ptr<ParsedExpression>> ConvertExpressions(const vector<cp::Expression> &inputs) {
 	vector<unique_ptr<ParsedExpression>> expressions;
@@ -55,19 +75,11 @@ static vector<Value> ArrowScanInput(const shared_ptr<arrow::dataset::Dataset> &d
 	return params;
 }
 
-static vector<Value> ArrowScanInput(const shared_ptr<arrow::Table> &table) {
+static vector<Value> ArrowScanInput(const duckdb::arrow::ArrayVectorStream &stream) {
 	vector<Value> params;
-	auto arrow_object = dataset->ArrowObject();
-	auto from_duckdb_result = true;
-
-	params.push_back(Value::POINTER(arrow_object));
-	if (from_duckdb_result) {
-		params.push_back(Value::POINTER((uintptr_t)&ArrowTestFactory::CreateStream));
-		params.push_back(Value::POINTER((uintptr_t)&ArrowTestFactory::GetSchema));
-	} else {
-		params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::CreateStream));
-		params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::GetSchema));
-	}
+	params.push_back(Value::POINTER((uintptr_t)&stream.stream.arrow_array_stream));
+	params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::CreateStream));
+	params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::GetSchema));
 
 	return params;
 }
@@ -128,6 +140,8 @@ static shared_ptr<Relation> ConvertDeclaration(const std::shared_ptr<ClientConte
 		auto &dataset = source_options.generator;
 		// TODO: Construct a TableFunctionRelation over the arrow dataset
 		auto params = ArrowScanInput(dataset);
+		// NOTE: this has no dependencies on the dataset, so it relies on the SourceNodeOptions to stay alive until
+		// execution is finished
 		return make_shared<TableFunctionRelation>(context, "arrow_scan", std::move(params));
 	}
 	case OptionType::HASH_JOIN_NODE: {
@@ -144,7 +158,51 @@ static shared_ptr<Relation> ConvertDeclaration(const std::shared_ptr<ClientConte
 		return make_shared<JoinRelation>(std::move(left), std::move(right), std::move(condition), join_type);
 	}
 	case OptionType::TABLE_SOURCE_NODE: {
-		auto 
+		auto &source_options = plan.options->Cast<TableSourceNodeOptions>();
+		// Create a stream that wraps our constructed arrow::Table
+		auto stream = duckdb::arrow::ArrayVectorStream(std::move(*source_options.table.get()));
+
+		// Then use this stream to create an 'arrow_scan'
+		auto params = ArrowScanInput(stream);
+		auto rel = make_shared<TableFunctionRelation>(context, "arrow_scan", std::move(params));
+		rel->extra_dependencies = make_shared<ArrowTableDependency>(std::move(stream));
+		return std::move(rel);
+	}
+	case OptionType::AGGREGATE_NODE: {
+		auto &aggregate_options = plan.options->Cast<AggregateNodeOptions>();
+		auto child = ConvertDeclaration(context, plan.inputs[0]);
+		vector<unique_ptr<ParsedExpression>> expressions;
+		for (auto &func : aggregate_options.aggregates) {
+			auto &name = func.function;
+			auto &alias = func.name;
+			auto &options = func.options;
+			auto &inputs = func.target;
+
+			vector<unique_ptr<ParsedExpression>> child_expressions;
+			for (auto &input : inputs) {
+				// FIXME: FieldRef can be either:
+				// 1. FieldPath (which is a vector of indices)
+				// 2. string (name)
+				// 3. vector<FieldRef> (for instance for a struct field, e.g: my_struct.my_field)
+				// Create a	ColumnRefExpression for every referenced column
+				child_expressions.push_back(make_uniq<ColumnRefExpression>(input.name));
+			}
+			// TODO: handle 'options'
+			auto function = make_uniq_base<ParsedExpression, FunctionExpression>(name, std::move(child_expressions));
+			function->alias = alias;
+			expressions.push_back(std::move(function));
+		}
+		// TODO: handle 'keys'
+		return make_shared<AggregateRelation>(std::move(child), std::move(expressions));
+	}
+	case OptionType::FILTER_NODE: {
+		auto &aggregate_options = plan.options->Cast<FilterNodeOptions>();
+		auto &exp = aggregate_options.filter_expression;
+		auto filter = exp.InternalExpression();
+
+		auto &inputs = plan.inputs;
+		auto child = ConvertDeclaration(context, inputs[0]);
+		return make_shared<FilterRelation>(std::move(child), std::move(filter));
 	}
 	default: {
 		throw NotImplementedException("Type not implemented for ExecNodeOptions::OptionType");

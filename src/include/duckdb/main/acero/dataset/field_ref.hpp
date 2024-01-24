@@ -8,8 +8,10 @@ namespace arrow {
 
 struct FieldRef {
 public:
-	FieldRef(std::string name) : name(std::move(name)) {}    // NOLINT runtime/explicit
-	FieldRef(const char* name) : name(std::string(name)) {}  // NOLINT runtime/explicit
+	FieldRef(std::string name) : name(std::move(name)) {
+	} // NOLINT runtime/explicit
+	FieldRef(const char *name) : name(std::string(name)) {
+	} // NOLINT runtime/explicit
 public:
 	std::string name;
 };
