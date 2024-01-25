@@ -51,7 +51,11 @@ for line in stdout.splitlines():
     splits = line.rsplit('\t', 1)
     test_cases.append(splits[0])
 
+
 test_count = len(test_cases)
+if args.list:
+    for test_number, test_case in enumerate(test_cases):
+        print(print(f"[{test_number}/{test_count}]: {test_case}"))
 return_code = 0
 
 
