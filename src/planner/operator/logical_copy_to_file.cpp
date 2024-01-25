@@ -71,13 +71,10 @@ unique_ptr<LogicalOperator> LogicalCopyToFile::Deserialize(Deserializer &deseria
 		if (!function.copy_to_bind) {
 			throw InternalException("Copy function \"%s\" has neither bind nor (de)serialize", function.name);
 		}
-
-		CopyFunctionBindInput function_bind_input(*copy_info);
-		bind_data = function.copy_to_bind(context, function_bind_input, names, expected_types);
+		bind_data = function.copy_to_bind(context, *copy_info, names, expected_types);
 	}
 
 	auto default_extension = function.extension;
-
 	auto file_extension =
 	    deserializer.ReadPropertyWithDefault<string>(213, "file_extension", std::move(default_extension));
 

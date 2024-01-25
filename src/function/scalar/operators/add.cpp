@@ -94,18 +94,13 @@ timestamp_t AddOperator::Operation(dtime_tz_t left, date_t right) {
 }
 
 template <>
-timestamp_t AddOperator::Operation(date_t left, interval_t right) {
-	if (left == date_t::infinity()) {
-		return timestamp_t::infinity();
-	} else if (left == date_t::ninfinity()) {
-		return timestamp_t::ninfinity();
-	}
-	return Interval::Add(Timestamp::FromDatetime(left, dtime_t(0)), right);
+date_t AddOperator::Operation(date_t left, interval_t right) {
+	return Interval::Add(left, right);
 }
 
 template <>
-timestamp_t AddOperator::Operation(interval_t left, date_t right) {
-	return AddOperator::Operation<date_t, interval_t, timestamp_t>(right, left);
+date_t AddOperator::Operation(interval_t left, date_t right) {
+	return AddOperator::Operation<date_t, interval_t, date_t>(right, left);
 }
 
 template <>

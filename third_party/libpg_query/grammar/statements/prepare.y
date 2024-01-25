@@ -24,6 +24,5 @@ PreparableStmt:
 			| InsertStmt
 			| UpdateStmt
 			| CopyStmt
-			| DeleteStmt
-			| VariableShowStmt				/* by default all are $$=$1 */
+			| DeleteStmt					/* by default all are $$=$1 */
 		;

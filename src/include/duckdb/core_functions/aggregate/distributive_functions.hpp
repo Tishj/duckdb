@@ -159,15 +159,6 @@ struct KurtosisFun {
 	static AggregateFunction GetFunction();
 };
 
-struct KurtosisPopFun {
-	static constexpr const char *Name = "kurtosis_pop";
-	static constexpr const char *Parameters = "x";
-	static constexpr const char *Description = "Returns the excess kurtosis (Fisher’s definition) of all input values, without bias correction";
-	static constexpr const char *Example = "";
-
-	static AggregateFunction GetFunction();
-};
-
 struct MinFun {
 	static constexpr const char *Name = "min";
 	static constexpr const char *Parameters = "arg";
