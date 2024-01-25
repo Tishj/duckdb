@@ -53,9 +53,6 @@ for line in stdout.splitlines():
 
 
 test_count = len(test_cases)
-if args.list:
-    for test_number, test_case in enumerate(test_cases):
-        print(print(f"[{test_number}/{test_count}]: {test_case}"))
 return_code = 0
 
 
