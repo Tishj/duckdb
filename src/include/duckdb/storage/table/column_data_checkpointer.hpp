@@ -13,7 +13,6 @@
 #include "duckdb/storage/table/column_checkpoint_state.hpp"
 
 namespace duckdb {
-struct TableScanOptions;
 
 class ColumnDataCheckpointer {
 public:

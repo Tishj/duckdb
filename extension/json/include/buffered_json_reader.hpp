@@ -68,11 +68,10 @@ public:
 
 	FileHandle &GetHandle();
 
-	//! The next two functions return whether the read was successful
-	bool GetPositionAndSize(idx_t &position, idx_t &size, idx_t requested_size);
-	bool Read(char *pointer, idx_t &read_size, idx_t requested_size, bool &file_done, bool sample_run);
+	idx_t GetPositionAndSize(idx_t &position, idx_t requested_size);
+	idx_t Read(char *pointer, idx_t requested_size, bool sample_run);
 	//! Read at position optionally allows passing a custom handle to read from, otherwise the default one is used
-	void ReadAtPosition(char *pointer, idx_t size, idx_t position, bool &file_done, bool sample_run,
+	void ReadAtPosition(char *pointer, idx_t size, idx_t position, bool sample_run,
 	                    optional_ptr<FileHandle> override_handle = nullptr);
 
 private:
@@ -92,7 +91,6 @@ private:
 	idx_t read_position;
 	idx_t requested_reads;
 	atomic<idx_t> actual_reads;
-	bool last_read_requested;
 
 	//! Cached buffers for resetting when reading stream
 	vector<AllocatedData> cached_buffers;
@@ -104,6 +102,7 @@ public:
 	BufferedJSONReader(ClientContext &context, BufferedJSONReaderOptions options, string file_name);
 
 	void OpenJSONFile();
+	void CloseJSONFile();
 	void Reset();
 
 	bool HasFileHandle() const;
@@ -124,12 +123,12 @@ public:
 	//! Insert/get/remove buffer (grabs the lock)
 	void InsertBuffer(idx_t buffer_idx, unique_ptr<JSONBufferHandle> &&buffer);
 	optional_ptr<JSONBufferHandle> GetBuffer(idx_t buffer_idx);
-	AllocatedData RemoveBuffer(JSONBufferHandle &handle);
+	AllocatedData RemoveBuffer(idx_t buffer_idx);
 
 	//! Get a new buffer index (must hold the lock)
 	idx_t GetBufferIndex();
 	//! Set line count for a buffer that is done (grabs the lock)
-	void SetBufferLineOrObjectCount(JSONBufferHandle &handle, idx_t count);
+	void SetBufferLineOrObjectCount(idx_t index, idx_t count);
 	//! Throws a parse error that mentions the file name and line number
 	void ThrowParseError(idx_t buf_index, idx_t line_or_object_in_buf, yyjson_read_err &err, const string &extra = "");
 	//! Throws a transform error that mentions the file name and line number

@@ -116,14 +116,4 @@ public:
 	void ExecuteInternal(ExecuteContext &context) const override;
 };
 
-class ModeCommand : public Command {
-public:
-	ModeCommand(SQLLogicTestRunner &runner, string parameter);
-
-public:
-	string parameter;
-
-	void ExecuteInternal(ExecuteContext &context) const override;
-};
-
 } // namespace duckdb

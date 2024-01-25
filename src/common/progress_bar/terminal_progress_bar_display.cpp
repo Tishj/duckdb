@@ -4,17 +4,13 @@
 
 namespace duckdb {
 
-int32_t TerminalProgressBarDisplay::NormalizePercentage(double percentage) {
+void TerminalProgressBarDisplay::PrintProgressInternal(int percentage) {
 	if (percentage > 100) {
-		return 100;
+		percentage = 100;
 	}
 	if (percentage < 0) {
-		return 0;
+		percentage = 0;
 	}
-	return int32_t(percentage);
-}
-
-void TerminalProgressBarDisplay::PrintProgressInternal(int32_t percentage) {
 	string result;
 	// we divide the number of blocks by the percentage
 	// 0%   = 0
@@ -57,13 +53,8 @@ void TerminalProgressBarDisplay::PrintProgressInternal(int32_t percentage) {
 }
 
 void TerminalProgressBarDisplay::Update(double percentage) {
-	auto percentage_int = NormalizePercentage(percentage);
-	if (percentage_int == rendered_percentage) {
-		return;
-	}
-	PrintProgressInternal(percentage_int);
+	PrintProgressInternal(percentage);
 	Printer::Flush(OutputStream::STREAM_STDOUT);
-	rendered_percentage = percentage_int;
 }
 
 void TerminalProgressBarDisplay::Finish() {

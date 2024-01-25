@@ -113,15 +113,8 @@ idx_t ColumnData::ScanVector(ColumnScanState &state, Vector &result, idx_t remai
 		idx_t scan_count = MinValue<idx_t>(remaining, state.current->start + state.current->count - state.row_index);
 		idx_t result_offset = initial_remaining - remaining;
 		if (scan_count > 0) {
-			if (state.scan_options && state.scan_options->force_fetch_row) {
-				for (idx_t i = 0; i < scan_count; i++) {
-					ColumnFetchState fetch_state;
-					state.current->FetchRow(fetch_state, state.row_index + i, result, result_offset + i);
-				}
-			} else {
-				state.current->Scan(state, scan_count, result, result_offset,
-				                    !has_updates && scan_count == initial_remaining);
-			}
+			state.current->Scan(state, scan_count, result, result_offset,
+			                    !has_updates && scan_count == initial_remaining);
 
 			state.row_index += scan_count;
 			remaining -= scan_count;
@@ -420,15 +413,7 @@ unique_ptr<ColumnCheckpointState> ColumnData::CreateCheckpointState(RowGroup &ro
 
 void ColumnData::CheckpointScan(ColumnSegment &segment, ColumnScanState &state, idx_t row_group_start, idx_t count,
                                 Vector &scan_vector) {
-	if (state.scan_options && state.scan_options->force_fetch_row) {
-		for (idx_t i = 0; i < count; i++) {
-			ColumnFetchState fetch_state;
-			segment.FetchRow(fetch_state, state.row_index + i, scan_vector, i);
-		}
-	} else {
-		segment.Scan(state, count, scan_vector, 0, true);
-	}
-
+	segment.Scan(state, count, scan_vector, 0, true);
 	if (updates) {
 		scan_vector.Flatten(count);
 		updates->FetchCommittedRange(state.row_index - row_group_start, count, scan_vector);
@@ -462,7 +447,7 @@ unique_ptr<ColumnCheckpointState> ColumnData::Checkpoint(RowGroup &row_group,
 	return checkpoint_state;
 }
 
-void ColumnData::DeserializeColumn(Deserializer &deserializer, BaseStatistics &target_stats) {
+void ColumnData::DeserializeColumn(Deserializer &deserializer) {
 	// load the data pointers for the column
 	deserializer.Set<DatabaseInstance &>(info.db.GetDatabase());
 	deserializer.Set<LogicalType &>(type);
@@ -478,11 +463,9 @@ void ColumnData::DeserializeColumn(Deserializer &deserializer, BaseStatistics &t
 	for (auto &data_pointer : data_pointers) {
 		// Update the count and statistics
 		this->count += data_pointer.tuple_count;
-
-		// Merge the statistics. If this is a child column, the target_stats reference will point into the parents stats
-		// otherwise if this is a top level column, `stats->statistics` == `target_stats`
-
-		target_stats.Merge(data_pointer.statistics);
+		if (stats) {
+			stats->statistics.Merge(data_pointer.statistics);
+		}
 
 		// create a persistent segment
 		auto segment = ColumnSegment::CreatePersistentSegment(
@@ -495,11 +478,12 @@ void ColumnData::DeserializeColumn(Deserializer &deserializer, BaseStatistics &t
 }
 
 shared_ptr<ColumnData> ColumnData::Deserialize(BlockManager &block_manager, DataTableInfo &info, idx_t column_index,
-                                               idx_t start_row, ReadStream &source, const LogicalType &type) {
-	auto entry = ColumnData::CreateColumn(block_manager, info, column_index, start_row, type, nullptr);
+                                               idx_t start_row, ReadStream &source, const LogicalType &type,
+                                               optional_ptr<ColumnData> parent) {
+	auto entry = ColumnData::CreateColumn(block_manager, info, column_index, start_row, type, parent);
 	BinaryDeserializer deserializer(source);
 	deserializer.Begin();
-	entry->DeserializeColumn(deserializer, entry->stats->statistics);
+	entry->DeserializeColumn(deserializer);
 	deserializer.End();
 	return entry;
 }

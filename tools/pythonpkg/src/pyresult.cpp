@@ -250,19 +250,16 @@ void DuckDBPyResult::ChangeToTZType(PandasDataFrame &df) {
 		if (result->types[i] == LogicalType::TIMESTAMP_TZ) {
 			// first localize to UTC then convert to timezone_config
 			auto utc_local = df[names[i].c_str()].attr("dt").attr("tz_localize")("UTC");
-			df.attr("__setitem__")(names[i].c_str(),
-			                       utc_local.attr("dt").attr("tz_convert")(result->client_properties.time_zone));
+			df[names[i].c_str()] = utc_local.attr("dt").attr("tz_convert")(result->client_properties.time_zone);
 		}
 	}
 }
 
 // TODO: unify these with an enum/flag to indicate which conversions to perform
 void DuckDBPyResult::ChangeDateToDatetime(PandasDataFrame &df) {
-	auto names = df.attr("columns").cast<vector<string>>();
-
 	for (idx_t i = 0; i < result->ColumnCount(); i++) {
 		if (result->types[i] == LogicalType::DATE) {
-			df.attr("__setitem__")(names[i].c_str(), df[names[i].c_str()].attr("dt").attr("date"));
+			df[result->names[i].c_str()] = df[result->names[i].c_str()].attr("dt").attr("date");
 		}
 	}
 }
