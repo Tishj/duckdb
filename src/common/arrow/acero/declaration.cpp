@@ -36,20 +36,6 @@
 namespace duckdb {
 namespace ac {
 
-namespace {
-
-class ArrowTableDependency : public ExternalDependency {
-public:
-	ArrowTableDependency(arrow::ArrayVectorStream &&stream)
-	    : ExternalDependency(ExternalDependenciesType::GENERIC), stream(std::move(stream)) {
-	}
-
-private:
-	arrow::ArrayVectorStream stream;
-};
-
-} // namespace
-
 static vector<unique_ptr<ParsedExpression>> ConvertExpressions(const vector<cp::Expression> &inputs) {
 	vector<unique_ptr<ParsedExpression>> expressions;
 	for (auto &input : inputs) {
@@ -77,7 +63,7 @@ static vector<Value> ArrowScanInput(const shared_ptr<arrow::dataset::Dataset> &d
 
 static vector<Value> ArrowScanInput(const duckdb::arrow::ArrayVectorStream &stream) {
 	vector<Value> params;
-	params.push_back(Value::POINTER((uintptr_t)&stream.stream.arrow_array_stream));
+	params.push_back(Value::POINTER((uintptr_t)&stream.stream));
 	params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::CreateStream));
 	params.push_back(Value::POINTER((uintptr_t)&ArrowStreamTestFactory::GetSchema));
 
@@ -165,7 +151,6 @@ static shared_ptr<Relation> ConvertDeclaration(const std::shared_ptr<ClientConte
 		// Then use this stream to create an 'arrow_scan'
 		auto params = ArrowScanInput(stream);
 		auto rel = make_shared<TableFunctionRelation>(context, "arrow_scan", std::move(params));
-		rel->extra_dependencies = make_shared<ArrowTableDependency>(std::move(stream));
 		return std::move(rel);
 	}
 	case OptionType::AGGREGATE_NODE: {

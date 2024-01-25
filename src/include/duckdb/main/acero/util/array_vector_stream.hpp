@@ -23,7 +23,7 @@ public:
 
 public:
 	Table table;
-	ArrowArrayStreamWrapper stream;
+	ArrowArrayStream stream;
 	idx_t chunk_index = 0;
 
 private:
@@ -31,11 +31,6 @@ private:
 	static int GetNext(struct ArrowArrayStream *stream, struct ArrowArray *out);
 	static void Release(struct ArrowArrayStream *stream);
 	static const char *GetLastError(struct ArrowArrayStream *stream);
-
-private:
-	ArrowArrayStream &GetStream() {
-		return stream.arrow_array_stream;
-	}
 };
 
 } // namespace arrow

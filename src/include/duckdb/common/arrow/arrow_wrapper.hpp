@@ -53,6 +53,8 @@ public:
 
 	const char *GetError();
 
+	ArrowArrayStreamWrapper(ArrowArrayStreamWrapper &&other);
+
 	~ArrowArrayStreamWrapper();
 	ArrowArrayStreamWrapper() {
 		arrow_array_stream.release = nullptr;

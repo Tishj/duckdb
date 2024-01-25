@@ -49,6 +49,11 @@ void ArrowArrayStreamWrapper::GetSchema(ArrowSchemaWrapper &schema) {
 	// LCOV_EXCL_STOP
 }
 
+ArrowArrayStreamWrapper::ArrowArrayStreamWrapper(ArrowArrayStreamWrapper &&other) {
+	this->arrow_array_stream = other.arrow_array_stream;
+	other.arrow_array_stream.release = nullptr;
+}
+
 shared_ptr<ArrowArrayWrapper> ArrowArrayStreamWrapper::GetNextChunk() {
 	auto current_chunk = make_shared<ArrowArrayWrapper>();
 	if (arrow_array_stream.get_next(&arrow_array_stream, &current_chunk->arrow_array)) { // LCOV_EXCL_START

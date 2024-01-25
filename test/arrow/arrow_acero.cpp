@@ -29,7 +29,7 @@ using namespace std;
 
 void VerifyResult(arrow::Table &table) {
 	auto array_vector_stream = new arrow::ArrayVectorStream(std::move(table));
-	auto &stream = array_vector_stream->stream.arrow_array_stream;
+	auto &stream = array_vector_stream->stream;
 
 	DuckDB db(nullptr);
 	Connection conn(db);

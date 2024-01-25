@@ -92,8 +92,6 @@ const char *ArrayVectorStream::GetLastError(struct ArrowArrayStream *stream) {
 
 ArrayVectorStream::ArrayVectorStream(Table &&table) : table(std::move(table)) {
 	//! We first initialize the private data of the stream
-	auto &stream = GetStream();
-
 	stream.private_data = this;
 	//! We initialize the stream functions
 	stream.get_schema = ArrayVectorStream::GetSchema;
