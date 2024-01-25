@@ -74,7 +74,7 @@ test_extra_args = []
 if args.success:
     test_extra_args.append('--success')
 
-for _ in range(10):
+for _ in range(100):
     for test_number, test_case in enumerate(test_cases):
         if not profile:
             print(f"[{test_number}/{test_count}]: {test_case}", end="")
