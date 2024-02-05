@@ -1,9 +1,9 @@
 #include "fuzzyduck.hpp"
 #include "duckdb/common/random_engine.hpp"
+#include "duckdb/common/thread.hpp"
 #include "statement_generator.hpp"
 #include <algorithm>
 #include <random>
-#include <thread>
 
 namespace duckdb {
 
@@ -95,7 +95,7 @@ void FuzzyDuck::RunQuery(string query) {
 	Connection con(*context.db);
 	atomic<bool> is_active(true);
 	atomic<bool> timed_out(false);
-	std::thread interrupt_thread(sleep_thread, &con, &is_active, &timed_out, timeout);
+	thread interrupt_thread(sleep_thread, &con, &is_active, &timed_out, timeout);
 
 	auto result = con.Query(query);
 	is_active = false;

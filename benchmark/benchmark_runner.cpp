@@ -3,6 +3,7 @@
 #include "duckdb/common/profiler.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/thread.hpp"
 #include "duckdb.hpp"
 #include "duckdb_benchmark.hpp"
 #include "interpreted_benchmark.hpp"
@@ -13,7 +14,6 @@
 
 #include <fstream>
 #include <sstream>
-#include <thread>
 
 using namespace duckdb;
 
@@ -113,7 +113,7 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 		}
 		is_active = true;
 		timeout = false;
-		std::thread interrupt_thread(sleep_thread, benchmark, state.get(), benchmark->Timeout());
+		thread interrupt_thread(sleep_thread, benchmark, state.get(), benchmark->Timeout());
 
 		profiler.Start();
 		benchmark->Run(state.get());
