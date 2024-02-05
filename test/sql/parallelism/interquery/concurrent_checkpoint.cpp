@@ -5,7 +5,7 @@
 
 #include <atomic>
 #include <random>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -139,7 +139,7 @@ TEST_CASE("Concurrent checkpoint with single updater", "[interquery][.]") {
 
 	bool read_correct = true;
 	// launch separate thread for reading aggregate
-	thread read_thread(ConcurrentCheckpoint::CheckpointThread<false>, &db, &read_correct);
+	duckdb::thread read_thread(ConcurrentCheckpoint::CheckpointThread<false>, &db, &read_correct);
 
 	// start vigorously updating balances in this thread
 	for (size_t i = 0; i < ConcurrentCheckpoint::CONCURRENT_UPDATE_TRANSACTION_UPDATE_COUNT; i++) {
@@ -208,12 +208,12 @@ TEST_CASE("Concurrent checkpoint with multiple updaters", "[interquery][.]") {
 
 	bool correct[ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
 	bool read_correct;
-	std::thread write_threads[ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
+	duckdb::thread write_threads[ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
 	// launch a thread for reading and checkpointing the table
-	thread read_thread(ConcurrentCheckpoint::CheckpointThread<false>, &db, &read_correct);
+	duckdb::thread read_thread(ConcurrentCheckpoint::CheckpointThread<false>, &db, &read_correct);
 	// launch several threads for updating the table
 	for (size_t i = 0; i < ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS; i++) {
-		write_threads[i] = thread(ConcurrentCheckpoint::WriteRandomNumbers, &db, correct, i);
+		write_threads[i] = duckdb::thread(ConcurrentCheckpoint::WriteRandomNumbers, &db, correct, i);
 	}
 	read_thread.join();
 	for (size_t i = 0; i < ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS; i++) {
@@ -248,7 +248,7 @@ TEST_CASE("Force concurrent checkpoint with single updater", "[interquery][.]") 
 
 	bool read_correct = true;
 	// launch separate thread for reading aggregate
-	thread read_thread(ConcurrentCheckpoint::CheckpointThread<true>, &db, &read_correct);
+	duckdb::thread read_thread(ConcurrentCheckpoint::CheckpointThread<true>, &db, &read_correct);
 
 	// start vigorously updating balances in this thread
 	for (size_t i = 0; i < ConcurrentCheckpoint::CONCURRENT_UPDATE_TRANSACTION_UPDATE_COUNT; i++) {
@@ -297,10 +297,10 @@ TEST_CASE("Concurrent commits on persistent database with automatic checkpoints"
 	result = con.Query("SELECT SUM(money) FROM accounts");
 	REQUIRE(CHECK_COLUMN(result, 0, {ACCOUNTS * ConcurrentCheckpoint::CONCURRENT_UPDATE_MONEY_PER_ACCOUNT}));
 
-	std::thread write_threads[ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
+	duckdb::thread write_threads[ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
 	// launch several threads for updating the table
 	for (size_t i = 0; i < ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS; i++) {
-		write_threads[i] = thread(ConcurrentCheckpoint::NopUpdate, &db);
+		write_threads[i] = duckdb::thread(ConcurrentCheckpoint::NopUpdate, &db);
 	}
 	for (size_t i = 0; i < ConcurrentCheckpoint::CONCURRENT_UPDATE_TOTAL_ACCOUNTS; i++) {
 		write_threads[i].join();

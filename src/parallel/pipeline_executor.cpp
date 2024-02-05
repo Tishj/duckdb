@@ -3,7 +3,7 @@
 #include "duckdb/common/limits.hpp"
 
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #include <chrono>
 #endif
 
@@ -139,7 +139,7 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 		debug_blocked_next_batch_count++;
 
 		auto &callback_state = interrupt_state;
-		std::thread rewake_thread([callback_state] {
+		thread rewake_thread([callback_state] {
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
 		});
@@ -326,7 +326,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		debug_blocked_combine_count++;
 
 		auto &callback_state = combine_input.interrupt_state;
-		std::thread rewake_thread([callback_state] {
+		thread rewake_thread([callback_state] {
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
 		});
@@ -453,7 +453,7 @@ SourceResultType PipelineExecutor::GetData(DataChunk &chunk, OperatorSourceInput
 		debug_blocked_source_count++;
 
 		auto &callback_state = input.interrupt_state;
-		std::thread rewake_thread([callback_state] {
+		thread rewake_thread([callback_state] {
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
 		});
@@ -473,7 +473,7 @@ SinkResultType PipelineExecutor::Sink(DataChunk &chunk, OperatorSinkInput &input
 		debug_blocked_sink_count++;
 
 		auto &callback_state = input.interrupt_state;
-		std::thread rewake_thread([callback_state] {
+		thread rewake_thread([callback_state] {
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
 		});

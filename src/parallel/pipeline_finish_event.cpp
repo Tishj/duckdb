@@ -26,7 +26,7 @@ public:
 			debug_blocked_count++;
 
 			auto &callback_state = interrupt_state;
-			std::thread rewake_thread([callback_state] {
+			thread rewake_thread([callback_state] {
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				callback_state.Callback();
 			});

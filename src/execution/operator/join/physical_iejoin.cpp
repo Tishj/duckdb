@@ -12,7 +12,7 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 namespace duckdb {
 

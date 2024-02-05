@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <mutex>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #include <atomic>
 
 using namespace duckdb;
@@ -79,10 +79,10 @@ TEST_CASE("Test parallel dependencies in multiple connections", "[interquery][.]
 	// the prepared statement depends on the table
 	// hence when the CASCADE drop is executed the prepared statement also needs to be dropped
 
-	thread table_thread = thread(create_drop_table, &db);
-	thread seq_threads[CONCURRENT_DEPENDENCIES_THREAD_COUNT];
+	duckdb::thread table_thread = duckdb::thread(create_drop_table, &db);
+	duckdb::thread seq_threads[CONCURRENT_DEPENDENCIES_THREAD_COUNT];
 	for (int i = 0; i < CONCURRENT_DEPENDENCIES_THREAD_COUNT; i++) {
-		seq_threads[i] = thread(create_use_prepared_statement, &db);
+		seq_threads[i] = duckdb::thread(create_use_prepared_statement, &db);
 	}
 	for (int i = 0; i < CONCURRENT_DEPENDENCIES_THREAD_COUNT; i++) {
 		seq_threads[i].join();
@@ -139,10 +139,10 @@ TEST_CASE("Test parallel dependencies with schemas and tables", "[interquery][.]
 	// in this test we create and drop a schema in one thread (with CASCADE drop)
 	// in other threads, we create tables and views and query those tables and views
 
-	thread table_thread = thread(create_drop_schema, &db);
-	thread seq_threads[CONCURRENT_DEPENDENCIES_THREAD_COUNT];
+	duckdb::thread table_thread = duckdb::thread(create_drop_schema, &db);
+	duckdb::thread seq_threads[CONCURRENT_DEPENDENCIES_THREAD_COUNT];
 	for (int i = 0; i < CONCURRENT_DEPENDENCIES_THREAD_COUNT; i++) {
-		seq_threads[i] = thread(create_use_table_view, &db, i);
+		seq_threads[i] = duckdb::thread(create_use_table_view, &db, i);
 	}
 	for (int i = 0; i < CONCURRENT_DEPENDENCIES_THREAD_COUNT; i++) {
 		seq_threads[i].join();

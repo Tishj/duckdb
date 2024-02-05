@@ -1,7 +1,7 @@
 #include "catch.hpp"
 #include "test_helpers.hpp"
 
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -132,9 +132,9 @@ TEST_CASE("Test parallel usage of pending query API", "[api][.]") {
 	REQUIRE_NO_FAIL(conn->Query("INSERT INTO integers VALUES (1), (2), (3), (NULL)"));
 
 	bool correct[20];
-	thread threads[20];
+	duckdb::thread threads[20];
 	for (size_t i = 0; i < 20; i++) {
-		threads[i] = thread(parallel_pending_query, conn.get(), correct, i);
+		threads[i] = duckdb::thread(parallel_pending_query, conn.get(), correct, i);
 	}
 	for (size_t i = 0; i < 20; i++) {
 		threads[i].join();

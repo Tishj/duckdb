@@ -4,7 +4,7 @@
 
 #include <atomic>
 #include <random>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -210,9 +210,9 @@ TEST_CASE("Concurrent delete", "[interquery][.]") {
 	delete_finished_threads = 0;
 
 	bool correct[CONCURRENT_DELETE_THREAD_COUNT];
-	thread threads[CONCURRENT_DELETE_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_DELETE_THREAD_COUNT];
 	for (size_t i = 0; i < CONCURRENT_DELETE_THREAD_COUNT; i++) {
-		threads[i] = thread(delete_elements, &db, correct, i);
+		threads[i] = duckdb::thread(delete_elements, &db, correct, i);
 	}
 
 	for (size_t i = 0; i < CONCURRENT_DELETE_THREAD_COUNT; i++) {

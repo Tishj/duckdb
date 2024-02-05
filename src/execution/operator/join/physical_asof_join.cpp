@@ -13,7 +13,7 @@
 #include "duckdb/parallel/event.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 namespace duckdb {
 

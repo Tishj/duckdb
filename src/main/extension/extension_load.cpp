@@ -1,11 +1,12 @@
 #include "duckdb/common/dl.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
+#include "duckdb/common/thread.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/error_manager.hpp"
 #include "mbedtls_wrapper.hpp"
 
 #ifndef DUCKDB_NO_THREADS
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #endif // DUCKDB_NO_THREADS
 
 #ifdef WASM_LOADABLE_EXTENSIONS
@@ -138,7 +139,7 @@ bool ExtensionHelper::TryInitialLoad(DBConfig &config, FileSystem &fs, const str
 		splits.back() = signature_offset;
 
 #ifndef DUCKDB_NO_THREADS
-		std::vector<std::thread> threads;
+		std::vector<thread> threads;
 		threads.reserve(numChunks);
 		for (idx_t i = 0; i < numChunks; i++) {
 			threads.emplace_back(ComputeSHA256FileSegment, handle.get(), splits[i], splits[i + 1], &hash_chunks[i]);

@@ -8,10 +8,10 @@
 
 #pragma once
 
-namespace duckdb {
-
 #include <thread>
 #include <utility>
+
+namespace duckdb {
 
 class thread {
 private:
@@ -28,20 +28,8 @@ public:
 		}
 	}
 
-	// Copy constructor
-	thread(const thread &other) : internal(other.internal) {
-	}
-
 	// Move constructor
 	thread(thread &&other) noexcept : internal(std::move(other.internal)) {
-	}
-
-	// Copy assignment operator
-	thread &operator=(const thread &other) {
-		if (this != &other) {
-			internal = other.internal;
-		}
-		return *this;
 	}
 
 	// Move assignment operator
@@ -87,10 +75,5 @@ public:
 
 	// Other methods from std::thread can be added similarly
 };
-
-// Non-member swap function for thread objects
-void swap(thread &t1, thread &t2) noexcept {
-	t1.swap(t2);
-}
 
 } // namespace duckdb

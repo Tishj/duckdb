@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <mutex>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -34,7 +34,7 @@ TEST_CASE("Test Concurrent Usage of Sequences", "[interquery][.]") {
 	duckdb::unique_ptr<QueryResult> result;
 	DuckDB db(nullptr);
 	Connection con(db);
-	thread threads[CONCURRENT_SEQUENCE_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_SEQUENCE_THREAD_COUNT];
 	ConcurrentData data(db);
 	ConcurrentData seq_data(db);
 
@@ -56,7 +56,7 @@ TEST_CASE("Test Concurrent Usage of Sequences", "[interquery][.]") {
 	// now launch threads that all use the sequence in parallel
 	// each appends the values to a duckdb::vector "results"
 	for (size_t i = 0; i < CONCURRENT_SEQUENCE_THREAD_COUNT; i++) {
-		threads[i] = thread(append_values_from_sequence, &data);
+		threads[i] = duckdb::thread(append_values_from_sequence, &data);
 	}
 	for (size_t i = 0; i < CONCURRENT_SEQUENCE_THREAD_COUNT; i++) {
 		threads[i].join();
@@ -79,7 +79,7 @@ TEST_CASE("Test Concurrent Usage of Sequences", "[interquery][.]") {
 	REQUIRE_NO_FAIL(con.Query("DROP SEQUENCE seq;"));
 	REQUIRE_NO_FAIL(con.Query("CREATE SEQUENCE seq MAXVALUE 10 CYCLE;"));
 	for (size_t i = 0; i < CONCURRENT_SEQUENCE_THREAD_COUNT; i++) {
-		threads[i] = thread(append_values_from_sequence, &data);
+		threads[i] = duckdb::thread(append_values_from_sequence, &data);
 	}
 	for (size_t i = 0; i < CONCURRENT_SEQUENCE_THREAD_COUNT; i++) {
 		threads[i].join();

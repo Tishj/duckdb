@@ -4,7 +4,7 @@
 #include "duckdb/planner/logical_operator.hpp"
 
 #include <chrono>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;

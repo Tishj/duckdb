@@ -8,7 +8,7 @@
 #include "test_helpers.hpp"
 #include "sqllogic_test_logger.hpp"
 
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 namespace duckdb {
 
@@ -296,7 +296,7 @@ vector<string> TestResultHelper::LoadResultFromFile(string fname, vector<string>
                                                     string &error) {
 	DuckDB db(nullptr);
 	Connection con(db);
-	con.Query("PRAGMA threads=" + to_string(std::thread::hardware_concurrency()));
+	con.Query("PRAGMA threads=" + to_string(thread::hardware_concurrency()));
 	fname = StringUtil::Replace(fname, "<FILE>:", "");
 
 	string struct_definition = "STRUCT_PACK(";

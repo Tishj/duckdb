@@ -14,7 +14,7 @@
 #include <duckdb/storage/buffer_manager.hpp>
 #include <duckdb/main/secret/secret_manager.hpp>
 #include <iostream>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 namespace duckdb {
 

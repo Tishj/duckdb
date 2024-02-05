@@ -9,7 +9,7 @@
 #include "sqllogic_test_logger.hpp"
 #include "catch.hpp"
 #include <list>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #include "duckdb/main/stream_query_result.hpp"
 #include <chrono>
 
@@ -209,7 +209,7 @@ void LoopCommand::ExecuteInternal(ExecuteContext &context) const {
 				break;
 			}
 		}
-		std::list<std::thread> threads;
+		std::list<thread> threads;
 		for (auto &context : contexts) {
 			threads.emplace_back(ParallelExecuteLoop, &context);
 		}

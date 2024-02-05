@@ -2,7 +2,7 @@
 #include "mbedtls_wrapper.hpp"
 
 #include <chrono>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #include <fstream>
 #include <sstream>
 

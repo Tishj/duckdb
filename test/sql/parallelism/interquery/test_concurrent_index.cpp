@@ -3,7 +3,7 @@
 #include "test_helpers.hpp"
 
 #include <atomic>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #include <vector>
 #include <random>
 
@@ -51,9 +51,9 @@ TEST_CASE("Concurrent reads during index creation", "[index][.]") {
 	concurrent_index_finished = false;
 
 	// launch many reading threads
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
-		threads[i] = thread(ReadFromIntegers, &db, i);
+		threads[i] = duckdb::thread(ReadFromIntegers, &db, i);
 	}
 
 	// create the index
@@ -87,9 +87,9 @@ TEST_CASE("Concurrent writes during index creation", "[index][.]") {
 	CreateIntegerTable(&con, 1000000);
 
 	// launch many concurrently writing threads
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
-		threads[i] = thread(AppendToIntegers, &db);
+		threads[i] = duckdb::thread(AppendToIntegers, &db);
 	}
 
 	// create the index
@@ -134,9 +134,9 @@ TEST_CASE("Concurrent inserts to PRIMARY KEY", "[index][.]") {
 
 	// launch many concurrently writing threads
 	// each thread writes the numbers 1...1000, possibly causing a constraint violation
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
-		threads[i] = thread(AppendToPK, &db);
+		threads[i] = duckdb::thread(AppendToPK, &db);
 	}
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
 		threads[i].join();
@@ -172,9 +172,9 @@ TEST_CASE("Concurrent updates to PRIMARY KEY", "[index][.]") {
 
 	// launch many concurrently updating threads
 	// each thread updates numbers by incrementing them
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
-		threads[i] = thread(UpdatePK, &db);
+		threads[i] = duckdb::thread(UpdatePK, &db);
 	}
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
 		threads[i].join();
@@ -235,13 +235,13 @@ TEST_CASE("Mix updates and inserts on PRIMARY KEY", "[index][.]") {
 	REQUIRE_NO_FAIL(con.Query("CREATE TABLE integers(i INTEGER PRIMARY KEY)"));
 
 	// launch a mix of updating and appending threads
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
 		if (i % 2) {
-			threads[i] = thread(MixUpdatePK, &db, i);
+			threads[i] = duckdb::thread(MixUpdatePK, &db, i);
 			continue;
 		}
-		threads[i] = thread(MixAppendToPK, &db, &atomic_count);
+		threads[i] = duckdb::thread(MixAppendToPK, &db, &atomic_count);
 	}
 
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
@@ -294,9 +294,9 @@ TEST_CASE("Parallel transactional appends to indexed table", "[index][.]") {
 	REQUIRE_NO_FAIL(con.Query("CREATE TABLE integers(i INTEGER PRIMARY KEY)"));
 
 	// launch many concurrently inserting threads
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
-		threads[i] = thread(TransactionalAppendToPK, &db, i);
+		threads[i] = duckdb::thread(TransactionalAppendToPK, &db, i);
 	}
 
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
@@ -344,20 +344,20 @@ TEST_CASE("Concurrent appends during joins", "[index][.]") {
 	REQUIRE_NO_FAIL(con.Query("SET immediate_transaction_mode=true"));
 	REQUIRE_NO_FAIL(join_con_2.Query("BEGIN TRANSACTION"));
 
-	thread threads[CONCURRENT_INDEX_THREAD_COUNT];
+	duckdb::thread threads[CONCURRENT_INDEX_THREAD_COUNT];
 
 	// join the data in join_con_1, which is an uncommitted transaction started
 	// before appending any data
-	threads[0] = thread(JoinIntegers, &join_con_1);
+	threads[0] = duckdb::thread(JoinIntegers, &join_con_1);
 
 	// launch many concurrently writing threads
 	for (idx_t i = 2; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
-		threads[i] = thread(AppendToIntegers, &db);
+		threads[i] = duckdb::thread(AppendToIntegers, &db);
 	}
 
 	// join the data in join_con_2, which is an uncommitted transaction started
 	// before appending any data
-	threads[1] = thread(JoinIntegers, &join_con_2);
+	threads[1] = duckdb::thread(JoinIntegers, &join_con_2);
 
 	for (idx_t i = 0; i < CONCURRENT_INDEX_THREAD_COUNT; i++) {
 		threads[i].join();

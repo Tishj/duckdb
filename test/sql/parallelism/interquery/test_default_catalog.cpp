@@ -4,7 +4,7 @@
 
 #include <atomic>
 #include <random>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -90,9 +90,9 @@ TEST_CASE("Concurrent default catalog using Scan", "[interquery][.]") {
 	con.Query("PRAGMA profiling_mode = detailed");
 
 	bool correct[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
-	thread threads[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
+	duckdb::thread threads[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
 	for (size_t i = 0; i < ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT; i++) {
-		threads[i] = thread(ConcurrentDefaultCatalog::ScanDefaultCatalog, &db, correct + i);
+		threads[i] = duckdb::thread(ConcurrentDefaultCatalog::ScanDefaultCatalog, &db, correct + i);
 	}
 
 	for (size_t i = 0; i < ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT; i++) {
@@ -113,9 +113,9 @@ TEST_CASE("Concurrent default catalog using Queries", "[interquery][.]") {
 	con.Query("PRAGMA profiling_mode = detailed");
 
 	bool correct[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
-	thread threads[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
+	duckdb::thread threads[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
 	for (size_t i = 0; i < ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT; i++) {
-		threads[i] = thread(ConcurrentDefaultCatalog::QueryDefaultCatalog, &db, correct + i, i);
+		threads[i] = duckdb::thread(ConcurrentDefaultCatalog::QueryDefaultCatalog, &db, correct + i, i);
 	}
 
 	for (size_t i = 0; i < ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT; i++) {
@@ -136,9 +136,9 @@ TEST_CASE("Concurrent default function creation", "[interquery][.]") {
 	con.Query("PRAGMA profiling_mode = detailed");
 
 	bool correct[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
-	thread threads[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
+	duckdb::thread threads[ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT];
 	for (size_t i = 0; i < ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT; i++) {
-		threads[i] = thread(ConcurrentDefaultCatalog::QueryDefaultCatalogFunctions, &db, correct + i, i);
+		threads[i] = duckdb::thread(ConcurrentDefaultCatalog::QueryDefaultCatalogFunctions, &db, correct + i, i);
 	}
 
 	for (size_t i = 0; i < ConcurrentDefaultCatalog::CONCURRENT_DEFAULT_THREAD_COUNT; i++) {

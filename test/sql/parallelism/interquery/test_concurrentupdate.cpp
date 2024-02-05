@@ -4,7 +4,7 @@
 
 #include <atomic>
 #include <random>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -92,7 +92,7 @@ TEST_CASE("Concurrent update", "[interquery][.]") {
 
 	bool read_correct;
 	// launch separate thread for reading aggregate
-	thread read_thread(read_total_balance, &db, &read_correct);
+	duckdb::thread read_thread(read_total_balance, &db, &read_correct);
 
 	// start vigorously updating balances in this thread
 	for (size_t i = 0; i < CONCURRENT_UPDATE_TRANSACTION_UPDATE_COUNT; i++) {
@@ -196,12 +196,12 @@ TEST_CASE("Multiple concurrent updaters", "[interquery][.]") {
 
 	bool correct[CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
 	bool read_correct;
-	std::thread write_threads[CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
+	duckdb::thread write_threads[CONCURRENT_UPDATE_TOTAL_ACCOUNTS];
 	// launch a thread for reading the table
-	thread read_thread(read_total_balance, &db, &read_correct);
+	duckdb::thread read_thread(read_total_balance, &db, &read_correct);
 	// launch several threads for updating the table
 	for (size_t i = 0; i < CONCURRENT_UPDATE_TOTAL_ACCOUNTS; i++) {
-		write_threads[i] = thread(write_random_numbers_to_account, &db, correct, i);
+		write_threads[i] = duckdb::thread(write_random_numbers_to_account, &db, correct, i);
 	}
 	read_thread.join();
 	for (size_t i = 0; i < CONCURRENT_UPDATE_TOTAL_ACCOUNTS; i++) {

@@ -7,7 +7,7 @@
 
 #include <duckdb/execution/executor.hpp>
 #include <future>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -44,7 +44,7 @@ public:
 
 	ClientContext *context;
 	atomic<bool> stop;
-	std::thread check_thread;
+	duckdb::thread check_thread;
 	TestFailure error;
 
 	void CheckProgressThread() {
@@ -73,7 +73,7 @@ public:
 	}
 	void Start() {
 		stop = false;
-		check_thread = std::thread(&TestProgressBar::CheckProgressThread, this);
+		check_thread = duckdb::thread(&TestProgressBar::CheckProgressThread, this);
 	}
 	void End() {
 		stop = true;

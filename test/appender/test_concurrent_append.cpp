@@ -3,7 +3,7 @@
 #include "test_helpers.hpp"
 
 #include <atomic>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #include <vector>
 
 using namespace duckdb;
@@ -41,9 +41,9 @@ TEST_CASE("Test concurrent appends", "[appender][.]") {
 
 	finished_threads = 0;
 
-	thread threads[THREAD_COUNT];
+	duckdb::thread threads[THREAD_COUNT];
 	for (size_t i = 0; i < THREAD_COUNT; i++) {
-		threads[i] = thread(append_to_integers, &db, i);
+		threads[i] = duckdb::thread(append_to_integers, &db, i);
 	}
 
 	for (size_t i = 0; i < THREAD_COUNT; i++) {

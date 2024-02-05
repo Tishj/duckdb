@@ -7,7 +7,7 @@
 #include <signal.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -98,9 +98,9 @@ TEST_CASE("Test that sequence never returns the same value twice even with abort
 		if (pid == 0) {
 			// child process, connect to the database and start inserting values in separate threads
 			DuckDB db(dbdir);
-			thread write_threads[8];
+			duckdb::thread write_threads[8];
 			for (size_t i = 0; i < 8; i++) {
-				write_threads[i] = thread(write_entries_to_table, &db, i);
+				write_threads[i] = duckdb::thread(write_entries_to_table, &db, i);
 			}
 			while (true)
 				;

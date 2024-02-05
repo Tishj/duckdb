@@ -9,7 +9,7 @@
 #include "concurrentqueue.h"
 #include "duckdb/common/thread.hpp"
 #include "lightweightsemaphore.h"
-#include <thread>
+#include "duckdb/common/thread.hpp"
 #else
 #include <queue>
 #endif
