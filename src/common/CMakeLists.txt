@@ -24,6 +24,7 @@ add_library_unity(
   duckdb_common
   OBJECT
   allocator.cpp
+  thread.cpp
   assert.cpp
   bind_helpers.cpp
   box_renderer.cpp

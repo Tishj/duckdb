@@ -10,7 +10,7 @@
 namespace duckdb {
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
-    : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
+    : pipeline(pipeline_p), thread_context(context_p), context(context_p, thread_context, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
@@ -346,7 +346,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	for (idx_t i = 0; i < intermediate_states.size(); i++) {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
-	pipeline.executor.Flush(thread);
+	pipeline.executor.Flush(thread_context);
 	local_sink_state.reset();
 
 	return PipelineExecuteResult::FINISHED;

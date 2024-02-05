@@ -12,7 +12,7 @@
 
 #include <chrono>
 #include <string>
-#include <thread>
+#include "duckdb/common/thread.hpp"
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "httplib.hpp"

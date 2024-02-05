@@ -65,7 +65,7 @@ private:
 	//! The pipeline to process
 	Pipeline &pipeline;
 	//! The thread context of this executor
-	ThreadContext thread;
+	ThreadContext thread_context;
 	//! The total execution context of this executor
 	ExecutionContext context;
 
