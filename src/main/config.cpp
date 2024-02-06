@@ -1,5 +1,4 @@
 #include "duckdb/main/config.hpp"
-#include "duckdb/common/thread.hpp"
 
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/common/string_util.hpp"

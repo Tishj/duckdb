@@ -7,7 +7,6 @@
 
 #ifndef DUCKDB_NO_THREADS
 #include "concurrentqueue.h"
-#include "duckdb/common/thread.hpp"
 #include "lightweightsemaphore.h"
 #include "duckdb/common/thread.hpp"
 #else
