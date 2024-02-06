@@ -18,13 +18,17 @@ namespace duckdb {
 class thread {
 private:
 	std::thread internal;
+#ifdef DUCKDB_DEBUG_THREADS
 	static std::atomic<int> thread_count;
+#endif
 
 	void IncrementIfJoinable() {
+#ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
 			thread_count++;
 			Printer::Print("thread_count " + std::to_string(thread_count.load()));
 		}
+#endif
 	}
 
 public:
@@ -34,9 +38,11 @@ public:
 	}
 
 	~thread() {
+#ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
 			thread_count--;
 		}
+#endif
 	}
 
 	// Move constructor
@@ -70,16 +76,20 @@ public:
 	}
 
 	void join() {
+#ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
 			thread_count--;
 		}
+#endif
 		internal.join();
 	}
 
 	void detach() {
+#ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
 			thread_count--;
 		}
+#endif
 		internal.detach();
 	}
 
@@ -87,9 +97,11 @@ public:
 		return std::thread::hardware_concurrency();
 	}
 
+#ifdef DUCKDB_DEBUG_THREADS
 	static int ThreadCount() noexcept {
 		return thread_count;
 	}
+#endif
 
 	std::thread::native_handle_type native_handle() {
 		return internal.native_handle();
