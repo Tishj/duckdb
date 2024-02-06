@@ -126,12 +126,14 @@ void Vector::Reinterpret(const Vector &other) {
 	bool this_is_nested = this_type.IsNested();
 	bool other_is_nested = other_type.IsNested();
 
+	bool source_is_null = other_type.id() == LogicalTypeId::SQLNULL;
+
 	bool not_nested = this_is_nested == false && other_is_nested == false;
 	bool type_size_equal = GetTypeIdSize(this_type.InternalType()) == GetTypeIdSize(other_type.InternalType());
 	//! Either the types are completely identical, or they are not nested and their physical type size is the same
 	//! The reason nested types are not allowed is because copying the auxiliary buffer does not happen recursively
 	//! e.g DOUBLE[] to BIGINT[], the type of the LIST would say BIGINT but the child Vector says DOUBLE
-	D_ASSERT((not_nested && type_size_equal) || type_is_same);
+	D_ASSERT(source_is_null || (not_nested && type_size_equal) || type_is_same);
 #endif
 	AssignSharedPointer(buffer, other.buffer);
 	AssignSharedPointer(auxiliary, other.auxiliary);
