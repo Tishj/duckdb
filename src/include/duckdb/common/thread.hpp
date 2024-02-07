@@ -25,7 +25,7 @@ private:
 	void IncrementIfJoinable() {
 #ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
-			thread_count++;
+			++thread_count;
 			Printer::Print("thread_count " + std::to_string(thread_count.load()));
 		}
 #endif
@@ -40,7 +40,7 @@ public:
 	~thread() {
 #ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
-			thread_count--;
+			--thread_count;
 		}
 #endif
 	}
@@ -78,7 +78,7 @@ public:
 	void join() {
 #ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
-			thread_count--;
+			--thread_count;
 		}
 #endif
 		internal.join();
@@ -87,7 +87,7 @@ public:
 	void detach() {
 #ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
-			thread_count--;
+			--thread_count;
 		}
 #endif
 		internal.detach();
@@ -99,7 +99,7 @@ public:
 
 #ifdef DUCKDB_DEBUG_THREADS
 	static int ThreadCount() noexcept {
-		return thread_count;
+		return thread_count.load();
 	}
 #endif
 
