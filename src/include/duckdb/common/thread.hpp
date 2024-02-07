@@ -12,6 +12,7 @@
 
 #include <thread>
 #include <utility>
+#include <atomic>
 
 namespace duckdb {
 
@@ -19,7 +20,7 @@ class thread {
 private:
 	std::thread internal;
 #ifdef DUCKDB_DEBUG_THREADS
-	static std::atomic<int> thread_count;
+	static std::atomic<int32_t> thread_count;
 #endif
 
 	void IncrementIfJoinable() {
@@ -98,7 +99,7 @@ public:
 	}
 
 #ifdef DUCKDB_DEBUG_THREADS
-	static int ThreadCount() noexcept {
+	static int32_t ThreadCount() noexcept {
 		return thread_count.load();
 	}
 #endif
