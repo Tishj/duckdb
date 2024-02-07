@@ -12,7 +12,9 @@
 
 #include <thread>
 #include <utility>
+#ifdef DUCKDB_DEBUG_THREADS
 #include <atomic>
+#endif
 
 namespace duckdb {
 
