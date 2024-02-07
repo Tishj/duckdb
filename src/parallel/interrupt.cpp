@@ -7,6 +7,10 @@
 
 namespace duckdb {
 
+#ifdef DUCKDB_DEBUG_THREADS
+std::atomic<int32_t> InterruptState::count {0};
+#endif
+
 InterruptState::InterruptState() : mode(InterruptMode::NO_INTERRUPTS) {
 }
 InterruptState::InterruptState(weak_ptr<Task> task) : mode(InterruptMode::TASK), current_task(std::move(task)) {

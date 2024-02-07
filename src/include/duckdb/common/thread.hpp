@@ -29,7 +29,7 @@ private:
 #ifdef DUCKDB_DEBUG_THREADS
 		if (internal.joinable()) {
 			++thread_count;
-			Printer::Print("thread_count " + std::to_string(thread_count.load()));
+			// Printer::Print("thread_count " + std::to_string(thread_count.load()));
 		}
 #endif
 	}

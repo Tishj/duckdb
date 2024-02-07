@@ -140,8 +140,16 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 
 		auto &callback_state = interrupt_state;
 		thread rewake_thread([callback_state] {
+#ifdef DUCKDB_DEBUG_THREADS
+			++InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
+#ifdef DUCKDB_DEBUG_THREADS
+			--InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 		});
 		rewake_thread.detach();
 
@@ -327,8 +335,16 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 
 		auto &callback_state = combine_input.interrupt_state;
 		thread rewake_thread([callback_state] {
+#ifdef DUCKDB_DEBUG_THREADS
+			++InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
+#ifdef DUCKDB_DEBUG_THREADS
+			--InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 		});
 		rewake_thread.detach();
 
@@ -454,8 +470,16 @@ SourceResultType PipelineExecutor::GetData(DataChunk &chunk, OperatorSourceInput
 
 		auto &callback_state = input.interrupt_state;
 		thread rewake_thread([callback_state] {
+#ifdef DUCKDB_DEBUG_THREADS
+			++InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
+#ifdef DUCKDB_DEBUG_THREADS
+			--InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 		});
 		rewake_thread.detach();
 
@@ -474,8 +498,16 @@ SinkResultType PipelineExecutor::Sink(DataChunk &chunk, OperatorSinkInput &input
 
 		auto &callback_state = input.interrupt_state;
 		thread rewake_thread([callback_state] {
+#ifdef DUCKDB_DEBUG_THREADS
+			++InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			callback_state.Callback();
+#ifdef DUCKDB_DEBUG_THREADS
+			--InterruptState::count;
+			Printer::Print("rewake count " + std::to_string(InterruptState::count.load()));
+#endif
 		});
 		rewake_thread.detach();
 

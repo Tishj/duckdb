@@ -58,6 +58,11 @@ protected:
 	weak_ptr<Task> current_task;
 	//! Signal state for InterruptMode::BLOCKING
 	weak_ptr<InterruptDoneSignalState> signal_state;
+
+public:
+#ifdef DUCKDB_DEBUG_THREADS
+	static std::atomic<int32_t> count;
+#endif
 };
 
 } // namespace duckdb
