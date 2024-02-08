@@ -37,6 +37,36 @@ public:
 	unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory;
 };
 
+struct ArrowRecordBatchReaderRegistry : public std::enable_shared_from_this() {
+public:
+	ArrowRecordBatchReaderRegistry() {
+	}
+
+public:
+	AddRecordBatchReader(uintptr_t address) {
+		lock_guard<mutex> guard(lock);
+		auto result = record_batch_readers.insert(address).second;
+		if (!result) {
+			throw InvalidInputException("Attempted to read from the same RecordBatchReader more than once!");
+		}
+	}
+
+private:
+	mutex lock;
+	set<uintptr_t> record_batch_readers;
+};
+
+struct PythonReplacementScanData : public ReplacementScanData {
+public:
+	PythonReplacementScanData() {
+	}
+	~PythonReplacementScanData() override {
+	}
+
+private:
+	shared_ptr<ArrowRecordBatchReaderRegistry> record_batch_registry;
+};
+
 struct DuckDBPyConnection : public std::enable_shared_from_this<DuckDBPyConnection> {
 public:
 	shared_ptr<DuckDB> database;
@@ -48,6 +78,7 @@ public:
 	//! MemoryFileSystem used to temporarily store file-like objects for reading
 	shared_ptr<ModifiedMemoryFileSystem> internal_object_filesystem;
 	case_insensitive_map_t<unique_ptr<PythonDependencies>> registered_functions;
+	shared_ptr<ArrowRecordBatchReaderRegistry> record_batch_registry;
 
 public:
 	explicit DuckDBPyConnection() {

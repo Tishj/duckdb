@@ -127,6 +127,7 @@ public:
 	TableFilterSet *filters = nullptr;
 	//! The DataChunk containing all read columns (even filter columns that are immediately removed)
 	DataChunk all_columns;
+	bool initialized = false;
 
 public:
 	void Reset() {
