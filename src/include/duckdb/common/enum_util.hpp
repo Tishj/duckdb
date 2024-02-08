@@ -138,7 +138,7 @@ enum class ForeignKeyType : uint8_t;
 
 enum class FunctionNullHandling : uint8_t;
 
-enum class FunctionSideEffects : uint8_t;
+enum class FunctionStability : uint8_t;
 
 enum class HLLStorageType : uint8_t;
 
@@ -165,6 +165,8 @@ enum class LookupResultType : uint8_t;
 enum class MacroType : uint8_t;
 
 enum class MapInvalidReason : uint8_t;
+
+enum class MemoryTag : uint8_t;
 
 enum class NType : uint8_t;
 
@@ -469,7 +471,7 @@ template<>
 const char* EnumUtil::ToChars<FunctionNullHandling>(FunctionNullHandling value);
 
 template<>
-const char* EnumUtil::ToChars<FunctionSideEffects>(FunctionSideEffects value);
+const char* EnumUtil::ToChars<FunctionStability>(FunctionStability value);
 
 template<>
 const char* EnumUtil::ToChars<HLLStorageType>(HLLStorageType value);
@@ -509,6 +511,9 @@ const char* EnumUtil::ToChars<MacroType>(MacroType value);
 
 template<>
 const char* EnumUtil::ToChars<MapInvalidReason>(MapInvalidReason value);
+
+template<>
+const char* EnumUtil::ToChars<MemoryTag>(MemoryTag value);
 
 template<>
 const char* EnumUtil::ToChars<NType>(NType value);
@@ -884,7 +889,7 @@ template<>
 FunctionNullHandling EnumUtil::FromString<FunctionNullHandling>(const char *value);
 
 template<>
-FunctionSideEffects EnumUtil::FromString<FunctionSideEffects>(const char *value);
+FunctionStability EnumUtil::FromString<FunctionStability>(const char *value);
 
 template<>
 HLLStorageType EnumUtil::FromString<HLLStorageType>(const char *value);
@@ -924,6 +929,9 @@ MacroType EnumUtil::FromString<MacroType>(const char *value);
 
 template<>
 MapInvalidReason EnumUtil::FromString<MapInvalidReason>(const char *value);
+
+template<>
+MemoryTag EnumUtil::FromString<MemoryTag>(const char *value);
 
 template<>
 NType EnumUtil::FromString<NType>(const char *value);
