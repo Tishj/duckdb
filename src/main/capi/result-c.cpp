@@ -136,8 +136,13 @@ duckdb_state deprecated_duckdb_translate_column(MaterializedQueryResult &result,
 	D_ASSERT(!result.HasError());
 	auto &collection = result.Collection();
 	idx_t row_count = collection.Count();
+	auto type_size = GetCTypeSize(column->__deprecated_type);
+	if (type_size == 0) {
+		// Nested or otherwise unsupported type
+		return DuckDBError;
+	}
 	column->__deprecated_nullmask = (bool *)duckdb_malloc(sizeof(bool) * collection.Count());
-	column->__deprecated_data = duckdb_malloc(GetCTypeSize(column->__deprecated_type) * row_count);
+	column->__deprecated_data = duckdb_malloc(type_size * row_count);
 	if (!column->__deprecated_nullmask || !column->__deprecated_data) { // LCOV_EXCL_START
 		// malloc failure
 		return DuckDBError;
@@ -332,7 +337,13 @@ bool deprecated_materialize_result(duckdb_result *result) {
 	// zero initialize the columns (so we can cleanly delete it in case a malloc fails)
 	memset(result->__deprecated_columns, 0, sizeof(duckdb_column) * column_count);
 	for (idx_t i = 0; i < column_count; i++) {
-		result->__deprecated_columns[i].__deprecated_type = ConvertCPPTypeToC(result_data->result->types[i]);
+		auto c_type = ConvertCPPTypeToC(result_data->result->types[i]);
+		auto c_type_size = GetCTypeSize(c_type);
+		if (c_type_size == 0) {
+			// Not supported
+			return false;
+		}
+		result->__deprecated_columns[i].__deprecated_type = c_type;
 		result->__deprecated_columns[i].__deprecated_name = (char *)result_data->result->names[i].c_str(); // NOLINT
 	}
 	result->__deprecated_row_count = materialized.RowCount();

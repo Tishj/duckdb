@@ -177,6 +177,8 @@ idx_t GetCTypeSize(duckdb_type type) {
 		return sizeof(duckdb_interval);
 	case DUCKDB_TYPE_DECIMAL:
 		return sizeof(duckdb_hugeint);
+	case DUCKDB_TYPE_LIST:
+		return 0;
 	default: // LCOV_EXCL_START
 		// unsupported type
 		D_ASSERT(0);
