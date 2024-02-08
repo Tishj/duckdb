@@ -233,7 +233,8 @@ if len(existing_duckdb_dir) == 0:
     if os.path.isfile(os.path.join(script_path, '..', '..', 'scripts', 'amalgamation.py')):
         # amalgamation exists: compiling from source directory
         # copy all source files to the current directory
-        sys.path.append(os.path.join(script_path, '..', '..', 'scripts'))
+        path = os.path.join(script_path, '..', '..', 'scripts')
+        sys.path.append(path)
         import package_build
 
         (source_list, include_list, original_sources) = package_build.build_package(
@@ -288,7 +289,10 @@ if len(existing_duckdb_dir) == 0:
         define_macros=define_macros,
     )
 else:
-    sys.path.append(os.path.join(script_path, '..', '..', 'scripts'))
+    # FIXME: this only works with an --editable build
+    # otherwise the sources have been moved and `../../scripts` no longer works
+    path = os.path.join(script_path, '..', '..', 'scripts')
+    sys.path.append(path)
     import package_build
 
     include_directories += [os.path.join('..', '..', include) for include in package_build.third_party_includes()]

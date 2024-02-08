@@ -4,6 +4,7 @@ import pytest
 
 import threading
 import _thread as thread
+import sys
 
 
 def send_keyboard_interrupt():
@@ -13,6 +14,7 @@ def send_keyboard_interrupt():
     thread.interrupt_main()
 
 
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="Requires python 3.8")
 class TestQueryInterruption(object):
     def test_query_interruption(self):
         con = duckdb.connect()

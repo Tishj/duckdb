@@ -37,7 +37,7 @@ class TestSimpleDBAPI(object):
         res = duckdb_cursor.fetchmany(3)
         assert len(res) == 0
 
-    def test_fetchmany(self, duckdb_cursor, integers):
+    def test_fetchmany_dbapi(self, duckdb_cursor, integers):
         # Get truth value
         truth_value = len(duckdb_cursor.execute("select * from integers").fetchall())
         duckdb_cursor.execute('select * from integers')

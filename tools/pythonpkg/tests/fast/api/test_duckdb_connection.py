@@ -159,7 +159,7 @@ class TestDuckDBConnection(object):
         res = duckdb.query("select * from res_df").fetchall()
         assert res == ref
 
-    def test_fetchmany(self):
+    def test_fetchmany_api(self):
         assert [(0,), (1,)] == duckdb.execute("select * from range(5)").fetchmany(2)
 
     def test_fetchnumpy(self):

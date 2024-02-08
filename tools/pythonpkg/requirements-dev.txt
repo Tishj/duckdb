@@ -4,9 +4,9 @@ setuptools_scm>=6.3
 setuptools>=58
 pytest
 pandas
-pyarrow
+pyarrow; python_version > '3.7'
 mypy
 psutil>=5.9.0
 fsspec
-polars
-tensorflow
+polars; python_version > '3.7'
+tensorflow; python_version > '3.7'
