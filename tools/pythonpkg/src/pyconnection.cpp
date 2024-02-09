@@ -571,9 +571,10 @@ void DuckDBPyConnection::RegisterArrowObject(const py::object &arrow_object, con
 		                                       Value::POINTER(CastPointerToValue(stream_factory_get_schema))})
 		        ->CreateView(name, true, true);
 	}
+	auto &registry = *record_batch_registry;
 	vector<shared_ptr<ExternalDependency>> dependencies;
 	dependencies.push_back(
-	    make_shared<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), arrow_object)));
+	    make_shared<PythonDependencies>(make_uniq<RegisteredArrow>(registry, std::move(stream_factory), arrow_object)));
 	connection->context->external_dependencies[name] = std::move(dependencies);
 }
 
@@ -1120,8 +1121,9 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromArrow(py::object &arrow_obj
 	                                              Value::POINTER(CastPointerToValue(stream_factory_produce)),
 	                                              Value::POINTER(CastPointerToValue(stream_factory_get_schema))})
 	               ->Alias(name);
+	auto &registry = *record_batch_registry;
 	rel->extra_dependencies =
-	    make_uniq<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), arrow_object));
+	    make_uniq<PythonDependencies>(make_uniq<RegisteredArrow>(registry, std::move(stream_factory), arrow_object));
 	return make_uniq<DuckDBPyRelation>(std::move(rel));
 }
 
@@ -1326,8 +1328,9 @@ duckdb::pyarrow::RecordBatchReader DuckDBPyConnection::FetchRecordBatchReader(co
 	return result->FetchRecordBatchReader(rows_per_batch);
 }
 
-static void CreateArrowScan(py::object entry, TableFunctionRef &table_function,
-                            vector<unique_ptr<ParsedExpression>> &children, ClientProperties &client_properties) {
+static void CreateArrowScan(ArrowRecordBatchReaderRegistry &registry, py::object entry,
+                            TableFunctionRef &table_function, vector<unique_ptr<ParsedExpression>> &children,
+                            ClientProperties &client_properties) {
 	string name = "arrow_" + StringUtil::GenerateRandomName();
 	auto stream_factory = make_uniq<PythonTableArrowArrayStreamFactory>(entry.ptr(), client_properties);
 	auto stream_factory_produce = PythonTableArrowArrayStreamFactory::Produce;
@@ -1339,10 +1342,11 @@ static void CreateArrowScan(py::object entry, TableFunctionRef &table_function,
 
 	table_function.function = make_uniq<FunctionExpression>("arrow_scan", std::move(children));
 	table_function.external_dependency =
-	    make_uniq<PythonDependencies>(make_uniq<RegisteredArrow>(std::move(stream_factory), entry));
+	    make_uniq<PythonDependencies>(make_uniq<RegisteredArrow>(registry, std::move(stream_factory), entry));
 }
 
-static unique_ptr<TableRef> TryReplacement(py::dict &dict, py::str &table_name, ClientProperties &client_properties,
+static unique_ptr<TableRef> TryReplacement(ArrowRecordBatchReaderRegistry &arrow_registry, py::dict &dict,
+                                           py::str &table_name, ClientProperties &client_properties,
                                            py::object &current_frame) {
 	if (!dict.contains(table_name)) {
 		// not present in the globals
@@ -1355,7 +1359,7 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, py::str &table_name, 
 	if (DuckDBPyConnection::IsPandasDataframe(entry)) {
 		if (PandasDataFrame::IsPyArrowBacked(entry)) {
 			auto table = ArrowTableFromDataframe(entry);
-			CreateArrowScan(table, *table_function, children, client_properties);
+			CreateArrowScan(arrow_registry, table, *table_function, children, client_properties);
 		} else {
 			string name = "df_" + StringUtil::GenerateRandomName();
 			auto new_df = PandasScanFunction::PandasReplaceCopiedNames(entry);
@@ -1366,7 +1370,7 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, py::str &table_name, 
 		}
 
 	} else if (DuckDBPyConnection::IsAcceptedArrowObject(entry)) {
-		CreateArrowScan(entry, *table_function, children, client_properties);
+		CreateArrowScan(arrow_registry, entry, *table_function, children, client_properties);
 	} else if (DuckDBPyRelation::IsRelation(entry)) {
 		auto pyrel = py::cast<DuckDBPyRelation *>(entry);
 		// create a subquery from the underlying relation object
@@ -1377,11 +1381,11 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, py::str &table_name, 
 		return std::move(subquery);
 	} else if (PolarsDataFrame::IsDataFrame(entry)) {
 		auto arrow_dataset = entry.attr("to_arrow")();
-		CreateArrowScan(arrow_dataset, *table_function, children, client_properties);
+		CreateArrowScan(arrow_registry, arrow_dataset, *table_function, children, client_properties);
 	} else if (PolarsDataFrame::IsLazyFrame(entry)) {
 		auto materialized = entry.attr("collect")();
 		auto arrow_dataset = materialized.attr("to_arrow")();
-		CreateArrowScan(arrow_dataset, *table_function, children, client_properties);
+		CreateArrowScan(arrow_registry, arrow_dataset, *table_function, children, client_properties);
 	} else if ((numpytype = DuckDBPyConnection::IsAcceptedNumpyObject(entry)) != NumpyObjectType::INVALID) {
 		string name = "np_" + StringUtil::GenerateRandomName();
 		py::dict data; // we will convert all the supported format to dict{"key": np.array(value)}.
@@ -1438,11 +1442,15 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 	// Here we do an exhaustive search on the frame lineage
 	auto current_frame = py::module::import("inspect").attr("currentframe")();
 	auto client_properties = context.GetClientProperties();
+
+	auto &scan_data = *dynamic_cast<PythonReplacementScanData *>(data);
+	auto &arrow_registry = scan_data.GetRegistry();
+
 	while (hasattr(current_frame, "f_locals")) {
 		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
 		// search local dictionary
 		if (local_dict) {
-			auto result = TryReplacement(local_dict, py_table_name, client_properties, current_frame);
+			auto result = TryReplacement(arrow_registry, local_dict, py_table_name, client_properties, current_frame);
 			if (result) {
 				return result;
 			}
@@ -1450,7 +1458,7 @@ static unique_ptr<TableRef> ScanReplacement(ClientContext &context, const string
 		// search global dictionary
 		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
 		if (global_dict) {
-			auto result = TryReplacement(global_dict, py_table_name, client_properties, current_frame);
+			auto result = TryReplacement(arrow_registry, global_dict, py_table_name, client_properties, current_frame);
 			if (result) {
 				return result;
 			}
@@ -1474,8 +1482,11 @@ case_insensitive_map_t<Value> TransformPyConfigDict(const py::dict &py_config_di
 void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig &config) {
 	// We don't cache unnamed memory instances (i.e., :memory:)
 	bool cache_instance = database != ":memory:" && !database.empty();
+
+	auto scan_data = make_uniq<PythonReplacementScanData>();
+	res.record_batch_registry = scan_data->GetRegistryShared();
 	if (config.options.enable_external_access) {
-		config.replacement_scans.emplace_back(ScanReplacement);
+		config.replacement_scans.emplace_back(ScanReplacement, std::move(scan_data));
 	}
 	res.database = instance_cache.CreateInstance(database, config, cache_instance);
 	res.connection = make_uniq<Connection>(*res.database);

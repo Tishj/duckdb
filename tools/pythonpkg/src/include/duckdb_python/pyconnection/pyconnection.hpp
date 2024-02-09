@@ -29,21 +29,13 @@ enum class PythonEnvironmentType { NORMAL, INTERACTIVE, JUPYTER };
 
 struct DuckDBPyRelation;
 
-class RegisteredArrow : public RegisteredObject {
-
-public:
-	RegisteredArrow(unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory_p, py::object obj_p)
-	    : RegisteredObject(std::move(obj_p)), arrow_factory(std::move(arrow_factory_p)) {};
-	unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory;
-};
-
-struct ArrowRecordBatchReaderRegistry : public std::enable_shared_from_this() {
+struct ArrowRecordBatchReaderRegistry : public std::enable_shared_from_this<ArrowRecordBatchReaderRegistry> {
 public:
 	ArrowRecordBatchReaderRegistry() {
 	}
 
 public:
-	AddRecordBatchReader(uintptr_t address) {
+	void AddRecordBatchReader(uintptr_t address) {
 		lock_guard<mutex> guard(lock);
 		auto result = record_batch_readers.insert(address).second;
 		if (!result) {
@@ -56,11 +48,33 @@ private:
 	set<uintptr_t> record_batch_readers;
 };
 
+class RegisteredArrow : public RegisteredObject {
+public:
+	RegisteredArrow(ArrowRecordBatchReaderRegistry &registry,
+	                unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory_p, py::object obj_p)
+	    : RegisteredObject(std::move(obj_p)), arrow_factory(std::move(arrow_factory_p)), registry(registry) {
+		registry.AddRecordBatchReader(reinterpret_cast<uintptr_t>(obj.ptr()));
+	};
+	~RegisteredArrow() override {
+	}
+	unique_ptr<PythonTableArrowArrayStreamFactory> arrow_factory;
+	ArrowRecordBatchReaderRegistry &registry;
+};
+
 struct PythonReplacementScanData : public ReplacementScanData {
 public:
 	PythonReplacementScanData() {
+		record_batch_registry = make_shared<ArrowRecordBatchReaderRegistry>();
 	}
 	~PythonReplacementScanData() override {
+	}
+
+public:
+	ArrowRecordBatchReaderRegistry &GetRegistry() {
+		return *record_batch_registry;
+	}
+	shared_ptr<ArrowRecordBatchReaderRegistry> GetRegistryShared() {
+		return record_batch_registry;
 	}
 
 private:

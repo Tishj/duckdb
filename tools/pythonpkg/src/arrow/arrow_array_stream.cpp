@@ -87,7 +87,6 @@ unique_ptr<ArrowArrayStreamWrapper> PythonTableArrowArrayStreamFactory::Produce(
                                                                                 ArrowStreamParameters &parameters) {
 	py::gil_scoped_acquire acquire;
 	auto factory = static_cast<PythonTableArrowArrayStreamFactory *>(reinterpret_cast<void *>(factory_ptr));
-	D_ASSERT(!factory->produced_scanner);
 	D_ASSERT(factory->arrow_object);
 	py::handle arrow_obj_handle(factory->arrow_object);
 	auto arrow_object_type = GetArrowType(arrow_obj_handle);
@@ -129,7 +128,6 @@ unique_ptr<ArrowArrayStreamWrapper> PythonTableArrowArrayStreamFactory::Produce(
 	auto res = make_uniq<ArrowArrayStreamWrapper>();
 	auto export_to_c = record_batches.attr("_export_to_c");
 	export_to_c(reinterpret_cast<uint64_t>(&res->arrow_array_stream));
-	factory->produced_scanner = true;
 	return res;
 }
 

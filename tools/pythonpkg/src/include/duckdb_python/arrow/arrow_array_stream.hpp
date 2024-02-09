@@ -72,7 +72,6 @@ public:
 	PyObject *arrow_object;
 
 	const ClientProperties client_properties;
-	bool produced_scanner = false;
 
 private:
 	//! We transform a TableFilterSet to an Arrow Expression Object
