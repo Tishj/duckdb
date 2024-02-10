@@ -177,6 +177,7 @@ void PartialBlockManager::ClearBlocks() {
 }
 
 void PartialBlockManager::FlushPartialBlocks() {
+	auto lock = GetLock();
 	for (auto &e : partially_filled_blocks) {
 		e.second->Flush(e.first);
 	}
