@@ -959,6 +959,7 @@ void RowGroupCollection::Checkpoint(TableDataWriter &writer, TableStatistics &gl
 		ScheduleCheckpointTask(checkpoint_state, segment_idx);
 		vacuum_state.row_start += entry.node->count;
 	}
+	Printer::Print("SCHEDULED");
 	// all tasks have been scheduled - execute tasks until we are done
 	do {
 		shared_ptr<Task> task;
