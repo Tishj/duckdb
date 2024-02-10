@@ -713,6 +713,7 @@ public:
 	void ExecuteTask() override {
 		auto &entry = checkpoint_state.segments[index];
 		auto &row_group = *entry.node;
+		Printer::Print(StringUtil::Format("INDEX: %d", index));
 		checkpoint_state.writers[index] = checkpoint_state.writer.GetRowGroupWriter(*entry.node);
 		checkpoint_state.write_data[index] = row_group.WriteToDisk(*checkpoint_state.writers[index]);
 	}
