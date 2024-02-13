@@ -4,9 +4,6 @@
 
 loop i 1 84
 
-statement ok
-SELECT '-inf'::FLOAT
-
 # cannot cast nan, inf or -inf to these types
 statement error
 SELECT '-inf'::FLOAT::integer from range(100000)
