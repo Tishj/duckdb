@@ -2,31 +2,23 @@
 # description: Test casting of NaN and inf values
 # group: [float]
 
-# cannot cast nan, inf or -inf to these types
-statement error
-SELECT 'nan'::FLOAT::DECIMAL(18,1)
-----
+# to integer/decimal casts
+foreach source_type FLOAT DOUBLE
+
+foreach target_type <integral> DECIMAL(4,1) DECIMAL(9,1) DECIMAL(18,1) DECIMAL(38,1)
+
+foreach val nan inf -inf
+
+statement ok
+SELECT 'nan'::FLOAT
 
 # cannot cast nan, inf or -inf to these types
 statement error
 SELECT 'nan'::FLOAT::DECIMAL(18,1)
 ----
 
+endloop
 
-# cannot cast nan, inf or -inf to these types
-statement error
-SELECT 'nan'::FLOAT::DECIMAL(18,1)
-----
+endloop
 
-
-# cannot cast nan, inf or -inf to these types
-statement error
-SELECT 'nan'::FLOAT::DECIMAL(18,1)
-----
-
-
-# cannot cast nan, inf or -inf to these types
-statement error
-SELECT 'nan'::FLOAT::DECIMAL(18,1)
-----
-
+endloop
