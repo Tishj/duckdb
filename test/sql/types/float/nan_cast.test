@@ -7,3 +7,26 @@ statement error
 SELECT 'nan'::FLOAT::DECIMAL(18,1)
 ----
 
+# cannot cast nan, inf or -inf to these types
+statement error
+SELECT 'nan'::FLOAT::DECIMAL(18,1)
+----
+
+
+# cannot cast nan, inf or -inf to these types
+statement error
+SELECT 'nan'::FLOAT::DECIMAL(18,1)
+----
+
+
+# cannot cast nan, inf or -inf to these types
+statement error
+SELECT 'nan'::FLOAT::DECIMAL(18,1)
+----
+
+
+# cannot cast nan, inf or -inf to these types
+statement error
+SELECT 'nan'::FLOAT::DECIMAL(18,1)
+----
+
