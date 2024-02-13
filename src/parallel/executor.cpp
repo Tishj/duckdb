@@ -75,7 +75,7 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 	auto base_initialize_event = make_shared<PipelineInitializeEvent>(base_pipeline);
 	auto base_event = make_shared<PipelineEvent>(base_pipeline);
 	auto base_finish_event = make_shared<PipelineFinishEvent>(base_pipeline);
-	auto base_complete_event = make_shared<PipelineCompleteEvent>(base_pipeline->executor, event_data.initial_schedule);
+	auto base_complete_event = make_shared<PipelineCompleteEvent>(base_pipeline, event_data.initial_schedule);
 	PipelineEventStack base_stack(*base_initialize_event, *base_event, *base_finish_event, *base_complete_event);
 	events.push_back(std::move(base_initialize_event));
 	events.push_back(std::move(base_event));
