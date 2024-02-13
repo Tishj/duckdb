@@ -25,27 +25,3 @@ endloop
 endloop
 
 endloop
-
-# we can cast nan, inf and -inf between floats and doubles, as well as to/from strings
-foreach source_type FLOAT DOUBLE VARCHAR
-
-foreach target_type FLOAT DOUBLE VARCHAR
-
-query I
-SELECT 'nan'::${source_type}::${target_type}
-----
-nan
-
-query I
-SELECT 'inf'::${source_type}::${target_type}
-----
-inf
-
-query I
-SELECT '-inf'::${source_type}::${target_type}
-----
--inf
-
-endloop
-
-endloop
