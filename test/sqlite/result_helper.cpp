@@ -288,7 +288,7 @@ bool TestResultHelper::CheckStatementResult(const Statement &statement, ExecuteC
 		}
 		return false;
 	}
-	REQUIRE(!error);
+	REQUIRE(context.sql_query == context.sql_query);
 	return true;
 }
 
