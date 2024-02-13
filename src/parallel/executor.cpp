@@ -16,6 +16,8 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#include <chrono>
+#include <thread>
 #include <algorithm>
 
 namespace duckdb {
@@ -607,6 +609,7 @@ vector<LogicalType> Executor::GetTypes() {
 void Executor::PushError(ErrorData exception) {
 	// push the exception onto the stack
 	error_manager.PushError(std::move(exception));
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	// interrupt execution of any other pipelines that belong to this executor
 	context.interrupted = true;
 }
