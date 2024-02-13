@@ -2,12 +2,7 @@
 # description: Test casting of NaN and inf values
 # group: [float]
 
-# to integer/decimal casts
-foreach source_type FLOAT DOUBLE
-
-foreach target_type <integral> DECIMAL(4,1) DECIMAL(9,1) DECIMAL(18,1) DECIMAL(38,1)
-
-foreach val nan inf -inf
+loop i 1 84
 
 statement ok
 SELECT '-inf'::FLOAT
@@ -16,9 +11,5 @@ SELECT '-inf'::FLOAT
 statement error
 SELECT '-inf'::FLOAT::integer
 ----
-
-endloop
-
-endloop
 
 endloop
