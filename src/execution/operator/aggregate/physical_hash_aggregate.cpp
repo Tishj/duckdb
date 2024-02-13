@@ -459,9 +459,9 @@ SinkCombineResultType PhysicalHashAggregate::Combine(ExecutionContext &context, 
 class HashAggregateFinalizeEvent : public BasePipelineEvent {
 public:
 	//! "Regular" Finalize Event that is scheduled after combining the thread-local distinct HTs
-	HashAggregateFinalizeEvent(ClientContext &context, Pipeline *pipeline_p, const PhysicalHashAggregate &op_p,
+	HashAggregateFinalizeEvent(ClientContext &context, Pipeline &pipeline, const PhysicalHashAggregate &op_p,
 	                           HashAggregateGlobalSinkState &gstate_p)
-	    : BasePipelineEvent(*pipeline_p), context(context), op(op_p), gstate(gstate_p) {
+	    : BasePipelineEvent(pipeline), context(context), op(op_p), gstate(gstate_p) {
 	}
 
 public:
@@ -496,7 +496,7 @@ private:
 
 void HashAggregateFinalizeEvent::Schedule() {
 	vector<shared_ptr<Task>> tasks;
-	tasks.push_back(make_uniq<HashAggregateFinalizeTask>(context, *pipeline, shared_from_this(), op, gstate));
+	tasks.push_back(make_uniq<HashAggregateFinalizeTask>(context, GetPipeline(), shared_from_this(), op, gstate));
 	D_ASSERT(!tasks.empty());
 	SetTasks(std::move(tasks));
 }
@@ -569,7 +569,7 @@ void HashAggregateDistinctFinalizeEvent::Schedule() {
 	n_tasks = MinValue<idx_t>(n_tasks, TaskScheduler::GetScheduler(context).NumberOfThreads());
 	vector<shared_ptr<Task>> tasks;
 	for (idx_t i = 0; i < n_tasks; i++) {
-		tasks.push_back(make_uniq<HashAggregateDistinctFinalizeTask>(*pipeline, shared_from_this(), op, gstate));
+		tasks.push_back(make_uniq<HashAggregateDistinctFinalizeTask>(GetPipeline(), shared_from_this(), op, gstate));
 	}
 	SetTasks(std::move(tasks));
 }
@@ -609,7 +609,7 @@ idx_t HashAggregateDistinctFinalizeEvent::CreateGlobalSources() {
 
 void HashAggregateDistinctFinalizeEvent::FinishEvent() {
 	// Now that everything is added to the main ht, we can actually finalize
-	auto new_event = make_shared<HashAggregateFinalizeEvent>(context, pipeline.get(), op, gstate);
+	auto new_event = make_shared<HashAggregateFinalizeEvent>(context, GetPipeline(), op, gstate);
 	this->InsertEvent(std::move(new_event));
 }
 

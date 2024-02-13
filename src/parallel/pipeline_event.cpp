@@ -8,9 +8,9 @@ PipelineEvent::PipelineEvent(shared_ptr<Pipeline> pipeline_p) : BasePipelineEven
 
 void PipelineEvent::Schedule() {
 	auto event = shared_from_this();
-	auto &executor = pipeline->executor;
+	auto &executor = GetPipeline().executor;
 	try {
-		pipeline->Schedule(event);
+		GetPipeline().Schedule(event);
 		D_ASSERT(total_tasks > 0);
 	} catch (std::exception &ex) {
 		executor.PushError(ErrorData(ex));

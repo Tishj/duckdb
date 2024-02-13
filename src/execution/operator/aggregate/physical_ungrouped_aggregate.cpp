@@ -460,7 +460,7 @@ void UngroupedDistinctAggregateFinalizeEvent::Schedule() {
 	vector<shared_ptr<Task>> tasks;
 	for (idx_t i = 0; i < n_tasks; i++) {
 		tasks.push_back(
-		    make_uniq<UngroupedDistinctAggregateFinalizeTask>(pipeline->executor, shared_from_this(), op, gstate));
+		    make_uniq<UngroupedDistinctAggregateFinalizeTask>(GetPipeline().executor, shared_from_this(), op, gstate));
 		tasks_scheduled++;
 	}
 	SetTasks(std::move(tasks));

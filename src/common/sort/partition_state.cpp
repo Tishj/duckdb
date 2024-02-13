@@ -658,7 +658,7 @@ TaskExecutionResult PartitionMergeTask::ExecuteTask(TaskExecutionMode mode) {
 }
 
 void PartitionMergeEvent::Schedule() {
-	auto &context = pipeline->GetClientContext();
+	auto &context = GetPipeline().GetClientContext();
 
 	// Schedule tasks equal to the number of threads, which will each merge multiple partitions
 	auto &ts = TaskScheduler::GetScheduler(context);

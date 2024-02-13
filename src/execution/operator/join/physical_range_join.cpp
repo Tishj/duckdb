@@ -122,7 +122,7 @@ public:
 
 public:
 	void Schedule() override {
-		auto &context = pipeline->GetClientContext();
+		auto &context = GetPipeline().GetClientContext();
 
 		// Schedule tasks equal to the number of threads, which will each merge multiple partitions
 		auto &ts = TaskScheduler::GetScheduler(context);
@@ -141,7 +141,7 @@ public:
 		global_sort_state.CompleteMergeRound(true);
 		if (global_sort_state.sorted_blocks.size() > 1) {
 			// Multiple blocks remaining: Schedule the next round
-			table.ScheduleMergeTasks(*pipeline, *this);
+			table.ScheduleMergeTasks(GetPipeline(), *this);
 		}
 	}
 };

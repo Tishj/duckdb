@@ -316,7 +316,7 @@ public:
 
 public:
 	void Schedule() override {
-		auto &context = pipeline->GetClientContext();
+		auto &context = GetPipeline().GetClientContext();
 
 		vector<shared_ptr<Task>> finalize_tasks;
 		auto &ht = *sink.hash_table;
@@ -429,7 +429,7 @@ public:
 			local_hts.resize(repartition_threads);
 		}
 
-		auto &context = pipeline->GetClientContext();
+		auto &context = GetPipeline().GetClientContext();
 
 		vector<shared_ptr<Task>> partition_tasks;
 		partition_tasks.reserve(local_hts.size());
@@ -453,7 +453,7 @@ public:
 		sink.temporary_memory_state->SetMinimumReservation(max_partition_size +
 		                                                   JoinHashTable::PointerTableSize(max_partition_count));
 		sink.hash_table->PrepareExternalFinalize(sink.temporary_memory_state->GetReservation());
-		sink.ScheduleFinalize(*pipeline, *this);
+		sink.ScheduleFinalize(GetPipeline(), *this);
 	}
 };
 

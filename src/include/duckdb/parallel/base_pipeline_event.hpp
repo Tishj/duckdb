@@ -23,6 +23,12 @@ public:
 		pipeline->Print();
 	}
 
+protected:
+	Pipeline &GetPipeline() {
+		return *pipeline;
+	}
+
+private:
 	//! The pipeline that this event belongs to
 	shared_ptr<Pipeline> pipeline;
 };

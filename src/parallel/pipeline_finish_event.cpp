@@ -60,7 +60,7 @@ PipelineFinishEvent::PipelineFinishEvent(shared_ptr<Pipeline> pipeline_p) : Base
 
 void PipelineFinishEvent::Schedule() {
 	vector<shared_ptr<Task>> tasks;
-	tasks.push_back(make_uniq<PipelineFinishTask>(*pipeline, shared_from_this()));
+	tasks.push_back(make_uniq<PipelineFinishTask>(GetPipeline(), shared_from_this()));
 	SetTasks(std::move(tasks));
 }
 
