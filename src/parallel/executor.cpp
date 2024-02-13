@@ -401,6 +401,9 @@ void Executor::CancelTasks() {
 		for (auto &pipeline : pipelines) {
 			weak_references.push_back(weak_ptr<Pipeline>(pipeline));
 		}
+		for (auto &pipeline : root_pipelines) {
+			weak_references.push_back(weak_ptr<Pipeline>(pipeline));
+		}
 		for (auto &rec_cte_ref : recursive_ctes) {
 			auto &rec_cte = rec_cte_ref.get().Cast<PhysicalRecursiveCTE>();
 			rec_cte.recursive_meta_pipeline.reset();
