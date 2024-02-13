@@ -609,9 +609,9 @@ vector<LogicalType> Executor::GetTypes() {
 void Executor::PushError(ErrorData exception) {
 	// push the exception onto the stack
 	error_manager.PushError(std::move(exception));
-	std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	// interrupt execution of any other pipelines that belong to this executor
 	context.interrupted = true;
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
 }
 
 bool Executor::HasError() {
