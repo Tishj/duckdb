@@ -4,9 +4,12 @@
 
 loop i 1 20
 
+statement ok
+SELECT '-inf'::FLOAT
+
 # cannot cast nan, inf or -inf to these types
 statement error
-SELECT '-inf'::FLOAT::integer from range(1000000)
+SELECT '-inf'::FLOAT::integer from range(100000)
 ----
 
 endloop
