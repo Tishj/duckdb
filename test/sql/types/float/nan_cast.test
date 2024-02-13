@@ -10,11 +10,11 @@ foreach target_type <integral> DECIMAL(4,1) DECIMAL(9,1) DECIMAL(18,1) DECIMAL(3
 foreach val nan inf -inf
 
 statement ok
-SELECT 'nan'::FLOAT
+SELECT '${val}'::${source_type}
 
 # cannot cast nan, inf or -inf to these types
 statement error
-SELECT 'nan'::FLOAT::DECIMAL(18,1)
+SELECT '${val}'::${source_type}::${target_type}
 ----
 
 endloop
