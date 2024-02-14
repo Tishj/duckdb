@@ -15,6 +15,7 @@
 #include "duckdb/common/enums/memory_tag.hpp"
 #include "duckdb/storage/buffer/temporary_file_information.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/main/config.hpp"
 
 namespace duckdb {
 
