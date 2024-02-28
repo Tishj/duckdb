@@ -469,7 +469,7 @@ Value TransformPythonValue(py::handle ele, const LogicalType &target_type, bool 
 	case PythonObjectType::Datetime: {
 		auto &import_cache = *DuckDBPyConnection::ImportCache();
 		bool is_nat = false;
-		if (import_cache.pandas.isnull(false)) {
+		if (import_cache.pandas.isnull()) {
 			auto isnull_result = import_cache.pandas.isnull()(ele);
 			is_nat = string(py::str(isnull_result)) == "True";
 		}

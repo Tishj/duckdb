@@ -9,7 +9,7 @@ namespace duckdb {
 // PythonImportCacheItem (SUPER CLASS)
 //===--------------------------------------------------------------------===//
 
-py::handle PythonImportCacheItem::operator()(bool load) {
+py::handle PythonImportCacheItem::operator()(void) {
 	stack<reference<PythonImportCacheItem>> hierarchy;
 
 	optional_ptr<PythonImportCacheItem> item = this;
@@ -17,7 +17,7 @@ py::handle PythonImportCacheItem::operator()(bool load) {
 		hierarchy.push(*item);
 		item = item->parent;
 	}
-	return PythonImporter::Import(hierarchy, load);
+	return PythonImporter::Import(hierarchy);
 }
 
 bool PythonImportCacheItem::LoadSucceeded() const {
@@ -55,12 +55,8 @@ void PythonImportCacheItem::LoadAttribute(PythonImportCache &cache, py::handle s
 	}
 }
 
-py::handle PythonImportCacheItem::Load(PythonImportCache &cache, py::handle source, bool load) {
+py::handle PythonImportCacheItem::Load(PythonImportCache &cache, py::handle source) {
 	if (IsLoaded()) {
-		return object;
-	}
-	if (!load) {
-		// Don't load the item if it's not already loaded
 		return object;
 	}
 	if (is_module) {
