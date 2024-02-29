@@ -45,6 +45,7 @@ void PythonImportCacheItem::LoadModule(PythonImportCache &cache) {
 		object = nullptr;
 		return;
 	}
+	LoadSubmodules();
 }
 
 void PythonImportCacheItem::LoadAttribute(PythonImportCache &cache, py::handle source) {

@@ -28,6 +28,10 @@ public:
 	virtual ~PythonImportCacheItem() {
 	}
 
+	virtual void LoadSubmodules() {
+		return;
+	}
+
 public:
 	bool LoadSucceeded() const;
 	bool IsLoaded() const;

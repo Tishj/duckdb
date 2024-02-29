@@ -32,6 +32,14 @@ public:
 	PythonImportCacheItem NaT;
 	PythonImportCacheItem NA;
 
+	void LoadSubmodules() override {
+		DataFrame();
+		isnull();
+		ArrowDtype();
+		NaT();
+		NA();
+	}
+
 protected:
 	bool IsRequired() const override final {
 		return false;
