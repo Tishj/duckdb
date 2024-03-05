@@ -345,7 +345,7 @@ void NumpyScan::Scan(PandasColumnBindData &bind_data, idx_t count, idx_t offset,
 					out_mask.SetInvalid(row);
 					continue;
 				}
-				if (import_cache.pandas.NaT(false)) {
+				if (import_cache.pandas.NaT()) {
 					// If pandas is imported, check if this is pandas.NaT
 					py::handle value(val);
 					if (value.is(import_cache.pandas.NaT())) {
@@ -353,7 +353,7 @@ void NumpyScan::Scan(PandasColumnBindData &bind_data, idx_t count, idx_t offset,
 						continue;
 					}
 				}
-				if (import_cache.pandas.NA(false)) {
+				if (import_cache.pandas.NA()) {
 					// If pandas is imported, check if this is pandas.NA
 					py::handle value(val);
 					if (value.is(import_cache.pandas.NA())) {

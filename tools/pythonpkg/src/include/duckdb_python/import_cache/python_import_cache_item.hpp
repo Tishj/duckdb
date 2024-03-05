@@ -31,8 +31,8 @@ public:
 public:
 	bool LoadSucceeded() const;
 	bool IsLoaded() const;
-	py::handle operator()(bool load = true);
-	py::handle Load(PythonImportCache &cache, py::handle source, bool load);
+	py::handle operator()(void);
+	py::handle Load(PythonImportCache &cache, py::handle source);
 
 protected:
 	virtual bool IsRequired() const {
