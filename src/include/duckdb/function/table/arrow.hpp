@@ -181,8 +181,9 @@ public:
 	static unique_ptr<FunctionData> ArrowScanBind(ClientContext &context, TableFunctionBindInput &input,
 	                                              vector<LogicalType> &return_types, vector<string> &names);
 	//! Actual conversion from Arrow to DuckDB
-	static void ArrowToDuckDB(ArrowScanLocalState &scan_state, const arrow_column_map_t &arrow_convert_data,
-	                          DataChunk &output, idx_t start, bool arrow_scan_is_projected = true);
+	static void ArrowToDuckDB(ClientContext &context, ArrowScanLocalState &scan_state,
+	                          const arrow_column_map_t &arrow_convert_data, DataChunk &output, idx_t start,
+	                          bool arrow_scan_is_projected = true);
 
 	//! Get next scan state
 	static bool ArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,

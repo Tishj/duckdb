@@ -162,6 +162,8 @@ struct DBConfigOptions {
 	bool preserve_insertion_order = true;
 	//! Whether Arrow Arrays use Large or Regular buffers
 	ArrowOffsetSize arrow_offset_size = ArrowOffsetSize::REGULAR;
+	//! Whether zero-copy should be disabled when scanning an Arrow table/dataset
+	bool arrow_disable_zero_copy = false;
 	//! Whether when producing arrow objects we produce string_views or regular strings
 	bool produce_arrow_string_views = false;
 	//! Database configuration variables as controlled by SET

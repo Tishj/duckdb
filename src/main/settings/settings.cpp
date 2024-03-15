@@ -1108,6 +1108,25 @@ void ProduceArrowStringView::ResetGlobal(DatabaseInstance *db, DBConfig &config)
 Value ProduceArrowStringView::GetSetting(ClientContext &context) {
 	return Value::BOOLEAN(DBConfig::GetConfig(context).options.produce_arrow_string_views);
 }
+
+// ArrowDisableZeroCopy
+//===--------------------------------------------------------------------===//
+void ArrowDisableZeroCopy::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto arrow_disable_zero_copy = input.GetValue<bool>();
+
+	config.options.arrow_disable_zero_copy = arrow_disable_zero_copy;
+}
+
+void ArrowDisableZeroCopy::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.arrow_disable_zero_copy = DBConfig().options.arrow_disable_zero_copy;
+}
+
+Value ArrowDisableZeroCopy::GetSetting(ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	bool arrow_disable_zero_copy = config.options.arrow_disable_zero_copy;
+	return Value::BOOLEAN(arrow_disable_zero_copy);
+}
+
 //===--------------------------------------------------------------------===//
 // Profile Output
 //===--------------------------------------------------------------------===//

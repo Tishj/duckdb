@@ -340,6 +340,16 @@ struct ExportLargeBufferArrow {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct ArrowDisableZeroCopy {
+	static constexpr const char *Name = "arrow_disable_zero_copy";
+	static constexpr const char *Description =
+	    "For some POD (plain old data) types we offer zero-copy conversion, this setting disables that conversion";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(ClientContext &context);
+};
+
 struct ExtensionDirectorySetting {
 	static constexpr const char *Name = "extension_directory";
 	static constexpr const char *Description = "Set the directory to store extensions in";
