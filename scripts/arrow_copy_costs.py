@@ -36,7 +36,7 @@ def close_result():
 
 ### --- Zero Copy
 
-types = {
+types = [
     'NULL',
     'TINYINT',
     'UTINYINT',
@@ -47,7 +47,7 @@ types = {
     'BIGINT',
     'UBIGINT',
     'HUGEINT',
-    'UHUGEINT',
+    # 'UHUGEINT', # <-- we can't produce this???
     'FLOAT',
     'DOUBLE',
     'TIMESTAMP',
@@ -56,7 +56,7 @@ types = {
     'TIMESTAMP_MS',
     'DATE',  # <-- date32 [days] in Arrow
     'DECIMAL(38, 10)',
-}
+]
 
 # Arrays of this type are kept alive and their data buffers are referenced in the DuckDB Vectors
 # If no destructive transformation is applied to them
@@ -86,6 +86,8 @@ def get_query(type: str):
         'DECIMAL(18, 6)': 'dec_18_6',
         'DECIMAL(9, 4)': 'dec_9_4',
         'DECIMAL(4, 1)': 'dec_4_1',
+        'INTEGER': 'int',
+        'UINTEGER': 'uint',
     }
     if type in type_mapping:
         type = type_mapping[type]
