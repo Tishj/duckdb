@@ -96,32 +96,34 @@ def get_query(type: str):
 for type in types:
     for batch_size in BATCH_SIZES:
         for size in TUPLE_COUNTS:
-            for nrun in range(10):
-                list_query = get_query(type)
+            list_query = get_query(type)
 
-                # Create the DuckDB relation we will use to create the arrow table
-                rel = con.query(
-                    f"""
-                    with t as materialized (
-                        select
-                            lst
-                        from (
-                            {list_query}
-                        ) t(lst)
-                    )
-                    select CASE
-                        WHEN (i % 3 == 0) THEN lst[1]
-                        WHEN (i % 3 == 1) THEN lst[2]
-                        WHEN (i % 3 == 2) THEN lst[3]
-                    END from range({size}) tbl(i), t
-                """
+            # Create the DuckDB relation we will use to create the arrow table
+            rel = con.query(
+                f"""
+                with t as materialized (
+                    select
+                        lst
+                    from (
+                        {list_query}
+                    ) t(lst)
                 )
-                arrow_table = rel.arrow(batch_size=batch_size)
-
+                select CASE
+                    WHEN (i % 3 == 0) THEN lst[1]
+                    WHEN (i % 3 == 1) THEN lst[2]
+                    WHEN (i % 3 == 2) THEN lst[3]
+                END from range({size}) tbl(i), t
+            """
+            )
+            con.execute("reset threads")
+            arrow_table = rel.arrow(batch_size=batch_size)
+            con.execute("pragma threads=1")
+            for nrun in range(10):
                 duration = 0.0
                 start = time.time()
-                res = con.query("EXPLAIN ANALYZE select * from arrow_table").fetchall()
+                res = con.query("EXPLAIN ANALYZE select count(*) from arrow_table").fetchall()
                 end = time.time()
+                #print(''.join(res[0]))
                 duration = float(end - start)
                 write_result(f"arrow_table_{type}_tuple_count_{size}_batch_size_{batch_size}", nrun, duration)
 
