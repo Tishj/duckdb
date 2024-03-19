@@ -77,10 +77,10 @@ def close_result():
 import pyarrow as pa
 import pandas as pd
 
+# Open dataset using year,month folder partition
+nyc_dataset = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
 
 for run in range(args.nruns):
-    # Open dataset using year,month folder partition
-    nyc_dataset = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
     # We must exclude one of the columns of the NYC dataset due to an unimplemented cast in Arrow.
     working_columns = [
         "vendor_id",
