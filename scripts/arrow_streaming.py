@@ -79,8 +79,8 @@ import pandas as pd
 
 
 for run in range(args.nruns):
-    start = time.time()
-
+    # Open dataset using year,month folder partition
+    nyc_dataset = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
     # We must exclude one of the columns of the NYC dataset due to an unimplemented cast in Arrow.
     working_columns = [
         "vendor_id",
@@ -104,25 +104,20 @@ for run in range(args.nruns):
         "month"
     ]
 
-    # Open dataset using year,month folder partition
-    nyc_dataset = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
     # Generate a scanner to skip problematic column
     dataset_scanner = nyc_dataset.scanner(columns=working_columns)
-
     # Materialize dataset to an Arrow Table
     nyc_table = dataset_scanner.to_table()
+    start = time.time()
 
     # Generate Dataframe from Arow Table
     nyc_df = nyc_table.to_pandas()
-
     # Apply Filter
     filtered_df = nyc_df[
         (nyc_df.total_amount > 100) &
         (nyc_df.year >2014)]
-
     # Apply Projection
     res = filtered_df[["total_amount", "passenger_count","year"]]
-
     # Transform Result back to an Arrow Table
     new_table = pa.Table.from_pandas(res)
 
