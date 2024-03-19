@@ -34,105 +34,105 @@ def close_result():
 
 ### -- DuckDB ---
 
-# Transforms Query Result from DuckDB to Arrow Table
+## Transforms Query Result from DuckDB to Arrow Table
 
-# Open dataset using year,month folder partition
-nyc = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
-# Get database connection
-con = duckdb.connect()
+## Open dataset using year,month folder partition
+#nyc = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
+## Get database connection
+#con = duckdb.connect()
 
-
-for run in range(args.nruns):
-    start = time.time()
-
-    # Run query that selects part of the data
-    query = con.execute("""
-        SELECT
-            total_amount,
-            passenger_count,year
-        FROM nyc
-        where
-            total_amount > 100
-            and year > 2014
-    """)
-
-    # Create Record Batch Reader from Query Result.
-    # "fetch_record_batch()" also accepts an extra parameter related to the desired produced chunk size.
-    record_batch_reader = query.fetch_record_batch()
-
-    # Retrieve all batch chunks
-    while True:
-        try:
-            chunk = record_batch_reader.read_next_batch()
-        except StopIteration:
-            break
-
-    end = time.time()
-    diff = end - start
-    duration = float(end - start)
-    write_result(f"benchmark_result", run, duration)
-
-### --- Pandas ---
-
-#import pyarrow as pa
-#import pandas as pd
-
-#arrow_table = pq.read_table('tmp/lineitemsf1.snappy.parquet')
-
-## Converts an Arrow table to a Dataframe
-#lineitem = arrow_table.to_pandas()
 
 #for run in range(args.nruns):
 #    start = time.time()
 
-#    # We must exclude one of the columns of the NYC dataset due to an unimplemented cast in Arrow.
-#    working_columns = [
-#        "vendor_id",
-#        "pickup_at",
-#        "dropoff_at",
-#        "passenger_count",
-#        "trip_distance",
-#        "pickup_longitude",
-#        "pickup_latitude",
-#        "store_and_fwd_flag",
-#        "dropoff_longitude",
-#        "dropoff_latitude",
-#        "payment_type",
-#        "fare_amount",
-#        "extra",
-#        "mta_tax",
-#        "tip_amount",
-#        "tolls_amount",
-#        "total_amount",
-#        "year",
-#        "month"
-#    ]
+#    # Run query that selects part of the data
+#    query = con.execute("""
+#        SELECT
+#            total_amount,
+#            passenger_count,year
+#        FROM nyc
+#        where
+#            total_amount > 100
+#            and year > 2014
+#    """)
 
-#    # Open dataset using year,month folder partition
-#    nyc_dataset = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
-#    # Generate a scanner to skip problematic column
-#    dataset_scanner = nyc_dataset.scanner(columns=working_columns)
+#    # Create Record Batch Reader from Query Result.
+#    # "fetch_record_batch()" also accepts an extra parameter related to the desired produced chunk size.
+#    record_batch_reader = query.fetch_record_batch()
 
-#    # Materialize dataset to an Arrow Table
-#    nyc_table = dataset_scanner.to_table()
-
-#    # Generate Dataframe from Arow Table
-#    nyc_df = nyc_table.to_pandas()
-
-#    # Apply Filter
-#    filtered_df = nyc_df[
-#        (nyc_df.total_amount > 100) &
-#        (nyc_df.year >2014)]
-
-#    # Apply Projection
-#    res = filtered_df[["total_amount", "passenger_count","year"]]
-
-#    # Transform Result back to an Arrow Table
-#    new_table = pa.Table.from_pandas(res)
+#    # Retrieve all batch chunks
+#    while True:
+#        try:
+#            chunk = record_batch_reader.read_next_batch()
+#        except StopIteration:
+#            break
 
 #    end = time.time()
 #    diff = end - start
 #    duration = float(end - start)
 #    write_result(f"benchmark_result", run, duration)
+
+### --- Pandas ---
+
+import pyarrow as pa
+import pandas as pd
+
+arrow_table = pq.read_table('tmp/lineitemsf1.snappy.parquet')
+
+# Converts an Arrow table to a Dataframe
+lineitem = arrow_table.to_pandas()
+
+for run in range(args.nruns):
+    start = time.time()
+
+    # We must exclude one of the columns of the NYC dataset due to an unimplemented cast in Arrow.
+    working_columns = [
+        "vendor_id",
+        "pickup_at",
+        "dropoff_at",
+        "passenger_count",
+        "trip_distance",
+        "pickup_longitude",
+        "pickup_latitude",
+        "store_and_fwd_flag",
+        "dropoff_longitude",
+        "dropoff_latitude",
+        "payment_type",
+        "fare_amount",
+        "extra",
+        "mta_tax",
+        "tip_amount",
+        "tolls_amount",
+        "total_amount",
+        "year",
+        "month"
+    ]
+
+    # Open dataset using year,month folder partition
+    nyc_dataset = ds.dataset('nyc-taxi/', partitioning=["year", "month"])
+    # Generate a scanner to skip problematic column
+    dataset_scanner = nyc_dataset.scanner(columns=working_columns)
+
+    # Materialize dataset to an Arrow Table
+    nyc_table = dataset_scanner.to_table()
+
+    # Generate Dataframe from Arow Table
+    nyc_df = nyc_table.to_pandas()
+
+    # Apply Filter
+    filtered_df = nyc_df[
+        (nyc_df.total_amount > 100) &
+        (nyc_df.year >2014)]
+
+    # Apply Projection
+    res = filtered_df[["total_amount", "passenger_count","year"]]
+
+    # Transform Result back to an Arrow Table
+    new_table = pa.Table.from_pandas(res)
+
+    end = time.time()
+    diff = end - start
+    duration = float(end - start)
+    write_result(f"benchmark_result", run, duration)
 
 close_result()
