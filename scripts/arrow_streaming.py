@@ -77,10 +77,6 @@ def close_result():
 import pyarrow as pa
 import pandas as pd
 
-arrow_table = pq.read_table('tmp/lineitemsf1.snappy.parquet')
-
-# Converts an Arrow table to a Dataframe
-lineitem = arrow_table.to_pandas()
 
 for run in range(args.nruns):
     start = time.time()
