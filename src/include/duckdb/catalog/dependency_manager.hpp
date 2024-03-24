@@ -21,7 +21,6 @@
 namespace duckdb {
 class DuckCatalog;
 class ClientContext;
-class DependencyList;
 class DependencyEntry;
 class LogicalDependencyList;
 
