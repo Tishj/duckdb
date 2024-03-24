@@ -11,6 +11,7 @@ MacroCatalogEntry::MacroCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schem
       function(std::move(info.function)) {
 	this->temporary = info.temporary;
 	this->internal = info.internal;
+	this->dependencies = info.dependencies;
 	this->comment = info.comment;
 }
 

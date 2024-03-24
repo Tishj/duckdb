@@ -41,6 +41,7 @@ unique_ptr<CreateInfo> ViewCatalogEntry::GetInfo() const {
 	result->types = types;
 	result->dependencies = dependencies;
 	result->temporary = temporary;
+	result->dependencies = dependencies;
 	result->comment = comment;
 	result->column_comments = column_comments;
 	return std::move(result);
