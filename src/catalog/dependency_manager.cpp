@@ -399,63 +399,55 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 		return;
 	}
 
-	auto info = GetLookupProperties(old_obj);
-	dependency_set_t owned_objects;
-	ScanDependents(transaction, info, [&](DependencyEntry &dep) {
+	const auto old_info = GetLookupProperties(old_obj);
+	const auto new_info = GetLookupProperties(new_obj);
+
+	vector<DependencyInfo> dependencies;
+	// Other entries that depend on us
+	ScanDependents(transaction, old_info, [&](DependencyEntry &dep) {
 		// It makes no sense to have a schema depend on anything
 		D_ASSERT(dep.EntryInfo().type != CatalogType::SCHEMA_ENTRY);
 
-		auto entry = LookupEntry(transaction, dep);
-		if (!entry) {
-			return;
+		if (dep.EntryInfo().type == CatalogType::INDEX_ENTRY) {
+			// FIXME: this is only done because the table name is baked into the SQL of the Index Entry
+			// If we update that then there is no reason this has to throw an exception.
+
+			// conflict: attempting to alter this object but the dependent object still exists
+			// no cascade and there are objects that depend on this object: throw error
+			throw DependencyException("Cannot alter entry \"%s\" because there are entries that "
+			                          "depend on it.",
+			                          old_obj.name);
 		}
-		// conflict: attempting to alter this object but the dependent object still exists
-		// no cascade and there are objects that depend on this object: throw error
-		throw DependencyException("Cannot alter entry \"%s\" because there are entries that "
-		                          "depend on it.",
-		                          old_obj.name);
+
+		auto dep_info = DependencyInfo::FromDependent(dep);
+		dep_info.subject.entry = new_info;
+		dependencies.emplace_back(dep_info);
 	});
 
 	// Keep old dependencies
 	dependency_set_t dependents;
-	ScanSubjects(transaction, info, [&](DependencyEntry &dep) {
+	ScanSubjects(transaction, old_info, [&](DependencyEntry &dep) {
 		auto entry = LookupEntry(transaction, dep);
 		if (!entry) {
 			return;
 		}
-		if (dep.Subject().flags.IsOwnership()) {
-			owned_objects.insert(Dependency(*entry, dep.Dependent().flags));
-			return;
-		}
-		dependents.insert(Dependency(*entry, dep.Dependent().flags));
+
+		auto dep_info = DependencyInfo::FromSubject(dep);
+		dep_info.dependent.entry = new_info;
+		dependencies.emplace_back(dep_info);
 	});
 
 	// FIXME: we should update dependencies in the future
 	// some alters could cause dependencies to change (imagine types of table columns)
 	// or DEFAULT depending on a sequence
-	if (StringUtil::CIEquals(old_obj.name, new_obj.name)) {
-		// The name was not changed, we do not need to recreate the dependency links
-		return;
-	}
-	CleanupDependencies(transaction, old_obj);
-
-	for (auto &dep : dependents) {
-		auto &other = dep.entry.get();
-		DependencyInfo info {/*dependent = */ DependencyDependent {GetLookupProperties(new_obj), dep.flags},
-		                     /*subject = */ DependencySubject {GetLookupProperties(other), DependencySubjectFlags()}};
-		CreateDependency(transaction, info);
+	if (!StringUtil::CIEquals(old_obj.name, new_obj.name)) {
+		// The name has been changed, we need to recreate the dependency links
+		CleanupDependencies(transaction, old_obj);
 	}
 
-	// For all the objects we own, re establish the dependency of the owner on the object
-	for (auto &object : owned_objects) {
-		auto &entry = object.entry.get();
-		{
-			DependencyInfo info {
-			    /*dependent = */ DependencyDependent {GetLookupProperties(new_obj),
-			                                          DependencyDependentFlags().SetOwnedBy()},
-			    /*subject = */ DependencySubject {GetLookupProperties(entry), DependencySubjectFlags().SetOwnership()}};
-			CreateDependency(transaction, info);
-		}
+	// Reinstate the old dependencies
+	for (auto &dep : dependencies) {
+		CreateDependency(transaction, dep);
 	}
 }
 
