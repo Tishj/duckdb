@@ -11,6 +11,10 @@ void DependencyList::AddDependency(CatalogEntry &entry) {
 	set.insert(entry);
 }
 
+bool DependencyList::Contains(CatalogEntry &entry_p) {
+	return set.count(entry_p);
+}
+
 void DependencyList::VerifyDependencies(Catalog &catalog, const string &name) {
 	for (auto &dep_entry : set) {
 		auto &dep = dep_entry.get();

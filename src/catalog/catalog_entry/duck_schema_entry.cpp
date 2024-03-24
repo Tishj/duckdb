@@ -36,13 +36,11 @@
 
 namespace duckdb {
 
-void FindForeignKeyInformation(CatalogEntry &entry, AlterForeignKeyType alter_fk_type,
+void FindForeignKeyInformation(TableCatalogEntry &table, AlterForeignKeyType alter_fk_type,
                                vector<unique_ptr<AlterForeignKeyInfo>> &fk_arrays) {
-	if (entry.type != CatalogType::TABLE_ENTRY) {
-		return;
-	}
-	auto &table_entry = entry.Cast<TableCatalogEntry>();
-	auto &constraints = table_entry.GetConstraints();
+	auto &constraints = table.GetConstraints();
+	auto &catalog = table.ParentCatalog();
+	auto &name = table.name;
 	for (idx_t i = 0; i < constraints.size(); i++) {
 		auto &cond = constraints[i];
 		if (cond->type != ConstraintType::FOREIGN_KEY) {
@@ -50,9 +48,9 @@ void FindForeignKeyInformation(CatalogEntry &entry, AlterForeignKeyType alter_fk
 		}
 		auto &fk = cond->Cast<ForeignKeyConstraint>();
 		if (fk.info.type == ForeignKeyType::FK_TYPE_FOREIGN_KEY_TABLE) {
-			AlterEntryData alter_data(entry.ParentCatalog().GetName(), fk.info.schema, fk.info.table,
+			AlterEntryData alter_data(catalog.GetName(), fk.info.schema, fk.info.table,
 			                          OnEntryNotFound::THROW_EXCEPTION);
-			fk_arrays.push_back(make_uniq<AlterForeignKeyInfo>(std::move(alter_data), entry.name, fk.pk_columns,
+			fk_arrays.push_back(make_uniq<AlterForeignKeyInfo>(std::move(alter_data), name, fk.pk_columns,
 			                                                   fk.fk_columns, fk.info.pk_keys, fk.info.fk_keys,
 			                                                   alter_fk_type));
 		} else if (fk.info.type == ForeignKeyType::FK_TYPE_PRIMARY_KEY_TABLE &&
@@ -94,6 +92,9 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::AddEntryInternal(CatalogTransaction 
 		// CREATE OR REPLACE: first try to drop the entry
 		auto old_entry = set.GetEntry(transaction, entry_name);
 		if (old_entry) {
+			if (dependencies.Contains(*old_entry)) {
+				throw CatalogException("CREATE OR REPLACE is not allowed to depend on itself");
+			}
 			if (old_entry->type != entry_type) {
 				throw CatalogException("Existing object %s is of type %s, trying to replace with type %s", entry_name,
 				                       CatalogTypeToString(old_entry->type), CatalogTypeToString(entry_type));
@@ -101,6 +102,7 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::AddEntryInternal(CatalogTransaction 
 			(void)set.DropEntry(transaction, entry_name, false, entry->internal);
 		}
 	}
+
 	// now try to add the entry
 	if (!set.CreateEntry(transaction, entry_name, std::move(entry), dependencies)) {
 		// entry already exists!
@@ -118,14 +120,9 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::CreateTable(CatalogTransaction trans
 	auto &storage = table->GetStorage();
 	storage.info->cardinality = storage.GetTotalRows();
 
-	auto entry = AddEntryInternal(transaction, std::move(table), info.Base().on_conflict, info.dependencies);
-	if (!entry) {
-		return nullptr;
-	}
-
 	// add a foreign key constraint in main key table if there is a foreign key constraint
 	vector<unique_ptr<AlterForeignKeyInfo>> fk_arrays;
-	FindForeignKeyInformation(*entry, AlterForeignKeyType::AFT_ADD, fk_arrays);
+	FindForeignKeyInformation(*table, AlterForeignKeyType::AFT_ADD, fk_arrays);
 	for (idx_t i = 0; i < fk_arrays.size(); i++) {
 		// alter primary key table
 		auto &fk_info = *fk_arrays[i];
@@ -135,6 +132,12 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::CreateTable(CatalogTransaction trans
 		auto &set = GetCatalogSet(CatalogType::TABLE_ENTRY);
 		info.dependencies.AddDependency(*set.GetEntry(transaction, fk_info.name));
 	}
+
+	auto entry = AddEntryInternal(transaction, std::move(table), info.Base().on_conflict, info.dependencies);
+	if (!entry) {
+		return nullptr;
+	}
+
 	return entry;
 }
 
@@ -289,7 +292,10 @@ void DuckSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 
 	// if there is a foreign key constraint, get that information
 	vector<unique_ptr<AlterForeignKeyInfo>> fk_arrays;
-	FindForeignKeyInformation(*existing_entry, AlterForeignKeyType::AFT_DELETE, fk_arrays);
+	if (existing_entry->type == CatalogType::TABLE_ENTRY) {
+		FindForeignKeyInformation(existing_entry->Cast<TableCatalogEntry>(), AlterForeignKeyType::AFT_DELETE,
+		                          fk_arrays);
+	}
 
 	if (!set.DropEntry(transaction, info.name, info.cascade, info.allow_drop_internal)) {
 		throw InternalException("Could not drop element because of an internal error");
