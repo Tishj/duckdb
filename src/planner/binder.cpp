@@ -252,6 +252,7 @@ unique_ptr<LogicalOperator> Binder::CreatePlan(BoundQueryNode &node) {
 
 unique_ptr<BoundTableRef> Binder::Bind(TableRef &ref) {
 	unique_ptr<BoundTableRef> result;
+	ref.BindBegin();
 	switch (ref.type) {
 	case TableReferenceType::BASE_TABLE:
 		result = Bind(ref.Cast<BaseTableRef>());
@@ -282,6 +283,7 @@ unique_ptr<BoundTableRef> Binder::Bind(TableRef &ref) {
 	default:
 		throw InternalException("Unknown table ref type");
 	}
+	ref.BindEnd();
 	result->sample = std::move(ref.sample);
 	return result;
 }
