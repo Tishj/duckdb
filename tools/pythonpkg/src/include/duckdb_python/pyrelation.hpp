@@ -26,6 +26,7 @@
 namespace duckdb {
 
 struct DuckDBPyConnection;
+class ReplacementCacheOverride;
 
 struct DuckDBPyRelation {
 public:
@@ -250,6 +251,8 @@ public:
 
 	bool ContainsColumnByName(const string &name) const;
 
+	shared_ptr<ReplacementCacheOverride> GetOverride();
+
 private:
 	string ToStringInternal(const BoxRendererConfig &config, bool invalidate_cache = false);
 	string GenerateExpressionList(const string &function_name, const string &aggregated_columns,
@@ -279,6 +282,9 @@ private:
 	vector<string> names;
 	unique_ptr<DuckDBPyResult> result;
 	std::string rendered_result;
+
+	//! The state of the replacement cache at the time of creation
+	shared_ptr<ReplacementCacheOverride> replacement_cache;
 };
 
 } // namespace duckdb

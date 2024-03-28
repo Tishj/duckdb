@@ -125,7 +125,6 @@ class TestRAPIQuery(object):
         duckdb_cursor.execute(f"SET max_expression_depth TO {depth_limit}")
         rel = duckdb_cursor.sql('select 42 a, 21 b')
         rel = duckdb_cursor.sql('select a+a a, b+b b from rel')
-        with pytest.raises(duckdb.BinderException, match=f'Max expression depth limit of {depth_limit} exceeded'):
-            other_rel = duckdb_cursor.sql('select a from rel')
-            res = other_rel.fetchall()
-            print(res)
+        rel = duckdb_cursor.sql('select a from rel')
+        res = rel.fetchall()
+        assert res == [(84,)]

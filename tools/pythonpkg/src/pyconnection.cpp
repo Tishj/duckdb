@@ -991,6 +991,10 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &quer
 	if (alias.empty()) {
 		alias = "unnamed_relation_" + StringUtil::GenerateRandomName(16);
 	}
+	auto &state = PythonContextState::GetState(*connection->context);
+	// Clear the replacement scan cache at the start of every "sql|query|from_query"
+	// the replacement scans are cached inside the created DuckDBPyRelation object afterwards
+	state.cache.Evict();
 
 	auto statements = GetStatements(query);
 	if (statements.size() == 1 && statements[0]->type == StatementType::SELECT_STATEMENT && py::none().is(params)) {

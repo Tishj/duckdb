@@ -15,9 +15,9 @@
 
 namespace duckdb {
 
-PythonSubqueryRef::PythonSubqueryRef(unique_ptr<SelectStatement> subquery, string name, PythonContextState &state,
-                                     shared_ptr<DuckDBPyRelation> relation, string alias)
-    : SubqueryRef(std::move(subquery), alias), state(state), name(name), relation(std::move(relation)) {
+PythonSubqueryRef::PythonSubqueryRef(unique_ptr<SelectStatement> subquery, PythonContextState &state,
+                                     shared_ptr<ReplacementCacheOverride> replacement, string alias)
+    : SubqueryRef(std::move(subquery), alias), state(state), replacement(std::move(replacement)) {
 }
 
 PythonSubqueryRef::~PythonSubqueryRef() {
@@ -25,12 +25,21 @@ PythonSubqueryRef::~PythonSubqueryRef() {
 
 void PythonSubqueryRef::BindBegin() {
 	auto &cache = state.cache;
-	// Make it so the next call to PythonReplacementScan::Replace for "name" finds this object
-	// cache.AddOverride(name, std::move(replacement));
+	cache.AddOverride(replacement);
 }
 
 void PythonSubqueryRef::BindEnd() {
 	auto &cache = state.cache;
+	cache.RemoveOverride(replacement);
+}
+
+unique_ptr<TableRef> PythonSubqueryRef::Copy() {
+	auto copy = make_uniq<PythonSubqueryRef>(unique_ptr_cast<SQLStatement, SelectStatement>(subquery->Copy()), state,
+	                                         replacement, alias);
+	copy->column_name_alias = column_name_alias;
+	copy->external_dependency = external_dependency;
+	CopyProperties(*copy);
+	return std::move(copy);
 }
 
 static void CreateArrowScan(const string &name, py::object entry, TableFunctionRef &table_function,
@@ -50,7 +59,7 @@ static void CreateArrowScan(const string &name, py::object entry, TableFunctionR
 }
 
 static unique_ptr<TableRef> TryReplacement(py::dict &dict, const string &name, ClientProperties &client_properties,
-                                           py::object &current_frame) {
+                                           py::object &current_frame, PythonContextState &state) {
 	auto table_name = py::str(name);
 	if (!dict.contains(table_name)) {
 		// not present in the globals
@@ -83,7 +92,10 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, const string &name, C
 		auto select = make_uniq<SelectStatement>();
 		select->node = pyrel->GetRel().GetQueryNode();
 
-		auto subquery = make_uniq<SubqueryRef>(std::move(select));
+		auto subquery = make_uniq<PythonSubqueryRef>(std::move(select), state, pyrel->GetOverride());
+		auto dependency = make_shared<PythonDependencies>(name);
+		dependency->AddObject("relation", entry);
+		subquery->external_dependency = std::move(dependency);
 		return std::move(subquery);
 	} else if (PolarsDataFrame::IsDataFrame(entry)) {
 		auto arrow_dataset = entry.attr("to_arrow")();
@@ -143,7 +155,8 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, const string &name, C
 	return std::move(table_function);
 }
 
-static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string &table_name) {
+static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string &table_name,
+                                            PythonContextState &state) {
 	py::gil_scoped_acquire acquire;
 	// Here we do an exhaustive search on the frame lineage
 	auto current_frame = py::module::import("inspect").attr("currentframe")();
@@ -152,7 +165,7 @@ static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string
 		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
 		// search local dictionary
 		if (local_dict) {
-			auto result = TryReplacement(local_dict, table_name, client_properties, current_frame);
+			auto result = TryReplacement(local_dict, table_name, client_properties, current_frame, state);
 			if (result) {
 				return result;
 			}
@@ -160,7 +173,7 @@ static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string
 		// search global dictionary
 		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
 		if (global_dict) {
-			auto result = TryReplacement(global_dict, table_name, client_properties, current_frame);
+			auto result = TryReplacement(global_dict, table_name, client_properties, current_frame, state);
 			if (result) {
 				return result;
 			}
@@ -171,22 +184,29 @@ static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string
 	return nullptr;
 }
 
-static PythonContextState &GetContextState(ClientContext &context) {
-	D_ASSERT(context.registered_state.count("python_state"));
-	return dynamic_cast<PythonContextState &>(*context.registered_state.at("python_state"));
-}
-
 unique_ptr<TableRef> PythonReplacementScan::Replace(ClientContext &context, const string &table_name,
                                                     ReplacementScanData *data) {
-	auto &state = GetContextState(context);
+	auto &state = PythonContextState::GetState(context);
 	auto &cache = state.cache;
+
+	if (!cache.overrides.empty()) {
+		auto &top = cache.overrides.top();
+		auto result = top->Lookup(table_name);
+		if (result) {
+			return std::move(result);
+		}
+		// An override is present, that means this should only use cache
+		// Failing to find the entry is unexpected, and might even be an internal exception
+		throw BinderException("Could not find a suitable replacement for %s", table_name);
+	}
+
 	// Check to see if this lookup is cached
 	auto result = cache.Lookup(table_name);
 	if (result) {
 		return std::move(result);
 	}
 	// Do the actual replacement scan
-	result = ReplaceInternal(context, table_name);
+	result = ReplaceInternal(context, table_name, state);
 	if (!result) {
 		return nullptr;
 	}

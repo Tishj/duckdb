@@ -28,8 +28,7 @@ public:
 
 	// if the function takes a subquery as argument its in here
 	unique_ptr<SelectStatement> subquery;
-
-	// External dependencies of this table function
+	// External dependencies of this tableref
 	shared_ptr<ExternalDependency> external_dependency;
 
 public:

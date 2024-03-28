@@ -10,6 +10,7 @@
 
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref.hpp"
+#include "duckdb/main/external_dependencies.hpp"
 
 namespace duckdb {
 //! Represents a subquery
@@ -27,6 +28,8 @@ public:
 	unique_ptr<SelectStatement> subquery;
 	//! Aliases for the column names
 	vector<string> column_name_alias;
+	// External dependencies of this subquery
+	shared_ptr<ExternalDependency> external_dependency;
 
 public:
 	string ToString() const override;

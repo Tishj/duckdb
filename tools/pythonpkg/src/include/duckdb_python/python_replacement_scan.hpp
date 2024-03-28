@@ -12,18 +12,18 @@ class DuckDBPyRelation;
 
 class PythonSubqueryRef : public SubqueryRef {
 public:
-	PythonSubqueryRef(unique_ptr<SelectStatement> subquery, string name, PythonContextState &state,
-	                  shared_ptr<DuckDBPyRelation> relation, string alias = string());
+	PythonSubqueryRef(unique_ptr<SelectStatement> subquery, PythonContextState &state,
+	                  shared_ptr<ReplacementCacheOverride> replacement, string alias = string());
 	~PythonSubqueryRef() override;
 
 public:
 	void BindBegin() override;
 	void BindEnd() override;
+	unique_ptr<TableRef> Copy() override;
 
 public:
 	PythonContextState &state;
-	string name;
-	shared_ptr<DuckDBPyRelation> relation;
+	shared_ptr<ReplacementCacheOverride> replacement;
 };
 
 struct PythonReplacementScan {

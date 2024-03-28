@@ -12,7 +12,7 @@ namespace duckdb {
 class PythonDependencies : public ExternalDependency {
 public:
 	explicit PythonDependencies(string name = string())
-	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY) {
+	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY), name(name) {
 	}
 	~PythonDependencies() override;
 
