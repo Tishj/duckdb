@@ -231,6 +231,24 @@ class TestResolveObjectColumns(object):
         pandas.testing.assert_frame_equal(df1, df)
 
     @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
+    def test_nested_map(self, pandas, duckdb_cursor):
+        df = pandas.DataFrame(data={'col1': [{'a': {'b': {'x': 'A', 'y': 'B'}}}, {'c': {'b': {'x': 'A'}}}]})
+
+        rel = duckdb_cursor.sql("select * from df")
+        expected_rel = duckdb_cursor.sql(
+            """
+            select x::map(varchar, struct(b map(varchar, varchar))) col1 from (VALUES
+                ('{a={b: {x=A, y=B}}}'),
+                ('{c={b: {x=A}}}')
+            ) t(x)
+        """
+        )
+
+        res = str(rel)
+        expected_res = str(expected_rel)
+        assert res == expected_res
+
+    @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
     def test_map_value_upgrade(self, pandas, duckdb_cursor):
         x = pandas.DataFrame(
             [
@@ -350,9 +368,9 @@ class TestResolveObjectColumns(object):
     @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
     def test_list_value_upgrade(self, pandas, duckdb_cursor):
         x = pandas.DataFrame([{'0': [['5'], [34], [-245]]}])
-        duckdb_col = duckdb_cursor.sql("select [['5'], ['34'], ['-245']] as '0'").df()
+        duckdb_rel = duckdb_cursor.sql("select [['5'], ['34'], ['-245']] as '0'")
+        duckdb_col = duckdb_rel.df()
         converted_col = duckdb_cursor.sql("select * from x").df()
-        duckdb_cursor.sql("drop view if exists tbl")
         pandas.testing.assert_frame_equal(duckdb_col, converted_col)
 
     @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])

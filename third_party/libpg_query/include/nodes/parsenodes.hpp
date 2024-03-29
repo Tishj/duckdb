@@ -51,6 +51,13 @@ typedef enum PGSortByDir {
 	SORTBY_USING /* not allowed in CREATE INDEX ... */
 } PGSortByDir;
 
+/* PGFuncCall options RESPECT/IGNORE NULLS */
+typedef enum PGIgnoreNulls {
+	PG_DEFAULT_NULLS,
+	PG_RESPECT_NULLS,
+	PG_IGNORE_NULLS
+} PGIgnoreNulls;
+
 typedef enum PGSortByNulls { PG_SORTBY_NULLS_DEFAULT, PG_SORTBY_NULLS_FIRST, PG_SORTBY_NULLS_LAST } PGSortByNulls;
 
 /*****************************************************************************
@@ -292,7 +299,7 @@ typedef struct PGFuncCall {
 	bool agg_within_group;    /* ORDER BY appeared in WITHIN GROUP */
 	bool agg_star;            /* argument was really '*' */
 	bool agg_distinct;        /* arguments were labeled DISTINCT */
-	bool agg_ignore_nulls;    /* arguments were labeled IGNORE NULLS */
+	PGIgnoreNulls agg_ignore_nulls; /* arguments were labeled IGNORE NULLS */
 	bool func_variadic;       /* last argument was labeled VARIADIC */
 	struct PGWindowDef *over; /* OVER clause, if any */
 	int location;             /* token location, or -1 if unknown */
@@ -1205,6 +1212,7 @@ typedef struct PGPivotExpr {
 	PGList *groups;      /* The set of groups to pivot over (if any) */
 	PGAlias *alias;      /* table alias & optional column aliases */
 	bool include_nulls;  /* Whether or not to include NULL values (UNPIVOT only */
+	int location;        /* token location, or -1 if unknown */
 } PGPivotExpr;
 
 typedef struct PGPivotStmt {
@@ -1214,6 +1222,7 @@ typedef struct PGPivotStmt {
 	PGList *unpivots;    /* The names to unpivot over (UNPIVOT only) */
 	PGList *columns;     /* The set of columns to pivot over */
 	PGList *groups;      /* The set of groups to pivot over (if any) */
+	int location;        /* token location, or -1 if unknown */
 } PGPivotStmt;
 
 /* ----------------------

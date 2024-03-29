@@ -8,7 +8,8 @@
 #include "test_helpers.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/execution/operator/csv_scanner/scanner/string_value_scanner.hpp"
+#include "duckdb/execution/operator/csv_scanner/string_value_scanner.hpp"
+#include "duckdb/common/case_insensitive_map.hpp"
 
 #include "pid.hpp"
 #include "duckdb/function/table/read_csv.hpp"
@@ -23,6 +24,7 @@ namespace duckdb {
 static string custom_test_directory;
 static int debug_initialize_value = -1;
 static bool single_threaded = false;
+static case_insensitive_set_t required_requires;
 
 bool NO_FAIL(QueryResult &result) {
 	if (result.HasError()) {
@@ -89,6 +91,14 @@ void SetSingleThreaded() {
 	single_threaded = true;
 }
 
+void AddRequire(string require) {
+	required_requires.insert(require);
+}
+
+bool IsRequired(string require) {
+	return required_requires.count(require);
+}
+
 string GetTestDirectory() {
 	if (custom_test_directory.empty()) {
 		return TESTING_DIRECTORY_NAME;
@@ -136,6 +146,11 @@ unique_ptr<DBConfig> GetTestConfig() {
 	result->options.checkpoint_wal_size = 0;
 #else
 	result->options.checkpoint_on_shutdown = false;
+#endif
+#ifdef DUCKDB_RUN_SLOW_VERIFIERS
+	// This mode isn't slow, but we want test coverage both when it's enabled
+	// and when it's not, so we enable only when DUCKDB_RUN_SLOW_VERIFIERS is set.
+	result->options.trim_free_blocks = true;
 #endif
 	result->options.allow_unsigned_extensions = true;
 	if (single_threaded) {

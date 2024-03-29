@@ -65,7 +65,7 @@ public:
 	                       vector<LogicalType> types, vector<string> names, ClientProperties client_properties);
 	//! Creates an unsuccessful query result with error condition
 	DUCKDB_API QueryResult(QueryResultType type, ErrorData error);
-	DUCKDB_API virtual ~QueryResult() override;
+	DUCKDB_API ~QueryResult() override;
 
 	//! Properties from the client context
 	ClientProperties client_properties;
@@ -88,6 +88,10 @@ public:
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+
+public:
+	//! Deduplicate column names for interop with external libraries
+	static void DeduplicateColumns(vector<string> &names);
 
 public:
 	//! Returns the name of the column for the given index
@@ -186,10 +190,10 @@ private:
 	};
 
 public:
-	QueryResultIterator begin() {
+	QueryResultIterator begin() { // NOLINT: match stl API
 		return QueryResultIterator(this);
 	}
-	QueryResultIterator end() {
+	QueryResultIterator end() { // NOLINT: match stl API
 		return QueryResultIterator(nullptr);
 	}
 

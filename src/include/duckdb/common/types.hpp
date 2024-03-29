@@ -24,7 +24,7 @@ class TypeCatalogEntry;
 class Vector;
 class ClientContext;
 
-struct string_t;
+struct string_t; // NOLINT: mimic std casing
 
 template <class T>
 using child_list_t = vector<std::pair<std::string, T>>;
@@ -32,12 +32,12 @@ using child_list_t = vector<std::pair<std::string, T>>;
 template <class T>
 using buffer_ptr = shared_ptr<T>;
 
-template <class T, typename... Args>
-buffer_ptr<T> make_buffer(Args &&...args) {
-	return make_shared<T>(std::forward<Args>(args)...);
+template <class T, typename... ARGS>
+buffer_ptr<T> make_buffer(ARGS &&...args) { // NOLINT: mimic std casing
+	return make_shared<T>(std::forward<ARGS>(args)...);
 }
 
-struct list_entry_t {
+struct list_entry_t { // NOLINT: mimic std casing
 	list_entry_t() = default;
 	list_entry_t(uint64_t offset, uint64_t length) : offset(offset), length(length) {
 	}
@@ -234,7 +234,7 @@ enum class LogicalTypeId : uint8_t {
 
 struct ExtraTypeInfo;
 
-struct aggregate_state_t;
+struct aggregate_state_t; // NOLINT: mimic std casing
 
 struct LogicalType {
 	DUCKDB_API LogicalType();
@@ -245,7 +245,7 @@ struct LogicalType {
 
 	DUCKDB_API ~LogicalType();
 
-	inline LogicalTypeId id() const {
+	inline LogicalTypeId id() const { // NOLINT: mimic std casing
 		return id_;
 	}
 	inline PhysicalType InternalType() const {
@@ -279,6 +279,9 @@ struct LogicalType {
 
 	// copy assignment
 	inline LogicalType &operator=(const LogicalType &other) {
+		if (this == &other) {
+			return *this;
+		}
 		id_ = other.id_;
 		physical_type_ = other.physical_type_;
 		type_info_ = other.type_info_;
@@ -332,10 +335,14 @@ struct LogicalType {
 
 	DUCKDB_API bool IsValid() const;
 
+	template<class F>
+	bool Contains(F &&predicate) const;
+	bool Contains(LogicalTypeId type_id) const;
+
 private:
-	LogicalTypeId id_;
-	PhysicalType physical_type_;
-	shared_ptr<ExtraTypeInfo> type_info_;
+	LogicalTypeId id_; // NOLINT: allow this naming for legacy reasons
+	PhysicalType physical_type_; // NOLINT: allow this naming for legacy reasons
+	shared_ptr<ExtraTypeInfo> type_info_; // NOLINT: allow this naming for legacy reasons
 
 private:
 	PhysicalType GetInternalType();
@@ -378,7 +385,7 @@ public:
 	static constexpr const LogicalTypeId ROW_TYPE = LogicalTypeId::BIGINT;
 
 	// explicitly allowing these functions to be capitalized to be in-line with the remaining functions
-	DUCKDB_API static LogicalType DECIMAL(int width, int scale);                 // NOLINT
+	DUCKDB_API static LogicalType DECIMAL(uint8_t width, uint8_t scale);                 // NOLINT
 	DUCKDB_API static LogicalType VARCHAR_COLLATION(string collation);           // NOLINT
 	DUCKDB_API static LogicalType LIST(const LogicalType &child);                // NOLINT
 	DUCKDB_API static LogicalType STRUCT(child_list_t<LogicalType> children);    // NOLINT
@@ -470,6 +477,8 @@ struct ArrayType {
 	DUCKDB_API static idx_t GetSize(const LogicalType &type);
 	DUCKDB_API static bool IsAnySize(const LogicalType &type);
 	DUCKDB_API static constexpr idx_t MAX_ARRAY_SIZE = 100000; // 100k for now
+	//! Recursively replace all ARRAY types to LIST types within the given type
+	DUCKDB_API static LogicalType ConvertToList(const LogicalType &type);
 };
 
 struct AggregateStateType {
@@ -514,6 +523,7 @@ bool ApproxEqual(double l, double r);
 struct aggregate_state_t {
 	aggregate_state_t() {
 	}
+	// NOLINTNEXTLINE: work around bug in clang-tidy
 	aggregate_state_t(string function_name_p, LogicalType return_type_p, vector<LogicalType> bound_argument_types_p)
 	    : function_name(std::move(function_name_p)), return_type(std::move(return_type_p)),
 	      bound_argument_types(std::move(bound_argument_types_p)) {
@@ -523,5 +533,38 @@ struct aggregate_state_t {
 	LogicalType return_type;
 	vector<LogicalType> bound_argument_types;
 };
+
+template<class F>
+bool LogicalType::Contains(F &&predicate) const {
+	if(predicate(*this)) {
+		return true;
+	}
+	switch(id()) {
+	case LogicalTypeId::STRUCT: {
+		for(const auto &child : StructType::GetChildTypes(*this)) {
+			if(child.second.Contains(predicate)) {
+				return true;
+			}
+		}
+		}
+		break;
+	case LogicalTypeId::LIST:
+		return ListType::GetChildType(*this).Contains(predicate);
+	case LogicalTypeId::MAP:
+		return MapType::KeyType(*this).Contains(predicate) || MapType::ValueType(*this).Contains(predicate);
+	case LogicalTypeId::UNION:
+		for(const auto &child : UnionType::CopyMemberTypes(*this)) {
+			if(child.second.Contains(predicate)) {
+				return true;
+			}
+		}
+		break;
+	case LogicalTypeId::ARRAY:
+		return ArrayType::GetChildType(*this).Contains(predicate);
+	default:
+		return false;
+	}
+	return false;
+}
 
 } // namespace duckdb

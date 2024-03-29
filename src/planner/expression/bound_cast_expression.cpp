@@ -40,7 +40,9 @@ unique_ptr<Expression> AddCastExpressionInternal(unique_ptr<Expression> expr, co
 			return expr;
 		}
 	}
-	return make_uniq<BoundCastExpression>(std::move(expr), target_type, std::move(bound_cast), try_cast);
+	auto result = make_uniq<BoundCastExpression>(std::move(expr), target_type, std::move(bound_cast), try_cast);
+	result->query_location = result->child->query_location;
+	return std::move(result);
 }
 
 unique_ptr<Expression> AddCastToTypeInternal(unique_ptr<Expression> expr, const LogicalType &target_type,
@@ -93,6 +95,7 @@ unique_ptr<Expression> BoundCastExpression::AddDefaultCastToType(unique_ptr<Expr
                                                                  const LogicalType &target_type, bool try_cast) {
 	CastFunctionSet default_set;
 	GetCastFunctionInput get_input;
+	get_input.query_location = expr->query_location;
 	return AddCastToTypeInternal(std::move(expr), target_type, default_set, get_input, try_cast);
 }
 
@@ -100,6 +103,7 @@ unique_ptr<Expression> BoundCastExpression::AddCastToType(ClientContext &context
                                                           const LogicalType &target_type, bool try_cast) {
 	auto &cast_functions = DBConfig::GetConfig(context).GetCastFunctions();
 	GetCastFunctionInput get_input(context);
+	get_input.query_location = expr->query_location;
 	return AddCastToTypeInternal(std::move(expr), target_type, cast_functions, get_input, try_cast);
 }
 
@@ -138,7 +142,12 @@ bool BoundCastExpression::CastIsInvertible(const LogicalType &source_type, const
 		}
 		return true;
 	}
-	if (source_type.id() == LogicalTypeId::TIMESTAMP || source_type.id() == LogicalTypeId::TIMESTAMP_TZ) {
+	switch (source_type.id()) {
+	case LogicalTypeId::TIMESTAMP:
+	case LogicalTypeId::TIMESTAMP_TZ:
+	case LogicalTypeId::TIMESTAMP_SEC:
+	case LogicalTypeId::TIMESTAMP_MS:
+	case LogicalTypeId::TIMESTAMP_NS:
 		switch (target_type.id()) {
 		case LogicalTypeId::DATE:
 		case LogicalTypeId::TIME:
@@ -147,8 +156,8 @@ bool BoundCastExpression::CastIsInvertible(const LogicalType &source_type, const
 		default:
 			break;
 		}
-	}
-	if (source_type.id() == LogicalTypeId::VARCHAR) {
+		break;
+	case LogicalTypeId::VARCHAR:
 		switch (target_type.id()) {
 		case LogicalTypeId::TIMESTAMP:
 		case LogicalTypeId::TIMESTAMP_NS:
@@ -159,6 +168,9 @@ bool BoundCastExpression::CastIsInvertible(const LogicalType &source_type, const
 		default:
 			return false;
 		}
+		break;
+	default:
+		break;
 	}
 	if (target_type.id() == LogicalTypeId::VARCHAR) {
 		switch (source_type.id()) {

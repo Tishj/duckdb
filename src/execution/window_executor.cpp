@@ -199,27 +199,49 @@ struct OperationCompare : public std::function<bool(T, T)> {
 
 template <typename T, typename OP, bool FROM>
 static idx_t FindTypedRangeBound(const WindowInputColumn &over, const idx_t order_begin, const idx_t order_end,
-                                 WindowInputExpression &boundary, const idx_t chunk_idx, const FrameBounds &prev) {
+                                 const WindowBoundary range, WindowInputExpression &boundary, const idx_t chunk_idx,
+                                 const FrameBounds &prev) {
 	D_ASSERT(!boundary.CellIsNull(chunk_idx));
 	const auto val = boundary.GetCell<T>(chunk_idx);
 
 	OperationCompare<T, OP> comp;
-	WindowColumnIterator<T> begin(over, order_begin);
-	WindowColumnIterator<T> end(over, order_end);
 
-	if (order_begin < prev.start && prev.start < order_end) {
-		const auto first = over.GetCell<T>(prev.start);
-		if (!comp(val, first)) {
-			//	prev.first <= val, so we can start further forward
-			begin += (prev.start - order_begin);
+	// Check that the value we are searching for is in range.
+	if (range == WindowBoundary::EXPR_PRECEDING_RANGE) {
+		//	Preceding but value past the end
+		const auto cur_val = over.GetCell<T>(order_end);
+		if (comp(cur_val, val)) {
+			throw OutOfRangeException("Invalid RANGE PRECEDING value");
+		}
+	} else {
+		//	Following but value before beginning
+		D_ASSERT(range == WindowBoundary::EXPR_FOLLOWING_RANGE);
+		const auto cur_val = over.GetCell<T>(order_begin);
+		if (comp(val, cur_val)) {
+			throw OutOfRangeException("Invalid RANGE FOLLOWING value");
 		}
 	}
-	if (order_begin <= prev.end && prev.end < order_end) {
-		const auto second = over.GetCell<T>(prev.end);
-		if (!comp(second, val)) {
-			//	val <= prev.second, so we can end further back
-			// (prev.second is the largest peer)
-			end -= (order_end - prev.end - 1);
+
+	//	Try to reuse the previous bounds to restrict the search.
+	//	This is only valid if the previous bounds were non-empty
+	//	Only inject the comparisons if the previous bounds are a strict subset.
+	WindowColumnIterator<T> begin(over, order_begin);
+	WindowColumnIterator<T> end(over, order_end);
+	if (prev.start < prev.end) {
+		if (order_begin < prev.start && prev.start < order_end) {
+			const auto first = over.GetCell<T>(prev.start);
+			if (!comp(val, first)) {
+				//	prev.first <= val, so we can start further forward
+				begin += (prev.start - order_begin);
+			}
+		}
+		if (order_begin < prev.end && prev.end < order_end) {
+			const auto second = over.GetCell<T>(prev.end - 1);
+			if (!comp(second, val)) {
+				//	val <= prev.second, so we can end further back
+				// (prev.second is the largest peer)
+				end -= (order_end - prev.end - 1);
+			}
 		}
 	}
 
@@ -232,37 +254,40 @@ static idx_t FindTypedRangeBound(const WindowInputColumn &over, const idx_t orde
 
 template <typename OP, bool FROM>
 static idx_t FindRangeBound(const WindowInputColumn &over, const idx_t order_begin, const idx_t order_end,
-                            WindowInputExpression &boundary, const idx_t chunk_idx, const FrameBounds &prev) {
+                            const WindowBoundary range, WindowInputExpression &boundary, const idx_t chunk_idx,
+                            const FrameBounds &prev) {
 	D_ASSERT(boundary.chunk.ColumnCount() == 1);
 	D_ASSERT(boundary.chunk.data[0].GetType().InternalType() == over.input_expr.ptype);
 
 	switch (over.input_expr.ptype) {
 	case PhysicalType::INT8:
-		return FindTypedRangeBound<int8_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<int8_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::INT16:
-		return FindTypedRangeBound<int16_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<int16_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::INT32:
-		return FindTypedRangeBound<int32_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<int32_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::INT64:
-		return FindTypedRangeBound<int64_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<int64_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::UINT8:
-		return FindTypedRangeBound<uint8_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<uint8_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::UINT16:
-		return FindTypedRangeBound<uint16_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<uint16_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::UINT32:
-		return FindTypedRangeBound<uint32_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<uint32_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::UINT64:
-		return FindTypedRangeBound<uint64_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<uint64_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::INT128:
-		return FindTypedRangeBound<hugeint_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<hugeint_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::UINT128:
-		return FindTypedRangeBound<uhugeint_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<uhugeint_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx,
+		                                                 prev);
 	case PhysicalType::FLOAT:
-		return FindTypedRangeBound<float, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<float, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::DOUBLE:
-		return FindTypedRangeBound<double, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<double, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case PhysicalType::INTERVAL:
-		return FindTypedRangeBound<interval_t, OP, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindTypedRangeBound<interval_t, OP, FROM>(over, order_begin, order_end, range, boundary, chunk_idx,
+		                                                 prev);
 	default:
 		throw InternalException("Unsupported column type for RANGE");
 	}
@@ -270,13 +295,13 @@ static idx_t FindRangeBound(const WindowInputColumn &over, const idx_t order_beg
 
 template <bool FROM>
 static idx_t FindOrderedRangeBound(const WindowInputColumn &over, const OrderType range_sense, const idx_t order_begin,
-                                   const idx_t order_end, WindowInputExpression &boundary, const idx_t chunk_idx,
-                                   const FrameBounds &prev) {
+                                   const idx_t order_end, const WindowBoundary range, WindowInputExpression &boundary,
+                                   const idx_t chunk_idx, const FrameBounds &prev) {
 	switch (range_sense) {
 	case OrderType::ASCENDING:
-		return FindRangeBound<LessThan, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindRangeBound<LessThan, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	case OrderType::DESCENDING:
-		return FindRangeBound<GreaterThan, FROM>(over, order_begin, order_end, boundary, chunk_idx, prev);
+		return FindRangeBound<GreaterThan, FROM>(over, order_begin, order_end, range, boundary, chunk_idx, prev);
 	default:
 		throw InternalException("Unsupported ORDER BY sense for RANGE");
 	}
@@ -453,7 +478,7 @@ void WindowBoundariesState::Update(const idx_t row_idx, const WindowInputColumn 
 			window_start = peer_start;
 		} else {
 			prev.start = FindOrderedRangeBound<true>(range_collection, range_sense, valid_start, row_idx,
-			                                         boundary_start, chunk_idx, prev);
+			                                         start_boundary, boundary_start, chunk_idx, prev);
 			window_start = prev.start;
 		}
 		break;
@@ -462,8 +487,8 @@ void WindowBoundariesState::Update(const idx_t row_idx, const WindowInputColumn 
 		if (boundary_start.CellIsNull(chunk_idx)) {
 			window_start = peer_start;
 		} else {
-			prev.start = FindOrderedRangeBound<true>(range_collection, range_sense, row_idx, valid_end, boundary_start,
-			                                         chunk_idx, prev);
+			prev.start = FindOrderedRangeBound<true>(range_collection, range_sense, row_idx, valid_end, start_boundary,
+			                                         boundary_start, chunk_idx, prev);
 			window_start = prev.start;
 		}
 		break;
@@ -497,8 +522,8 @@ void WindowBoundariesState::Update(const idx_t row_idx, const WindowInputColumn 
 		if (boundary_end.CellIsNull(chunk_idx)) {
 			window_end = peer_end;
 		} else {
-			prev.end = FindOrderedRangeBound<false>(range_collection, range_sense, valid_start, row_idx, boundary_end,
-			                                        chunk_idx, prev);
+			prev.end = FindOrderedRangeBound<false>(range_collection, range_sense, valid_start, row_idx, end_boundary,
+			                                        boundary_end, chunk_idx, prev);
 			window_end = prev.end;
 		}
 		break;
@@ -507,8 +532,8 @@ void WindowBoundariesState::Update(const idx_t row_idx, const WindowInputColumn 
 		if (boundary_end.CellIsNull(chunk_idx)) {
 			window_end = peer_end;
 		} else {
-			prev.end = FindOrderedRangeBound<false>(range_collection, range_sense, row_idx, valid_end, boundary_end,
-			                                        chunk_idx, prev);
+			prev.end = FindOrderedRangeBound<false>(range_collection, range_sense, row_idx, valid_end, end_boundary,
+			                                        boundary_end, chunk_idx, prev);
 			window_end = prev.end;
 		}
 		break;
@@ -940,6 +965,64 @@ void WindowAggregateExecutor::Sink(DataChunk &input_chunk, const idx_t input_idx
 	WindowExecutor::Sink(input_chunk, input_idx, total_count);
 }
 
+static void ApplyWindowStats(const WindowBoundary &boundary, FrameDelta &delta, BaseStatistics *base, bool is_start) {
+	// Avoid overflow by clamping to the frame bounds
+	auto base_stats = delta;
+
+	switch (boundary) {
+	case WindowBoundary::UNBOUNDED_PRECEDING:
+		if (is_start) {
+			delta.end = 0;
+			return;
+		}
+		break;
+	case WindowBoundary::UNBOUNDED_FOLLOWING:
+		if (!is_start) {
+			delta.begin = 0;
+			return;
+		}
+		break;
+	case WindowBoundary::CURRENT_ROW_ROWS:
+		delta.begin = delta.end = 0;
+		return;
+	case WindowBoundary::EXPR_PRECEDING_ROWS:
+		if (base && base->GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(*base)) {
+			//	Preceding so negative offset from current row
+			base_stats.begin = NumericStats::GetMin<int64_t>(*base);
+			base_stats.end = NumericStats::GetMax<int64_t>(*base);
+			if (delta.begin < base_stats.end && base_stats.end < delta.end) {
+				delta.begin = -base_stats.end;
+			}
+			if (delta.begin < base_stats.begin && base_stats.begin < delta.end) {
+				delta.end = -base_stats.begin + 1;
+			}
+		}
+		return;
+	case WindowBoundary::EXPR_FOLLOWING_ROWS:
+		if (base && base->GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(*base)) {
+			base_stats.begin = NumericStats::GetMin<int64_t>(*base);
+			base_stats.end = NumericStats::GetMax<int64_t>(*base);
+			if (base_stats.end < delta.end) {
+				delta.end = base_stats.end + 1;
+			}
+		}
+		return;
+
+	case WindowBoundary::CURRENT_ROW_RANGE:
+	case WindowBoundary::EXPR_PRECEDING_RANGE:
+	case WindowBoundary::EXPR_FOLLOWING_RANGE:
+		return;
+	default:
+		break;
+	}
+
+	if (is_start) {
+		throw InternalException("Unsupported window start boundary");
+	} else {
+		throw InternalException("Unsupported window end boundary");
+	}
+}
+
 void WindowAggregateExecutor::Finalize() {
 	D_ASSERT(aggregator);
 
@@ -951,66 +1034,12 @@ void WindowAggregateExecutor::Finalize() {
 	//	First entry is the frame start
 	stats[0] = FrameDelta(-count, count);
 	auto base = wexpr.expr_stats.empty() ? nullptr : wexpr.expr_stats[0].get();
-	switch (wexpr.start) {
-	case WindowBoundary::UNBOUNDED_PRECEDING:
-		stats[0].end = 0;
-		break;
-	case WindowBoundary::CURRENT_ROW_ROWS:
-		stats[0].begin = stats[0].end = 0;
-		break;
-	case WindowBoundary::EXPR_PRECEDING_ROWS:
-		if (base && base->GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(*base)) {
-			//	Preceding so negative offset from current row
-			stats[0].begin = -NumericStats::GetMax<int64_t>(*base);
-			stats[0].end = -NumericStats::GetMin<int64_t>(*base) + 1;
-		}
-		break;
-	case WindowBoundary::EXPR_FOLLOWING_ROWS:
-		if (base && base->GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(*base)) {
-			stats[0].begin = NumericStats::GetMin<int64_t>(*base);
-			stats[0].end = NumericStats::GetMax<int64_t>(*base) + 1;
-		}
-		break;
-
-	case WindowBoundary::CURRENT_ROW_RANGE:
-	case WindowBoundary::EXPR_PRECEDING_RANGE:
-	case WindowBoundary::EXPR_FOLLOWING_RANGE:
-		break;
-	default:
-		throw InternalException("Unsupported window start boundary");
-	}
+	ApplyWindowStats(wexpr.start, stats[0], base, true);
 
 	//	Second entry is the frame end
 	stats[1] = FrameDelta(-count, count);
 	base = wexpr.expr_stats.empty() ? nullptr : wexpr.expr_stats[1].get();
-	switch (wexpr.end) {
-	case WindowBoundary::UNBOUNDED_FOLLOWING:
-		stats[1].begin = 0;
-		break;
-	case WindowBoundary::CURRENT_ROW_ROWS:
-		stats[1].begin = stats[1].end = 0;
-		break;
-	case WindowBoundary::EXPR_PRECEDING_ROWS:
-		if (base && base->GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(*base)) {
-			//	Preceding so negative offset from current row
-			stats[1].begin = -NumericStats::GetMax<int64_t>(*base);
-			stats[1].end = -NumericStats::GetMin<int64_t>(*base) + 1;
-		}
-		break;
-	case WindowBoundary::EXPR_FOLLOWING_ROWS:
-		if (base && base->GetStatsType() == StatisticsType::NUMERIC_STATS && NumericStats::HasMinMax(*base)) {
-			stats[1].begin = NumericStats::GetMin<int64_t>(*base);
-			stats[1].end = NumericStats::GetMax<int64_t>(*base) + 1;
-		}
-		break;
-
-	case WindowBoundary::CURRENT_ROW_RANGE:
-	case WindowBoundary::EXPR_PRECEDING_RANGE:
-	case WindowBoundary::EXPR_FOLLOWING_RANGE:
-		break;
-	default:
-		throw InternalException("Unsupported window end boundary");
-	}
+	ApplyWindowStats(wexpr.end, stats[1], base, false);
 
 	aggregator->Finalize(stats);
 }
@@ -1282,6 +1311,7 @@ void WindowValueExecutor::Sink(DataChunk &input_chunk, const idx_t input_idx, co
 		if (check_nulls) {
 			const auto count = input_chunk.size();
 
+			payload_chunk.Flatten();
 			UnifiedVectorFormat vdata;
 			payload_chunk.data[0].ToUnifiedFormat(count, vdata);
 			if (!vdata.validity.AllValid()) {
