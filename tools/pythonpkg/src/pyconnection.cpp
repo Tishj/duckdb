@@ -659,7 +659,8 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterPythonObject(const st
 			                                                       make_uniq<RegisteredObject>(new_df)));
 			connection->context->external_dependencies[name] = std::move(dependencies);
 		}
-	} else if (IsAcceptedArrowObject(python_object) || IsPolarsDataframe(python_object)) {
+	} else if ((IsAcceptedArrowObject(python_object) != PyArrowObjectType::Invalid) ||
+	           IsPolarsDataframe(python_object)) {
 		py::object arrow_object;
 		if (IsPolarsDataframe(python_object)) {
 			if (PolarsDataFrame::IsDataFrame(python_object)) {
@@ -1167,7 +1168,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromArrow(py::object &arrow_obj
 	}
 	py::gil_scoped_acquire acquire;
 	string name = "arrow_object_" + StringUtil::GenerateRandomName();
-	if (!IsAcceptedArrowObject(arrow_object)) {
+	auto arrow_type = IsAcceptedArrowObject(arrow_object);
+	if (arrow_type == PyArrowObjectType::Invalid) {
 		auto py_object_type = string(py::str(arrow_object.get_type().attr("__name__")));
 		throw InvalidInputException("Python Object Type %s is not an accepted Arrow Object.", py_object_type);
 	}
@@ -1647,20 +1649,11 @@ NumpyObjectType DuckDBPyConnection::IsAcceptedNumpyObject(const py::object &obje
 	return NumpyObjectType::INVALID;
 }
 
-bool DuckDBPyConnection::IsAcceptedArrowObject(const py::object &object) {
+PyArrowObjectType DuckDBPyConnection::IsAcceptedArrowObject(const py::object &object) {
 	if (!ModuleIsLoaded<PyarrowCacheItem>()) {
-		return false;
+		return PyArrowObjectType::Invalid;
 	}
-	auto &import_cache_py = *DuckDBPyConnection::ImportCache();
-	if (py::isinstance(object, import_cache_py.pyarrow.Table()) ||
-	    py::isinstance(object, import_cache_py.pyarrow.RecordBatchReader())) {
-		return true;
-	}
-	if (!ModuleIsLoaded<PyarrowDatasetCacheItem>()) {
-		return false;
-	}
-	return (py::isinstance(object, import_cache_py.pyarrow.dataset.Dataset()) ||
-	        py::isinstance(object, import_cache_py.pyarrow.dataset.Scanner()));
+	return PythonTableArrowArrayStreamFactory::GetArrowType(object);
 }
 
 unique_lock<std::mutex> DuckDBPyConnection::AcquireConnectionLock() {
