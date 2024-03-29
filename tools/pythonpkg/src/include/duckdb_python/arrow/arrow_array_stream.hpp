@@ -54,8 +54,6 @@ enum class PyArrowObjectType { Invalid, Table, RecordBatchReader, Scanner, Datas
 
 void TransformDuckToArrowChunk(ArrowSchema &arrow_schema, ArrowArray &data, py::list &batches);
 
-PyArrowObjectType GetArrowType(const py::handle &obj);
-
 class PythonTableArrowArrayStreamFactory {
 public:
 	explicit PythonTableArrowArrayStreamFactory(PyObject *arrow_table, const ClientProperties &client_properties_p)
@@ -63,6 +61,8 @@ public:
 
 	//! Produces an Arrow Scanner, should be only called once when initializing Scan States
 	static unique_ptr<ArrowArrayStreamWrapper> Produce(uintptr_t factory, ArrowStreamParameters &parameters);
+
+	static PyArrowObjectType GetArrowType(const py::handle &obj);
 
 	//! Get the schema of the arrow object
 	static void GetSchemaInternal(py::handle arrow_object, ArrowSchemaWrapper &schema);

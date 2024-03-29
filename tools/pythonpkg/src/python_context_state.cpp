@@ -2,6 +2,18 @@
 
 namespace duckdb {
 
+RecordBatchReaderRegistry::RecordBatchReaderRegistry() {
+}
+
+void RecordBatchReaderRegistry::AddRecordBatchReader(PyObject *record_batch_reader) {
+	// FIXME: we should differentiate between replacement scanned and consumed
+	// a plan could be canceled, making it so the reader was never consumed
+	auto result = consumed.insert(record_batch_reader).second;
+	if (!result) {
+		throw InvalidInputException("Attempted to read from the same RecordBatchReader more than once!");
+	}
+}
+
 // Replacement Cache
 
 ReplacementCache::ReplacementCache() {
