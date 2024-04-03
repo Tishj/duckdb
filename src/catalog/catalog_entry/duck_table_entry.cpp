@@ -334,14 +334,14 @@ unique_ptr<CatalogEntry> DuckTableEntry::AddColumn(ClientContext &context, AddCo
 	for (auto &constraint : constraints) {
 		create_info->constraints.push_back(constraint->Copy());
 	}
-	Binder::BindLogicalType(context, info.new_column.TypeMutable(), &catalog, schema.name);
+	auto binder = Binder::CreateBinder(context);
+	binder->BindLogicalType(info.new_column.TypeMutable(), &catalog, schema.name);
 	info.new_column.SetOid(columns.LogicalColumnCount());
 	info.new_column.SetStorageOid(columns.PhysicalColumnCount());
 	auto col = info.new_column.Copy();
 
 	create_info->columns.AddColumn(std::move(col));
 
-	auto binder = Binder::CreateBinder(context);
 	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info), schema);
 	auto new_storage =
 	    make_shared<DataTable>(context, *storage, info.new_column, *bound_create_info->bound_defaults.back());
@@ -577,7 +577,8 @@ unique_ptr<CatalogEntry> DuckTableEntry::DropNotNull(ClientContext &context, Dro
 }
 
 unique_ptr<CatalogEntry> DuckTableEntry::ChangeColumnType(ClientContext &context, ChangeColumnTypeInfo &info) {
-	Binder::BindLogicalType(context, info.target_type, &catalog, schema.name);
+	auto binder = Binder::CreateBinder(context);
+	binder->BindLogicalType(info.target_type, &catalog, schema.name);
 	auto change_idx = GetColumnIndex(info.column_name);
 	auto create_info = make_uniq<CreateTableInfo>(schema, name);
 	create_info->temporary = temporary;
@@ -643,7 +644,6 @@ unique_ptr<CatalogEntry> DuckTableEntry::ChangeColumnType(ClientContext &context
 		create_info->constraints.push_back(std::move(constraint));
 	}
 
-	auto binder = Binder::CreateBinder(context);
 	// bind the specified expression
 	vector<LogicalIndex> bound_columns;
 	AlterBinder expr_binder(*binder, context, *this, bound_columns, info.target_type);
@@ -763,7 +763,7 @@ void DuckTableEntry::SetAsRoot() {
 
 void DuckTableEntry::CommitAlter(string &column_name) {
 	D_ASSERT(!column_name.empty());
-	idx_t removed_index = DConstants::INVALID_INDEX;
+	optional_idx removed_index;
 	for (auto &col : columns.Logical()) {
 		if (col.Name() == column_name) {
 			// No need to alter storage, removed column is generated column
@@ -774,8 +774,7 @@ void DuckTableEntry::CommitAlter(string &column_name) {
 			break;
 		}
 	}
-	D_ASSERT(removed_index != DConstants::INVALID_INDEX);
-	storage->CommitDropColumn(columns.LogicalToPhysical(LogicalIndex(removed_index)).index);
+	storage->CommitDropColumn(columns.LogicalToPhysical(LogicalIndex(removed_index.GetIndex())).index);
 }
 
 void DuckTableEntry::CommitDrop() {

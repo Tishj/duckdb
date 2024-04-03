@@ -255,7 +255,7 @@ void DependencyManager::CreateDependency(CatalogTransaction transaction, Depende
 }
 
 void DependencyManager::CreateDependencies(CatalogTransaction transaction, const CatalogEntry &object,
-                                           const LogicalDependencyList &dependencies) {
+                                           const LogicalDependencyList &unfiltered_dependencies) {
 	DependencyDependentFlags dependency_flags;
 	if (object.type != CatalogType::INDEX_ENTRY) {
 		// indexes do not require CASCADE to be dropped, they are simply always dropped along with the table
@@ -263,14 +263,16 @@ void DependencyManager::CreateDependencies(CatalogTransaction transaction, const
 	}
 
 	const auto object_info = GetLookupProperties(object);
+	LogicalDependencyList dependencies;
 	// check for each object in the sources if they were not deleted yet
-	for (auto &dependency : dependencies.Set()) {
+	for (auto &dependency : unfiltered_dependencies.Set()) {
 		if (dependency.catalog != object.ParentCatalog().GetName()) {
-			throw DependencyException(
-			    "Error adding dependency for object \"%s\" - dependency \"%s\" is in catalog "
-			    "\"%s\", which does not match the catalog \"%s\".\nCross catalog dependencies are not supported.",
-			    object.name, dependency.entry.name, dependency.catalog, object.ParentCatalog().GetName());
+			continue;
 		}
+		if (object_info == dependency.entry) {
+			continue;
+		}
+		dependencies.AddDependency(dependency);
 	}
 
 	// add the object to the dependents_map of each object that it depends on
@@ -408,9 +410,16 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 		// It makes no sense to have a schema depend on anything
 		D_ASSERT(dep.EntryInfo().type != CatalogType::SCHEMA_ENTRY);
 
-		throw DependencyException("Cannot alter entry \"%s\" because there are entries that "
-		                          "depend on it.",
-		                          old_obj.name);
+		if (dep.EntryInfo().type == CatalogType::INDEX_ENTRY) {
+			// FIXME: this is only done because the table name is baked into the SQL of the Index Entry
+			// If we update that then there is no reason this has to throw an exception.
+
+			// conflict: attempting to alter this object but the dependent object still exists
+			// no cascade and there are objects that depend on this object: throw error
+			throw DependencyException("Cannot alter entry \"%s\" because there are entries that "
+			                          "depend on it.",
+			                          old_obj.name);
+		}
 
 		auto dep_info = DependencyInfo::FromDependent(dep);
 		dep_info.subject.entry = new_info;
@@ -442,6 +451,101 @@ void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry
 	for (auto &dep : dependencies) {
 		CreateDependency(transaction, dep);
 	}
+}
+
+bool AllExportDependenciesWritten(const catalog_entry_vector_t &dependencies, catalog_entry_set_t &exported) {
+	for (auto &entry : dependencies) {
+		auto &dep = entry.get().Cast<DependencyEntry>();
+		// This is an entry that needs to be written before 'object' can be written
+		bool contains = false;
+		for (auto &to_check : exported) {
+			LogicalDependency a(entry);
+			LogicalDependency b(to_check);
+
+			if (a == b) {
+				contains = true;
+				break;
+			}
+			auto &flags = dep.Subject().flags;
+			if (flags.IsOwnership()) {
+				// 'object' is owned by this entry
+				// it needs to be written first
+				contains = true;
+				break;
+			}
+			continue;
+		}
+		if (!contains) {
+			return false;
+		}
+		// We do not need to check recursively, if the object is written
+		// that means that the objects it depends on have also been written
+	}
+	return true;
+}
+
+void AddDependentsToBacklog(stack<reference<CatalogEntry>> &backlog, const catalog_entry_vector_t &dependents) {
+	catalog_entry_vector_t tables;
+	for (auto &dependent : dependents) {
+		backlog.push(dependent);
+	}
+}
+
+catalog_entry_vector_t DependencyManager::GetExportOrder(CatalogTransaction &transaction) {
+	auto all_entries = catalog.GetNonSystemEntries(transaction);
+	CatalogEntryOrdering ordering;
+	auto &entries = ordering.ordered_set;
+	auto &export_order = ordering.ordered_vector;
+
+	stack<reference<CatalogEntry>> backlog;
+	for (auto &obj : all_entries) {
+		if (obj.get().type == CatalogType::SCHEMA_ENTRY) {
+			export_order.push_back(obj);
+			entries.insert(obj);
+			continue;
+		}
+		backlog.push(obj);
+	}
+
+	while (!backlog.empty()) {
+		// As long as we still have unordered entries
+		auto &object = backlog.top();
+		backlog.pop();
+		const auto info = GetLookupProperties(object);
+		auto it = std::find_if(entries.begin(), entries.end(), [&](CatalogEntry &to_check) {
+			const auto other_info = GetLookupProperties(to_check);
+			return info == other_info;
+		});
+		if (it != entries.end()) {
+			// This entry has already been written
+			continue;
+		}
+
+		catalog_entry_vector_t dependencies;
+		DependencyCatalogSet subjects_map(Subjects(), info);
+		subjects_map.Scan(transaction, [&dependencies](CatalogEntry &entry) { dependencies.push_back(entry); });
+
+		bool is_ordered = AllExportDependenciesWritten(dependencies, entries);
+		if (!is_ordered) {
+			for (auto &dependency : dependencies) {
+				backlog.emplace(dependency);
+			}
+			continue;
+		}
+
+		// All dependencies written, we can write this now
+		auto insert_result = entries.insert(object);
+		(void)insert_result;
+		D_ASSERT(insert_result.second);
+		auto entry = LookupEntry(transaction, object);
+		export_order.push_back(*entry);
+		catalog_entry_vector_t dependents;
+		DependencyCatalogSet dependents_map(Dependents(), info);
+		dependents_map.Scan(transaction, [&dependents](CatalogEntry &entry) { dependents.push_back(entry); });
+		AddDependentsToBacklog(backlog, dependents);
+	}
+
+	return std::move(ordering.ordered_vector);
 }
 
 void DependencyManager::Scan(

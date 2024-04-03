@@ -70,6 +70,17 @@ class LogicalDelete;
 class LogicalUpdate;
 class CreateStatement;
 
+//! Return value of Catalog::LookupEntry
+struct CatalogEntryLookup {
+	optional_ptr<SchemaCatalogEntry> schema;
+	optional_ptr<CatalogEntry> entry;
+	ErrorData error;
+
+	DUCKDB_API bool Found() const {
+		return entry;
+	}
+};
+
 //! The Catalog object represents the catalog of the database.
 class Catalog {
 public:
@@ -328,6 +339,10 @@ protected:
 	AttachedDatabase &db;
 
 public:
+	//! Lookup an entry using TryLookupEntry, throws if entry not found and if_not_found == THROW_EXCEPTION
+	CatalogEntryLookup LookupEntry(ClientContext &context, CatalogType type, const string &schema, const string &name,
+	                               OnEntryNotFound if_not_found, QueryErrorContext error_context = QueryErrorContext());
+
 private:
 	//! Lookup an entry in the schema, returning a lookup with the entry and schema if they exist
 	CatalogEntryLookup TryLookupEntryInternal(CatalogTransaction transaction, CatalogType type, const string &schema,
@@ -337,9 +352,6 @@ private:
 	CatalogEntryLookup TryLookupEntry(ClientContext &context, CatalogType type, const string &schema,
 	                                  const string &name, OnEntryNotFound if_not_found,
 	                                  QueryErrorContext error_context = QueryErrorContext());
-	//! Lookup an entry using TryLookupEntry, throws if entry not found and if_not_found == THROW_EXCEPTION
-	CatalogEntryLookup LookupEntry(ClientContext &context, CatalogType type, const string &schema, const string &name,
-	                               OnEntryNotFound if_not_found, QueryErrorContext error_context = QueryErrorContext());
 	static CatalogEntryLookup TryLookupEntry(ClientContext &context, vector<CatalogLookup> &lookups, CatalogType type,
 	                                         const string &name, OnEntryNotFound if_not_found,
 	                                         QueryErrorContext error_context = QueryErrorContext());

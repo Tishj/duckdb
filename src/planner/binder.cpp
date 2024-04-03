@@ -50,9 +50,10 @@ shared_ptr<Binder> Binder::CreateBinder(ClientContext &context, optional_ptr<Bin
 }
 
 Binder::Binder(bool, ClientContext &context, shared_ptr<Binder> parent_p, bool inherit_ctes_p)
-    : context(context), bind_context(*this), parent(std::move(parent_p)), bound_tables(0),
-      inherit_ctes(inherit_ctes_p) {
+    : context(context), bind_context(*this), parent(std::move(parent_p)), bound_tables(0), inherit_ctes(inherit_ctes_p),
+      entry_retriever(context) {
 	if (parent) {
+		entry_retriever.SetCallback(parent->entry_retriever.GetCallback());
 
 		// We have to inherit macro and lambda parameter bindings and from the parent binder, if there is a parent.
 		macro_binding = parent->macro_binding;
@@ -333,17 +334,19 @@ void Binder::AddCTE(const string &name, CommonTableExpressionInfo &info) {
 	CTE_bindings.insert(make_pair(name, reference<CommonTableExpressionInfo>(info)));
 }
 
-optional_ptr<CommonTableExpressionInfo> Binder::FindCTE(const string &name, bool skip) {
+vector<reference<CommonTableExpressionInfo>> Binder::FindCTE(const string &name, bool skip) {
 	auto entry = CTE_bindings.find(name);
+	vector<reference<CommonTableExpressionInfo>> ctes;
 	if (entry != CTE_bindings.end()) {
 		if (!skip || entry->second.get().query->node->type == QueryNodeType::RECURSIVE_CTE_NODE) {
-			return &entry->second.get();
+			ctes.push_back(entry->second);
 		}
 	}
 	if (parent && inherit_ctes) {
-		return parent->FindCTE(name, name == alias);
+		auto parent_ctes = parent->FindCTE(name, name == alias);
+		ctes.insert(ctes.end(), parent_ctes.begin(), parent_ctes.end());
 	}
-	return nullptr;
+	return ctes;
 }
 
 bool Binder::CTEIsAlreadyBound(CommonTableExpressionInfo &cte) {
@@ -572,6 +575,12 @@ BoundStatement Binder::BindReturning(vector<unique_ptr<ParsedExpression>> return
 	properties.allow_stream_result = false;
 	properties.return_type = StatementReturnType::QUERY_RESULT;
 	return result;
+}
+
+optional_ptr<CatalogEntry> Binder::GetCatalogEntry(CatalogType type, const string &catalog, const string &schema,
+                                                   const string &name, OnEntryNotFound on_entry_not_found,
+                                                   QueryErrorContext &error_context) {
+	return entry_retriever.GetEntry(type, catalog, schema, name, on_entry_not_found, error_context);
 }
 
 } // namespace duckdb
