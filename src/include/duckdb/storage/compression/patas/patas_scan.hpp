@@ -17,10 +17,11 @@
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
-#include "duckdb/storage/statistics/numeric_statistics.hpp"
+
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
 #include "duckdb/common/operator/subtract.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 
 namespace duckdb {
 
@@ -86,7 +87,7 @@ private:
 template <class T>
 struct PatasScanState : public SegmentScanState {
 public:
-	using EXACT_TYPE = typename FloatingToExact<T>::type;
+	using EXACT_TYPE = typename FloatingToExact<T>::TYPE;
 
 	explicit PatasScanState(ColumnSegment &segment) : segment(segment), count(segment.count) {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
@@ -173,7 +174,7 @@ public:
 public:
 	//! Skip the next 'skip_count' values, we don't store the values
 	void Skip(ColumnSegment &segment, idx_t skip_count) {
-		using EXACT_TYPE = typename FloatingToExact<T>::type;
+		using EXACT_TYPE = typename FloatingToExact<T>::TYPE;
 
 		if (total_value_count != 0 && !GroupFinished()) {
 			// Finish skipping the current group
@@ -199,7 +200,7 @@ public:
 
 template <class T>
 unique_ptr<SegmentScanState> PatasInitScan(ColumnSegment &segment) {
-	auto result = make_unique_base<SegmentScanState, PatasScanState<T>>(segment);
+	auto result = make_uniq_base<SegmentScanState, PatasScanState<T>>(segment);
 	return result;
 }
 
@@ -209,7 +210,7 @@ unique_ptr<SegmentScanState> PatasInitScan(ColumnSegment &segment) {
 template <class T>
 void PatasScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
                       idx_t result_offset) {
-	using EXACT_TYPE = typename FloatingToExact<T>::type;
+	using EXACT_TYPE = typename FloatingToExact<T>::TYPE;
 	auto &scan_state = (PatasScanState<T> &)*state.scan_state;
 
 	// Get the pointer to the result values

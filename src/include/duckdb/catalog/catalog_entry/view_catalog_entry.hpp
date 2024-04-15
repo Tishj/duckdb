@@ -26,7 +26,7 @@ public:
 
 public:
 	//! Create a real TableCatalogEntry and initialize storage for it
-	ViewCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schema, CreateViewInfo *info);
+	ViewCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateViewInfo &info);
 
 	//! The query of the view
 	unique_ptr<SelectStatement> query;
@@ -36,20 +36,21 @@ public:
 	vector<string> aliases;
 	//! The returned types of the view
 	vector<LogicalType> types;
+	//! The returned names of the view
+	vector<string> names;
+	//! The comments on the columns of the view: can be empty if there are no comments
+	vector<Value> column_comments;
 
 public:
-	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo *info) override;
+	unique_ptr<CreateInfo> GetInfo() const override;
 
-	//! Serialize the meta information of the ViewCatalogEntry a serializer
-	virtual void Serialize(Serializer &serializer);
-	//! Deserializes to a CreateTableInfo
-	static unique_ptr<CreateViewInfo> Deserialize(Deserializer &source, ClientContext &context);
+	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo &info) override;
 
-	unique_ptr<CatalogEntry> Copy(ClientContext &context) override;
+	unique_ptr<CatalogEntry> Copy(ClientContext &context) const override;
 
-	string ToSQL() override;
+	string ToSQL() const override;
 
 private:
-	void Initialize(CreateViewInfo *info);
+	void Initialize(CreateViewInfo &info);
 };
 } // namespace duckdb

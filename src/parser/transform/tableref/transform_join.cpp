@@ -2,12 +2,15 @@
 #include "duckdb/parser/tableref/basetableref.hpp"
 #include "duckdb/parser/tableref/joinref.hpp"
 #include "duckdb/parser/transformer.hpp"
+#include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/tableref/subqueryref.hpp"
+#include "duckdb/parser/expression/star_expression.hpp"
 
 namespace duckdb {
 
-unique_ptr<TableRef> Transformer::TransformJoin(duckdb_libpgquery::PGJoinExpr *root) {
-	auto result = make_unique<JoinRef>(JoinRefType::REGULAR);
-	switch (root->jointype) {
+unique_ptr<TableRef> Transformer::TransformJoin(duckdb_libpgquery::PGJoinExpr &root) {
+	auto result = make_uniq<JoinRef>(JoinRefType::REGULAR);
+	switch (root.jointype) {
 	case duckdb_libpgquery::PG_JOIN_INNER: {
 		result->type = JoinType::INNER;
 		break;
@@ -28,26 +31,36 @@ unique_ptr<TableRef> Transformer::TransformJoin(duckdb_libpgquery::PGJoinExpr *r
 		result->type = JoinType::SEMI;
 		break;
 	}
+	case duckdb_libpgquery::PG_JOIN_ANTI: {
+		result->type = JoinType::ANTI;
+		break;
+	}
 	case duckdb_libpgquery::PG_JOIN_POSITION: {
 		result->ref_type = JoinRefType::POSITIONAL;
 		break;
 	}
 	default: {
-		throw NotImplementedException("Join type %d not supported\n", root->jointype);
+		throw NotImplementedException("Join type %d not supported\n", root.jointype);
 	}
 	}
 
 	// Check the type of left arg and right arg before transform
-	result->left = TransformTableRefNode(root->larg);
-	result->right = TransformTableRefNode(root->rarg);
-	if (root->isNatural) {
+	result->left = TransformTableRefNode(*root.larg);
+	result->right = TransformTableRefNode(*root.rarg);
+	switch (root.joinreftype) {
+	case duckdb_libpgquery::PG_JOIN_NATURAL:
 		result->ref_type = JoinRefType::NATURAL;
+		break;
+	case duckdb_libpgquery::PG_JOIN_ASOF:
+		result->ref_type = JoinRefType::ASOF;
+		break;
+	default:
+		break;
 	}
-	result->query_location = root->location;
-
-	if (root->usingClause && root->usingClause->length > 0) {
+	SetQueryLocation(*result, root.location);
+	if (root.usingClause && root.usingClause->length > 0) {
 		// usingClause is a list of strings
-		for (auto node = root->usingClause->head; node != nullptr; node = node->next) {
+		for (auto node = root.usingClause->head; node != nullptr; node = node->next) {
 			auto target = reinterpret_cast<duckdb_libpgquery::PGNode *>(node->data.ptr_value);
 			D_ASSERT(target->type == duckdb_libpgquery::T_PGString);
 			auto column_name = string(reinterpret_cast<duckdb_libpgquery::PGValue *>(target)->val.str);
@@ -56,10 +69,23 @@ unique_ptr<TableRef> Transformer::TransformJoin(duckdb_libpgquery::PGJoinExpr *r
 		return std::move(result);
 	}
 
-	if (!root->quals && result->using_columns.empty() && result->ref_type == JoinRefType::REGULAR) { // CROSS PRODUCT
+	if (!root.quals && result->using_columns.empty() && result->ref_type == JoinRefType::REGULAR) { // CROSS PRODUCT
 		result->ref_type = JoinRefType::CROSS;
 	}
-	result->condition = TransformExpression(root->quals);
+	result->condition = TransformExpression(root.quals);
+	if (root.alias) {
+		// join with an alias - wrap it in a subquery
+		auto select_node = make_uniq<SelectNode>();
+		select_node->select_list.push_back(make_uniq<StarExpression>());
+		select_node->from_table = std::move(result);
+		auto select = make_uniq<SelectStatement>();
+		select->node = std::move(select_node);
+		auto subquery = make_uniq<SubqueryRef>(std::move(select));
+		SetQueryLocation(*subquery, root.location);
+		// apply the alias to that subquery
+		subquery->alias = TransformAlias(root.alias, subquery->column_name_alias);
+		return std::move(subquery);
+	}
 	return std::move(result);
 }
 

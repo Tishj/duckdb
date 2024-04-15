@@ -29,7 +29,23 @@ struct RepeatTableFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 
+struct RepeatRowTableFunction {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
 struct UnnestTableFunction {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
+struct CSVSnifferFunction {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
+struct ReadBlobFunction {
+	static void RegisterFunction(BuiltinFunctions &set);
+};
+
+struct ReadTextFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 

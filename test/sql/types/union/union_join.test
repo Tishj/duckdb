@@ -3,6 +3,12 @@
 # group: [union]
 
 statement ok
+PRAGMA enable_verification
+
+statement ok
+SET default_null_order='nulls_first';
+
+statement ok
 CREATE TABLE tbl1(id INT, a UNION(b INT, c VARCHAR));
 
 statement ok

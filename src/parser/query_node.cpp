@@ -4,8 +4,10 @@
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/query_node/set_operation_node.hpp"
 #include "duckdb/parser/query_node/recursive_cte_node.hpp"
+#include "duckdb/parser/query_node/cte_node.hpp"
 #include "duckdb/common/limits.hpp"
-#include "duckdb/common/field_writer.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -15,11 +17,12 @@ CommonTableExpressionMap::CommonTableExpressionMap() {
 CommonTableExpressionMap CommonTableExpressionMap::Copy() const {
 	CommonTableExpressionMap res;
 	for (auto &kv : this->map) {
-		auto kv_info = make_unique<CommonTableExpressionInfo>();
+		auto kv_info = make_uniq<CommonTableExpressionInfo>();
 		for (auto &al : kv.second->aliases) {
 			kv_info->aliases.push_back(al);
 		}
 		kv_info->query = unique_ptr_cast<SQLStatement, SelectStatement>(kv.second->query->Copy());
+		kv_info->materialized = kv.second->materialized;
 		res.map[kv.first] = std::move(kv_info);
 	}
 	return res;
@@ -77,7 +80,13 @@ string CommonTableExpressionMap::ToString() const {
 			}
 			result += ")";
 		}
-		result += " AS (";
+		if (kv.second->materialized == CTEMaterialize::CTE_MATERIALIZE_ALWAYS) {
+			result += " AS MATERIALIZED (";
+		} else if (kv.second->materialized == CTEMaterialize::CTE_MATERIALIZE_NEVER) {
+			result += " AS NOT MATERIALIZED (";
+		} else {
+			result += " AS (";
+		}
 		result += cte.query->ToString();
 		result += ")";
 		first_cte = false;
@@ -90,7 +99,7 @@ string QueryNode::ResultModifiersToString() const {
 	for (idx_t modifier_idx = 0; modifier_idx < modifiers.size(); modifier_idx++) {
 		auto &modifier = *modifiers[modifier_idx];
 		if (modifier.type == ResultModifierType::ORDER_MODIFIER) {
-			auto &order_modifier = (OrderModifier &)modifier;
+			auto &order_modifier = modifier.Cast<OrderModifier>();
 			result += " ORDER BY ";
 			for (idx_t k = 0; k < order_modifier.orders.size(); k++) {
 				if (k > 0) {
@@ -99,7 +108,7 @@ string QueryNode::ResultModifiersToString() const {
 				result += order_modifier.orders[k].ToString();
 			}
 		} else if (modifier.type == ResultModifierType::LIMIT_MODIFIER) {
-			auto &limit_modifier = (LimitModifier &)modifier;
+			auto &limit_modifier = modifier.Cast<LimitModifier>();
 			if (limit_modifier.limit) {
 				result += " LIMIT " + limit_modifier.limit->ToString();
 			}
@@ -107,7 +116,7 @@ string QueryNode::ResultModifiersToString() const {
 				result += " OFFSET " + limit_modifier.offset->ToString();
 			}
 		} else if (modifier.type == ResultModifierType::LIMIT_PERCENT_MODIFIER) {
-			auto &limit_p_modifier = (LimitPercentModifier &)modifier;
+			auto &limit_p_modifier = modifier.Cast<LimitPercentModifier>();
 			if (limit_p_modifier.limit) {
 				result += " LIMIT (" + limit_p_modifier.limit->ToString() + ") %";
 			}
@@ -129,11 +138,12 @@ bool QueryNode::Equals(const QueryNode *other) const {
 	if (other->type != this->type) {
 		return false;
 	}
+
 	if (modifiers.size() != other->modifiers.size()) {
 		return false;
 	}
 	for (idx_t i = 0; i < modifiers.size(); i++) {
-		if (!modifiers[i]->Equals(other->modifiers[i].get())) {
+		if (!modifiers[i]->Equals(*other->modifiers[i])) {
 			return false;
 		}
 	}
@@ -161,65 +171,14 @@ void QueryNode::CopyProperties(QueryNode &other) const {
 		other.modifiers.push_back(modifier->Copy());
 	}
 	for (auto &kv : cte_map.map) {
-		auto kv_info = make_unique<CommonTableExpressionInfo>();
+		auto kv_info = make_uniq<CommonTableExpressionInfo>();
 		for (auto &al : kv.second->aliases) {
 			kv_info->aliases.push_back(al);
 		}
 		kv_info->query = unique_ptr_cast<SQLStatement, SelectStatement>(kv.second->query->Copy());
+		kv_info->materialized = kv.second->materialized;
 		other.cte_map.map[kv.first] = std::move(kv_info);
 	}
-}
-
-void QueryNode::Serialize(Serializer &main_serializer) const {
-	FieldWriter writer(main_serializer);
-	writer.WriteField<QueryNodeType>(type);
-	writer.WriteSerializableList(modifiers);
-	// cte_map
-	writer.WriteField<uint32_t>((uint32_t)cte_map.map.size());
-	auto &serializer = writer.GetSerializer();
-	for (auto &cte : cte_map.map) {
-		serializer.WriteString(cte.first);
-		serializer.WriteStringVector(cte.second->aliases);
-		cte.second->query->Serialize(serializer);
-	}
-	Serialize(writer);
-	writer.Finalize();
-}
-
-unique_ptr<QueryNode> QueryNode::Deserialize(Deserializer &main_source) {
-	FieldReader reader(main_source);
-
-	auto type = reader.ReadRequired<QueryNodeType>();
-	auto modifiers = reader.ReadRequiredSerializableList<ResultModifier>();
-	// cte_map
-	auto cte_count = reader.ReadRequired<uint32_t>();
-	auto &source = reader.GetSource();
-	case_insensitive_map_t<unique_ptr<CommonTableExpressionInfo>> new_map;
-	for (idx_t i = 0; i < cte_count; i++) {
-		auto name = source.Read<string>();
-		auto info = make_unique<CommonTableExpressionInfo>();
-		source.ReadStringVector(info->aliases);
-		info->query = SelectStatement::Deserialize(source);
-		new_map[name] = std::move(info);
-	}
-	unique_ptr<QueryNode> result;
-	switch (type) {
-	case QueryNodeType::SELECT_NODE:
-		result = SelectNode::Deserialize(reader);
-		break;
-	case QueryNodeType::SET_OPERATION_NODE:
-		result = SetOperationNode::Deserialize(reader);
-		break;
-	case QueryNodeType::RECURSIVE_CTE_NODE:
-		result = RecursiveCTENode::Deserialize(reader);
-		break;
-	default:
-		throw SerializationException("Could not deserialize Query Node: unknown type!");
-	}
-	result->modifiers = std::move(modifiers);
-	result->cte_map.map = std::move(new_map);
-	reader.Finalize();
-	return result;
 }
 
 void QueryNode::AddDistinct() {
@@ -227,7 +186,7 @@ void QueryNode::AddDistinct() {
 	for (idx_t modifier_idx = modifiers.size(); modifier_idx > 0; modifier_idx--) {
 		auto &modifier = *modifiers[modifier_idx - 1];
 		if (modifier.type == ResultModifierType::DISTINCT_MODIFIER) {
-			auto &distinct_modifier = (DistinctModifier &)modifier;
+			auto &distinct_modifier = modifier.Cast<DistinctModifier>();
 			if (distinct_modifier.distinct_on_targets.empty()) {
 				// we have a DISTINCT without an ON clause - this distinct does not need to be added
 				return;
@@ -239,7 +198,7 @@ void QueryNode::AddDistinct() {
 			break;
 		}
 	}
-	modifiers.push_back(make_unique<DistinctModifier>());
+	modifiers.push_back(make_uniq<DistinctModifier>());
 }
 
 } // namespace duckdb

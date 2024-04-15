@@ -12,10 +12,14 @@
 #include "duckdb/common/enums/set_type.hpp"
 #include "duckdb/parser/sql_statement.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/parser/parsed_expression.hpp"
 
 namespace duckdb {
 
 class SetStatement : public SQLStatement {
+public:
+	static constexpr const StatementType TYPE = StatementType::SET_STATEMENT;
+
 protected:
 	SetStatement(std::string name_p, SetScope scope_p, SetType type_p);
 	SetStatement(const SetStatement &other) = default;
@@ -32,16 +36,16 @@ public:
 
 class SetVariableStatement : public SetStatement {
 public:
-	SetVariableStatement(std::string name_p, Value value_p, SetScope scope_p);
+	SetVariableStatement(std::string name_p, unique_ptr<ParsedExpression> value_p, SetScope scope_p);
 
 protected:
-	SetVariableStatement(const SetVariableStatement &other) = default;
+	SetVariableStatement(const SetVariableStatement &other);
 
 public:
 	unique_ptr<SQLStatement> Copy() const override;
 
 public:
-	Value value;
+	unique_ptr<ParsedExpression> value;
 };
 
 class ResetVariableStatement : public SetStatement {

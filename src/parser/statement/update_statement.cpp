@@ -19,7 +19,7 @@ bool UpdateSetInfo::Equals(const UpdateSetInfo &other) const {
 	if (!condition && !other.condition) {
 	} else if (!condition || !other.condition) {
 		return false;
-	} else if (!condition->Equals(other.condition.get())) {
+	} else if (!condition->Equals(*other.condition)) {
 		return false;
 	}
 
@@ -34,7 +34,7 @@ bool UpdateSetInfo::Equals(const UpdateSetInfo &other) const {
 		auto &lhs = expressions[i];
 		auto &rhs = other.expressions[i];
 
-		if (!lhs->Equals(rhs.get())) {
+		if (!lhs->Equals(*rhs)) {
 			return false;
 		}
 	}
@@ -113,14 +113,14 @@ bool UpdateStatement::Equals(const SQLStatement *other_p) const {
 	}
 
 	D_ASSERT(table);
-	if (!table->Equals(other.table.get())) {
+	if (!table->Equals(*other.table)) {
 		return false;
 	}
 
 	if (!from_table && !other.from_table) {
 	} else if (!from_table || !other.from_table) {
 		return false;
-	} else if (!from_table->Equals(other.from_table.get())) {
+	} else if (!from_table->Equals(*other.from_table)) {
 		return false;
 	}
 
@@ -131,7 +131,7 @@ bool UpdateStatement::Equals(const SQLStatement *other_p) const {
 		auto &lhs = returning_list[i];
 		auto &rhs = other.returning_list[i];
 
-		if (!lhs->Equals(rhs.get())) {
+		if (!lhs->Equals(*rhs)) {
 			return false;
 		}
 	}

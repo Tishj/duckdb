@@ -15,63 +15,80 @@
 #include "duckdb/execution/expression_executor_state.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
+#include "duckdb/common/optional_ptr.hpp"
 
 namespace duckdb {
 
 struct FunctionLocalState {
 	DUCKDB_API virtual ~FunctionLocalState();
+
+	template <class TARGET>
+	TARGET &Cast() {
+		DynamicCastCheck<TARGET>(this);
+		return reinterpret_cast<TARGET &>(*this);
+	}
+	template <class TARGET>
+	const TARGET &Cast() const {
+		DynamicCastCheck<TARGET>(this);
+		return reinterpret_cast<const TARGET &>(*this);
+	}
 };
 
 class Binder;
 class BoundFunctionExpression;
-class DependencyList;
+class LogicalDependencyList;
 class ScalarFunctionCatalogEntry;
 
 struct FunctionStatisticsInput {
-	FunctionStatisticsInput(BoundFunctionExpression &expr_p, FunctionData *bind_data_p,
-	                        vector<unique_ptr<BaseStatistics>> &child_stats_p, unique_ptr<Expression> *expr_ptr_p)
+	FunctionStatisticsInput(BoundFunctionExpression &expr_p, optional_ptr<FunctionData> bind_data_p,
+	                        vector<BaseStatistics> &child_stats_p, unique_ptr<Expression> *expr_ptr_p)
 	    : expr(expr_p), bind_data(bind_data_p), child_stats(child_stats_p), expr_ptr(expr_ptr_p) {
 	}
 
 	BoundFunctionExpression &expr;
-	FunctionData *bind_data;
-	vector<unique_ptr<BaseStatistics>> &child_stats;
+	optional_ptr<FunctionData> bind_data;
+	vector<BaseStatistics> &child_stats;
 	unique_ptr<Expression> *expr_ptr;
 };
 
-//! The type used for scalar functions
+//! The scalar function type
 typedef std::function<void(DataChunk &, ExpressionState &, Vector &)> scalar_function_t;
-//! Binds the scalar function and creates the function data
+//! The type to bind the scalar function and to create the function data
 typedef unique_ptr<FunctionData> (*bind_scalar_function_t)(ClientContext &context, ScalarFunction &bound_function,
                                                            vector<unique_ptr<Expression>> &arguments);
+//! The type to initialize a thread local state for the scalar function
 typedef unique_ptr<FunctionLocalState> (*init_local_state_t)(ExpressionState &state,
                                                              const BoundFunctionExpression &expr,
                                                              FunctionData *bind_data);
+//! The type to add the dependencies of this BoundFunctionExpression to the set of dependencies
+typedef void (*dependency_function_t)(BoundFunctionExpression &expr, LogicalDependencyList &dependencies);
+//! The type to propagate statistics for this scalar function
 typedef unique_ptr<BaseStatistics> (*function_statistics_t)(ClientContext &context, FunctionStatisticsInput &input);
-//! Adds the dependencies of this BoundFunctionExpression to the set of dependencies
-typedef void (*dependency_function_t)(BoundFunctionExpression &expr, DependencyList &dependencies);
+//! The type to bind lambda-specific parameter types
+typedef LogicalType (*bind_lambda_function_t)(const idx_t parameter_idx, const LogicalType &list_child_type);
 
-typedef void (*function_serialize_t)(FieldWriter &writer, const FunctionData *bind_data,
+typedef void (*function_serialize_t)(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
                                      const ScalarFunction &function);
-typedef unique_ptr<FunctionData> (*function_deserialize_t)(ClientContext &context, FieldReader &reader,
-                                                           ScalarFunction &function);
+typedef unique_ptr<FunctionData> (*function_deserialize_t)(Deserializer &deserializer, ScalarFunction &function);
 
-class ScalarFunction : public BaseScalarFunction {
+class ScalarFunction : public BaseScalarFunction { // NOLINT: work-around bug in clang-tidy
 public:
 	DUCKDB_API ScalarFunction(string name, vector<LogicalType> arguments, LogicalType return_type,
 	                          scalar_function_t function, bind_scalar_function_t bind = nullptr,
 	                          dependency_function_t dependency = nullptr, function_statistics_t statistics = nullptr,
 	                          init_local_state_t init_local_state = nullptr,
 	                          LogicalType varargs = LogicalType(LogicalTypeId::INVALID),
-	                          FunctionSideEffects side_effects = FunctionSideEffects::NO_SIDE_EFFECTS,
-	                          FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING);
+	                          FunctionStability stability = FunctionStability::CONSISTENT,
+	                          FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING,
+	                          bind_lambda_function_t bind_lambda = nullptr);
 
 	DUCKDB_API ScalarFunction(vector<LogicalType> arguments, LogicalType return_type, scalar_function_t function,
 	                          bind_scalar_function_t bind = nullptr, dependency_function_t dependency = nullptr,
 	                          function_statistics_t statistics = nullptr, init_local_state_t init_local_state = nullptr,
 	                          LogicalType varargs = LogicalType(LogicalTypeId::INVALID),
-	                          FunctionSideEffects side_effects = FunctionSideEffects::NO_SIDE_EFFECTS,
-	                          FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING);
+	                          FunctionStability stability = FunctionStability::CONSISTENT,
+	                          FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING,
+	                          bind_lambda_function_t bind_lambda = nullptr);
 
 	//! The main scalar function to execute
 	scalar_function_t function;
@@ -83,6 +100,8 @@ public:
 	dependency_function_t dependency;
 	//! The statistics propagation function (if any)
 	function_statistics_t statistics;
+	//! The lambda bind function (if any)
+	bind_lambda_function_t bind_lambda;
 
 	function_serialize_t serialize;
 	function_deserialize_t deserialize;
@@ -91,9 +110,6 @@ public:
 	DUCKDB_API bool operator!=(const ScalarFunction &rhs) const;
 
 	DUCKDB_API bool Equal(const ScalarFunction &rhs) const;
-
-private:
-	bool CompareScalarFunctionT(const scalar_function_t &other) const;
 
 public:
 	DUCKDB_API static void NopFunction(DataChunk &input, ExpressionState &state, Vector &result);
@@ -119,7 +135,7 @@ public:
 
 public:
 	template <class OP>
-	static scalar_function_t GetScalarUnaryFunction(LogicalType type) {
+	static scalar_function_t GetScalarUnaryFunction(const LogicalType &type) {
 		scalar_function_t function;
 		switch (type.id()) {
 		case LogicalTypeId::TINYINT:
@@ -149,6 +165,9 @@ public:
 		case LogicalTypeId::HUGEINT:
 			function = &ScalarFunction::UnaryFunction<hugeint_t, hugeint_t, OP>;
 			break;
+		case LogicalTypeId::UHUGEINT:
+			function = &ScalarFunction::UnaryFunction<uhugeint_t, uhugeint_t, OP>;
+			break;
 		case LogicalTypeId::FLOAT:
 			function = &ScalarFunction::UnaryFunction<float, float, OP>;
 			break;
@@ -162,7 +181,7 @@ public:
 	}
 
 	template <class TR, class OP>
-	static scalar_function_t GetScalarUnaryFunctionFixedReturn(LogicalType type) {
+	static scalar_function_t GetScalarUnaryFunctionFixedReturn(const LogicalType &type) {
 		scalar_function_t function;
 		switch (type.id()) {
 		case LogicalTypeId::TINYINT:
@@ -191,6 +210,9 @@ public:
 			break;
 		case LogicalTypeId::HUGEINT:
 			function = &ScalarFunction::UnaryFunction<hugeint_t, TR, OP>;
+			break;
+		case LogicalTypeId::UHUGEINT:
+			function = &ScalarFunction::UnaryFunction<uhugeint_t, TR, OP>;
 			break;
 		case LogicalTypeId::FLOAT:
 			function = &ScalarFunction::UnaryFunction<float, TR, OP>;

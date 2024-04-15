@@ -16,16 +16,11 @@ namespace duckdb {
 
 class SegmentStatistics {
 public:
-	SegmentStatistics(LogicalType type);
-	SegmentStatistics(LogicalType type, unique_ptr<BaseStatistics> statistics);
-
-	LogicalType type;
+	explicit SegmentStatistics(LogicalType type);
+	explicit SegmentStatistics(BaseStatistics statistics);
 
 	//! Type-specific statistics of the segment
-	unique_ptr<BaseStatistics> statistics;
-
-public:
-	void Reset();
+	BaseStatistics statistics;
 };
 
 } // namespace duckdb

@@ -5,6 +5,7 @@
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+#include "duckdb/parser/parsed_data/comment_on_column_info.hpp"
 #include "duckdb/planner/binder.hpp"
 
 //! This file contains the binder definitions for statements that do not need to be bound at all and only require a
@@ -17,17 +18,30 @@ BoundStatement Binder::Bind(AlterStatement &stmt) {
 	result.names = {"Success"};
 	result.types = {LogicalType::BOOLEAN};
 	BindSchemaOrCatalog(stmt.info->catalog, stmt.info->schema);
-	auto entry = Catalog::GetEntry(context, stmt.info->GetCatalogType(), stmt.info->catalog, stmt.info->schema,
-	                               stmt.info->name, stmt.info->if_exists);
+
+	optional_ptr<CatalogEntry> entry;
+
+	if (stmt.info->type == AlterType::SET_COLUMN_COMMENT) {
+		// for column comments we need to an extra step: they can alter a table or a view, we resolve that here.
+		auto &info = stmt.info->Cast<SetColumnCommentInfo>();
+		entry = info.TryResolveCatalogEntry(context);
+	} else {
+		// All other AlterTypes
+		entry = Catalog::GetEntry(context, stmt.info->GetCatalogType(), stmt.info->catalog, stmt.info->schema,
+		                          stmt.info->name, stmt.info->if_not_found);
+	}
+
 	if (entry) {
+		D_ASSERT(!entry->deleted);
+		auto &catalog = entry->ParentCatalog();
 		if (!entry->temporary) {
 			// we can only alter temporary tables/views in read-only mode
-			properties.modified_databases.insert(entry->catalog->GetName());
+			properties.modified_databases.insert(catalog.GetName());
 		}
-		stmt.info->catalog = entry->catalog->GetName();
-		stmt.info->schema = ((StandardEntry *)entry)->schema->name;
+		stmt.info->catalog = catalog.GetName();
+		stmt.info->schema = entry->ParentSchema().name;
 	}
-	result.plan = make_unique<LogicalSimple>(LogicalOperatorType::LOGICAL_ALTER, std::move(stmt.info));
+	result.plan = make_uniq<LogicalSimple>(LogicalOperatorType::LOGICAL_ALTER, std::move(stmt.info));
 	properties.return_type = StatementReturnType::NOTHING;
 	return result;
 }
@@ -39,7 +53,7 @@ BoundStatement Binder::Bind(TransactionStatement &stmt) {
 	BoundStatement result;
 	result.names = {"Success"};
 	result.types = {LogicalType::BOOLEAN};
-	result.plan = make_unique<LogicalSimple>(LogicalOperatorType::LOGICAL_TRANSACTION, std::move(stmt.info));
+	result.plan = make_uniq<LogicalSimple>(LogicalOperatorType::LOGICAL_TRANSACTION, std::move(stmt.info));
 	properties.return_type = StatementReturnType::NOTHING;
 	return result;
 }

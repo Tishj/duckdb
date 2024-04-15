@@ -11,7 +11,7 @@ void CommonAggregateOptimizer::VisitOperator(LogicalOperator &op) {
 	LogicalOperatorVisitor::VisitOperator(op);
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY:
-		ExtractCommonAggregates((LogicalAggregate &)op);
+		ExtractCommonAggregates(op.Cast<LogicalAggregate>());
 		break;
 	default:
 		break;
@@ -33,13 +33,13 @@ void CommonAggregateOptimizer::ExtractCommonAggregates(LogicalAggregate &aggr) {
 	idx_t total_erased = 0;
 	for (idx_t i = 0; i < aggr.expressions.size(); i++) {
 		idx_t original_index = i + total_erased;
-		auto entry = aggregate_remap.find(aggr.expressions[i].get());
+		auto entry = aggregate_remap.find(*aggr.expressions[i]);
 		if (entry == aggregate_remap.end()) {
 			// aggregate does not exist yet: add it to the map
-			aggregate_remap[aggr.expressions[i].get()] = i;
+			aggregate_remap[*aggr.expressions[i]] = i;
 			if (i != original_index) {
-				// this aggregate is not erased, however an agregate BEFORE it has been erased
-				// so we need to remap this aggregaet
+				// this aggregate is not erased, however an aggregate BEFORE it has been erased
+				// so we need to remap this aggregate
 				ColumnBinding original_binding(aggr.aggregate_index, original_index);
 				ColumnBinding new_binding(aggr.aggregate_index, i);
 				aggregate_map[original_binding] = new_binding;

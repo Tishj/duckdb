@@ -140,7 +140,7 @@ TEST_CASE("Basic prepared statement usage", "[sqlite3wrapper]") {
 	REQUIRE(sqlite3_clear_bindings(stmt.stmt) == SQLITE_OK);
 	REQUIRE(sqlite3_step(stmt.stmt) == SQLITE_DONE);
 
-	REQUIRE(db.Execute("SELECT * FROM test ORDER BY 1"));
+	REQUIRE(db.Execute("SELECT * FROM test ORDER BY 1 NULLS FIRST"));
 
 	REQUIRE(db.CheckColumn(0, {"NULL", "NULL", "NULL", "NULL", "2"}));
 	REQUIRE(db.CheckColumn(1, {"NULL", "NULL", "NULL", "NULL", "1000"}));
@@ -334,4 +334,34 @@ TEST_CASE("Test rollback of aborted transaction", "[sqlite3wrapper]") {
 	REQUIRE(db.Execute("ROLLBACK"));
 	// can start a transaction again after a rollback
 	REQUIRE(db.Execute("START TRANSACTION"));
+}
+
+TEST_CASE("Test sqlite3_complete", "[sqlite3wrapper]") {
+	REQUIRE(sqlite3_complete("SELECT $$ this is a dollar quoted string without a marker $$;") == 1);
+	REQUIRE(sqlite3_complete("SELECT $this$is a dollar quoted string$this$;") == 1);
+	REQUIRE(sqlite3_complete("SELECT $this$this$;") == 0);
+	REQUIRE(sqlite3_complete("SELECT $this$is a non-terminated dollar quoted string;") == 0);
+	REQUIRE(sqlite3_complete("SELECT $this$is a non-terminated dollar quoted string;$") == 0);
+	REQUIRE(sqlite3_complete("SELECT $this$is a non-terminated dollar quoted string;$this") == 0);
+	REQUIRE(sqlite3_complete("SELECT $this$is a non-terminated dollar quoted string;$xxx$") == 0);
+	REQUIRE(sqlite3_complete("SELECT $this$is a terminated dollar quoted string;$xxx$$this$") == 0);
+	REQUIRE(sqlite3_complete("SELECT $this$is a terminated dollar quoted string;$xxx$$this$;") == 1);
+	REQUIRE(sqlite3_complete("SELECT $this$$$is a nested $x$ what what $x$ dollar quoted string;$$$this$;") == 1);
+	REQUIRE(sqlite3_complete("") == 0);
+	REQUIRE(sqlite3_complete("S") == 0);
+	REQUIRE(sqlite3_complete("SELECT 42") == 0);
+	REQUIRE(sqlite3_complete("SELECT 42;") == 1);
+	REQUIRE(sqlite3_complete("--comment on first line\nselect 42;") == 1);
+	REQUIRE(sqlite3_complete("SELECT 42;   \n\n\t\t\n\f\t  ") == 1);
+	REQUIRE(sqlite3_complete("SELECT 42;--this is a comment") == 1);
+	REQUIRE(sqlite3_complete("SELECT 42;  --this is a comment") == 1);
+	REQUIRE(sqlite3_complete("SELECT 'quoted semicolon;") == 0);
+	REQUIRE(sqlite3_complete("SELECT 'quoted semicolon\nwith newline\n;") == 0);
+	REQUIRE(sqlite3_complete("SELECT 'quoted semicolon ;\nwith ;; newline\nnow terminated';") == 1);
+	REQUIRE(sqlite3_complete("SELECT \"double-quoted semicolon ;;") == 0);
+	REQUIRE(sqlite3_complete("SELECT 42;\n\t\n--this is a comment") == 1);
+	REQUIRE(sqlite3_complete("SELECT 42;\n\t\n--this is a comment\nS") == 0);
+	REQUIRE(sqlite3_complete("SELECT 42; /* c-style comment *//*followed by another one */  --and this one") == 1);
+	REQUIRE(sqlite3_complete("SELECT 'thisis a string with '';") == 0);
+	REQUIRE(sqlite3_complete("SELECT 'thisis a string with '';;'' escapes';") == 1);
 }

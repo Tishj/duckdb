@@ -6,8 +6,8 @@ ExecuteStatement::ExecuteStatement() : SQLStatement(StatementType::EXECUTE_STATE
 }
 
 ExecuteStatement::ExecuteStatement(const ExecuteStatement &other) : SQLStatement(other), name(other.name) {
-	for (const auto &value : other.values) {
-		values.push_back(value->Copy());
+	for (const auto &item : other.named_values) {
+		named_values.emplace(std::make_pair(item.first, item.second->Copy()));
 	}
 }
 
@@ -23,15 +23,20 @@ bool ExecuteStatement::Equals(const SQLStatement *other_p) const {
 	if (other.name != name) {
 		return false;
 	}
-	if (values.size() != other.values.size()) {
+	if (named_values.size() != other.named_values.size()) {
 		return false;
 	}
-	for (idx_t i = 0; i < values.size(); i++) {
-		auto &lhs = values[i];
-		auto &rhs = other.values[i];
-		if (!lhs->Equals(rhs.get())) {
+	auto it = named_values.begin();
+	auto jt = other.named_values.begin();
+	for (; it != named_values.end();) {
+		if (it->first != jt->first) {
 			return false;
 		}
+		if (it->second->Equals(*jt->second)) {
+			return false;
+		}
+		it++;
+		jt++;
 	}
 	return true;
 }

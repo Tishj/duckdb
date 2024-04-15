@@ -11,12 +11,13 @@
 #include "duckdb/transaction/transaction.hpp"
 
 namespace duckdb {
+class RowVersionManager;
 
 class DuckTransaction : public Transaction {
 public:
 	DuckTransaction(TransactionManager &manager, ClientContext &context, transaction_t start_time,
 	                transaction_t transaction_id);
-	~DuckTransaction();
+	~DuckTransaction() override;
 
 	//! The start timestamp of this transaction
 	transaction_t start_time;
@@ -34,11 +35,11 @@ public:
 	static DuckTransaction &Get(ClientContext &context, Catalog &catalog);
 	LocalStorage &GetLocalStorage();
 
-	void PushCatalogEntry(CatalogEntry *entry, data_ptr_t extra_data = nullptr, idx_t extra_data_size = 0);
+	void PushCatalogEntry(CatalogEntry &entry, data_ptr_t extra_data = nullptr, idx_t extra_data_size = 0);
 
 	//! Commit the current transaction with the given commit identifier. Returns an error message if the transaction
 	//! commit failed, or an empty string if the commit was sucessful
-	string Commit(AttachedDatabase &db, transaction_t commit_id, bool checkpoint) noexcept;
+	ErrorData Commit(AttachedDatabase &db, transaction_t commit_id, bool checkpoint) noexcept;
 	//! Returns whether or not a commit of this transaction should trigger an automatic checkpoint
 	bool AutomaticCheckpoint(AttachedDatabase &db);
 
@@ -49,8 +50,9 @@ public:
 
 	bool ChangesMade();
 
-	void PushDelete(DataTable *table, ChunkVectorInfo *vinfo, row_t rows[], idx_t count, idx_t base_row);
-	void PushAppend(DataTable *table, idx_t row_start, idx_t row_count);
+	void PushDelete(DataTable &table, RowVersionManager &info, idx_t vector_idx, row_t rows[], idx_t count,
+	                idx_t base_row);
+	void PushAppend(DataTable &table, idx_t row_start, idx_t row_count);
 	UpdateInfo *CreateUpdateInfo(idx_t type_size, idx_t entries);
 
 	bool IsDuckTransaction() const override {

@@ -17,6 +17,7 @@ class BoundQueryNode;
 class BoundSelectNode;
 class BoundSetOperationNode;
 class BoundRecursiveCTENode;
+class BoundCTENode;
 
 //===--------------------------------------------------------------------===//
 // Expressions
@@ -52,5 +53,6 @@ class BoundTableFunction;
 class BoundEmptyTableRef;
 class BoundExpressionListRef;
 class BoundCTERef;
+class BoundPivotRef;
 
 } // namespace duckdb

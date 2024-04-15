@@ -1,3 +1,4 @@
+
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
@@ -8,10 +9,9 @@
 
 #pragma once
 
-#include "duckdb_python/pybind_wrapper.hpp"
+#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/vector.hpp"
-#include "duckdb_python/python_object_container.hpp"
 #include "duckdb_python/import_cache/python_import_cache_modules.hpp"
 
 namespace duckdb {
@@ -23,55 +23,23 @@ public:
 	~PythonImportCache();
 
 public:
-	template <class T>
-	T &LazyLoadModule(T &module) {
-		if (!module.LoadAttempted()) {
-			module.LoadModule(T::Name, *this);
-		}
-		return module;
-	}
-
-	NumpyCacheItem &numpy() {
-		return LazyLoadModule(numpy_module);
-	}
-	DatetimeCacheItem &datetime() {
-		return LazyLoadModule(datetime_module);
-	}
-	DecimalCacheItem &decimal() {
-		return LazyLoadModule(decimal_module);
-	}
-	UUIDCacheItem &uuid() {
-		return LazyLoadModule(uuid_module);
-	}
-	PandasCacheItem &pandas() {
-		return LazyLoadModule(pandas_module);
-	}
-	PolarsCacheItem &polars() {
-		return LazyLoadModule(polars_module);
-	}
-	ArrowCacheItem &arrow() {
-		return LazyLoadModule(arrow_module);
-	}
-	IPythonCacheItem &IPython() {
-		return LazyLoadModule(IPython_module);
-	}
-	IpywidgetsCacheItem &ipywidgets() {
-		return LazyLoadModule(ipywidgets_module);
-	}
-
-private:
-	NumpyCacheItem numpy_module;
-	DatetimeCacheItem datetime_module;
-	DecimalCacheItem decimal_module;
-	UUIDCacheItem uuid_module;
-	PandasCacheItem pandas_module;
-	PolarsCacheItem polars_module;
-	ArrowCacheItem arrow_module;
-	IPythonCacheItem IPython_module;
-	IpywidgetsCacheItem ipywidgets_module;
+	PyarrowCacheItem pyarrow;
+	PandasCacheItem pandas;
+	DatetimeCacheItem datetime;
+	DecimalCacheItem decimal;
+	IpythonCacheItem IPython;
+	IpywidgetsCacheItem ipywidgets;
+	NumpyCacheItem numpy;
+	PathlibCacheItem pathlib;
+	PolarsCacheItem polars;
+	DuckdbCacheItem duckdb;
+	PytzCacheItem pytz;
+	TypesCacheItem types;
+	TypingCacheItem typing;
+	UuidCacheItem uuid;
 
 public:
-	PyObject *AddCache(py::object item);
+	py::handle AddCache(py::object item);
 
 private:
 	vector<py::object> owned_objects;

@@ -13,226 +13,231 @@
 
 namespace duckdb_parquet { namespace format {
 
-int _kTypeValues[] = {
-  Type::BOOLEAN,
-  Type::INT32,
-  Type::INT64,
-  Type::INT96,
-  Type::FLOAT,
-  Type::DOUBLE,
-  Type::BYTE_ARRAY,
-  Type::FIXED_LEN_BYTE_ARRAY
-};
-const char* _kTypeNames[] = {
-  "BOOLEAN",
-  "INT32",
-  "INT64",
-  "INT96",
-  "FLOAT",
-  "DOUBLE",
-  "BYTE_ARRAY",
-  "FIXED_LEN_BYTE_ARRAY"
-};
-const std::map<int, const char*> _Type_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(8, _kTypeValues, _kTypeNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const Type::type& val) {
-  std::map<int, const char*>::const_iterator it = _Type_VALUES_TO_NAMES.find(val);
-  if (it != _Type_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const Type::type &val) {
+	switch (val) {
+	case Type::BOOLEAN:
+		out << "BOOLEAN";
+		return out;
+	case Type::INT32:
+		out << "INT32";
+		return out;
+	case Type::INT64:
+		out << "INT64";
+		return out;
+	case Type::INT96:
+		out << "INT96";
+		return out;
+	case Type::FLOAT:
+		out << "FLOAT";
+		return out;
+	case Type::DOUBLE:
+		out << "DOUBLE";
+		return out;
+	case Type::BYTE_ARRAY:
+		out << "BYTE_ARRAY";
+		return out;
+	case Type::FIXED_LEN_BYTE_ARRAY:
+		out << "FIXED_LEN_BYTE_ARRAY";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
-int _kConvertedTypeValues[] = {
-  ConvertedType::UTF8,
-  ConvertedType::MAP,
-  ConvertedType::MAP_KEY_VALUE,
-  ConvertedType::LIST,
-  ConvertedType::ENUM,
-  ConvertedType::DECIMAL,
-  ConvertedType::DATE,
-  ConvertedType::TIME_MILLIS,
-  ConvertedType::TIME_MICROS,
-  ConvertedType::TIMESTAMP_MILLIS,
-  ConvertedType::TIMESTAMP_MICROS,
-  ConvertedType::UINT_8,
-  ConvertedType::UINT_16,
-  ConvertedType::UINT_32,
-  ConvertedType::UINT_64,
-  ConvertedType::INT_8,
-  ConvertedType::INT_16,
-  ConvertedType::INT_32,
-  ConvertedType::INT_64,
-  ConvertedType::JSON,
-  ConvertedType::BSON,
-  ConvertedType::INTERVAL
-};
-const char* _kConvertedTypeNames[] = {
-  "UTF8",
-  "MAP",
-  "MAP_KEY_VALUE",
-  "LIST",
-  "ENUM",
-  "DECIMAL",
-  "DATE",
-  "TIME_MILLIS",
-  "TIME_MICROS",
-  "TIMESTAMP_MILLIS",
-  "TIMESTAMP_MICROS",
-  "UINT_8",
-  "UINT_16",
-  "UINT_32",
-  "UINT_64",
-  "INT_8",
-  "INT_16",
-  "INT_32",
-  "INT_64",
-  "JSON",
-  "BSON",
-  "INTERVAL"
-};
-const std::map<int, const char*> _ConvertedType_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(22, _kConvertedTypeValues, _kConvertedTypeNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const ConvertedType::type& val) {
-  std::map<int, const char*>::const_iterator it = _ConvertedType_VALUES_TO_NAMES.find(val);
-  if (it != _ConvertedType_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const ConvertedType::type &val) {
+	switch (val) {
+	case ConvertedType::UTF8:
+		out << "UTF8";
+		return out;
+	case ConvertedType::MAP:
+		out << "MAP";
+		return out;
+	case ConvertedType::MAP_KEY_VALUE:
+		out << "MAP_KEY_VALUE";
+		return out;
+	case ConvertedType::LIST:
+		out << "LIST";
+		return out;
+	case ConvertedType::ENUM:
+		out << "ENUM";
+		return out;
+	case ConvertedType::DECIMAL:
+		out << "DECIMAL";
+		return out;
+	case ConvertedType::DATE:
+		out << "DATE";
+		return out;
+	case ConvertedType::TIME_MILLIS:
+		out << "TIME_MILLIS";
+		return out;
+	case ConvertedType::TIME_MICROS:
+		out << "TIME_MICROS";
+		return out;
+	case ConvertedType::TIMESTAMP_MILLIS:
+		out << "TIMESTAMP_MILLIS";
+		return out;
+	case ConvertedType::TIMESTAMP_MICROS:
+		out << "TIMESTAMP_MICROS";
+		return out;
+	case ConvertedType::UINT_8:
+		out << "UINT_8";
+		return out;
+	case ConvertedType::UINT_16:
+		out << "UINT_16";
+		return out;
+	case ConvertedType::UINT_32:
+		out << "UINT_32";
+		return out;
+	case ConvertedType::UINT_64:
+		out << "UINT_64";
+		return out;
+	case ConvertedType::INT_8:
+		out << "INT_8";
+		return out;
+	case ConvertedType::INT_16:
+		out << "INT_16";
+		return out;
+	case ConvertedType::INT_32:
+		out << "INT_32";
+		return out;
+	case ConvertedType::INT_64:
+		out << "INT_64";
+		return out;
+	case ConvertedType::JSON:
+		out << "JSON";
+		return out;
+	case ConvertedType::BSON:
+		out << "BSON";
+		return out;
+	case ConvertedType::INTERVAL:
+		out << "INTERVAL";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
-int _kFieldRepetitionTypeValues[] = {
-  FieldRepetitionType::REQUIRED,
-  FieldRepetitionType::OPTIONAL,
-  FieldRepetitionType::REPEATED
-};
-const char* _kFieldRepetitionTypeNames[] = {
-  "REQUIRED",
-  "OPTIONAL",
-  "REPEATED"
-};
-const std::map<int, const char*> _FieldRepetitionType_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(3, _kFieldRepetitionTypeValues, _kFieldRepetitionTypeNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const FieldRepetitionType::type& val) {
-  std::map<int, const char*>::const_iterator it = _FieldRepetitionType_VALUES_TO_NAMES.find(val);
-  if (it != _FieldRepetitionType_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const FieldRepetitionType::type &val) {
+	switch (val) {
+	case FieldRepetitionType::REQUIRED:
+		out << "REQUIRED";
+		return out;
+	case FieldRepetitionType::OPTIONAL:
+		out << "OPTIONAL";
+		return out;
+	case FieldRepetitionType::REPEATED:
+		out << "REPEATED";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
-int _kEncodingValues[] = {
-  Encoding::PLAIN,
-  Encoding::PLAIN_DICTIONARY,
-  Encoding::RLE,
-  Encoding::BIT_PACKED,
-  Encoding::DELTA_BINARY_PACKED,
-  Encoding::DELTA_LENGTH_BYTE_ARRAY,
-  Encoding::DELTA_BYTE_ARRAY,
-  Encoding::RLE_DICTIONARY
-};
-const char* _kEncodingNames[] = {
-  "PLAIN",
-  "PLAIN_DICTIONARY",
-  "RLE",
-  "BIT_PACKED",
-  "DELTA_BINARY_PACKED",
-  "DELTA_LENGTH_BYTE_ARRAY",
-  "DELTA_BYTE_ARRAY",
-  "RLE_DICTIONARY"
-};
-const std::map<int, const char*> _Encoding_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(8, _kEncodingValues, _kEncodingNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const Encoding::type& val) {
-  std::map<int, const char*>::const_iterator it = _Encoding_VALUES_TO_NAMES.find(val);
-  if (it != _Encoding_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const Encoding::type &val) {
+	switch (val) {
+	case Encoding::PLAIN:
+		out << "PLAIN";
+		return out;
+	case Encoding::PLAIN_DICTIONARY:
+		out << "PLAIN_DICTIONARY";
+		return out;
+	case Encoding::RLE:
+		out << "RLE";
+		return out;
+	case Encoding::BIT_PACKED:
+		out << "BIT_PACKED";
+		return out;
+	case Encoding::DELTA_BINARY_PACKED:
+		out << "DELTA_BINARY_PACKED";
+		return out;
+	case Encoding::DELTA_LENGTH_BYTE_ARRAY:
+		out << "DELTA_LENGTH_BYTE_ARRAY";
+		return out;
+	case Encoding::DELTA_BYTE_ARRAY:
+		out << "DELTA_BYTE_ARRAY";
+		return out;
+	case Encoding::RLE_DICTIONARY:
+		out << "RLE_DICTIONARY";
+		return out;
+	case Encoding::BYTE_STREAM_SPLIT:
+		out << "BYTE_STREAM_SPLIT";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
-int _kCompressionCodecValues[] = {
-  CompressionCodec::UNCOMPRESSED,
-  CompressionCodec::SNAPPY,
-  CompressionCodec::GZIP,
-  CompressionCodec::LZO,
-  CompressionCodec::BROTLI,
-  CompressionCodec::LZ4,
-  CompressionCodec::ZSTD
-};
-const char* _kCompressionCodecNames[] = {
-  "UNCOMPRESSED",
-  "SNAPPY",
-  "GZIP",
-  "LZO",
-  "BROTLI",
-  "LZ4",
-  "ZSTD"
-};
-const std::map<int, const char*> _CompressionCodec_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(7, _kCompressionCodecValues, _kCompressionCodecNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const CompressionCodec::type& val) {
-  std::map<int, const char*>::const_iterator it = _CompressionCodec_VALUES_TO_NAMES.find(val);
-  if (it != _CompressionCodec_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const CompressionCodec::type &val) {
+	switch (val) {
+	case CompressionCodec::UNCOMPRESSED:
+		out << "UNCOMPRESSED";
+		return out;
+	case CompressionCodec::SNAPPY:
+		out << "SNAPPY";
+		return out;
+	case CompressionCodec::GZIP:
+		out << "GZIP";
+		return out;
+	case CompressionCodec::LZO:
+		out << "LZO";
+		return out;
+	case CompressionCodec::BROTLI:
+		out << "BROTLI";
+		return out;
+	case CompressionCodec::LZ4:
+		out << "LZ4";
+		return out;
+	case CompressionCodec::ZSTD:
+		out << "ZSTD";
+		return out;
+	case CompressionCodec::LZ4_RAW:
+		out << "LZ4_RAW";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
-int _kPageTypeValues[] = {
-  PageType::DATA_PAGE,
-  PageType::INDEX_PAGE,
-  PageType::DICTIONARY_PAGE,
-  PageType::DATA_PAGE_V2
-};
-const char* _kPageTypeNames[] = {
-  "DATA_PAGE",
-  "INDEX_PAGE",
-  "DICTIONARY_PAGE",
-  "DATA_PAGE_V2"
-};
-const std::map<int, const char*> _PageType_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(4, _kPageTypeValues, _kPageTypeNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const PageType::type& val) {
-  std::map<int, const char*>::const_iterator it = _PageType_VALUES_TO_NAMES.find(val);
-  if (it != _PageType_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const PageType::type &val) {
+	switch (val) {
+	case PageType::DATA_PAGE:
+		out << "DATA_PAGE";
+		return out;
+	case PageType::INDEX_PAGE:
+		out << "INDEX_PAGE";
+		return out;
+	case PageType::DICTIONARY_PAGE:
+		out << "DICTIONARY_PAGE";
+		return out;
+	case PageType::DATA_PAGE_V2:
+		out << "DATA_PAGE_V2";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
-int _kBoundaryOrderValues[] = {
-  BoundaryOrder::UNORDERED,
-  BoundaryOrder::ASCENDING,
-  BoundaryOrder::DESCENDING
-};
-const char* _kBoundaryOrderNames[] = {
-  "UNORDERED",
-  "ASCENDING",
-  "DESCENDING"
-};
-const std::map<int, const char*> _BoundaryOrder_VALUES_TO_NAMES(::duckdb_apache::thrift::TEnumIterator(3, _kBoundaryOrderValues, _kBoundaryOrderNames), ::duckdb_apache::thrift::TEnumIterator(-1, NULL, NULL));
-
-std::ostream& operator<<(std::ostream& out, const BoundaryOrder::type& val) {
-  std::map<int, const char*>::const_iterator it = _BoundaryOrder_VALUES_TO_NAMES.find(val);
-  if (it != _BoundaryOrder_VALUES_TO_NAMES.end()) {
-    out << it->second;
-  } else {
-    out << static_cast<int>(val);
-  }
-  return out;
+std::ostream &operator<<(std::ostream &out, const BoundaryOrder::type &val) {
+	switch (val) {
+	case BoundaryOrder::UNORDERED:
+		out << "UNORDERED";
+		return out;
+	case BoundaryOrder::ASCENDING:
+		out << "ASCENDING";
+		return out;
+	case BoundaryOrder::DESCENDING:
+		out << "DESCENDING";
+		return out;
+		//  no default for compiler error on missing enum
+	}
+	out << static_cast<int>(val);
+	return out;
 }
 
 
@@ -3827,11 +3832,11 @@ void ColumnMetaData::__set_type(const Type::type val) {
   this->type = val;
 }
 
-void ColumnMetaData::__set_encodings(const std::vector<Encoding::type> & val) {
+void ColumnMetaData::__set_encodings(const duckdb::vector<Encoding::type> & val) {
   this->encodings = val;
 }
 
-void ColumnMetaData::__set_path_in_schema(const std::vector<std::string> & val) {
+void ColumnMetaData::__set_path_in_schema(const duckdb::vector<std::string> & val) {
   this->path_in_schema = val;
 }
 
@@ -3851,7 +3856,7 @@ void ColumnMetaData::__set_total_compressed_size(const int64_t val) {
   this->total_compressed_size = val;
 }
 
-void ColumnMetaData::__set_key_value_metadata(const std::vector<KeyValue> & val) {
+void ColumnMetaData::__set_key_value_metadata(const duckdb::vector<KeyValue> & val) {
   this->key_value_metadata = val;
 __isset.key_value_metadata = true;
 }
@@ -3875,7 +3880,7 @@ void ColumnMetaData::__set_statistics(const Statistics& val) {
 __isset.statistics = true;
 }
 
-void ColumnMetaData::__set_encoding_stats(const std::vector<PageEncodingStats> & val) {
+void ColumnMetaData::__set_encoding_stats(const duckdb::vector<PageEncodingStats> & val) {
   this->encoding_stats = val;
 __isset.encoding_stats = true;
 }
@@ -4113,7 +4118,7 @@ uint32_t ColumnMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* opr
   xfer += oprot->writeFieldBegin("encodings", ::duckdb_apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->encodings.size()));
-    std::vector<Encoding::type> ::const_iterator _iter90;
+    duckdb::vector<Encoding::type> ::const_iterator _iter90;
     for (_iter90 = this->encodings.begin(); _iter90 != this->encodings.end(); ++_iter90)
     {
       xfer += oprot->writeI32((int32_t)(*_iter90));
@@ -4125,7 +4130,7 @@ uint32_t ColumnMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* opr
   xfer += oprot->writeFieldBegin("path_in_schema", ::duckdb_apache::thrift::protocol::T_LIST, 3);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->path_in_schema.size()));
-    std::vector<std::string> ::const_iterator _iter91;
+    duckdb::vector<std::string> ::const_iterator _iter91;
     for (_iter91 = this->path_in_schema.begin(); _iter91 != this->path_in_schema.end(); ++_iter91)
     {
       xfer += oprot->writeString((*_iter91));
@@ -4154,7 +4159,7 @@ uint32_t ColumnMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* opr
     xfer += oprot->writeFieldBegin("key_value_metadata", ::duckdb_apache::thrift::protocol::T_LIST, 8);
     {
       xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->key_value_metadata.size()));
-      std::vector<KeyValue> ::const_iterator _iter92;
+      duckdb::vector<KeyValue> ::const_iterator _iter92;
       for (_iter92 = this->key_value_metadata.begin(); _iter92 != this->key_value_metadata.end(); ++_iter92)
       {
         xfer += (*_iter92).write(oprot);
@@ -4186,7 +4191,7 @@ uint32_t ColumnMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* opr
     xfer += oprot->writeFieldBegin("encoding_stats", ::duckdb_apache::thrift::protocol::T_LIST, 13);
     {
       xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->encoding_stats.size()));
-      std::vector<PageEncodingStats> ::const_iterator _iter93;
+      duckdb::vector<PageEncodingStats> ::const_iterator _iter93;
       for (_iter93 = this->encoding_stats.begin(); _iter93 != this->encoding_stats.end(); ++_iter93)
       {
         xfer += (*_iter93).write(oprot);
@@ -4343,7 +4348,7 @@ EncryptionWithColumnKey::~EncryptionWithColumnKey() throw() {
 }
 
 
-void EncryptionWithColumnKey::__set_path_in_schema(const std::vector<std::string> & val) {
+void EncryptionWithColumnKey::__set_path_in_schema(const duckdb::vector<std::string> & val) {
   this->path_in_schema = val;
 }
 
@@ -4430,7 +4435,7 @@ uint32_t EncryptionWithColumnKey::write(::duckdb_apache::thrift::protocol::TProt
   xfer += oprot->writeFieldBegin("path_in_schema", ::duckdb_apache::thrift::protocol::T_LIST, 1);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->path_in_schema.size()));
-    std::vector<std::string> ::const_iterator _iter103;
+    duckdb::vector<std::string> ::const_iterator _iter103;
     for (_iter103 = this->path_in_schema.begin(); _iter103 != this->path_in_schema.end(); ++_iter103)
     {
       xfer += oprot->writeString((*_iter103));
@@ -4867,7 +4872,7 @@ RowGroup::~RowGroup() throw() {
 }
 
 
-void RowGroup::__set_columns(const std::vector<ColumnChunk> & val) {
+void RowGroup::__set_columns(const duckdb::vector<ColumnChunk> & val) {
   this->columns = val;
 }
 
@@ -4879,7 +4884,7 @@ void RowGroup::__set_num_rows(const int64_t val) {
   this->num_rows = val;
 }
 
-void RowGroup::__set_sorting_columns(const std::vector<SortingColumn> & val) {
+void RowGroup::__set_sorting_columns(const duckdb::vector<SortingColumn> & val) {
   this->sorting_columns = val;
 __isset.sorting_columns = true;
 }
@@ -5035,7 +5040,7 @@ uint32_t RowGroup::write(::duckdb_apache::thrift::protocol::TProtocol* oprot) co
   xfer += oprot->writeFieldBegin("columns", ::duckdb_apache::thrift::protocol::T_LIST, 1);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->columns.size()));
-    std::vector<ColumnChunk> ::const_iterator _iter120;
+    duckdb::vector<ColumnChunk> ::const_iterator _iter120;
     for (_iter120 = this->columns.begin(); _iter120 != this->columns.end(); ++_iter120)
     {
       xfer += (*_iter120).write(oprot);
@@ -5056,7 +5061,7 @@ uint32_t RowGroup::write(::duckdb_apache::thrift::protocol::TProtocol* oprot) co
     xfer += oprot->writeFieldBegin("sorting_columns", ::duckdb_apache::thrift::protocol::T_LIST, 4);
     {
       xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->sorting_columns.size()));
-      std::vector<SortingColumn> ::const_iterator _iter121;
+      duckdb::vector<SortingColumn> ::const_iterator _iter121;
       for (_iter121 = this->sorting_columns.begin(); _iter121 != this->sorting_columns.end(); ++_iter121)
       {
         xfer += (*_iter121).write(oprot);
@@ -5436,7 +5441,7 @@ OffsetIndex::~OffsetIndex() throw() {
 }
 
 
-void OffsetIndex::__set_page_locations(const std::vector<PageLocation> & val) {
+void OffsetIndex::__set_page_locations(const duckdb::vector<PageLocation> & val) {
   this->page_locations = val;
 }
 std::ostream& operator<<(std::ostream& out, const OffsetIndex& obj)
@@ -5510,7 +5515,7 @@ uint32_t OffsetIndex::write(::duckdb_apache::thrift::protocol::TProtocol* oprot)
   xfer += oprot->writeFieldBegin("page_locations", ::duckdb_apache::thrift::protocol::T_LIST, 1);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->page_locations.size()));
-    std::vector<PageLocation> ::const_iterator _iter135;
+    duckdb::vector<PageLocation> ::const_iterator _iter135;
     for (_iter135 = this->page_locations.begin(); _iter135 != this->page_locations.end(); ++_iter135)
     {
       xfer += (*_iter135).write(oprot);
@@ -5548,15 +5553,15 @@ ColumnIndex::~ColumnIndex() throw() {
 }
 
 
-void ColumnIndex::__set_null_pages(const std::vector<bool> & val) {
+void ColumnIndex::__set_null_pages(const duckdb::vector<bool> & val) {
   this->null_pages = val;
 }
 
-void ColumnIndex::__set_min_values(const std::vector<std::string> & val) {
+void ColumnIndex::__set_min_values(const duckdb::vector<std::string> & val) {
   this->min_values = val;
 }
 
-void ColumnIndex::__set_max_values(const std::vector<std::string> & val) {
+void ColumnIndex::__set_max_values(const duckdb::vector<std::string> & val) {
   this->max_values = val;
 }
 
@@ -5564,7 +5569,7 @@ void ColumnIndex::__set_boundary_order(const BoundaryOrder::type val) {
   this->boundary_order = val;
 }
 
-void ColumnIndex::__set_null_counts(const std::vector<int64_t> & val) {
+void ColumnIndex::__set_null_counts(const duckdb::vector<int64_t> & val) {
   this->null_counts = val;
 __isset.null_counts = true;
 }
@@ -5718,7 +5723,7 @@ uint32_t ColumnIndex::write(::duckdb_apache::thrift::protocol::TProtocol* oprot)
   xfer += oprot->writeFieldBegin("null_pages", ::duckdb_apache::thrift::protocol::T_LIST, 1);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->null_pages.size()));
-    std::vector<bool> ::const_iterator _iter159;
+    duckdb::vector<bool> ::const_iterator _iter159;
     for (_iter159 = this->null_pages.begin(); _iter159 != this->null_pages.end(); ++_iter159)
     {
       xfer += oprot->writeBool((*_iter159));
@@ -5730,7 +5735,7 @@ uint32_t ColumnIndex::write(::duckdb_apache::thrift::protocol::TProtocol* oprot)
   xfer += oprot->writeFieldBegin("min_values", ::duckdb_apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->min_values.size()));
-    std::vector<std::string> ::const_iterator _iter160;
+    duckdb::vector<std::string> ::const_iterator _iter160;
     for (_iter160 = this->min_values.begin(); _iter160 != this->min_values.end(); ++_iter160)
     {
       xfer += oprot->writeBinary((*_iter160));
@@ -5742,7 +5747,7 @@ uint32_t ColumnIndex::write(::duckdb_apache::thrift::protocol::TProtocol* oprot)
   xfer += oprot->writeFieldBegin("max_values", ::duckdb_apache::thrift::protocol::T_LIST, 3);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->max_values.size()));
-    std::vector<std::string> ::const_iterator _iter161;
+    duckdb::vector<std::string> ::const_iterator _iter161;
     for (_iter161 = this->max_values.begin(); _iter161 != this->max_values.end(); ++_iter161)
     {
       xfer += oprot->writeBinary((*_iter161));
@@ -5759,7 +5764,7 @@ uint32_t ColumnIndex::write(::duckdb_apache::thrift::protocol::TProtocol* oprot)
     xfer += oprot->writeFieldBegin("null_counts", ::duckdb_apache::thrift::protocol::T_LIST, 5);
     {
       xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_I64, static_cast<uint32_t>(this->null_counts.size()));
-      std::vector<int64_t> ::const_iterator _iter162;
+      duckdb::vector<int64_t> ::const_iterator _iter162;
       for (_iter162 = this->null_counts.begin(); _iter162 != this->null_counts.end(); ++_iter162)
       {
         xfer += oprot->writeI64((*_iter162));
@@ -6212,7 +6217,7 @@ void FileMetaData::__set_version(const int32_t val) {
   this->version = val;
 }
 
-void FileMetaData::__set_schema(const std::vector<SchemaElement> & val) {
+void FileMetaData::__set_schema(const duckdb::vector<SchemaElement> & val) {
   this->schema = val;
 }
 
@@ -6220,11 +6225,11 @@ void FileMetaData::__set_num_rows(const int64_t val) {
   this->num_rows = val;
 }
 
-void FileMetaData::__set_row_groups(const std::vector<RowGroup> & val) {
+void FileMetaData::__set_row_groups(const duckdb::vector<RowGroup> & val) {
   this->row_groups = val;
 }
 
-void FileMetaData::__set_key_value_metadata(const std::vector<KeyValue> & val) {
+void FileMetaData::__set_key_value_metadata(const duckdb::vector<KeyValue> & val) {
   this->key_value_metadata = val;
 __isset.key_value_metadata = true;
 }
@@ -6234,7 +6239,7 @@ void FileMetaData::__set_created_by(const std::string& val) {
 __isset.created_by = true;
 }
 
-void FileMetaData::__set_column_orders(const std::vector<ColumnOrder> & val) {
+void FileMetaData::__set_column_orders(const duckdb::vector<ColumnOrder> & val) {
   this->column_orders = val;
 __isset.column_orders = true;
 }
@@ -6432,7 +6437,7 @@ uint32_t FileMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* oprot
   xfer += oprot->writeFieldBegin("schema", ::duckdb_apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->schema.size()));
-    std::vector<SchemaElement> ::const_iterator _iter191;
+    duckdb::vector<SchemaElement> ::const_iterator _iter191;
     for (_iter191 = this->schema.begin(); _iter191 != this->schema.end(); ++_iter191)
     {
       xfer += (*_iter191).write(oprot);
@@ -6448,7 +6453,7 @@ uint32_t FileMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* oprot
   xfer += oprot->writeFieldBegin("row_groups", ::duckdb_apache::thrift::protocol::T_LIST, 4);
   {
     xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->row_groups.size()));
-    std::vector<RowGroup> ::const_iterator _iter192;
+    duckdb::vector<RowGroup> ::const_iterator _iter192;
     for (_iter192 = this->row_groups.begin(); _iter192 != this->row_groups.end(); ++_iter192)
     {
       xfer += (*_iter192).write(oprot);
@@ -6461,7 +6466,7 @@ uint32_t FileMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* oprot
     xfer += oprot->writeFieldBegin("key_value_metadata", ::duckdb_apache::thrift::protocol::T_LIST, 5);
     {
       xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->key_value_metadata.size()));
-      std::vector<KeyValue> ::const_iterator _iter193;
+      duckdb::vector<KeyValue> ::const_iterator _iter193;
       for (_iter193 = this->key_value_metadata.begin(); _iter193 != this->key_value_metadata.end(); ++_iter193)
       {
         xfer += (*_iter193).write(oprot);
@@ -6479,7 +6484,7 @@ uint32_t FileMetaData::write(::duckdb_apache::thrift::protocol::TProtocol* oprot
     xfer += oprot->writeFieldBegin("column_orders", ::duckdb_apache::thrift::protocol::T_LIST, 7);
     {
       xfer += oprot->writeListBegin(::duckdb_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->column_orders.size()));
-      std::vector<ColumnOrder> ::const_iterator _iter194;
+      duckdb::vector<ColumnOrder> ::const_iterator _iter194;
       for (_iter194 = this->column_orders.begin(); _iter194 != this->column_orders.end(); ++_iter194)
       {
         xfer += (*_iter194).write(oprot);
@@ -6674,5 +6679,6 @@ void FileCryptoMetaData::printTo(std::ostream& out) const {
   out << ", " << "key_metadata="; (__isset.key_metadata ? (out << to_string(key_metadata)) : (out << "<null>"));
   out << ")";
 }
+
 
 }} // namespace

@@ -66,7 +66,7 @@ bool DeleteStatement::Equals(const SQLStatement *other_p) const {
 	} else if (!condition || !other.condition) {
 		// one of them has it, other doesn't
 		return false;
-	} else if (!condition->Equals(other.condition.get())) {
+	} else if (!condition->Equals(*other.condition)) {
 		// both have it, but they are not the same
 		return false;
 	}
@@ -76,7 +76,7 @@ bool DeleteStatement::Equals(const SQLStatement *other_p) const {
 	} else if (!table || !other.table) {
 		// one of them has it, other doesn't
 		return false;
-	} else if (!table->Equals(other.table.get())) {
+	} else if (!table->Equals(*other.table)) {
 		// both have it, but they are not the same
 		return false;
 	}
@@ -87,7 +87,7 @@ bool DeleteStatement::Equals(const SQLStatement *other_p) const {
 	for (idx_t i = 0; i < using_clauses.size(); i++) {
 		auto &lhs = using_clauses[i];
 		auto &rhs = other.using_clauses[i];
-		if (!lhs->Equals(rhs.get())) {
+		if (!lhs->Equals(*rhs)) {
 			return false;
 		}
 	}
@@ -98,7 +98,7 @@ bool DeleteStatement::Equals(const SQLStatement *other_p) const {
 	for (idx_t i = 0; i < returning_list.size(); i++) {
 		auto &lhs = returning_list[i];
 		auto &rhs = other.returning_list[i];
-		if (!lhs->Equals(rhs.get())) {
+		if (!lhs->Equals(*rhs)) {
 			return false;
 		}
 	}

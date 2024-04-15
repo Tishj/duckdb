@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/catalog/catalog_entry/dtable_catalog_entry.hpp
+// duckdb/catalog/catalog_entry/duck_table_entry.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -16,33 +16,34 @@ namespace duckdb {
 class DuckTableEntry : public TableCatalogEntry {
 public:
 	//! Create a TableCatalogEntry and initialize storage for it
-	DuckTableEntry(Catalog *catalog, SchemaCatalogEntry *schema, BoundCreateTableInfo *info,
+	DuckTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, BoundCreateTableInfo &info,
 	               std::shared_ptr<DataTable> inherited_storage = nullptr);
 
 public:
-	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo *info) override;
-	void UndoAlter(ClientContext &context, AlterInfo *info) override;
+	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo &info) override;
+	void UndoAlter(ClientContext &context, AlterInfo &info) override;
 	//! Returns the underlying storage of the table
 	DataTable &GetStorage() override;
-	DataTable *GetStoragePtr() override;
 	//! Returns a list of the bound constraints of the table
 	const vector<unique_ptr<BoundConstraint>> &GetBoundConstraints() override;
 
 	//! Get statistics of a column (physical or virtual) within the table
 	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, column_t column_id) override;
 
-	unique_ptr<CatalogEntry> Copy(ClientContext &context) override;
+	unique_ptr<CatalogEntry> Copy(ClientContext &context) const override;
 
 	void SetAsRoot() override;
 
-	void CommitAlter(AlterInfo &info);
+	void CommitAlter(string &column_name);
 	void CommitDrop();
 
 	TableFunction GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data) override;
 
+	vector<ColumnSegmentInfo> GetColumnSegmentInfo() override;
+
 	TableStorageInfo GetStorageInfo(ClientContext &context) override;
 
-	bool IsDuckTable() override {
+	bool IsDuckTable() const override {
 		return true;
 	}
 
@@ -56,6 +57,7 @@ private:
 	unique_ptr<CatalogEntry> DropNotNull(ClientContext &context, DropNotNullInfo &info);
 	unique_ptr<CatalogEntry> AddForeignKeyConstraint(ClientContext &context, AlterForeignKeyInfo &info);
 	unique_ptr<CatalogEntry> DropForeignKeyConstraint(ClientContext &context, AlterForeignKeyInfo &info);
+	unique_ptr<CatalogEntry> SetColumnComment(ClientContext &context, SetColumnCommentInfo &info);
 
 	void UpdateConstraintsOnColumnDrop(const LogicalIndex &removed_index, const vector<LogicalIndex> &adjusted_indices,
 	                                   const RemoveColumnInfo &info, CreateTableInfo &create_info, bool is_generated);

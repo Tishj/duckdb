@@ -20,6 +20,7 @@ class DatabaseInstance;
 class StorageManager;
 class TransactionManager;
 class StorageExtension;
+class DatabaseManager;
 
 struct AttachInfo;
 
@@ -38,12 +39,15 @@ public:
 	//! Create an attached database instance with the specified name and storage
 	AttachedDatabase(DatabaseInstance &db, Catalog &catalog, string name, string file_path, AccessMode access_mode);
 	//! Create an attached database instance with the specified storage extension
-	AttachedDatabase(DatabaseInstance &db, Catalog &catalog, StorageExtension &ext, string name, AttachInfo &info,
-	                 AccessMode access_mode);
-	~AttachedDatabase();
+	AttachedDatabase(DatabaseInstance &db, Catalog &catalog, StorageExtension &ext, ClientContext &context, string name,
+	                 const AttachInfo &info, AccessMode access_mode);
+	~AttachedDatabase() override;
 
-	void Initialize();
+	void Initialize(optional_ptr<ClientContext> context = nullptr);
+	void Close();
 
+	Catalog &ParentCatalog() override;
+	const Catalog &ParentCatalog() const override;
 	StorageManager &GetStorageManager();
 	Catalog &GetCatalog();
 	TransactionManager &GetTransactionManager();
@@ -56,8 +60,12 @@ public:
 	bool IsSystem() const;
 	bool IsTemporary() const;
 	bool IsReadOnly() const;
+	bool IsInitialDatabase() const;
+	void SetInitialDatabase();
+	void SetReadOnlyDatabase();
 
-	static string ExtractDatabaseName(const string &dbpath);
+	static bool NameIsReserved(const string &name);
+	static string ExtractDatabaseName(const string &dbpath, FileSystem &fs);
 
 private:
 	DatabaseInstance &db;
@@ -65,6 +73,9 @@ private:
 	unique_ptr<Catalog> catalog;
 	unique_ptr<TransactionManager> transaction_manager;
 	AttachedDatabaseType type;
+	optional_ptr<Catalog> parent_catalog;
+	bool is_initial_database = false;
+	bool is_closed = false;
 };
 
 } // namespace duckdb

@@ -54,7 +54,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		// aggregate
 		if (!everything_referenced) {
 			// FIXME: groups that are not referenced need to stay -> but they don't need to be scanned and output!
-			auto &aggr = (LogicalAggregate &)op;
+			auto &aggr = op.Cast<LogicalAggregate>();
 			ClearUnusedExpressions(aggr.expressions, aggr.aggregate_index);
 			if (aggr.expressions.empty() && aggr.groups.empty()) {
 				// removed all expressions from the aggregate: push a COUNT(*)
@@ -71,10 +71,11 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		remove.VisitOperator(*op.children[0]);
 		return;
 	}
+	case LogicalOperatorType::LOGICAL_ASOF_JOIN:
 	case LogicalOperatorType::LOGICAL_DELIM_JOIN:
 	case LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
 		if (!everything_referenced) {
-			auto &comp_join = (LogicalComparisonJoin &)op;
+			auto &comp_join = op.Cast<LogicalComparisonJoin>();
 
 			if (comp_join.join_type != JoinType::INNER) {
 				break;
@@ -88,8 +89,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 					    cond.right->expression_class == ExpressionClass::BOUND_COLUMN_REF) {
 						// comparison join between two bound column refs
 						// we can replace any reference to the RHS (build-side) with a reference to the LHS (probe-side)
-						auto &lhs_col = (BoundColumnRefExpression &)*cond.left;
-						auto &rhs_col = (BoundColumnRefExpression &)*cond.right;
+						auto &lhs_col = cond.left->Cast<BoundColumnRefExpression>();
+						auto &rhs_col = cond.right->Cast<BoundColumnRefExpression>();
 						// if there are any columns that refer to the RHS,
 						auto colrefs = column_references.find(rhs_col.binding);
 						if (colrefs != column_references.end()) {
@@ -107,12 +108,12 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	}
 	case LogicalOperatorType::LOGICAL_ANY_JOIN:
 		break;
-	case LogicalOperatorType::LOGICAL_UNION:
-		if (!everything_referenced) {
-			// for UNION we can remove unreferenced columns as long as everything_referenced is false (i.e. we
-			// encounter a UNION node that is not preceded by a DISTINCT)
-			// this happens when UNION ALL is used
-			auto &setop = (LogicalSetOperation &)op;
+	case LogicalOperatorType::LOGICAL_UNION: {
+		auto &setop = op.Cast<LogicalSetOperation>();
+		if (setop.setop_all && !everything_referenced) {
+			// for UNION we can remove unreferenced columns if union all is used
+			// it's possible not all columns are referenced, but unreferenced columns in the union can
+			// still have an affect on the result of the union
 			vector<idx_t> entries;
 			for (idx_t i = 0; i < setop.column_count; i++) {
 				entries.push_back(i);
@@ -138,10 +139,10 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 					expressions.reserve(entries.size());
 					for (auto &column_idx : entries) {
 						expressions.push_back(
-						    make_unique<BoundColumnRefExpression>(child->types[column_idx], bindings[column_idx]));
+						    make_uniq<BoundColumnRefExpression>(child->types[column_idx], bindings[column_idx]));
 					}
 					auto new_projection =
-					    make_unique<LogicalProjection>(binder.GenerateTableIndex(), std::move(expressions));
+					    make_uniq<LogicalProjection>(binder.GenerateTableIndex(), std::move(expressions));
 					new_projection->children.push_back(std::move(child));
 					op.children[child_idx] = std::move(new_projection);
 
@@ -155,6 +156,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 			remove.VisitOperator(*child);
 		}
 		return;
+	}
 	case LogicalOperatorType::LOGICAL_EXCEPT:
 	case LogicalOperatorType::LOGICAL_INTERSECT:
 		// for INTERSECT/EXCEPT operations we can't remove anything, just recursively visit the children
@@ -165,7 +167,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		return;
 	case LogicalOperatorType::LOGICAL_ORDER_BY:
 		if (!everything_referenced) {
-			auto &order = (LogicalOrder &)op;
+			auto &order = op.Cast<LogicalOrder>();
 			D_ASSERT(order.projections.empty()); // should not yet be set
 			const auto all_bindings = order.GetColumnBindings();
 
@@ -182,14 +184,14 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		return;
 	case LogicalOperatorType::LOGICAL_PROJECTION: {
 		if (!everything_referenced) {
-			auto &proj = (LogicalProjection &)op;
+			auto &proj = op.Cast<LogicalProjection>();
 			ClearUnusedExpressions(proj.expressions, proj.table_index);
 
 			if (proj.expressions.empty()) {
 				// nothing references the projected expressions
 				// this happens in the case of e.g. EXISTS(SELECT * FROM ...)
 				// in this case we only need to project a single constant
-				proj.expressions.push_back(make_unique<BoundConstantExpression>(Value::INTEGER(42)));
+				proj.expressions.push_back(make_uniq<BoundConstantExpression>(Value::INTEGER(42)));
 			}
 		}
 		// then recurse into the children of this projection
@@ -214,7 +216,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	case LogicalOperatorType::LOGICAL_GET:
 		LogicalOperatorVisitor::VisitOperatorExpressions(op);
 		if (!everything_referenced) {
-			auto &get = (LogicalGet &)op;
+			auto &get = op.Cast<LogicalGet>();
 			if (!get.function.projection_pushdown) {
 				return;
 			}
@@ -232,17 +234,17 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 			// for every table filter, push a column binding into the column references map to prevent the column from
 			// being projected out
 			for (auto &filter : get.table_filters.filters) {
-				idx_t index = DConstants::INVALID_INDEX;
+				optional_idx index;
 				for (idx_t i = 0; i < get.column_ids.size(); i++) {
 					if (get.column_ids[i] == filter.first) {
 						index = i;
 						break;
 					}
 				}
-				if (index == DConstants::INVALID_INDEX) {
+				if (!index.IsValid()) {
 					throw InternalException("Could not find column index for table filter");
 				}
-				ColumnBinding filter_binding(get.table_index, index);
+				ColumnBinding filter_binding(get.table_index, index.GetIndex());
 				if (column_references.find(filter_binding) == column_references.end()) {
 					column_references.insert(make_pair(filter_binding, vector<BoundColumnRefExpression *>()));
 				}
@@ -282,7 +284,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		}
 		return;
 	case LogicalOperatorType::LOGICAL_FILTER: {
-		auto &filter = (LogicalFilter &)op;
+		auto &filter = op.Cast<LogicalFilter>();
 		if (!filter.projection_map.empty()) {
 			// if we have any entries in the filter projection map don't prune any columns
 			// FIXME: we can do something more clever here
@@ -301,7 +303,15 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		everything_referenced = true;
 		break;
 	}
+	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE: {
+		everything_referenced = true;
+		break;
+	}
 	case LogicalOperatorType::LOGICAL_CTE_REF: {
+		everything_referenced = true;
+		break;
+	}
+	case LogicalOperatorType::LOGICAL_PIVOT: {
 		everything_referenced = true;
 		break;
 	}
@@ -310,6 +320,27 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	}
 	LogicalOperatorVisitor::VisitOperatorExpressions(op);
 	LogicalOperatorVisitor::VisitOperatorChildren(op);
+
+	if (op.type == LogicalOperatorType::LOGICAL_ASOF_JOIN || op.type == LogicalOperatorType::LOGICAL_DELIM_JOIN ||
+	    op.type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+		auto &comp_join = op.Cast<LogicalComparisonJoin>();
+		// after removing duplicate columns we may have duplicate join conditions (if the join graph is cyclical)
+		vector<JoinCondition> unique_conditions;
+		for (auto &cond : comp_join.conditions) {
+			bool found = false;
+			for (auto &unique_cond : unique_conditions) {
+				if (cond.comparison == unique_cond.comparison && cond.left->Equals(*unique_cond.left) &&
+				    cond.right->Equals(*unique_cond.right)) {
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				unique_conditions.push_back(std::move(cond));
+			}
+		}
+		comp_join.conditions = std::move(unique_conditions);
+	}
 }
 
 unique_ptr<Expression> RemoveUnusedColumns::VisitReplace(BoundColumnRefExpression &expr,

@@ -13,15 +13,38 @@
 
 namespace duckdb {
 
+class ArenaAllocator;
 struct AggregateObject;
 struct AggregateFilterData;
 class DataChunk;
 class RowLayout;
+class TupleDataLayout;
 class RowDataCollection;
 struct SelectionVector;
 class StringHeap;
 class Vector;
 struct UnifiedVectorFormat;
+
+// The NestedValidity class help to set/get the validity from inside nested vectors
+class NestedValidity {
+	data_ptr_t list_validity_location;
+	data_ptr_t *struct_validity_locations;
+	idx_t entry_idx;
+	idx_t idx_in_entry;
+
+public:
+	explicit NestedValidity(data_ptr_t validitymask_location);
+	NestedValidity(data_ptr_t *validitymask_locations, idx_t child_vector_index);
+	void SetInvalid(idx_t idx);
+	bool IsValid(idx_t idx);
+};
+
+struct RowOperationsState {
+	explicit RowOperationsState(ArenaAllocator &allocator) : allocator(allocator) {
+	}
+
+	ArenaAllocator &allocator;
+};
 
 // RowOperations contains a set of operations that operate on data using a RowLayout
 struct RowOperations {
@@ -29,18 +52,21 @@ struct RowOperations {
 	// Aggregation Operators
 	//===--------------------------------------------------------------------===//
 	//! initialize - unaligned addresses
-	static void InitializeStates(RowLayout &layout, Vector &addresses, const SelectionVector &sel, idx_t count);
+	static void InitializeStates(TupleDataLayout &layout, Vector &addresses, const SelectionVector &sel, idx_t count);
 	//! destructor - unaligned addresses, updated
-	static void DestroyStates(RowLayout &layout, Vector &addresses, idx_t count);
+	static void DestroyStates(RowOperationsState &state, TupleDataLayout &layout, Vector &addresses, idx_t count);
 	//! update - aligned addresses
-	static void UpdateStates(AggregateObject &aggr, Vector &addresses, DataChunk &payload, idx_t arg_idx, idx_t count);
+	static void UpdateStates(RowOperationsState &state, AggregateObject &aggr, Vector &addresses, DataChunk &payload,
+	                         idx_t arg_idx, idx_t count);
 	//! filtered update - aligned addresses
-	static void UpdateFilteredStates(AggregateFilterData &filter_data, AggregateObject &aggr, Vector &addresses,
-	                                 DataChunk &payload, idx_t arg_idx);
+	static void UpdateFilteredStates(RowOperationsState &state, AggregateFilterData &filter_data, AggregateObject &aggr,
+	                                 Vector &addresses, DataChunk &payload, idx_t arg_idx);
 	//! combine - unaligned addresses, updated
-	static void CombineStates(RowLayout &layout, Vector &sources, Vector &targets, idx_t count);
+	static void CombineStates(RowOperationsState &state, TupleDataLayout &layout, Vector &sources, Vector &targets,
+	                          idx_t count);
 	//! finalize - unaligned addresses, updated
-	static void FinalizeStates(RowLayout &layout, Vector &addresses, DataChunk &result, idx_t aggr_idx);
+	static void FinalizeStates(RowOperationsState &state, TupleDataLayout &layout, Vector &addresses, DataChunk &result,
+	                           idx_t aggr_idx);
 
 	//===--------------------------------------------------------------------===//
 	// Read/Write Operators
@@ -55,7 +81,7 @@ struct RowOperations {
 	                   const idx_t count, const RowLayout &layout, const idx_t col_no, const idx_t build_size = 0,
 	                   data_ptr_t heap_ptr = nullptr);
 	//! Full Scan an entire columns
-	static void FullScanColumn(const RowLayout &layout, Vector &rows, Vector &col, idx_t count, idx_t col_idx);
+	static void FullScanColumn(const TupleDataLayout &layout, Vector &rows, Vector &col, idx_t count, idx_t col_idx);
 
 	//===--------------------------------------------------------------------===//
 	// Comparison Operators
@@ -65,7 +91,7 @@ struct RowOperations {
 	//! Returns the number of matches remaining in the selection.
 	using Predicates = vector<ExpressionType>;
 
-	static idx_t Match(DataChunk &columns, UnifiedVectorFormat col_data[], const RowLayout &layout, Vector &rows,
+	static idx_t Match(DataChunk &columns, UnifiedVectorFormat col_data[], const TupleDataLayout &layout, Vector &rows,
 	                   const Predicates &predicates, SelectionVector &sel, idx_t count, SelectionVector *no_match,
 	                   idx_t &no_match_count);
 
@@ -79,15 +105,15 @@ struct RowOperations {
 	static void ComputeEntrySizes(Vector &v, UnifiedVectorFormat &vdata, idx_t entry_sizes[], idx_t vcount,
 	                              idx_t ser_count, const SelectionVector &sel, idx_t offset = 0);
 	//! Scatter vector with variable size type to the heap.
-	static void HeapScatter(Vector &v, idx_t vcount, const SelectionVector &sel, idx_t ser_count, idx_t col_idx,
-	                        data_ptr_t *key_locations, data_ptr_t *validitymask_locations, idx_t offset = 0);
+	static void HeapScatter(Vector &v, idx_t vcount, const SelectionVector &sel, idx_t ser_count,
+	                        data_ptr_t *key_locations, optional_ptr<NestedValidity> parent_validity, idx_t offset = 0);
 	//! Scatter vector data with variable size type to the heap.
 	static void HeapScatterVData(UnifiedVectorFormat &vdata, PhysicalType type, const SelectionVector &sel,
-	                             idx_t ser_count, idx_t col_idx, data_ptr_t *key_locations,
-	                             data_ptr_t *validitymask_locations, idx_t offset = 0);
+	                             idx_t ser_count, data_ptr_t *key_locations,
+	                             optional_ptr<NestedValidity> parent_validity, idx_t offset = 0);
 	//! Gather a single column with variable size type from the heap.
-	static void HeapGather(Vector &v, const idx_t &vcount, const SelectionVector &sel, const idx_t &col_idx,
-	                       data_ptr_t key_locations[], data_ptr_t validitymask_locations[]);
+	static void HeapGather(Vector &v, const idx_t &vcount, const SelectionVector &sel, data_ptr_t key_locations[],
+	                       optional_ptr<NestedValidity> parent_validity);
 
 	//===--------------------------------------------------------------------===//
 	// Sorting Operators

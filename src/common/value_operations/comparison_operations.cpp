@@ -1,5 +1,6 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/operator/comparison_operators.hpp"
+#include "duckdb/common/uhugeint.hpp"
 #include "duckdb/common/value_operations/value_operations.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 
@@ -65,33 +66,33 @@ inline bool ValuePositionComparator::Final<duckdb::NotEquals>(const Value &lhs, 
 // Non-strict inequalities must use strict comparisons for Definite
 template <>
 bool ValuePositionComparator::Definite<duckdb::LessThanEquals>(const Value &lhs, const Value &rhs) {
-	return ValueOperations::DistinctLessThan(lhs, rhs);
-}
-
-template <>
-bool ValuePositionComparator::Final<duckdb::LessThanEquals>(const Value &lhs, const Value &rhs) {
-	return ValueOperations::DistinctLessThanEquals(lhs, rhs);
-}
-
-template <>
-bool ValuePositionComparator::Definite<duckdb::GreaterThanEquals>(const Value &lhs, const Value &rhs) {
-	return ValueOperations::DistinctGreaterThan(lhs, rhs);
-}
-
-template <>
-bool ValuePositionComparator::Final<duckdb::GreaterThanEquals>(const Value &lhs, const Value &rhs) {
-	return ValueOperations::DistinctGreaterThanEquals(lhs, rhs);
-}
-
-// Strict inequalities just use strict for both Definite and Final
-template <>
-bool ValuePositionComparator::Final<duckdb::LessThan>(const Value &lhs, const Value &rhs) {
-	return ValueOperations::DistinctLessThan(lhs, rhs);
+	return !ValuePositionComparator::Definite<duckdb::GreaterThan>(lhs, rhs);
 }
 
 template <>
 bool ValuePositionComparator::Final<duckdb::GreaterThan>(const Value &lhs, const Value &rhs) {
 	return ValueOperations::DistinctGreaterThan(lhs, rhs);
+}
+
+template <>
+bool ValuePositionComparator::Final<duckdb::LessThanEquals>(const Value &lhs, const Value &rhs) {
+	return !ValuePositionComparator::Final<duckdb::GreaterThan>(lhs, rhs);
+}
+
+template <>
+bool ValuePositionComparator::Definite<duckdb::GreaterThanEquals>(const Value &lhs, const Value &rhs) {
+	return !ValuePositionComparator::Definite<duckdb::GreaterThan>(rhs, lhs);
+}
+
+template <>
+bool ValuePositionComparator::Final<duckdb::GreaterThanEquals>(const Value &lhs, const Value &rhs) {
+	return !ValuePositionComparator::Final<duckdb::GreaterThan>(rhs, lhs);
+}
+
+// Strict inequalities just use strict for both Definite and Final
+template <>
+bool ValuePositionComparator::Final<duckdb::LessThan>(const Value &lhs, const Value &rhs) {
+	return ValuePositionComparator::Final<duckdb::GreaterThan>(rhs, lhs);
 }
 
 template <class OP>
@@ -102,7 +103,7 @@ static bool TemplatedBooleanOperation(const Value &left, const Value &right) {
 		Value left_copy = left;
 		Value right_copy = right;
 
-		LogicalType comparison_type = BoundComparisonExpression::BindComparison(left_type, right_type);
+		auto comparison_type = LogicalType::ForceMaxLogicalType(left_type, right_type);
 		if (!left_copy.DefaultTryCastAs(comparison_type) || !right_copy.DefaultTryCastAs(comparison_type)) {
 			return false;
 		}
@@ -128,6 +129,8 @@ static bool TemplatedBooleanOperation(const Value &left, const Value &right) {
 		return OP::Operation(left.GetValueUnsafe<uint32_t>(), right.GetValueUnsafe<uint32_t>());
 	case PhysicalType::UINT64:
 		return OP::Operation(left.GetValueUnsafe<uint64_t>(), right.GetValueUnsafe<uint64_t>());
+	case PhysicalType::UINT128:
+		return OP::Operation(left.GetValueUnsafe<uhugeint_t>(), right.GetValueUnsafe<uhugeint_t>());
 	case PhysicalType::INT128:
 		return OP::Operation(left.GetValueUnsafe<hugeint_t>(), right.GetValueUnsafe<hugeint_t>());
 	case PhysicalType::FLOAT:
@@ -170,6 +173,23 @@ static bool TemplatedBooleanOperation(const Value &left, const Value &right) {
 		}
 		return false;
 	}
+	case PhysicalType::ARRAY: {
+		auto &left_children = ArrayValue::GetChildren(left);
+		auto &right_children = ArrayValue::GetChildren(right);
+
+		// Should be enforced by the type
+		D_ASSERT(left_children.size() == right_children.size());
+
+		for (idx_t i = 0; i < left_children.size(); i++) {
+			if (ValuePositionComparator::Definite<OP>(left_children[i], right_children[i])) {
+				return true;
+			}
+			if (!ValuePositionComparator::Possible<OP>(left_children[i], right_children[i])) {
+				return false;
+			}
+		}
+		return true;
+	}
 	default:
 		throw InternalException("Unimplemented type for value comparison");
 	}
@@ -194,10 +214,7 @@ bool ValueOperations::GreaterThan(const Value &left, const Value &right) {
 }
 
 bool ValueOperations::GreaterThanEquals(const Value &left, const Value &right) {
-	if (left.IsNull() || right.IsNull()) {
-		throw InternalException("Comparison on NULL values");
-	}
-	return TemplatedBooleanOperation<duckdb::GreaterThanEquals>(left, right);
+	return !ValueOperations::GreaterThan(right, left);
 }
 
 bool ValueOperations::LessThan(const Value &left, const Value &right) {
@@ -205,7 +222,7 @@ bool ValueOperations::LessThan(const Value &left, const Value &right) {
 }
 
 bool ValueOperations::LessThanEquals(const Value &left, const Value &right) {
-	return ValueOperations::GreaterThanEquals(right, left);
+	return !ValueOperations::GreaterThan(left, right);
 }
 
 bool ValueOperations::NotDistinctFrom(const Value &left, const Value &right) {
@@ -234,12 +251,7 @@ bool ValueOperations::DistinctGreaterThan(const Value &left, const Value &right)
 }
 
 bool ValueOperations::DistinctGreaterThanEquals(const Value &left, const Value &right) {
-	if (left.IsNull()) {
-		return true;
-	} else if (right.IsNull()) {
-		return false;
-	}
-	return TemplatedBooleanOperation<duckdb::GreaterThanEquals>(left, right);
+	return !ValueOperations::DistinctGreaterThan(right, left);
 }
 
 bool ValueOperations::DistinctLessThan(const Value &left, const Value &right) {
@@ -247,7 +259,7 @@ bool ValueOperations::DistinctLessThan(const Value &left, const Value &right) {
 }
 
 bool ValueOperations::DistinctLessThanEquals(const Value &left, const Value &right) {
-	return ValueOperations::DistinctGreaterThanEquals(right, left);
+	return !ValueOperations::DistinctGreaterThan(left, right);
 }
 
 } // namespace duckdb

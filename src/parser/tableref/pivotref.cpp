@@ -1,7 +1,6 @@
 #include "duckdb/parser/tableref/pivotref.hpp"
 
 #include "duckdb/common/limits.hpp"
-#include "duckdb/common/field_writer.hpp"
 
 namespace duckdb {
 
@@ -10,15 +9,29 @@ namespace duckdb {
 //===--------------------------------------------------------------------===//
 string PivotColumn::ToString() const {
 	string result;
-	if (names.size() == 1) {
-		result += KeywordHelper::WriteOptionallyQuoted(names[0]);
-	} else {
+	if (!unpivot_names.empty()) {
+		D_ASSERT(pivot_expressions.empty());
+		// unpivot
+		if (unpivot_names.size() == 1) {
+			result += KeywordHelper::WriteOptionallyQuoted(unpivot_names[0]);
+		} else {
+			result += "(";
+			for (idx_t n = 0; n < unpivot_names.size(); n++) {
+				if (n > 0) {
+					result += ", ";
+				}
+				result += KeywordHelper::WriteOptionallyQuoted(unpivot_names[n]);
+			}
+			result += ")";
+		}
+	} else if (!pivot_expressions.empty()) {
+		// pivot
 		result += "(";
-		for (idx_t n = 0; n < names.size(); n++) {
+		for (idx_t n = 0; n < pivot_expressions.size(); n++) {
 			if (n > 0) {
 				result += ", ";
 			}
-			result += KeywordHelper::WriteOptionallyQuoted(names[n]);
+			result += pivot_expressions[n]->ToString();
 		}
 		result += ")";
 	}
@@ -30,9 +43,9 @@ string PivotColumn::ToString() const {
 			if (e > 0) {
 				result += ", ";
 			}
-			if (entry.star_expr) {
+			if (entry.expr) {
 				D_ASSERT(entry.values.empty());
-				result += entry.star_expr->ToString();
+				result += entry.expr->ToString();
 			} else if (entry.values.size() == 1) {
 				result += entry.values[0].ToSQLString();
 			} else {
@@ -72,7 +85,10 @@ bool PivotColumnEntry::Equals(const PivotColumnEntry &other) const {
 }
 
 bool PivotColumn::Equals(const PivotColumn &other) const {
-	if (other.names != names) {
+	if (!ExpressionUtil::ListEquals(pivot_expressions, other.pivot_expressions)) {
+		return false;
+	}
+	if (other.unpivot_names != unpivot_names) {
 		return false;
 	}
 	if (other.pivot_enum != pivot_enum) {
@@ -91,29 +107,14 @@ bool PivotColumn::Equals(const PivotColumn &other) const {
 
 PivotColumn PivotColumn::Copy() const {
 	PivotColumn result;
-	result.names = names;
+	for (auto &expr : pivot_expressions) {
+		result.pivot_expressions.push_back(expr->Copy());
+	}
+	result.unpivot_names = unpivot_names;
 	for (auto &entry : entries) {
 		result.entries.push_back(entry.Copy());
 	}
 	result.pivot_enum = pivot_enum;
-	return result;
-}
-
-void PivotColumn::Serialize(Serializer &serializer) const {
-	FieldWriter writer(serializer);
-	writer.WriteList<string>(names);
-	writer.WriteRegularSerializableList(entries);
-	writer.WriteString(pivot_enum);
-	writer.Finalize();
-}
-
-PivotColumn PivotColumn::Deserialize(Deserializer &source) {
-	PivotColumn result;
-	FieldReader reader(source);
-	result.names = reader.ReadRequiredList<string>();
-	result.entries = reader.ReadRequiredSerializableList<PivotColumnEntry, PivotColumnEntry>();
-	result.pivot_enum = reader.ReadRequired<string>();
-	reader.Finalize();
 	return result;
 }
 
@@ -123,26 +124,8 @@ PivotColumn PivotColumn::Deserialize(Deserializer &source) {
 PivotColumnEntry PivotColumnEntry::Copy() const {
 	PivotColumnEntry result;
 	result.values = values;
-	result.star_expr = star_expr ? star_expr->Copy() : nullptr;
+	result.expr = expr ? expr->Copy() : nullptr;
 	result.alias = alias;
-	return result;
-}
-
-void PivotColumnEntry::Serialize(Serializer &serializer) const {
-	FieldWriter writer(serializer);
-	writer.WriteRegularSerializableList(values);
-	writer.WriteOptional(star_expr);
-	writer.WriteString(alias);
-	writer.Finalize();
-}
-
-PivotColumnEntry PivotColumnEntry::Deserialize(Deserializer &source) {
-	PivotColumnEntry result;
-	FieldReader reader(source);
-	result.values = reader.ReadRequiredSerializableList<Value, Value>();
-	result.star_expr = reader.ReadOptional<ParsedExpression>(nullptr);
-	result.alias = reader.ReadRequired<string>();
-	reader.Finalize();
 	return result;
 }
 
@@ -215,47 +198,42 @@ string PivotRef::ToString() const {
 	return result;
 }
 
-bool PivotRef::Equals(const TableRef *other_p) const {
+bool PivotRef::Equals(const TableRef &other_p) const {
 	if (!TableRef::Equals(other_p)) {
 		return false;
 	}
-	auto other = (PivotRef *)other_p;
-	if (!source->Equals(other->source.get())) {
+	auto &other = other_p.Cast<PivotRef>();
+	if (!source->Equals(*other.source)) {
 		return false;
 	}
-	if (aggregates.size() != other->aggregates.size()) {
+	if (!ParsedExpression::ListEquals(aggregates, other.aggregates)) {
 		return false;
 	}
-	for (idx_t i = 0; i < aggregates.size(); i++) {
-		if (!BaseExpression::Equals(aggregates[i].get(), other->aggregates[i].get())) {
-			return false;
-		}
-	}
-	if (pivots.size() != other->pivots.size()) {
+	if (pivots.size() != other.pivots.size()) {
 		return false;
 	}
 	for (idx_t i = 0; i < pivots.size(); i++) {
-		if (!pivots[i].Equals(other->pivots[i])) {
+		if (!pivots[i].Equals(other.pivots[i])) {
 			return false;
 		}
 	}
-	if (unpivot_names != other->unpivot_names) {
+	if (unpivot_names != other.unpivot_names) {
 		return false;
 	}
-	if (alias != other->alias) {
+	if (alias != other.alias) {
 		return false;
 	}
-	if (groups != other->groups) {
+	if (groups != other.groups) {
 		return false;
 	}
-	if (include_nulls != other->include_nulls) {
+	if (include_nulls != other.include_nulls) {
 		return false;
 	}
 	return true;
 }
 
 unique_ptr<TableRef> PivotRef::Copy() {
-	auto copy = make_unique<PivotRef>();
+	auto copy = make_uniq<PivotRef>();
 	copy->source = source->Copy();
 	for (auto &aggr : aggregates) {
 		copy->aggregates.push_back(aggr->Copy());
@@ -269,28 +247,6 @@ unique_ptr<TableRef> PivotRef::Copy() {
 	copy->include_nulls = include_nulls;
 	copy->alias = alias;
 	return std::move(copy);
-}
-
-void PivotRef::Serialize(FieldWriter &writer) const {
-	writer.WriteSerializable(*source);
-	writer.WriteSerializableList(aggregates);
-	writer.WriteList<string>(unpivot_names);
-	writer.WriteRegularSerializableList(pivots);
-	writer.WriteList<string>(groups);
-	writer.WriteList<string>(column_name_alias);
-	writer.WriteField<bool>(include_nulls);
-}
-
-unique_ptr<TableRef> PivotRef::Deserialize(FieldReader &reader) {
-	auto result = make_unique<PivotRef>();
-	result->source = reader.ReadRequiredSerializable<TableRef>();
-	result->aggregates = reader.ReadRequiredSerializableList<ParsedExpression>();
-	result->unpivot_names = reader.ReadRequiredList<string>();
-	result->pivots = reader.ReadRequiredSerializableList<PivotColumn, PivotColumn>();
-	result->groups = reader.ReadRequiredList<string>();
-	result->column_name_alias = reader.ReadRequiredList<string>();
-	result->include_nulls = reader.ReadRequired<bool>();
-	return std::move(result);
 }
 
 } // namespace duckdb

@@ -17,7 +17,7 @@ namespace duckdb {
 //! The ParserExtensionInfo holds static information relevant to the parser extension
 //! It is made available in the parse_function, and will be kept alive as long as the database system is kept alive
 struct ParserExtensionInfo {
-	DUCKDB_API virtual ~ParserExtensionInfo() {
+	virtual ~ParserExtensionInfo() {
 	}
 };
 
@@ -29,7 +29,7 @@ enum class ParserExtensionResultType : uint8_t { PARSE_SUCCESSFUL, DISPLAY_ORIGI
 //! The ParserExtensionParseData holds the result of a successful parse step
 //! It will be passed along to the subsequent plan function
 struct ParserExtensionParseData {
-	DUCKDB_API virtual ~ParserExtensionParseData() {
+	virtual ~ParserExtensionParseData() {
 	}
 
 	virtual unique_ptr<ParserExtensionParseData> Copy() const = 0;
@@ -38,10 +38,10 @@ struct ParserExtensionParseData {
 struct ParserExtensionParseResult {
 	ParserExtensionParseResult() : type(ParserExtensionResultType::DISPLAY_ORIGINAL_ERROR) {
 	}
-	ParserExtensionParseResult(string error_p)
+	explicit ParserExtensionParseResult(string error_p)
 	    : type(ParserExtensionResultType::DISPLAY_EXTENSION_ERROR), error(std::move(error_p)) {
 	}
-	ParserExtensionParseResult(unique_ptr<ParserExtensionParseData> parse_data_p)
+	explicit ParserExtensionParseResult(unique_ptr<ParserExtensionParseData> parse_data_p)
 	    : type(ParserExtensionResultType::PARSE_SUCCESSFUL), parse_data(std::move(parse_data_p)) {
 	}
 
@@ -51,13 +51,15 @@ struct ParserExtensionParseResult {
 	unique_ptr<ParserExtensionParseData> parse_data;
 	//! The error message (if unsuccessful)
 	string error;
+	//! The error location (if unsuccessful)
+	optional_idx error_location;
 };
 
 typedef ParserExtensionParseResult (*parse_function_t)(ParserExtensionInfo *info, const string &query);
 //===--------------------------------------------------------------------===//
 // Plan
 //===--------------------------------------------------------------------===//
-struct ParserExtensionPlanResult {
+struct ParserExtensionPlanResult { // NOLINT: work-around bug in clang-tidy
 	//! The table function to execute
 	TableFunction function;
 	//! Parameters to the function

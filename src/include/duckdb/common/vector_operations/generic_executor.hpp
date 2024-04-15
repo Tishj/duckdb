@@ -26,10 +26,9 @@ struct PrimitiveTypeState {
 
 template <class INPUT_TYPE>
 struct PrimitiveType {
-	PrimitiveType() {
+	PrimitiveType() = default;
+	PrimitiveType(INPUT_TYPE val) : val(val) { // NOLINT: allow implicit cast
 	}
-	PrimitiveType(INPUT_TYPE val) : val(val) {
-	} // NOLINT: allow implicit cast
 
 	INPUT_TYPE val;
 
@@ -38,7 +37,7 @@ struct PrimitiveType {
 	static bool ConstructType(STRUCT_STATE &state, idx_t i, PrimitiveType<INPUT_TYPE> &result) {
 		auto &vdata = state.main_data;
 		auto idx = vdata.sel->get_index(i);
-		auto ptr = (INPUT_TYPE *)vdata.data;
+		auto ptr = UnifiedVectorFormat::GetData<INPUT_TYPE>(vdata);
 		result.val = ptr[idx];
 		return true;
 	}
@@ -77,7 +76,7 @@ struct StructTypeUnary {
 		if (!a_data.validity.RowIsValid(a_idx)) {
 			return false;
 		}
-		auto a_ptr = (A_TYPE *)a_data.data;
+		auto a_ptr = UnifiedVectorFormat::GetData<A_TYPE>(a_data);
 		result.a_val = a_ptr[a_idx];
 		return true;
 	}
@@ -106,8 +105,8 @@ struct StructTypeBinary {
 		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
 			return false;
 		}
-		auto a_ptr = (A_TYPE *)a_data.data;
-		auto b_ptr = (B_TYPE *)b_data.data;
+		auto a_ptr = UnifiedVectorFormat::GetData<A_TYPE>(a_data);
+		auto b_ptr = UnifiedVectorFormat::GetData<B_TYPE>(b_data);
 		result.a_val = a_ptr[a_idx];
 		result.b_val = b_ptr[b_idx];
 		return true;
@@ -143,9 +142,9 @@ struct StructTypeTernary {
 		    !c_data.validity.RowIsValid(c_idx)) {
 			return false;
 		}
-		auto a_ptr = (A_TYPE *)a_data.data;
-		auto b_ptr = (B_TYPE *)b_data.data;
-		auto c_ptr = (C_TYPE *)c_data.data;
+		auto a_ptr = UnifiedVectorFormat::GetData<A_TYPE>(a_data);
+		auto b_ptr = UnifiedVectorFormat::GetData<B_TYPE>(b_data);
+		auto c_ptr = UnifiedVectorFormat::GetData<C_TYPE>(c_data);
 		result.a_val = a_ptr[a_idx];
 		result.b_val = b_ptr[b_idx];
 		result.c_val = c_ptr[c_idx];
@@ -188,10 +187,10 @@ struct StructTypeQuaternary {
 		    !c_data.validity.RowIsValid(c_idx) || !d_data.validity.RowIsValid(d_idx)) {
 			return false;
 		}
-		auto a_ptr = (A_TYPE *)a_data.data;
-		auto b_ptr = (B_TYPE *)b_data.data;
-		auto c_ptr = (C_TYPE *)c_data.data;
-		auto d_ptr = (D_TYPE *)d_data.data;
+		auto a_ptr = UnifiedVectorFormat::GetData<A_TYPE>(a_data);
+		auto b_ptr = UnifiedVectorFormat::GetData<B_TYPE>(b_data);
+		auto c_ptr = UnifiedVectorFormat::GetData<C_TYPE>(c_data);
+		auto d_ptr = UnifiedVectorFormat::GetData<D_TYPE>(d_data);
 		result.a_val = a_ptr[a_idx];
 		result.b_val = b_ptr[b_idx];
 		result.c_val = c_ptr[c_idx];
@@ -254,7 +253,7 @@ private:
 
 		for (idx_t i = 0; i < (constant ? 1 : count); i++) {
 			auto a_idx = a_state.main_data.sel->get_index(i);
-			auto b_idx = a_state.main_data.sel->get_index(i);
+			auto b_idx = b_state.main_data.sel->get_index(i);
 			if (!a_state.main_data.validity.RowIsValid(a_idx) || !b_state.main_data.validity.RowIsValid(b_idx)) {
 				FlatVector::SetNull(result, i, true);
 				continue;
@@ -288,8 +287,8 @@ private:
 
 		for (idx_t i = 0; i < (constant ? 1 : count); i++) {
 			auto a_idx = a_state.main_data.sel->get_index(i);
-			auto b_idx = a_state.main_data.sel->get_index(i);
-			auto c_idx = a_state.main_data.sel->get_index(i);
+			auto b_idx = b_state.main_data.sel->get_index(i);
+			auto c_idx = c_state.main_data.sel->get_index(i);
 			if (!a_state.main_data.validity.RowIsValid(a_idx) || !b_state.main_data.validity.RowIsValid(b_idx) ||
 			    !c_state.main_data.validity.RowIsValid(c_idx)) {
 				FlatVector::SetNull(result, i, true);
@@ -329,9 +328,9 @@ private:
 
 		for (idx_t i = 0; i < (constant ? 1 : count); i++) {
 			auto a_idx = a_state.main_data.sel->get_index(i);
-			auto b_idx = a_state.main_data.sel->get_index(i);
-			auto c_idx = a_state.main_data.sel->get_index(i);
-			auto d_idx = a_state.main_data.sel->get_index(i);
+			auto b_idx = b_state.main_data.sel->get_index(i);
+			auto c_idx = c_state.main_data.sel->get_index(i);
+			auto d_idx = d_state.main_data.sel->get_index(i);
 			if (!a_state.main_data.validity.RowIsValid(a_idx) || !b_state.main_data.validity.RowIsValid(b_idx) ||
 			    !c_state.main_data.validity.RowIsValid(c_idx) || !d_state.main_data.validity.RowIsValid(d_idx)) {
 				FlatVector::SetNull(result, i, true);

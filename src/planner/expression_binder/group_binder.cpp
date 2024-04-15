@@ -4,24 +4,25 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression_binder/select_bind_state.hpp"
 #include "duckdb/common/to_string.hpp"
 
 namespace duckdb {
 
 GroupBinder::GroupBinder(Binder &binder, ClientContext &context, SelectNode &node, idx_t group_index,
-                         case_insensitive_map_t<idx_t> &alias_map, case_insensitive_map_t<idx_t> &group_alias_map)
-    : ExpressionBinder(binder, context), node(node), alias_map(alias_map), group_alias_map(group_alias_map),
+                         SelectBindState &bind_state, case_insensitive_map_t<idx_t> &group_alias_map)
+    : ExpressionBinder(binder, context), node(node), bind_state(bind_state), group_alias_map(group_alias_map),
       group_index(group_index) {
 }
 
-BindResult GroupBinder::BindExpression(unique_ptr<ParsedExpression> *expr_ptr, idx_t depth, bool root_expression) {
-	auto &expr = **expr_ptr;
+BindResult GroupBinder::BindExpression(unique_ptr<ParsedExpression> &expr_ptr, idx_t depth, bool root_expression) {
+	auto &expr = *expr_ptr;
 	if (root_expression && depth == 0) {
 		switch (expr.expression_class) {
 		case ExpressionClass::COLUMN_REF:
-			return BindColumnRef((ColumnRefExpression &)expr);
+			return BindColumnRef(expr.Cast<ColumnRefExpression>());
 		case ExpressionClass::CONSTANT:
-			return BindConstant((ConstantExpression &)expr);
+			return BindConstant(expr.Cast<ConstantExpression>());
 		case ExpressionClass::PARAMETER:
 			throw ParameterNotAllowedException("Parameter not supported in GROUP BY clause");
 		default:
@@ -49,7 +50,7 @@ BindResult GroupBinder::BindSelectRef(idx_t entry) {
 		// e.g. GROUP BY k, k or GROUP BY 1, 1
 		// in this case, we can just replace the grouping with a constant since the second grouping has no effect
 		// (the constant grouping will be optimized out later)
-		return BindResult(make_unique<BoundConstantExpression>(Value::INTEGER(42)));
+		return BindResult(make_uniq<BoundConstantExpression>(Value::INTEGER(42)));
 	}
 	if (entry >= node.select_list.size()) {
 		throw BinderException("GROUP BY term out of range - should be between 1 and %d", (int)node.select_list.size());
@@ -61,7 +62,7 @@ BindResult GroupBinder::BindSelectRef(idx_t entry) {
 	auto binding = Bind(select_entry, nullptr, false);
 	// now replace the original expression in the select list with a reference to this group
 	group_alias_map[to_string(entry)] = bind_index;
-	node.select_list[entry] = make_unique<ColumnRefExpression>(to_string(entry));
+	node.select_list[entry] = make_uniq<ColumnRefExpression>(to_string(entry));
 	// insert into the set of used aliases
 	used_aliases.insert(entry);
 	return BindResult(std::move(binding));
@@ -94,8 +95,8 @@ BindResult GroupBinder::BindColumnRef(ColumnRefExpression &colref) {
 		// failed to bind the column and the node is the root expression with depth = 0
 		// check if refers to an alias in the select clause
 		auto alias_name = colref.column_names[0];
-		auto entry = alias_map.find(alias_name);
-		if (entry == alias_map.end()) {
+		auto entry = bind_state.alias_map.find(alias_name);
+		if (entry == bind_state.alias_map.end()) {
 			// no matching alias found
 			return result;
 		}

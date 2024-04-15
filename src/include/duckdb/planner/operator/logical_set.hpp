@@ -17,8 +17,12 @@ namespace duckdb {
 
 class LogicalSet : public LogicalOperator {
 public:
+	static constexpr const LogicalOperatorType TYPE = LogicalOperatorType::LOGICAL_SET;
+
+public:
 	LogicalSet(std::string name_p, Value value_p, SetScope scope_p)
-	    : LogicalOperator(LogicalOperatorType::LOGICAL_SET), name(name_p), value(value_p), scope(scope_p) {
+	    : LogicalOperator(LogicalOperatorType::LOGICAL_SET), name(std::move(name_p)), value(std::move(value_p)),
+	      scope(scope_p) {
 	}
 
 	std::string name;
@@ -26,8 +30,9 @@ public:
 	SetScope scope;
 
 public:
-	void Serialize(FieldWriter &writer) const override;
-	static unique_ptr<LogicalOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader);
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<LogicalOperator> Deserialize(Deserializer &deserializer);
+
 	idx_t EstimateCardinality(ClientContext &context) override;
 
 protected:

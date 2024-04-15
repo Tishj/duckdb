@@ -6,7 +6,7 @@ namespace duckdb {
 
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundOperatorExpression &expr,
                                                                 ExpressionExecutorState &root) {
-	auto result = make_unique<ExpressionState>(expr, root);
+	auto result = make_uniq<ExpressionState>(expr, root);
 	for (auto &child : expr.children) {
 		result->AddChild(child.get());
 	}
@@ -90,7 +90,7 @@ void ExpressionExecutor::Execute(const BoundOperatorExpression &expr, Expression
 			}
 			if (result_count > 0) {
 				vector_to_check.Slice(slice_sel, result_count);
-				FillSwitch(vector_to_check, result, result_sel, result_count);
+				FillSwitch(vector_to_check, result, result_sel, NumericCast<sel_t>(result_count));
 			}
 			current_sel = next_sel;
 			next_sel = next_sel == &sel_a ? &sel_b : &sel_a;

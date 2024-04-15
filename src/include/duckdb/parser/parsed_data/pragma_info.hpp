@@ -18,19 +18,30 @@ namespace duckdb {
 enum class PragmaType : uint8_t { PRAGMA_STATEMENT, PRAGMA_CALL };
 
 struct PragmaInfo : public ParseInfo {
+public:
+	static constexpr const ParseInfoType TYPE = ParseInfoType::PRAGMA_INFO;
+
+public:
+	PragmaInfo() : ParseInfo(TYPE) {
+	}
+
 	//! Name of the PRAGMA statement
 	string name;
 	//! Parameter list (if any)
-	vector<Value> parameters;
+	vector<unique_ptr<ParsedExpression>> parameters;
 	//! Named parameter list (if any)
-	named_parameter_map_t named_parameters;
+	case_insensitive_map_t<unique_ptr<ParsedExpression>> named_parameters;
 
 public:
 	unique_ptr<PragmaInfo> Copy() const {
-		auto result = make_unique<PragmaInfo>();
+		auto result = make_uniq<PragmaInfo>();
 		result->name = name;
-		result->parameters = parameters;
-		result->named_parameters = named_parameters;
+		for (auto &param : parameters) {
+			result->parameters.push_back(param->Copy());
+		}
+		for (auto &entry : named_parameters) {
+			result->named_parameters.insert(make_pair(entry.first, entry.second->Copy()));
+		}
 		return result;
 	}
 
@@ -41,11 +52,26 @@ public:
 		if (parameters != other.parameters) {
 			return false;
 		}
-		if (named_parameters != other.named_parameters) {
+		if (named_parameters.size() != other.named_parameters.size()) {
 			return false;
+		}
+		auto it = named_parameters.begin();
+		auto jt = other.named_parameters.begin();
+		for (; it != named_parameters.end();) {
+			if (it->first != jt->first) {
+				return false;
+			}
+			if (!it->second->Equals(*jt->second)) {
+				return false;
+			}
+			it++;
+			jt++;
 		}
 		return true;
 	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };
 
 } // namespace duckdb

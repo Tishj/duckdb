@@ -9,19 +9,18 @@
 #pragma once
 
 #include "duckdb/storage/block.hpp"
-#include "duckdb/storage/table/segment_tree.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/statistics/segment_statistics.hpp"
 #include "duckdb/storage/storage_lock.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/function/compression_function.hpp"
+#include "duckdb/storage/table/segment_base.hpp"
+#include "duckdb/storage/buffer/block_handle.hpp"
 
 namespace duckdb {
 class ColumnSegment;
 class BlockManager;
-class ColumnSegment;
 class ColumnData;
 class DatabaseInstance;
 class Transaction;
@@ -35,9 +34,9 @@ struct ColumnAppendState;
 enum class ColumnSegmentType : uint8_t { TRANSIENT, PERSISTENT };
 //! TableFilter represents a filter pushed down into the table scan.
 
-class ColumnSegment : public SegmentBase {
+class ColumnSegment : public SegmentBase<ColumnSegment> {
 public:
-	~ColumnSegment() override;
+	~ColumnSegment();
 
 	//! The database instance
 	DatabaseInstance &db;
@@ -48,7 +47,7 @@ public:
 	//! The column segment type (transient or persistent)
 	ColumnSegmentType segment_type;
 	//! The compression function
-	CompressionFunction *function;
+	reference<CompressionFunction> function;
 	//! The statistics for the segment
 	SegmentStatistics stats;
 	//! The block that this segment relates to
@@ -57,10 +56,10 @@ public:
 	static unique_ptr<ColumnSegment> CreatePersistentSegment(DatabaseInstance &db, BlockManager &block_manager,
 	                                                         block_id_t id, idx_t offset, const LogicalType &type_p,
 	                                                         idx_t start, idx_t count, CompressionType compression_type,
-	                                                         unique_ptr<BaseStatistics> statistics);
+	                                                         BaseStatistics statistics,
+	                                                         unique_ptr<ColumnSegmentState> segment_state);
 	static unique_ptr<ColumnSegment> CreateTransientSegment(DatabaseInstance &db, const LogicalType &type, idx_t start,
 	                                                        idx_t segment_size = Storage::BLOCK_SIZE);
-	static unique_ptr<ColumnSegment> CreateSegment(ColumnSegment &other, idx_t start);
 
 public:
 	void InitializeScan(ColumnScanState &state);
@@ -69,8 +68,8 @@ public:
 	//! Fetch a value of the specific row id and append it to the result
 	void FetchRow(ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx);
 
-	static idx_t FilterSelection(SelectionVector &sel, Vector &result, const TableFilter &filter,
-	                             idx_t &approved_tuple_count, ValidityMask &mask);
+	static idx_t FilterSelection(SelectionVector &sel, Vector &vector, UnifiedVectorFormat &vdata,
+	                             const TableFilter &filter, idx_t scan_count, idx_t &approved_tuple_count);
 
 	//! Skip a scan forward to the row_index specified in the scan state
 	void Skip(ColumnScanState &state);
@@ -93,7 +92,7 @@ public:
 
 	//! Convert a transient in-memory segment into a persistent segment blocked by an on-disk block.
 	//! Only used during checkpointing.
-	void ConvertToPersistent(BlockManager *block_manager, block_id_t block_id);
+	void ConvertToPersistent(optional_ptr<BlockManager> block_manager, block_id_t block_id);
 	//! Updates pointers to refer to the given block and offset. This is only used
 	//! when sharing a block among segments. This is invoked only AFTER the block is written.
 	void MarkAsPersistent(shared_ptr<BlockHandle> block, uint32_t offset_in_block);
@@ -118,14 +117,17 @@ public:
 		return row_index - this->start;
 	}
 
-	CompressedSegmentState *GetSegmentState() {
+	optional_ptr<CompressedSegmentState> GetSegmentState() {
 		return segment_state.get();
 	}
 
+	void CommitDropSegment();
+
 public:
 	ColumnSegment(DatabaseInstance &db, shared_ptr<BlockHandle> block, LogicalType type, ColumnSegmentType segment_type,
-	              idx_t start, idx_t count, CompressionFunction *function, unique_ptr<BaseStatistics> statistics,
-	              block_id_t block_id, idx_t offset, idx_t segment_size);
+	              idx_t start, idx_t count, CompressionFunction &function, BaseStatistics statistics,
+	              block_id_t block_id, idx_t offset, idx_t segment_size,
+	              unique_ptr<ColumnSegmentState> segment_state = nullptr);
 	ColumnSegment(ColumnSegment &other, idx_t start);
 
 private:
@@ -137,7 +139,7 @@ private:
 	block_id_t block_id;
 	//! The offset into the block (persistent segment only)
 	idx_t offset;
-	//! The allocated segment size
+	//! The allocated segment size, which is bounded by Storage::BLOCK_SIZE
 	idx_t segment_size;
 	//! Storage associated with the compressed segment
 	unique_ptr<CompressedSegmentState> segment_state;

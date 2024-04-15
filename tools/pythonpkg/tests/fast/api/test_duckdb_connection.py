@@ -1,23 +1,43 @@
 import duckdb
-from pandas import DataFrame
-import pandas as pd
 import pytest
+from conftest import NumpyPandas, ArrowPandas
+
 
 def is_dunder_method(method_name: str) -> bool:
-    if (len(method_name) < 4):
+    if len(method_name) < 4:
         return False
     return method_name[:2] == '__' and method_name[:-3:-1] == '__'
+
 
 # This file contains tests for DuckDBPyConnection methods,
 # wrapped by the 'duckdb' module, to execute with the 'default_connection'
 class TestDuckDBConnection(object):
-    def test_append(self):
+    @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
+    def test_append(self, pandas):
         duckdb.execute("Create table integers (i integer)")
-        df_in = pd.DataFrame({'numbers': [1,2,3,4,5],})
-        duckdb.append('integers',df_in)
+        df_in = pandas.DataFrame(
+            {
+                'numbers': [1, 2, 3, 4, 5],
+            }
+        )
+        duckdb.append('integers', df_in)
         assert duckdb.execute('select count(*) from integers').fetchone()[0] == 5
         # cleanup
         duckdb.execute("drop table integers")
+
+    def test_default_connection_from_connect(self):
+        duckdb.sql('create or replace table connect_default_connect (i integer)')
+        con = duckdb.connect(':default:')
+        con.sql('select i from connect_default_connect')
+        duckdb.sql('drop table connect_default_connect')
+        with pytest.raises(duckdb.Error):
+            con.sql('select i from connect_default_connect')
+
+        # not allowed with additional options
+        with pytest.raises(
+            duckdb.InvalidInputException, match='Default connection fetching is only allowed without additional options'
+        ):
+            con = duckdb.connect(':default:', read_only=True)
 
     def test_arrow(self):
         pyarrow = pytest.importorskip("pyarrow")
@@ -50,7 +70,7 @@ class TestDuckDBConnection(object):
             duckdb.table("tbl")
 
     def test_df(self):
-        ref = [([1,2,3],)]
+        ref = [([1, 2, 3],)]
         duckdb.execute("select [1,2,3]")
         res_df = duckdb.fetch_df()
         res = duckdb.query("select * from res_df").fetchall()
@@ -65,7 +85,7 @@ class TestDuckDBConnection(object):
             dup_conn.table("tbl").fetchall()
 
     def test_execute(self):
-        assert [([4,2],)] == duckdb.execute("select [4,2]").fetchall()
+        assert [([4, 2],)] == duckdb.execute("select [4,2]").fetchall()
 
     def test_executemany(self):
         # executemany does not keep an open result set
@@ -76,15 +96,60 @@ class TestDuckDBConnection(object):
         assert res == [(5, 'test'), (2, 'duck'), (42, 'quack')]
         duckdb.execute("drop table tbl")
 
+    def test_pystatement(self):
+        with pytest.raises(duckdb.ParserException, match='seledct'):
+            statements = duckdb.extract_statements('seledct 42; select 21')
+
+        statements = duckdb.extract_statements('select $1; select 21')
+        assert len(statements) == 2
+        assert statements[0].query == 'select $1'
+        assert statements[0].type == duckdb.StatementType.SELECT
+        assert statements[0].named_parameters == set('1')
+        assert statements[0].expected_result_type == [duckdb.ExpectedResultType.QUERY_RESULT]
+
+        assert statements[1].query == ' select 21'
+        assert statements[1].type == duckdb.StatementType.SELECT
+        assert statements[1].named_parameters == set()
+
+        with pytest.raises(
+            duckdb.InvalidInputException,
+            match='Please provide either a DuckDBPyStatement or a string representing the query',
+        ):
+            rel = duckdb.query(statements)
+
+        with pytest.raises(duckdb.BinderException, match="This type of statement can't be prepared!"):
+            rel = duckdb.query(statements[0])
+
+        assert duckdb.query(statements[1]).fetchall() == [(21,)]
+        assert duckdb.execute(statements[1]).fetchall() == [(21,)]
+
+        with pytest.raises(duckdb.InvalidInputException, match='Prepared statement needs 1 parameters, 0 given'):
+            duckdb.execute(statements[0])
+        assert duckdb.execute(statements[0], {'1': 42}).fetchall() == [(42,)]
+
+        duckdb.execute("create table tbl(a integer)")
+        statements = duckdb.extract_statements('insert into tbl select $1')
+        assert statements[0].expected_result_type == [
+            duckdb.ExpectedResultType.CHANGED_ROWS,
+            duckdb.ExpectedResultType.QUERY_RESULT,
+        ]
+        with pytest.raises(
+            duckdb.InvalidInputException, match='executemany requires a non-empty list of parameter sets to be provided'
+        ):
+            duckdb.executemany(statements[0])
+        duckdb.executemany(statements[0], [(21,), (22,), (23,)])
+        assert duckdb.table('tbl').fetchall() == [(21,), (22,), (23,)]
+        duckdb.execute("drop table tbl")
+
     def test_fetch_arrow_table(self):
         # Needed for 'fetch_arrow_table'
         pyarrow = pytest.importorskip("pyarrow")
 
         duckdb.execute("Create Table test (a integer)")
 
-        for i in range (1024):
+        for i in range(1024):
             for j in range(2):
-                duckdb.execute("Insert Into test values ('"+str(i)+"')")
+                duckdb.execute("Insert Into test values ('" + str(i) + "')")
         duckdb.execute("Insert Into test values ('5000')")
         duckdb.execute("Insert Into test values ('6000')")
         sql = '''
@@ -102,7 +167,7 @@ class TestDuckDBConnection(object):
         duckdb.execute("drop table test")
 
     def test_fetch_df(self):
-        ref = [([1,2,3],)]
+        ref = [([1, 2, 3],)]
         duckdb.execute("select [1,2,3]")
         res_df = duckdb.fetch_df()
         res = duckdb.query("select * from res_df").fetchall()
@@ -112,11 +177,11 @@ class TestDuckDBConnection(object):
         duckdb.execute("CREATE table t as select range a from range(3000);")
         query = duckdb.execute("SELECT a FROM t")
         cur_chunk = query.fetch_df_chunk()
-        assert(cur_chunk['a'][0] == 0)
-        assert(len(cur_chunk) == 2048)
+        assert cur_chunk['a'][0] == 0
+        assert len(cur_chunk) == 2048
         cur_chunk = query.fetch_df_chunk()
-        assert(cur_chunk['a'][0] == 2048)
-        assert(len(cur_chunk) == 952)
+        assert cur_chunk['a'][0] == 2048
+        assert len(cur_chunk) == 952
         duckdb.execute("DROP TABLE t")
 
     def test_fetch_record_batch(self):
@@ -127,13 +192,13 @@ class TestDuckDBConnection(object):
         duckdb.execute("SELECT a FROM t")
         record_batch_reader = duckdb.fetch_record_batch(1024)
         chunk = record_batch_reader.read_all()
-        assert(len(chunk) == 3000)
+        assert len(chunk) == 3000
 
     def test_fetchall(self):
         assert [([1, 2, 3],)] == duckdb.execute("select [1,2,3]").fetchall()
 
     def test_fetchdf(self):
-        ref = [([1,2,3],)]
+        ref = [([1, 2, 3],)]
         duckdb.execute("select [1,2,3]")
         res_df = duckdb.fetchdf()
         res = duckdb.query("select * from res_df").fetchall()
@@ -167,9 +232,6 @@ class TestDuckDBConnection(object):
     def test_from_parquet(self):
         assert None != duckdb.from_parquet
 
-    def test_from_parquet(self):
-        assert None != duckdb.from_parquet
-
     def test_from_query(self):
         assert None != duckdb.from_query
 
@@ -197,10 +259,36 @@ class TestDuckDBConnection(object):
     def test_register(self):
         assert None != duckdb.register
 
+    def test_register_relation(self):
+        con = duckdb.connect()
+        rel = con.sql('select [5,4,3]')
+        con.register("relation", rel)
+
+        con.sql("create table tbl as select * from relation")
+        assert con.table('tbl').fetchall() == [([5, 4, 3],)]
+
+    @pytest.mark.parametrize('pandas', [NumpyPandas(), ArrowPandas()])
+    def test_relation_out_of_scope(self, pandas):
+        def temporary_scope():
+            # Create a connection, we will return this
+            con = duckdb.connect()
+            # Create a dataframe
+            df = pandas.DataFrame({'a': [1, 2, 3]})
+            # The dataframe has to be registered as well
+            # making sure it does not go out of scope
+            con.register("df", df)
+            rel = con.sql('select * from df')
+            con.register("relation", rel)
+            return con
+
+        con = temporary_scope()
+        res = con.sql('select * from relation').fetchall()
+        print(res)
+
     def test_table(self):
-        duckdb.execute("create table tbl as select 1")
-        assert [(1,)] == duckdb.table("tbl").fetchall()
-        duckdb.execute("drop table tbl")
+        con = duckdb.connect()
+        con.execute("create table tbl as select 1")
+        assert [(1,)] == con.table("tbl").fetchall()
 
     def test_table_function(self):
         assert None != duckdb.table_function
@@ -222,9 +310,11 @@ class TestDuckDBConnection(object):
     def test_close(self):
         assert None != duckdb.close
 
+    def test_interrupt(self):
+        assert None != duckdb.interrupt
+
     def test_wrap_coverage(self):
         con = duckdb.default_connection
-        assert str(con.__class__) == "<class 'duckdb.DuckDBPyConnection'>"
 
         # Skip all of the initial __xxxx__ methods
         connection_methods = dir(con)
@@ -232,3 +322,16 @@ class TestDuckDBConnection(object):
         for method in filtered_methods:
             # Assert that every method of DuckDBPyConnection is wrapped by the 'duckdb' module
             assert method in dir(duckdb)
+
+    def test_set_pandas_analyze_sample_size(self):
+        con = duckdb.connect(":memory:named", config={"pandas_analyze_sample": 0})
+        res = con.sql("select current_setting('pandas_analyze_sample')").fetchone()
+        assert res == (0,)
+
+        # Find the cached config
+        con2 = duckdb.connect(":memory:named", config={"pandas_analyze_sample": 0})
+        con2.execute(f"SET GLOBAL pandas_analyze_sample=2")
+
+        # This change is reflected in 'con' because the instance was cached
+        res = con.sql("select current_setting('pandas_analyze_sample')").fetchone()
+        assert res == (2,)

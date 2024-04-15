@@ -12,22 +12,23 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/storage/storage_info.hpp"
+#include "duckdb/common/file_buffer.hpp"
+#include "duckdb/common/enums/memory_tag.hpp"
 
 namespace duckdb {
 class BlockManager;
 class BufferHandle;
-class BufferManager;
 class BufferPool;
 class DatabaseInstance;
-class FileBuffer;
 
 enum class BlockState : uint8_t { BLOCK_UNLOADED = 0, BLOCK_LOADED = 1 };
 
 struct BufferPoolReservation {
+	MemoryTag tag;
 	idx_t size {0};
+	BufferPool &pool;
 
-	BufferPoolReservation() {
-	}
+	BufferPoolReservation(MemoryTag tag, BufferPool &pool);
 	BufferPoolReservation(const BufferPoolReservation &) = delete;
 	BufferPoolReservation &operator=(const BufferPoolReservation &) = delete;
 
@@ -36,18 +37,17 @@ struct BufferPoolReservation {
 
 	~BufferPoolReservation();
 
-	void Resize(atomic<idx_t> &counter, idx_t new_size);
-	void Merge(BufferPoolReservation &&src);
+	void Resize(idx_t new_size);
+	void Merge(BufferPoolReservation src);
 };
 
 struct TempBufferPoolReservation : BufferPoolReservation {
-	atomic<idx_t> &counter;
-	TempBufferPoolReservation(atomic<idx_t> &counter, idx_t size) : counter(counter) {
-		Resize(counter, size);
+	TempBufferPoolReservation(MemoryTag tag, BufferPool &pool, idx_t size) : BufferPoolReservation(tag, pool) {
+		Resize(size);
 	}
 	TempBufferPoolReservation(TempBufferPoolReservation &&) = default;
 	~TempBufferPoolReservation() {
-		Resize(counter, 0);
+		Resize(0);
 	}
 };
 
@@ -56,12 +56,13 @@ class BlockHandle {
 	friend struct BufferEvictionNode;
 	friend class BufferHandle;
 	friend class BufferManager;
+	friend class StandardBufferManager;
 	friend class BufferPool;
 
 public:
-	BlockHandle(BlockManager &block_manager, block_id_t block_id);
-	BlockHandle(BlockManager &block_manager, block_id_t block_id, unique_ptr<FileBuffer> buffer, bool can_destroy,
-	            idx_t block_size, BufferPoolReservation &&reservation);
+	BlockHandle(BlockManager &block_manager, block_id_t block_id, MemoryTag tag);
+	BlockHandle(BlockManager &block_manager, block_id_t block_id, MemoryTag tag, unique_ptr<FileBuffer> buffer,
+	            bool can_destroy, idx_t block_size, BufferPoolReservation &&reservation);
 	~BlockHandle();
 
 	BlockManager &block_manager;
@@ -69,6 +70,14 @@ public:
 public:
 	block_id_t BlockId() {
 		return block_id;
+	}
+
+	void ResizeBuffer(idx_t block_size, int64_t memory_delta) {
+		D_ASSERT(buffer);
+		// resize and adjust current memory
+		buffer->Resize(block_size);
+		memory_usage += memory_delta;
+		D_ASSERT(memory_usage == buffer->AllocSize());
 	}
 
 	int32_t Readers() const {
@@ -90,6 +99,9 @@ public:
 	inline const idx_t &GetMemoryUsage() const {
 		return memory_usage;
 	}
+	bool IsUnloaded() {
+		return state == BlockState::BLOCK_UNLOADED;
+	}
 
 private:
 	static BufferHandle Load(shared_ptr<BlockHandle> &handle, unique_ptr<FileBuffer> buffer = nullptr);
@@ -105,6 +117,8 @@ private:
 	atomic<int32_t> readers;
 	//! The block id of the block
 	const block_id_t block_id;
+	//! Memory tag
+	MemoryTag tag;
 	//! Pointer to loaded data (if any)
 	unique_ptr<FileBuffer> buffer;
 	//! Internal eviction timestamp

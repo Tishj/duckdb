@@ -6,8 +6,10 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/operator/constant_operators.hpp"
 #include "duckdb/common/row_operations/row_operations.hpp"
-#include "duckdb/common/types/row_data_collection.hpp"
-#include "duckdb/common/types/row_layout.hpp"
+#include "duckdb/common/types/row/row_data_collection.hpp"
+#include "duckdb/common/types/row/row_layout.hpp"
+#include "duckdb/common/types/row/tuple_data_layout.hpp"
+#include "duckdb/common/uhugeint.hpp"
 
 namespace duckdb {
 
@@ -94,8 +96,8 @@ static void GatherNestedVector(Vector &rows, const SelectionVector &row_sel, Vec
 	auto ptrs = FlatVector::GetData<data_ptr_t>(rows);
 
 	// Build the gather locations
-	auto data_locations = unique_ptr<data_ptr_t[]>(new data_ptr_t[count]);
-	auto mask_locations = unique_ptr<data_ptr_t[]>(new data_ptr_t[count]);
+	auto data_locations = make_unsafe_uniq_array<data_ptr_t>(count);
+	auto mask_locations = make_unsafe_uniq_array<data_ptr_t>(count);
 	for (idx_t i = 0; i < count; i++) {
 		auto row_idx = row_sel.get_index(i);
 		auto row = ptrs[row_idx];
@@ -111,7 +113,8 @@ static void GatherNestedVector(Vector &rows, const SelectionVector &row_sel, Vec
 	}
 
 	// Deserialise into the selected locations
-	RowOperations::HeapGather(col, count, col_sel, col_no, data_locations.get(), mask_locations.get());
+	NestedValidity parent_validity(mask_locations.get(), col_no);
+	RowOperations::HeapGather(col, count, col_sel, data_locations.get(), &parent_validity);
 }
 
 void RowOperations::Gather(Vector &rows, const SelectionVector &row_sel, Vector &col, const SelectionVector &col_sel,
@@ -133,6 +136,9 @@ void RowOperations::Gather(Vector &rows, const SelectionVector &row_sel, Vector 
 		break;
 	case PhysicalType::UINT64:
 		TemplatedGatherLoop<uint64_t>(rows, row_sel, col, col_sel, count, layout, col_no, build_size);
+		break;
+	case PhysicalType::UINT128:
+		TemplatedGatherLoop<uhugeint_t>(rows, row_sel, col, col_sel, count, layout, col_no, build_size);
 		break;
 	case PhysicalType::BOOL:
 	case PhysicalType::INT8:
@@ -164,6 +170,7 @@ void RowOperations::Gather(Vector &rows, const SelectionVector &row_sel, Vector 
 		break;
 	case PhysicalType::LIST:
 	case PhysicalType::STRUCT:
+	case PhysicalType::ARRAY:
 		GatherNestedVector(rows, row_sel, col, col_sel, count, layout, col_no, heap_ptr);
 		break;
 	default:
@@ -193,7 +200,8 @@ static void TemplatedFullScanLoop(Vector &rows, Vector &col, idx_t count, idx_t 
 	}
 }
 
-void RowOperations::FullScanColumn(const RowLayout &layout, Vector &rows, Vector &col, idx_t count, idx_t col_no) {
+void RowOperations::FullScanColumn(const TupleDataLayout &layout, Vector &rows, Vector &col, idx_t count,
+                                   idx_t col_no) {
 	const auto col_offset = layout.GetOffsets()[col_no];
 	col.SetVectorType(VectorType::FLAT_VECTOR);
 	switch (col.GetType().InternalType()) {

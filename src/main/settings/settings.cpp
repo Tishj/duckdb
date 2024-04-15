@@ -2,25 +2,34 @@
 
 #include "duckdb/catalog/catalog_search_path.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/main/database.hpp"
+#include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/query_profiler.hpp"
+#include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/expression_binder.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/storage_manager.hpp"
-#include "duckdb/main/database_manager.hpp"
-#include "duckdb/main/attached_database.hpp"
-#include "duckdb/main/database.hpp"
 
 namespace duckdb {
+
+const string GetDefaultUserAgent() {
+	return StringUtil::Format("duckdb/%s(%s)", DuckDB::LibraryVersion(), DuckDB::Platform());
+}
 
 //===--------------------------------------------------------------------===//
 // Access Mode
 //===--------------------------------------------------------------------===//
 void AccessModeSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	if (db) {
+		throw InvalidInputException("Cannot change access_mode setting while database is running - it must be set when "
+		                            "opening or attaching the database");
+	}
 	auto parameter = StringUtil::Lower(input.ToString());
 	if (parameter == "automatic") {
 		config.options.access_mode = AccessMode::AUTOMATIC;
@@ -38,7 +47,7 @@ void AccessModeSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.access_mode = DBConfig().options.access_mode;
 }
 
-Value AccessModeSetting::GetSetting(ClientContext &context) {
+Value AccessModeSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	switch (config.options.access_mode) {
 	case AccessMode::AUTOMATIC:
@@ -53,6 +62,23 @@ Value AccessModeSetting::GetSetting(ClientContext &context) {
 }
 
 //===--------------------------------------------------------------------===//
+// Allow Persistent Secrets
+//===--------------------------------------------------------------------===//
+void AllowPersistentSecrets::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto value = input.DefaultCastAs(LogicalType::BOOLEAN);
+	config.secret_manager->SetEnablePersistentSecrets(value.GetValue<bool>());
+}
+
+void AllowPersistentSecrets::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.secret_manager->ResetEnablePersistentSecrets();
+}
+
+Value AllowPersistentSecrets::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.secret_manager->PersistentSecretsEnabled());
+}
+
+//===--------------------------------------------------------------------===//
 // Checkpoint Threshold
 //===--------------------------------------------------------------------===//
 void CheckpointThresholdSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
@@ -64,7 +90,7 @@ void CheckpointThresholdSetting::ResetGlobal(DatabaseInstance *db, DBConfig &con
 	config.options.checkpoint_wal_size = DBConfig().options.checkpoint_wal_size;
 }
 
-Value CheckpointThresholdSetting::GetSetting(ClientContext &context) {
+Value CheckpointThresholdSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value(StringUtil::BytesToHumanReadableString(config.options.checkpoint_wal_size));
 }
@@ -92,7 +118,7 @@ void DebugCheckpointAbort::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.checkpoint_abort = DBConfig().options.checkpoint_abort;
 }
 
-Value DebugCheckpointAbort::GetSetting(ClientContext &context) {
+Value DebugCheckpointAbort::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(*context.db);
 	auto setting = config.options.checkpoint_abort;
 	switch (setting) {
@@ -112,7 +138,6 @@ Value DebugCheckpointAbort::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 // Debug Force External
 //===--------------------------------------------------------------------===//
-
 void DebugForceExternal::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).force_external = ClientConfig().force_external;
 }
@@ -121,14 +146,13 @@ void DebugForceExternal::SetLocal(ClientContext &context, const Value &input) {
 	ClientConfig::GetConfig(context).force_external = input.GetValue<bool>();
 }
 
-Value DebugForceExternal::GetSetting(ClientContext &context) {
+Value DebugForceExternal::GetSetting(const ClientContext &context) {
 	return Value::BOOLEAN(ClientConfig::GetConfig(context).force_external);
 }
 
 //===--------------------------------------------------------------------===//
 // Debug Force NoCrossProduct
 //===--------------------------------------------------------------------===//
-
 void DebugForceNoCrossProduct::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).force_no_cross_product = ClientConfig().force_no_cross_product;
 }
@@ -137,8 +161,27 @@ void DebugForceNoCrossProduct::SetLocal(ClientContext &context, const Value &inp
 	ClientConfig::GetConfig(context).force_no_cross_product = input.GetValue<bool>();
 }
 
-Value DebugForceNoCrossProduct::GetSetting(ClientContext &context) {
+Value DebugForceNoCrossProduct::GetSetting(const ClientContext &context) {
 	return Value::BOOLEAN(ClientConfig::GetConfig(context).force_no_cross_product);
+}
+
+//===--------------------------------------------------------------------===//
+// Ordered Aggregate Threshold
+//===--------------------------------------------------------------------===//
+void OrderedAggregateThreshold::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).ordered_aggregate_threshold = ClientConfig().ordered_aggregate_threshold;
+}
+
+void OrderedAggregateThreshold::SetLocal(ClientContext &context, const Value &input) {
+	const auto param = input.GetValue<uint64_t>();
+	if (param <= 0) {
+		throw ParserException("Invalid option for PRAGMA ordered_aggregate_threshold, value must be positive");
+	}
+	ClientConfig::GetConfig(context).ordered_aggregate_threshold = param;
+}
+
+Value OrderedAggregateThreshold::GetSetting(const ClientContext &context) {
+	return Value::UBIGINT(ClientConfig::GetConfig(context).ordered_aggregate_threshold);
 }
 
 //===--------------------------------------------------------------------===//
@@ -161,8 +204,38 @@ void DebugWindowMode::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.window_mode = DBConfig().options.window_mode;
 }
 
-Value DebugWindowMode::GetSetting(ClientContext &context) {
+Value DebugWindowMode::GetSetting(const ClientContext &context) {
 	return Value();
+}
+
+//===--------------------------------------------------------------------===//
+// Debug AsOf Join
+//===--------------------------------------------------------------------===//
+void DebugAsOfIEJoin::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).force_asof_iejoin = ClientConfig().force_asof_iejoin;
+}
+
+void DebugAsOfIEJoin::SetLocal(ClientContext &context, const Value &input) {
+	ClientConfig::GetConfig(context).force_asof_iejoin = input.GetValue<bool>();
+}
+
+Value DebugAsOfIEJoin::GetSetting(const ClientContext &context) {
+	return Value::BOOLEAN(ClientConfig::GetConfig(context).force_asof_iejoin);
+}
+
+//===--------------------------------------------------------------------===//
+// Prefer Range Joins
+//===--------------------------------------------------------------------===//
+void PreferRangeJoins::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).prefer_range_joins = ClientConfig().prefer_range_joins;
+}
+
+void PreferRangeJoins::SetLocal(ClientContext &context, const Value &input) {
+	ClientConfig::GetConfig(context).prefer_range_joins = input.GetValue<bool>();
+}
+
+Value PreferRangeJoins::GetSetting(const ClientContext &context) {
+	return Value::BOOLEAN(ClientConfig::GetConfig(context).prefer_range_joins);
 }
 
 //===--------------------------------------------------------------------===//
@@ -190,7 +263,7 @@ void DefaultCollationSetting::SetLocal(ClientContext &context, const Value &inpu
 	config.options.collation = parameter;
 }
 
-Value DefaultCollationSetting::GetSetting(ClientContext &context) {
+Value DefaultCollationSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value(config.options.collation);
 }
@@ -214,7 +287,7 @@ void DefaultOrderSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.default_order_type = DBConfig().options.default_order_type;
 }
 
-Value DefaultOrderSetting::GetSetting(ClientContext &context) {
+Value DefaultOrderSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	switch (config.options.default_order_type) {
 	case OrderType::ASCENDING:
@@ -233,14 +306,18 @@ void DefaultNullOrderSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, 
 	auto parameter = StringUtil::Lower(input.ToString());
 
 	if (parameter == "nulls_first" || parameter == "nulls first" || parameter == "null first" || parameter == "first") {
-		config.options.default_null_order = OrderByNullType::NULLS_FIRST;
+		config.options.default_null_order = DefaultOrderByNullType::NULLS_FIRST;
 	} else if (parameter == "nulls_last" || parameter == "nulls last" || parameter == "null last" ||
 	           parameter == "last") {
-		config.options.default_null_order = OrderByNullType::NULLS_LAST;
+		config.options.default_null_order = DefaultOrderByNullType::NULLS_LAST;
+	} else if (parameter == "nulls_first_on_asc_last_on_desc" || parameter == "sqlite" || parameter == "mysql") {
+		config.options.default_null_order = DefaultOrderByNullType::NULLS_FIRST_ON_ASC_LAST_ON_DESC;
+	} else if (parameter == "nulls_last_on_asc_first_on_desc" || parameter == "postgres") {
+		config.options.default_null_order = DefaultOrderByNullType::NULLS_LAST_ON_ASC_FIRST_ON_DESC;
 	} else {
-		throw ParserException(
-		    "Unrecognized parameter for option NULL_ORDER \"%s\", expected either NULLS FIRST or NULLS LAST",
-		    parameter);
+		throw ParserException("Unrecognized parameter for option NULL_ORDER \"%s\", expected either NULLS FIRST, NULLS "
+		                      "LAST, SQLite, MySQL or Postgres",
+		                      parameter);
 	}
 }
 
@@ -248,16 +325,60 @@ void DefaultNullOrderSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config
 	config.options.default_null_order = DBConfig().options.default_null_order;
 }
 
-Value DefaultNullOrderSetting::GetSetting(ClientContext &context) {
+Value DefaultNullOrderSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	switch (config.options.default_null_order) {
-	case OrderByNullType::NULLS_FIRST:
+	case DefaultOrderByNullType::NULLS_FIRST:
 		return "nulls_first";
-	case OrderByNullType::NULLS_LAST:
+	case DefaultOrderByNullType::NULLS_LAST:
 		return "nulls_last";
+	case DefaultOrderByNullType::NULLS_FIRST_ON_ASC_LAST_ON_DESC:
+		return "nulls_first_on_asc_last_on_desc";
+	case DefaultOrderByNullType::NULLS_LAST_ON_ASC_FIRST_ON_DESC:
+		return "nulls_last_on_asc_first_on_desc";
 	default:
 		throw InternalException("Unknown null order setting");
 	}
+}
+
+//===--------------------------------------------------------------------===//
+// Default Null Order
+//===--------------------------------------------------------------------===//
+void DefaultSecretStorage::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.secret_manager->SetDefaultStorage(input.ToString());
+}
+
+void DefaultSecretStorage::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.secret_manager->ResetDefaultStorage();
+}
+
+Value DefaultSecretStorage::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return config.secret_manager->DefaultStorage();
+}
+
+//===--------------------------------------------------------------------===//
+// Disabled File Systems
+//===--------------------------------------------------------------------===//
+void DisabledFileSystemsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	if (!db) {
+		throw InternalException("disabled_filesystems can only be set in an active database");
+	}
+	auto &fs = FileSystem::GetFileSystem(*db);
+	auto list = StringUtil::Split(input.ToString(), ",");
+	fs.SetDisabledFileSystems(list);
+}
+
+void DisabledFileSystemsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	if (!db) {
+		throw InternalException("disabled_filesystems can only be set in an active database");
+	}
+	auto &fs = FileSystem::GetFileSystem(*db);
+	fs.SetDisabledFileSystems(vector<string>());
+}
+
+Value DisabledFileSystemsSetting::GetSetting(const ClientContext &context) {
+	return Value("");
 }
 
 //===--------------------------------------------------------------------===//
@@ -281,7 +402,7 @@ void DisabledOptimizersSetting::ResetGlobal(DatabaseInstance *db, DBConfig &conf
 	config.options.disabled_optimizers = DBConfig().options.disabled_optimizers;
 }
 
-Value DisabledOptimizersSetting::GetSetting(ClientContext &context) {
+Value DisabledOptimizersSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	string result;
 	for (auto &optimizer : config.options.disabled_optimizers) {
@@ -311,7 +432,7 @@ void EnableExternalAccessSetting::ResetGlobal(DatabaseInstance *db, DBConfig &co
 	config.options.enable_external_access = DBConfig().options.enable_external_access;
 }
 
-Value EnableExternalAccessSetting::GetSetting(ClientContext &context) {
+Value EnableExternalAccessSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.enable_external_access);
 }
@@ -327,7 +448,7 @@ void EnableFSSTVectors::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.enable_fsst_vectors = DBConfig().options.enable_fsst_vectors;
 }
 
-Value EnableFSSTVectors::GetSetting(ClientContext &context) {
+Value EnableFSSTVectors::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.enable_fsst_vectors);
 }
@@ -350,9 +471,49 @@ void AllowUnsignedExtensionsSetting::ResetGlobal(DatabaseInstance *db, DBConfig 
 	config.options.allow_unsigned_extensions = DBConfig().options.allow_unsigned_extensions;
 }
 
-Value AllowUnsignedExtensionsSetting::GetSetting(ClientContext &context) {
+Value AllowUnsignedExtensionsSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.allow_unsigned_extensions);
+}
+
+//===--------------------------------------------------------------------===//
+// Allow Extensions Metadata Mismatch
+//===--------------------------------------------------------------------===//
+void AllowExtensionsMetadataMismatchSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto new_value = input.GetValue<bool>();
+	config.options.allow_extensions_metadata_mismatch = new_value;
+}
+
+void AllowExtensionsMetadataMismatchSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.allow_extensions_metadata_mismatch = DBConfig().options.allow_extensions_metadata_mismatch;
+}
+
+Value AllowExtensionsMetadataMismatchSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.allow_extensions_metadata_mismatch);
+}
+
+//===--------------------------------------------------------------------===//
+// Allow Unredacted Secrets
+//===--------------------------------------------------------------------===//
+void AllowUnredactedSecretsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto new_value = input.GetValue<bool>();
+	if (db && new_value) {
+		throw InvalidInputException("Cannot change allow_unredacted_secrets setting while database is running");
+	}
+	config.options.allow_unredacted_secrets = new_value;
+}
+
+void AllowUnredactedSecretsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	if (db) {
+		throw InvalidInputException("Cannot change allow_unredacted_secrets setting while database is running");
+	}
+	config.options.allow_unredacted_secrets = DBConfig().options.allow_unredacted_secrets;
+}
+
+Value AllowUnredactedSecretsSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.allow_unredacted_secrets);
 }
 
 //===--------------------------------------------------------------------===//
@@ -366,7 +527,7 @@ void EnableObjectCacheSetting::ResetGlobal(DatabaseInstance *db, DBConfig &confi
 	config.options.object_cache_enable = DBConfig().options.object_cache_enable;
 }
 
-Value EnableObjectCacheSetting::GetSetting(ClientContext &context) {
+Value EnableObjectCacheSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.object_cache_enable);
 }
@@ -382,7 +543,7 @@ void EnableHTTPMetadataCacheSetting::ResetGlobal(DatabaseInstance *db, DBConfig 
 	config.options.http_metadata_cache_enable = DBConfig().options.http_metadata_cache_enable;
 }
 
-Value EnableHTTPMetadataCacheSetting::GetSetting(ClientContext &context) {
+Value EnableHTTPMetadataCacheSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.http_metadata_cache_enable);
 }
@@ -390,7 +551,6 @@ Value EnableHTTPMetadataCacheSetting::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 // Enable Profiling
 //===--------------------------------------------------------------------===//
-
 void EnableProfilingSetting::ResetLocal(ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	config.profiler_print_format = ClientConfig().profiler_print_format;
@@ -416,7 +576,7 @@ void EnableProfilingSetting::SetLocal(ClientContext &context, const Value &input
 	config.emit_profiler_output = true;
 }
 
-Value EnableProfilingSetting::GetSetting(ClientContext &context) {
+Value EnableProfilingSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	if (!config.enable_profiler) {
 		return Value();
@@ -436,32 +596,82 @@ Value EnableProfilingSetting::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 // Custom Extension Repository
 //===--------------------------------------------------------------------===//
-
-void CustomExtensionRepository::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).custom_extension_repo = ClientConfig().custom_extension_repo;
+void CustomExtensionRepository::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.custom_extension_repo = DBConfig().options.custom_extension_repo;
 }
 
-void CustomExtensionRepository::SetLocal(ClientContext &context, const Value &input) {
-	ClientConfig::GetConfig(context).custom_extension_repo = StringUtil::Lower(input.ToString());
+void CustomExtensionRepository::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.custom_extension_repo = input.ToString();
 }
 
-Value CustomExtensionRepository::GetSetting(ClientContext &context) {
-	return Value(ClientConfig::GetConfig(context).custom_extension_repo);
+Value CustomExtensionRepository::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(config.options.custom_extension_repo);
+}
+
+//===--------------------------------------------------------------------===//
+// Autoload Extension Repository
+//===--------------------------------------------------------------------===//
+void AutoloadExtensionRepository::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.autoinstall_extension_repo = DBConfig().options.autoinstall_extension_repo;
+}
+
+void AutoloadExtensionRepository::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.autoinstall_extension_repo = input.ToString();
+}
+
+Value AutoloadExtensionRepository::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(config.options.autoinstall_extension_repo);
+}
+
+//===--------------------------------------------------------------------===//
+// Autoinstall Known Extensions
+//===--------------------------------------------------------------------===//
+void AutoinstallKnownExtensions::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.autoinstall_known_extensions = input.GetValue<bool>();
+}
+
+void AutoinstallKnownExtensions::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.autoinstall_known_extensions = DBConfig().options.autoinstall_known_extensions;
+}
+
+Value AutoinstallKnownExtensions::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.autoinstall_known_extensions);
+}
+//===--------------------------------------------------------------------===//
+// Autoload Known Extensions
+//===--------------------------------------------------------------------===//
+void AutoloadKnownExtensions::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.autoload_known_extensions = input.GetValue<bool>();
+}
+
+void AutoloadKnownExtensions::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.autoload_known_extensions = DBConfig().options.autoload_known_extensions;
+}
+
+Value AutoloadKnownExtensions::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.autoload_known_extensions);
 }
 
 //===--------------------------------------------------------------------===//
 // Enable Progress Bar
 //===--------------------------------------------------------------------===//
-
 void EnableProgressBarSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).enable_progress_bar = ClientConfig().enable_progress_bar;
+	auto &config = ClientConfig::GetConfig(context);
+	ProgressBar::SystemOverrideCheck(config);
+	config.enable_progress_bar = ClientConfig().enable_progress_bar;
 }
 
 void EnableProgressBarSetting::SetLocal(ClientContext &context, const Value &input) {
-	ClientConfig::GetConfig(context).enable_progress_bar = input.GetValue<bool>();
+	auto &config = ClientConfig::GetConfig(context);
+	ProgressBar::SystemOverrideCheck(config);
+	config.enable_progress_bar = input.GetValue<bool>();
 }
 
-Value EnableProgressBarSetting::GetSetting(ClientContext &context) {
+Value EnableProgressBarSetting::GetSetting(const ClientContext &context) {
 	return Value::BOOLEAN(ClientConfig::GetConfig(context).enable_progress_bar);
 }
 
@@ -469,37 +679,39 @@ Value EnableProgressBarSetting::GetSetting(ClientContext &context) {
 // Enable Progress Bar Print
 //===--------------------------------------------------------------------===//
 void EnableProgressBarPrintSetting::SetLocal(ClientContext &context, const Value &input) {
-	ClientConfig::GetConfig(context).print_progress_bar = input.GetValue<bool>();
+	auto &config = ClientConfig::GetConfig(context);
+	ProgressBar::SystemOverrideCheck(config);
+	config.print_progress_bar = input.GetValue<bool>();
 }
 
 void EnableProgressBarPrintSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).print_progress_bar = ClientConfig().print_progress_bar;
+	auto &config = ClientConfig::GetConfig(context);
+	ProgressBar::SystemOverrideCheck(config);
+	config.print_progress_bar = ClientConfig().print_progress_bar;
 }
 
-Value EnableProgressBarPrintSetting::GetSetting(ClientContext &context) {
+Value EnableProgressBarPrintSetting::GetSetting(const ClientContext &context) {
 	return Value::BOOLEAN(ClientConfig::GetConfig(context).print_progress_bar);
 }
 
 //===--------------------------------------------------------------------===//
-// Experimental Parallel CSV
+// Errors As JSON
 //===--------------------------------------------------------------------===//
-void ExperimentalParallelCSVSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.experimental_parallel_csv_reader = input.GetValue<bool>();
+void ErrorsAsJsonSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).errors_as_json = ClientConfig().errors_as_json;
 }
 
-void ExperimentalParallelCSVSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.experimental_parallel_csv_reader = DBConfig().options.experimental_parallel_csv_reader;
+void ErrorsAsJsonSetting::SetLocal(ClientContext &context, const Value &input) {
+	ClientConfig::GetConfig(context).errors_as_json = BooleanValue::Get(input);
 }
 
-Value ExperimentalParallelCSVSetting::GetSetting(ClientContext &context) {
-	auto &config = DBConfig::GetConfig(context);
-	return Value::BIGINT(config.options.experimental_parallel_csv_reader);
+Value ErrorsAsJsonSetting::GetSetting(const ClientContext &context) {
+	return Value::BOOLEAN(ClientConfig::GetConfig(context).errors_as_json ? 1 : 0);
 }
 
 //===--------------------------------------------------------------------===//
 // Explain Output
 //===--------------------------------------------------------------------===//
-
 void ExplainOutputSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).explain_output_type = ClientConfig().explain_output_type;
 }
@@ -518,7 +730,7 @@ void ExplainOutputSetting::SetLocal(ClientContext &context, const Value &input) 
 	}
 }
 
-Value ExplainOutputSetting::GetSetting(ClientContext &context) {
+Value ExplainOutputSetting::GetSetting(const ClientContext &context) {
 	switch (ClientConfig::GetConfig(context).explain_output_type) {
 	case ExplainOutputType::ALL:
 		return "all";
@@ -535,7 +747,6 @@ Value ExplainOutputSetting::GetSetting(ClientContext &context) {
 // Extension Directory Setting
 //===--------------------------------------------------------------------===//
 void ExtensionDirectorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	auto new_directory = input.ToString();
 	config.options.extension_directory = input.ToString();
 }
 
@@ -543,7 +754,7 @@ void ExtensionDirectorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &conf
 	config.options.extension_directory = DBConfig().options.extension_directory;
 }
 
-Value ExtensionDirectorySetting::GetSetting(ClientContext &context) {
+Value ExtensionDirectorySetting::GetSetting(const ClientContext &context) {
 	return Value(DBConfig::GetConfig(context).options.extension_directory);
 }
 
@@ -551,14 +762,26 @@ Value ExtensionDirectorySetting::GetSetting(ClientContext &context) {
 // External Threads Setting
 //===--------------------------------------------------------------------===//
 void ExternalThreadsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.external_threads = input.GetValue<int64_t>();
+	auto new_val = input.GetValue<int64_t>();
+	if (new_val < 0) {
+		throw SyntaxException("Must have a non-negative number of external threads!");
+	}
+	idx_t new_external_threads = new_val;
+	if (db) {
+		TaskScheduler::GetScheduler(*db).SetThreads(config.options.maximum_threads, new_external_threads);
+	}
+	config.options.external_threads = new_external_threads;
 }
 
 void ExternalThreadsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.options.external_threads = DBConfig().options.external_threads;
+	idx_t new_external_threads = DBConfig().options.external_threads;
+	if (db) {
+		TaskScheduler::GetScheduler(*db).SetThreads(config.options.maximum_threads, new_external_threads);
+	}
+	config.options.external_threads = new_external_threads;
 }
 
-Value ExternalThreadsSetting::GetSetting(ClientContext &context) {
+Value ExternalThreadsSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BIGINT(config.options.external_threads);
 }
@@ -577,7 +800,7 @@ void FileSearchPathSetting::SetLocal(ClientContext &context, const Value &input)
 	client_data.file_search_path = parameter;
 }
 
-Value FileSearchPathSetting::GetSetting(ClientContext &context) {
+Value FileSearchPathSetting::GetSetting(const ClientContext &context) {
 	auto &client_data = ClientData::Get(context);
 	return Value(client_data.file_search_path);
 }
@@ -591,6 +814,10 @@ void ForceCompressionSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, 
 		config.options.force_compression = CompressionType::COMPRESSION_AUTO;
 	} else {
 		auto compression_type = CompressionTypeFromString(compression);
+		if (CompressionTypeIsDeprecated(compression_type)) {
+			throw ParserException("Attempted to force a deprecated compression type (%s)",
+			                      CompressionTypeToString(compression_type));
+		}
 		if (compression_type == CompressionType::COMPRESSION_AUTO) {
 			auto compression_types = StringUtil::Join(ListCompressionTypes(), ", ");
 			throw ParserException("Unrecognized option for PRAGMA force_compression, expected %s", compression_types);
@@ -603,7 +830,7 @@ void ForceCompressionSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config
 	config.options.force_compression = DBConfig().options.force_compression;
 }
 
-Value ForceCompressionSetting::GetSetting(ClientContext &context) {
+Value ForceCompressionSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(*context.db);
 	return CompressionTypeToString(config.options.force_compression);
 }
@@ -613,49 +840,64 @@ Value ForceCompressionSetting::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 void ForceBitpackingModeSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
 	auto mode_str = StringUtil::Lower(input.ToString());
-	if (mode_str == "none") {
-		config.options.force_bitpacking_mode = BitpackingMode::AUTO;
-	} else {
-		auto mode = BitpackingModeFromString(mode_str);
-		if (mode == BitpackingMode::AUTO) {
-			throw ParserException(
-			    "Unrecognized option for force_bitpacking_mode, expected none, constant, constant_delta, "
-			    "delta_for, or for");
-		}
-		config.options.force_bitpacking_mode = mode;
+	auto mode = BitpackingModeFromString(mode_str);
+	if (mode == BitpackingMode::INVALID) {
+		throw ParserException("Unrecognized option for force_bitpacking_mode, expected none, constant, constant_delta, "
+		                      "delta_for, or for");
 	}
+	config.options.force_bitpacking_mode = mode;
 }
 
 void ForceBitpackingModeSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.force_bitpacking_mode = DBConfig().options.force_bitpacking_mode;
 }
 
-Value ForceBitpackingModeSetting::GetSetting(ClientContext &context) {
+Value ForceBitpackingModeSetting::GetSetting(const ClientContext &context) {
 	return Value(BitpackingModeToString(context.db->config.options.force_bitpacking_mode));
 }
 
 //===--------------------------------------------------------------------===//
 // Home Directory
 //===--------------------------------------------------------------------===//
-
 void HomeDirectorySetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).home_directory = ClientConfig().home_directory;
 }
 
 void HomeDirectorySetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
+
+	if (!input.IsNull() && FileSystem::GetFileSystem(context).IsRemoteFile(input.ToString())) {
+		throw InvalidInputException("Cannot set the home directory to a remote path");
+	}
+
 	config.home_directory = input.IsNull() ? string() : input.ToString();
 }
 
-Value HomeDirectorySetting::GetSetting(ClientContext &context) {
+Value HomeDirectorySetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value(config.home_directory);
 }
 
 //===--------------------------------------------------------------------===//
+// Integer Division
+//===--------------------------------------------------------------------===//
+void IntegerDivisionSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).integer_division = ClientConfig().integer_division;
+}
+
+void IntegerDivisionSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.integer_division = input.GetValue<bool>();
+}
+
+Value IntegerDivisionSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value(config.integer_division);
+}
+
+//===--------------------------------------------------------------------===//
 // Log Query Path
 //===--------------------------------------------------------------------===//
-
 void LogQueryPathSetting::ResetLocal(ClientContext &context) {
 	auto &client_data = ClientData::Get(context);
 	// TODO: verify that this does the right thing
@@ -669,15 +911,31 @@ void LogQueryPathSetting::SetLocal(ClientContext &context, const Value &input) {
 		// empty path: clean up query writer
 		client_data.log_query_writer = nullptr;
 	} else {
-		client_data.log_query_writer =
-		    make_unique<BufferedFileWriter>(FileSystem::GetFileSystem(context), path,
-		                                    BufferedFileWriter::DEFAULT_OPEN_FLAGS, client_data.file_opener.get());
+		client_data.log_query_writer = make_uniq<BufferedFileWriter>(FileSystem::GetFileSystem(context), path,
+		                                                             BufferedFileWriter::DEFAULT_OPEN_FLAGS);
 	}
 }
 
-Value LogQueryPathSetting::GetSetting(ClientContext &context) {
+Value LogQueryPathSetting::GetSetting(const ClientContext &context) {
 	auto &client_data = ClientData::Get(context);
 	return client_data.log_query_writer ? Value(client_data.log_query_writer->path) : Value();
+}
+
+//===--------------------------------------------------------------------===//
+// Lock Configuration
+//===--------------------------------------------------------------------===//
+void LockConfigurationSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto new_value = input.GetValue<bool>();
+	config.options.lock_configuration = new_value;
+}
+
+void LockConfigurationSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.lock_configuration = DBConfig().options.lock_configuration;
+}
+
+Value LockConfigurationSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.lock_configuration);
 }
 
 //===--------------------------------------------------------------------===//
@@ -691,7 +949,7 @@ void ImmediateTransactionModeSetting::ResetGlobal(DatabaseInstance *db, DBConfig
 	config.options.immediate_transaction_mode = DBConfig().options.immediate_transaction_mode;
 }
 
-Value ImmediateTransactionModeSetting::GetSetting(ClientContext &context) {
+Value ImmediateTransactionModeSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.immediate_transaction_mode);
 }
@@ -699,7 +957,6 @@ Value ImmediateTransactionModeSetting::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 // Maximum Expression Depth
 //===--------------------------------------------------------------------===//
-
 void MaximumExpressionDepthSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).max_expression_depth = ClientConfig().max_expression_depth;
 }
@@ -708,7 +965,7 @@ void MaximumExpressionDepthSetting::SetLocal(ClientContext &context, const Value
 	ClientConfig::GetConfig(context).max_expression_depth = input.GetValue<uint64_t>();
 }
 
-Value MaximumExpressionDepthSetting::GetSetting(ClientContext &context) {
+Value MaximumExpressionDepthSetting::GetSetting(const ClientContext &context) {
 	return Value::UBIGINT(ClientConfig::GetConfig(context).max_expression_depth);
 }
 
@@ -726,9 +983,41 @@ void MaximumMemorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.SetDefaultMaxMemory();
 }
 
-Value MaximumMemorySetting::GetSetting(ClientContext &context) {
+Value MaximumMemorySetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value(StringUtil::BytesToHumanReadableString(config.options.maximum_memory));
+}
+
+//===--------------------------------------------------------------------===//
+// Old Implicit Casting
+//===--------------------------------------------------------------------===//
+void OldImplicitCasting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.old_implicit_casting = input.GetValue<bool>();
+}
+
+void OldImplicitCasting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.old_implicit_casting = DBConfig().options.old_implicit_casting;
+}
+
+Value OldImplicitCasting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.old_implicit_casting);
+}
+
+//===--------------------------------------------------------------------===//
+// Partitioned Write Flush Threshold
+//===--------------------------------------------------------------------===//
+void PartitionedWriteFlushThreshold::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).partitioned_write_flush_threshold =
+	    ClientConfig().partitioned_write_flush_threshold;
+}
+
+void PartitionedWriteFlushThreshold::SetLocal(ClientContext &context, const Value &input) {
+	ClientConfig::GetConfig(context).partitioned_write_flush_threshold = input.GetValue<idx_t>();
+}
+
+Value PartitionedWriteFlushThreshold::GetSetting(const ClientContext &context) {
+	return Value::BIGINT(ClientConfig::GetConfig(context).partitioned_write_flush_threshold);
 }
 
 //===--------------------------------------------------------------------===//
@@ -742,34 +1031,62 @@ void PasswordSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	// nop
 }
 
-Value PasswordSetting::GetSetting(ClientContext &context) {
+Value PasswordSetting::GetSetting(const ClientContext &context) {
 	return Value();
 }
 
 //===--------------------------------------------------------------------===//
 // Perfect Hash Threshold
 //===--------------------------------------------------------------------===//
-
 void PerfectHashThresholdSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).perfect_ht_threshold = ClientConfig().perfect_ht_threshold;
 }
 
 void PerfectHashThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
-	auto bits = input.GetValue<int32_t>();
+	auto bits = input.GetValue<int64_t>();
 	if (bits < 0 || bits > 32) {
 		throw ParserException("Perfect HT threshold out of range: should be within range 0 - 32");
 	}
 	ClientConfig::GetConfig(context).perfect_ht_threshold = bits;
 }
 
-Value PerfectHashThresholdSetting::GetSetting(ClientContext &context) {
+Value PerfectHashThresholdSetting::GetSetting(const ClientContext &context) {
 	return Value::BIGINT(ClientConfig::GetConfig(context).perfect_ht_threshold);
+}
+
+//===--------------------------------------------------------------------===//
+// Pivot Filter Threshold
+//===--------------------------------------------------------------------===//
+void PivotFilterThreshold::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).pivot_filter_threshold = ClientConfig().pivot_filter_threshold;
+}
+
+void PivotFilterThreshold::SetLocal(ClientContext &context, const Value &input) {
+	ClientConfig::GetConfig(context).pivot_filter_threshold = input.GetValue<uint64_t>();
+}
+
+Value PivotFilterThreshold::GetSetting(const ClientContext &context) {
+	return Value::BIGINT(ClientConfig::GetConfig(context).pivot_filter_threshold);
+}
+
+//===--------------------------------------------------------------------===//
+// Pivot Limit
+//===--------------------------------------------------------------------===//
+void PivotLimitSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).pivot_limit = ClientConfig().pivot_limit;
+}
+
+void PivotLimitSetting::SetLocal(ClientContext &context, const Value &input) {
+	ClientConfig::GetConfig(context).pivot_limit = input.GetValue<uint64_t>();
+}
+
+Value PivotLimitSetting::GetSetting(const ClientContext &context) {
+	return Value::BIGINT(ClientConfig::GetConfig(context).pivot_limit);
 }
 
 //===--------------------------------------------------------------------===//
 // PreserveIdentifierCase
 //===--------------------------------------------------------------------===//
-
 void PreserveIdentifierCase::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).preserve_identifier_case = ClientConfig().preserve_identifier_case;
 }
@@ -778,7 +1095,7 @@ void PreserveIdentifierCase::SetLocal(ClientContext &context, const Value &input
 	ClientConfig::GetConfig(context).preserve_identifier_case = input.GetValue<bool>();
 }
 
-Value PreserveIdentifierCase::GetSetting(ClientContext &context) {
+Value PreserveIdentifierCase::GetSetting(const ClientContext &context) {
 	return Value::BOOLEAN(ClientConfig::GetConfig(context).preserve_identifier_case);
 }
 
@@ -793,37 +1110,33 @@ void PreserveInsertionOrder::ResetGlobal(DatabaseInstance *db, DBConfig &config)
 	config.options.preserve_insertion_order = DBConfig().options.preserve_insertion_order;
 }
 
-Value PreserveInsertionOrder::GetSetting(ClientContext &context) {
+Value PreserveInsertionOrder::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.preserve_insertion_order);
 }
 
 //===--------------------------------------------------------------------===//
-// Profiler History Size
+// ExportLargeBufferArrow
 //===--------------------------------------------------------------------===//
+void ExportLargeBufferArrow::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto export_large_buffers_arrow = input.GetValue<bool>();
 
-void ProfilerHistorySize::ResetLocal(ClientContext &context) {
-	auto &client_data = ClientData::Get(context);
-	client_data.query_profiler_history->ResetProfilerHistorySize();
+	config.options.arrow_offset_size = export_large_buffers_arrow ? ArrowOffsetSize::LARGE : ArrowOffsetSize::REGULAR;
 }
 
-void ProfilerHistorySize::SetLocal(ClientContext &context, const Value &input) {
-	auto size = input.GetValue<int64_t>();
-	if (size <= 0) {
-		throw ParserException("Size should be >= 0");
-	}
-	auto &client_data = ClientData::Get(context);
-	client_data.query_profiler_history->SetProfilerHistorySize(size);
+void ExportLargeBufferArrow::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.arrow_offset_size = DBConfig().options.arrow_offset_size;
 }
 
-Value ProfilerHistorySize::GetSetting(ClientContext &context) {
-	return Value();
+Value ExportLargeBufferArrow::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	bool export_large_buffers_arrow = config.options.arrow_offset_size == ArrowOffsetSize::LARGE;
+	return Value::BOOLEAN(export_large_buffers_arrow);
 }
 
 //===--------------------------------------------------------------------===//
 // Profile Output
 //===--------------------------------------------------------------------===//
-
 void ProfileOutputSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).profiler_save_location = ClientConfig().profiler_save_location;
 }
@@ -834,7 +1147,7 @@ void ProfileOutputSetting::SetLocal(ClientContext &context, const Value &input) 
 	config.profiler_save_location = parameter;
 }
 
-Value ProfileOutputSetting::GetSetting(ClientContext &context) {
+Value ProfileOutputSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value(config.profiler_save_location);
 }
@@ -842,7 +1155,6 @@ Value ProfileOutputSetting::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 // Profiling Mode
 //===--------------------------------------------------------------------===//
-
 void ProfilingModeSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).enable_profiler = ClientConfig().enable_profiler;
 	ClientConfig::GetConfig(context).enable_detailed_profiling = ClientConfig().enable_detailed_profiling;
@@ -865,7 +1177,7 @@ void ProfilingModeSetting::SetLocal(ClientContext &context, const Value &input) 
 	}
 }
 
-Value ProfilingModeSetting::GetSetting(ClientContext &context) {
+Value ProfilingModeSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	if (!config.enable_profiler) {
 		return Value();
@@ -876,18 +1188,21 @@ Value ProfilingModeSetting::GetSetting(ClientContext &context) {
 //===--------------------------------------------------------------------===//
 // Progress Bar Time
 //===--------------------------------------------------------------------===//
-
 void ProgressBarTimeSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).wait_time = ClientConfig().wait_time;
-	ClientConfig::GetConfig(context).enable_progress_bar = ClientConfig().enable_progress_bar;
+	auto &config = ClientConfig::GetConfig(context);
+	ProgressBar::SystemOverrideCheck(config);
+	config.wait_time = ClientConfig().wait_time;
+	config.enable_progress_bar = ClientConfig().enable_progress_bar;
 }
 
 void ProgressBarTimeSetting::SetLocal(ClientContext &context, const Value &input) {
-	ClientConfig::GetConfig(context).wait_time = input.GetValue<int32_t>();
-	ClientConfig::GetConfig(context).enable_progress_bar = true;
+	auto &config = ClientConfig::GetConfig(context);
+	ProgressBar::SystemOverrideCheck(config);
+	config.wait_time = input.GetValue<int32_t>();
+	config.enable_progress_bar = true;
 }
 
-Value ProgressBarTimeSetting::GetSetting(ClientContext &context) {
+Value ProgressBarTimeSetting::GetSetting(const ClientContext &context) {
 	return Value::BIGINT(ClientConfig::GetConfig(context).wait_time);
 }
 
@@ -903,10 +1218,10 @@ void SchemaSetting::ResetLocal(ClientContext &context) {
 void SchemaSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto parameter = input.ToString();
 	auto &client_data = ClientData::Get(context);
-	client_data.catalog_search_path->Set(CatalogSearchEntry::Parse(parameter), true);
+	client_data.catalog_search_path->Set(CatalogSearchEntry::Parse(parameter), CatalogSetPathType::SET_SCHEMA);
 }
 
-Value SchemaSetting::GetSetting(ClientContext &context) {
+Value SchemaSetting::GetSetting(const ClientContext &context) {
 	auto &client_data = ClientData::Get(context);
 	return client_data.catalog_search_path->GetDefault().schema;
 }
@@ -923,13 +1238,29 @@ void SearchPathSetting::ResetLocal(ClientContext &context) {
 void SearchPathSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto parameter = input.ToString();
 	auto &client_data = ClientData::Get(context);
-	client_data.catalog_search_path->Set(CatalogSearchEntry::ParseList(parameter), false);
+	client_data.catalog_search_path->Set(CatalogSearchEntry::ParseList(parameter), CatalogSetPathType::SET_SCHEMAS);
 }
 
-Value SearchPathSetting::GetSetting(ClientContext &context) {
+Value SearchPathSetting::GetSetting(const ClientContext &context) {
 	auto &client_data = ClientData::Get(context);
 	auto &set_paths = client_data.catalog_search_path->GetSetPaths();
 	return Value(CatalogSearchEntry::ListToString(set_paths));
+}
+
+//===--------------------------------------------------------------------===//
+// Secret Directory
+//===--------------------------------------------------------------------===//
+void SecretDirectorySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.secret_manager->SetPersistentSecretPath(input.ToString());
+}
+
+void SecretDirectorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.secret_manager->ResetPersistentSecretPath();
+}
+
+Value SecretDirectorySetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return config.secret_manager->PersistentSecretPath();
 }
 
 //===--------------------------------------------------------------------===//
@@ -953,7 +1284,7 @@ void TempDirectorySetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	}
 }
 
-Value TempDirectorySetting::GetSetting(ClientContext &context) {
+Value TempDirectorySetting::GetSetting(const ClientContext &context) {
 	auto &buffer_manager = BufferManager::GetBufferManager(context);
 	return Value(buffer_manager.GetTemporaryDirectory());
 }
@@ -962,17 +1293,26 @@ Value TempDirectorySetting::GetSetting(ClientContext &context) {
 // Threads Setting
 //===--------------------------------------------------------------------===//
 void ThreadsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	config.options.maximum_threads = input.GetValue<int64_t>();
-	if (db) {
-		TaskScheduler::GetScheduler(*db).SetThreads(config.options.maximum_threads);
+	auto new_val = input.GetValue<int64_t>();
+	if (new_val < 1) {
+		throw SyntaxException("Must have at least 1 thread!");
 	}
+	idx_t new_maximum_threads = new_val;
+	if (db) {
+		TaskScheduler::GetScheduler(*db).SetThreads(new_maximum_threads, config.options.external_threads);
+	}
+	config.options.maximum_threads = new_maximum_threads;
 }
 
 void ThreadsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
-	config.SetDefaultMaxThreads();
+	idx_t new_maximum_threads = config.GetSystemMaxThreads(*config.file_system);
+	if (db) {
+		TaskScheduler::GetScheduler(*db).SetThreads(new_maximum_threads, config.options.external_threads);
+	}
+	config.options.maximum_threads = new_maximum_threads;
 }
 
-Value ThreadsSetting::GetSetting(ClientContext &context) {
+Value ThreadsSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BIGINT(config.options.maximum_threads);
 }
@@ -988,8 +1328,79 @@ void UsernameSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	// nop
 }
 
-Value UsernameSetting::GetSetting(ClientContext &context) {
+Value UsernameSetting::GetSetting(const ClientContext &context) {
 	return Value();
+}
+
+//===--------------------------------------------------------------------===//
+// Allocator Flush Threshold
+//===--------------------------------------------------------------------===//
+void FlushAllocatorSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.allocator_flush_threshold = DBConfig::ParseMemoryLimit(input.ToString());
+	if (db) {
+		TaskScheduler::GetScheduler(*db).SetAllocatorFlushTreshold(config.options.allocator_flush_threshold);
+	}
+}
+
+void FlushAllocatorSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.allocator_flush_threshold = DBConfig().options.allocator_flush_threshold;
+	if (db) {
+		TaskScheduler::GetScheduler(*db).SetAllocatorFlushTreshold(config.options.allocator_flush_threshold);
+	}
+}
+
+Value FlushAllocatorSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(StringUtil::BytesToHumanReadableString(config.options.allocator_flush_threshold));
+}
+
+//===--------------------------------------------------------------------===//
+// DuckDBApi Setting
+//===--------------------------------------------------------------------===//
+
+void DuckDBApiSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto new_value = input.GetValue<string>();
+	if (db) {
+		throw InvalidInputException("Cannot change duckdb_api setting while database is running");
+	}
+	config.options.duckdb_api = new_value;
+}
+
+void DuckDBApiSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	if (db) {
+		throw InvalidInputException("Cannot change duckdb_api setting while database is running");
+	}
+	config.options.duckdb_api = GetDefaultUserAgent();
+}
+
+Value DuckDBApiSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(config.options.duckdb_api);
+}
+
+//===--------------------------------------------------------------------===//
+// CustomUserAgent Setting
+//===--------------------------------------------------------------------===//
+
+void CustomUserAgentSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto new_value = input.GetValue<string>();
+	if (db) {
+		throw InvalidInputException("Cannot change custom_user_agent setting while database is running");
+	}
+	config.options.custom_user_agent =
+	    config.options.custom_user_agent.empty() ? new_value : config.options.custom_user_agent + " " + new_value;
+}
+
+void CustomUserAgentSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	if (db) {
+		throw InvalidInputException("Cannot change custom_user_agent setting while database is running");
+	}
+	config.options.custom_user_agent = DBConfig().options.custom_user_agent;
+}
+
+Value CustomUserAgentSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(config.options.custom_user_agent);
 }
 
 } // namespace duckdb

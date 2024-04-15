@@ -9,14 +9,20 @@
 #pragma once
 
 #include "duckdb/common/enums/catalog_type.hpp"
-#include "duckdb/common/field_writer.hpp"
 #include "duckdb/parser/parsed_data/parse_info.hpp"
+#include "duckdb/parser/parsed_data/extra_drop_info.hpp"
+#include "duckdb/common/enums/on_entry_not_found.hpp"
 
 namespace duckdb {
+struct ExtraDropInfo;
 
 struct DropInfo : public ParseInfo {
-	DropInfo() : catalog(INVALID_CATALOG), schema(INVALID_SCHEMA), if_exists(false), cascade(false) {
-	}
+public:
+	static constexpr const ParseInfoType TYPE = ParseInfoType::DROP_INFO;
+
+public:
+	DropInfo();
+	DropInfo(const DropInfo &info);
 
 	//! The catalog type to drop
 	CatalogType type;
@@ -27,76 +33,21 @@ struct DropInfo : public ParseInfo {
 	//! Element name to drop
 	string name;
 	//! Ignore if the entry does not exist instead of failing
-	bool if_exists = false;
+	OnEntryNotFound if_not_found = OnEntryNotFound::THROW_EXCEPTION;
 	//! Cascade drop (drop all dependents instead of throwing an error if there
 	//! are any)
 	bool cascade = false;
 	//! Allow dropping of internal system entries
 	bool allow_drop_internal = false;
+	//! Extra info related to this drop
+	unique_ptr<ExtraDropInfo> extra_drop_info;
 
 public:
-	unique_ptr<DropInfo> Copy() const {
-		auto result = make_unique<DropInfo>();
-		result->type = type;
-		result->catalog = catalog;
-		result->schema = schema;
-		result->name = name;
-		result->if_exists = if_exists;
-		result->cascade = cascade;
-		result->allow_drop_internal = allow_drop_internal;
-		return result;
-	}
+	virtual unique_ptr<DropInfo> Copy() const;
+	bool Equals(const DropInfo &other) const;
 
-	void Serialize(Serializer &serializer) const {
-		FieldWriter writer(serializer);
-		writer.WriteField<CatalogType>(type);
-		writer.WriteString(catalog);
-		writer.WriteString(schema);
-		writer.WriteString(name);
-		writer.WriteField(if_exists);
-		writer.WriteField(cascade);
-		writer.WriteField(allow_drop_internal);
-		writer.Finalize();
-	}
-
-	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer) {
-		FieldReader reader(deserializer);
-		auto drop_info = make_unique<DropInfo>();
-		drop_info->type = reader.ReadRequired<CatalogType>();
-		drop_info->catalog = reader.ReadRequired<string>();
-		drop_info->schema = reader.ReadRequired<string>();
-		drop_info->name = reader.ReadRequired<string>();
-		drop_info->if_exists = reader.ReadRequired<bool>();
-		drop_info->cascade = reader.ReadRequired<bool>();
-		drop_info->allow_drop_internal = reader.ReadRequired<bool>();
-		reader.Finalize();
-		return std::move(drop_info);
-	}
-
-	bool Equals(const DropInfo &other) const {
-		if (other.type != type) {
-			return false;
-		}
-		if (other.catalog != catalog) {
-			return false;
-		}
-		if (other.schema != schema) {
-			return false;
-		}
-		if (other.name != name) {
-			return false;
-		}
-		if (other.if_exists != if_exists) {
-			return false;
-		}
-		if (other.cascade != cascade) {
-			return false;
-		}
-		if (other.allow_drop_internal != allow_drop_internal) {
-			return false;
-		}
-		return true;
-	}
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };
 
 } // namespace duckdb

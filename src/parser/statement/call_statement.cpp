@@ -23,7 +23,7 @@ bool CallStatement::Equals(const SQLStatement *other_p) const {
 	if (!function || !other.function) {
 		return false;
 	}
-	return function->Equals(other.function.get());
+	return function->Equals(*other.function);
 }
 
 } // namespace duckdb

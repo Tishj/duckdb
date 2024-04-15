@@ -1,8 +1,17 @@
+//===----------------------------------------------------------------------===//
+//                         DuckDB
+//
+// utf8proc_wrapper.hpp
+//
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include <string>
 #include <cassert>
 #include <cstring>
+#include <cstdint>
 
 namespace duckdb {
 
@@ -17,6 +26,8 @@ public:
 	static char* Normalize(const char* s, size_t len);
 	//! Returns whether or not the UTF8 string is valid
 	static bool IsValid(const char *s, size_t len);
+	//! Makes Invalid Unicode valid by replacing invalid parts with a given character
+	static void MakeValid(char *s, size_t len, char special_flag = '?');
 	//! Returns the position (in bytes) of the next grapheme cluster
 	static size_t NextGraphemeCluster(const char *s, size_t len, size_t pos);
 	//! Returns the position (in bytes) of the previous grapheme cluster

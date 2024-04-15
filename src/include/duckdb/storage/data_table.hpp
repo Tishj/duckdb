@@ -8,20 +8,21 @@
 
 #pragma once
 
-#include "duckdb/common/enums/index_type.hpp"
+#include "duckdb/common/enums/index_constraint_type.hpp"
 #include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
-#include "duckdb/storage/index.hpp"
-#include "duckdb/storage/table/table_statistics.hpp"
+#include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/storage/block.hpp"
+#include "duckdb/storage/index.hpp"
 #include "duckdb/storage/statistics/column_statistics.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
-#include "duckdb/storage/table/persistent_table_data.hpp"
-#include "duckdb/storage/table/row_group_collection.hpp"
-#include "duckdb/storage/table/row_group.hpp"
-#include "duckdb/transaction/local_storage.hpp"
 #include "duckdb/storage/table/data_table_info.hpp"
+#include "duckdb/storage/table/persistent_table_data.hpp"
+#include "duckdb/storage/table/row_group.hpp"
+#include "duckdb/storage/table/row_group_collection.hpp"
+#include "duckdb/storage/table/table_statistics.hpp"
+#include "duckdb/transaction/local_storage.hpp"
 
 namespace duckdb {
 class BoundForeignKeyConstraint;
@@ -39,6 +40,7 @@ class Transaction;
 class WriteAheadLog;
 class TableDataWriter;
 class ConflictManager;
+class TableScanState;
 enum class VerifyExistenceType : uint8_t;
 
 //! DataTable represents a physical table on disk
@@ -49,14 +51,14 @@ public:
 	          const string &table, vector<ColumnDefinition> column_definitions_p,
 	          unique_ptr<PersistentTableData> data = nullptr);
 	//! Constructs a DataTable as a delta on an existing data table with a newly added column
-	DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression *default_value);
+	DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression &default_value);
 	//! Constructs a DataTable as a delta on an existing data table but with one column removed
 	DataTable(ClientContext &context, DataTable &parent, idx_t removed_column);
 	//! Constructs a DataTable as a delta on an existing data table but with one column changed type
 	DataTable(ClientContext &context, DataTable &parent, idx_t changed_idx, const LogicalType &target_type,
 	          const vector<column_t> &bound_columns, Expression &cast_expr);
 	//! Constructs a DataTable as a delta on an existing data table but with one column added new constraint
-	DataTable(ClientContext &context, DataTable &parent, unique_ptr<BoundConstraint> constraint);
+	explicit DataTable(ClientContext &context, DataTable &parent, unique_ptr<BoundConstraint> constraint);
 
 	//! The table info
 	shared_ptr<DataTableInfo> info;
@@ -103,7 +105,8 @@ public:
 	//! Merge a row group collection into the transaction-local storage
 	void LocalMerge(ClientContext &context, RowGroupCollection &collection);
 	//! Creates an optimistic writer for this table - used for optimistically writing parallel appends
-	OptimisticDataWriter *CreateOptimisticWriter(ClientContext &context);
+	OptimisticDataWriter &CreateOptimisticWriter(ClientContext &context);
+	void FinalizeOptimisticWriter(ClientContext &context, OptimisticDataWriter &writer);
 
 	//! Delete the entries with the specified row identifier from the table
 	idx_t Delete(TableCatalogEntry &table, ClientContext &context, Vector &row_ids, idx_t count);
@@ -122,18 +125,14 @@ public:
 	void UpdateColumn(TableCatalogEntry &table, ClientContext &context, Vector &row_ids,
 	                  const vector<column_t> &column_path, DataChunk &updates);
 
-	//! Add an index to the DataTable. NOTE: for CREATE (UNIQUE) INDEX statements, we use the PhysicalCreateIndex
-	//! operator. This function is only used during the WAL replay, and is a much less performant index creation
-	//! approach.
-	void WALAddIndex(ClientContext &context, unique_ptr<Index> index,
-	                 const vector<unique_ptr<Expression>> &expressions);
-
 	//! Fetches an append lock
 	void AppendLock(TableAppendState &state);
 	//! Begin appending structs to this table, obtaining necessary locks, etc
-	void InitializeAppend(DuckTransaction &transaction, TableAppendState &state, idx_t append_count);
+	void InitializeAppend(DuckTransaction &transaction, TableAppendState &state);
 	//! Append a chunk to the table using the AppendState obtained from InitializeAppend
 	void Append(DataChunk &chunk, TableAppendState &state);
+	//! Finalize an append
+	void FinalizeAppend(DuckTransaction &transaction, TableAppendState &state);
 	//! Commit the append
 	void CommitAppend(transaction_t commit_id, idx_t row_start, idx_t count);
 	//! Write a segment of the table to the WAL
@@ -141,7 +140,7 @@ public:
 	//! Revert a set of appends made by the given AppendState, used to revert appends in the event of an error during
 	//! commit (e.g. because of an I/O exception)
 	void RevertAppend(idx_t start_row, idx_t count);
-	void RevertAppendInternal(idx_t start_row, idx_t count);
+	void RevertAppendInternal(idx_t start_row);
 
 	void ScanTableSegment(idx_t start_row, idx_t count, const std::function<void(DataChunk &chunk)> &function);
 
@@ -150,8 +149,8 @@ public:
 
 	//! Append a chunk with the row ids [row_start, ..., row_start + chunk.size()] to all indexes of the table, returns
 	//! whether or not the append succeeded
-	bool AppendToIndexes(DataChunk &chunk, row_t row_start);
-	static bool AppendToIndexes(TableIndexList &indexes, DataChunk &chunk, row_t row_start);
+	ErrorData AppendToIndexes(DataChunk &chunk, row_t row_start);
+	static ErrorData AppendToIndexes(TableIndexList &indexes, DataChunk &chunk, row_t row_start);
 	//! Remove a chunk with the row ids [row_start, ..., row_start + chunk.size()] from all indexes of the table
 	void RemoveFromIndexes(TableAppendState &state, DataChunk &chunk, row_t row_start);
 	//! Remove the chunk with the specified set of row identifiers from all indexes of the table
@@ -169,26 +168,31 @@ public:
 	//! Get statistics of a physical column within the table
 	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, column_t column_id);
 	//! Sets statistics of a physical column within the table
-	void SetStatistics(column_t column_id, const std::function<void(BaseStatistics &)> &set_fun);
+	void SetDistinct(column_t column_id, unique_ptr<DistinctStatistics> distinct_stats);
 
 	//! Checkpoint the table to the specified table data writer
-	void Checkpoint(TableDataWriter &writer);
+	void Checkpoint(TableDataWriter &writer, Serializer &serializer);
 	void CommitDropTable();
 	void CommitDropColumn(idx_t index);
 
 	idx_t GetTotalRows();
 
-	void GetStorageInfo(TableStorageInfo &result);
+	vector<ColumnSegmentInfo> GetColumnSegmentInfo();
 	static bool IsForeignKeyIndex(const vector<PhysicalIndex> &fk_keys, Index &index, ForeignKeyType fk_type);
 
-	//! Initializes a special scan that is used to create an index on the table, it keeps locks on the table
-	void InitializeWALCreateIndexScan(CreateIndexScanState &state, const vector<column_t> &column_ids);
 	//! Scans the next chunk for the CREATE INDEX operator
 	bool CreateIndexScan(TableScanState &state, DataChunk &result, TableScanType type);
+	//! Returns true, if the index name is unique (i.e., no PK, UNIQUE, FK constraint has the same name)
+	//! FIXME: This is only necessary until we treat all indexes as catalog entries, allowing to alter constraints
+	bool IndexNameIsUnique(const string &name);
 
 	//! Verify constraints with a chunk from the Append containing all columns of the table
 	void VerifyAppendConstraints(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
 	                             ConflictManager *conflict_manager = nullptr);
+
+public:
+	static void VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &context, DataChunk &chunk,
+	                                ConflictManager *conflict_manager);
 
 private:
 	//! Verify the new added constraints against current persistent&local data

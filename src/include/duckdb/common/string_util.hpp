@@ -11,8 +11,23 @@
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/vector.hpp"
+#include "duckdb/common/set.hpp"
+
+#include <cstring>
 
 namespace duckdb {
+
+#ifndef DUCKDB_QUOTE_DEFINE
+// Preprocessor trick to allow text to be converted to C-string / string
+// Expecte use is:
+//	#ifdef SOME_DEFINE
+//	string str = DUCKDB_QUOTE_DEFINE(SOME_DEFINE)
+//	...do something with str
+//	#endif SOME_DEFINE
+#define DUCKDB_QUOTE_DEFINE_IMPL(x) #x
+#define DUCKDB_QUOTE_DEFINE(x)      DUCKDB_QUOTE_DEFINE_IMPL(x)
+#endif
+
 /**
  * String Utility Functions
  * Note that these are not the most efficient implementations (i.e., they copy
@@ -21,25 +36,47 @@ namespace duckdb {
  */
 class StringUtil {
 public:
-	DUCKDB_API static bool CharacterIsSpace(char c) {
+	static string GenerateRandomName(idx_t length = 16);
+
+	static uint8_t GetHexValue(char c) {
+		if (c >= '0' && c <= '9') {
+			return c - '0';
+		}
+		if (c >= 'a' && c <= 'f') {
+			return c - 'a' + 10;
+		}
+		if (c >= 'A' && c <= 'F') {
+			return c - 'A' + 10;
+		}
+		throw InvalidInputException("Invalid input for hex digit: %s", string(c, 1));
+	}
+
+	static uint8_t GetBinaryValue(char c) {
+		if (c >= '0' && c <= '1') {
+			return c - '0';
+		}
+		throw InvalidInputException("Invalid input for binary digit: %s", string(c, 1));
+	}
+
+	static bool CharacterIsSpace(char c) {
 		return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
 	}
-	DUCKDB_API static bool CharacterIsNewline(char c) {
+	static bool CharacterIsNewline(char c) {
 		return c == '\n' || c == '\r';
 	}
-	DUCKDB_API static bool CharacterIsDigit(char c) {
+	static bool CharacterIsDigit(char c) {
 		return c >= '0' && c <= '9';
 	}
-	DUCKDB_API static bool CharacterIsHex(char c) {
+	static bool CharacterIsHex(char c) {
 		return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 	}
-	DUCKDB_API static char CharacterToLower(char c) {
+	static char CharacterToLower(char c) {
 		if (c >= 'A' && c <= 'Z') {
 			return c - ('A' - 'a');
 		}
 		return c;
 	}
-	DUCKDB_API static char CharacterIsAlpha(char c) {
+	static char CharacterIsAlpha(char c) {
 		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 	}
 	static bool CharacterIsOperator(char c) {
@@ -59,6 +96,23 @@ public:
 			return true;
 		}
 		return false;
+	}
+
+	template <class TO>
+	static vector<TO> ConvertStrings(const vector<string> &strings) {
+		vector<TO> result;
+		for (auto &string : strings) {
+			result.emplace_back(string);
+		}
+		return result;
+	}
+
+	static vector<SQLIdentifier> ConvertToSQLIdentifiers(const vector<string> &strings) {
+		return ConvertStrings<SQLIdentifier>(strings);
+	}
+
+	static vector<SQLString> ConvertToSQLStrings(const vector<string> &strings) {
+		return ConvertStrings<SQLString>(strings);
 	}
 
 	//! Returns true if the needle string exists in the haystack
@@ -81,6 +135,7 @@ public:
 
 	//! Join multiple strings into one string. Components are concatenated by the given separator
 	DUCKDB_API static string Join(const vector<string> &input, const string &separator);
+	DUCKDB_API static string Join(const set<string> &input, const string &separator);
 
 	template <class T>
 	static string ToString(const vector<T> &input, const string &separator) {
@@ -93,8 +148,8 @@ public:
 
 	//! Join multiple items of container with given size, transformed to string
 	//! using function, into one string using the given separator
-	template <typename C, typename S, typename Func>
-	static string Join(const C &input, S count, const string &separator, Func f) {
+	template <typename C, typename S, typename FUNC>
+	static string Join(const C &input, S count, const string &separator, FUNC f) {
 		// The result
 		std::string result;
 
@@ -113,7 +168,7 @@ public:
 	}
 
 	//! Return a string that formats the give number of bytes
-	DUCKDB_API static string BytesToHumanReadableString(idx_t bytes);
+	DUCKDB_API static string BytesToHumanReadableString(idx_t bytes, idx_t multiplier = 1024);
 
 	//! Convert a string to uppercase
 	DUCKDB_API static string Upper(const string &str);
@@ -121,12 +176,20 @@ public:
 	//! Convert a string to lowercase
 	DUCKDB_API static string Lower(const string &str);
 
+	DUCKDB_API static bool IsLower(const string &str);
+
+	//! Case insensitive hash
+	DUCKDB_API static uint64_t CIHash(const string &str);
+
 	//! Case insensitive equals
 	DUCKDB_API static bool CIEquals(const string &l1, const string &l2);
 
+	//! Case insensitive compare
+	DUCKDB_API static bool CILessThan(const string &l1, const string &l2);
+
 	//! Format a string using printf semantics
-	template <typename... Args>
-	static string Format(const string fmt_str, Args... params) {
+	template <typename... ARGS>
+	static string Format(const string fmt_str, ARGS... params) {
 		return Exception::ConstructMessage(fmt_str, params...);
 	}
 
@@ -170,6 +233,35 @@ public:
 	//! Equivalent to calling TopNLevenshtein followed by CandidatesMessage
 	DUCKDB_API static string CandidatesErrorMessage(const vector<string> &strings, const string &target,
 	                                                const string &message_prefix, idx_t n = 5);
+
+	//! Returns true if two null-terminated strings are equal or point to the same address.
+	//! Returns false if only one of the strings is nullptr
+	static bool Equals(const char *s1, const char *s2) {
+		if (s1 == s2) {
+			return true;
+		}
+		if (s1 == nullptr || s2 == nullptr) {
+			return false;
+		}
+		return strcmp(s1, s2) == 0;
+	}
+
+	//! JSON method that parses a { string: value } JSON blob
+	//! NOTE: this method ONLY parses a JSON {"key": "value"} object, it does not support ANYTHING else
+	//! NOTE: this method is not efficient
+	//! NOTE: this method is used in Exception construction - as such it does NOT throw on invalid JSON, instead an
+	//! empty map is returned
+	DUCKDB_API static unordered_map<string, string> ParseJSONMap(const string &json);
+	//! JSON method that constructs a { string: value } JSON map
+	//! This is the inverse of ParseJSONMap
+	//! NOTE: this method is not efficient
+	DUCKDB_API static string ToJSONMap(ExceptionType type, const string &message,
+	                                   const unordered_map<string, string> &map);
+
+	DUCKDB_API static string GetFileName(const string &file_path);
+	DUCKDB_API static string GetFileExtension(const string &file_name);
+	DUCKDB_API static string GetFileStem(const string &file_name);
+	DUCKDB_API static string GetFilePath(const string &file_path);
 };
 
 } // namespace duckdb

@@ -23,14 +23,12 @@ public:
 
 	//! The expression rewriter this rule belongs to
 	ExpressionRewriter &rewriter;
-	//! The root
-	unique_ptr<LogicalOperatorMatcher> logical_root;
 	//! The expression matcher of the rule
 	unique_ptr<ExpressionMatcher> root;
 
 	ClientContext &GetContext() const;
-	virtual unique_ptr<Expression> Apply(LogicalOperator &op, vector<Expression *> &bindings, bool &fixed_point,
-	                                     bool is_root) = 0;
+	virtual unique_ptr<Expression> Apply(LogicalOperator &op, vector<reference<Expression>> &bindings,
+	                                     bool &fixed_point, bool is_root) = 0;
 };
 
 } // namespace duckdb

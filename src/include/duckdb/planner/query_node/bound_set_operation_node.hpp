@@ -17,11 +17,16 @@ namespace duckdb {
 //! Bound equivalent of SetOperationNode
 class BoundSetOperationNode : public BoundQueryNode {
 public:
+	static constexpr const QueryNodeType TYPE = QueryNodeType::SET_OPERATION_NODE;
+
+public:
 	BoundSetOperationNode() : BoundQueryNode(QueryNodeType::SET_OPERATION_NODE) {
 	}
 
 	//! The type of set operation
 	SetOperationType setop_type = SetOperationType::NONE;
+	//! whether the ALL modifier was used or not
+	bool setop_all = false;
 	//! The left side of the set operation
 	unique_ptr<BoundQueryNode> left;
 	//! The right side of the set operation

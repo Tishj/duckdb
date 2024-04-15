@@ -13,6 +13,7 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/atomic.hpp"
+#include "duckdb/execution/operator/csv_scanner/csv_state_machine_cache.hpp"
 
 namespace duckdb {
 class AttachedDatabase;
@@ -20,21 +21,19 @@ class BufferedFileWriter;
 class ClientContext;
 class CatalogSearchPath;
 class FileOpener;
-class HTTPStats;
+class FileSystem;
+class HTTPState;
 class QueryProfiler;
-class QueryProfilerHistory;
 class PreparedStatementData;
 class SchemaCatalogEntry;
 struct RandomEngine;
 
 struct ClientData {
-	ClientData(ClientContext &context);
+	explicit ClientData(ClientContext &context);
 	~ClientData();
 
 	//! Query profiler
 	shared_ptr<QueryProfiler> profiler;
-	//! QueryProfiler History
-	unique_ptr<QueryProfilerHistory> query_profiler_history;
 
 	//! The set of temporary objects that belong to this client
 	shared_ptr<AttachedDatabase> temporary_objects;
@@ -52,14 +51,20 @@ struct ClientData {
 	//! The file opener of the client context
 	unique_ptr<FileOpener> file_opener;
 
-	//! Statistics on HTTP traffic
-	unique_ptr<HTTPStats> http_stats;
+	//! The clients' file system wrapper
+	unique_ptr<FileSystem> client_file_system;
 
 	//! The file search path
 	string file_search_path;
 
+	//! The Max Line Length Size of Last Query Executed on a CSV File. (Only used for testing)
+	//! FIXME: this should not be done like this
+	bool debug_set_max_line_length = false;
+	idx_t debug_max_line_length = 0;
+
 public:
 	DUCKDB_API static ClientData &Get(ClientContext &context);
+	DUCKDB_API static const ClientData &Get(const ClientContext &context);
 };
 
 } // namespace duckdb

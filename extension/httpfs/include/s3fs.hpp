@@ -1,11 +1,15 @@
 #pragma once
 
 #include "duckdb/common/atomic.hpp"
+#include "duckdb/common/chrono.hpp"
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/mutex.hpp"
-#include "duckdb/common/chrono.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/main/secret/secret.hpp"
+#include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include "duckdb/common/case_insensitive_map.hpp"
 #include "httpfs.hpp"
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -17,8 +21,23 @@
 
 namespace duckdb {
 
+struct S3AuthParams {
+	string region;
+	string access_key_id;
+	string secret_access_key;
+	string session_token;
+	string endpoint;
+	string url_style;
+	bool use_ssl = true;
+	bool s3_url_compatibility_mode = false;
+
+	static S3AuthParams ReadFrom(optional_ptr<FileOpener> opener, FileOpenerInfo &info);
+	static unique_ptr<S3AuthParams> ReadFromStoredCredentials(optional_ptr<FileOpener> opener, string path);
+};
+
 struct AWSEnvironmentCredentialsProvider {
-	static constexpr const char *REGION_ENV_VAR = "AWS_DEFAULT_REGION";
+	static constexpr const char *REGION_ENV_VAR = "AWS_REGION";
+	static constexpr const char *DEFAULT_REGION_ENV_VAR = "AWS_DEFAULT_REGION";
 	static constexpr const char *ACCESS_KEY_ENV_VAR = "AWS_ACCESS_KEY_ID";
 	static constexpr const char *SECRET_KEY_ENV_VAR = "AWS_SECRET_ACCESS_KEY";
 	static constexpr const char *SESSION_TOKEN_ENV_VAR = "AWS_SESSION_TOKEN";
@@ -31,30 +50,20 @@ struct AWSEnvironmentCredentialsProvider {
 
 	void SetExtensionOptionValue(string key, const char *env_var);
 	void SetAll();
-};
-
-struct S3AuthParams {
-	string region;
-	string access_key_id;
-	string secret_access_key;
-	string session_token;
-	string endpoint;
-	string url_style;
-	bool use_ssl;
-	bool s3_url_compatibility_mode;
-
-	static S3AuthParams ReadFrom(FileOpener *opener);
+	S3AuthParams CreateParams();
 };
 
 struct ParsedS3Url {
 	const string http_proto;
+	const string prefix;
 	const string host;
 	const string bucket;
+	const string key;
 	const string path;
 	const string query_param;
 	const string trimmed_s3_url;
 
-	string GetHTTPUrl(S3AuthParams &auth_params, string http_query_string = "");
+	string GetHTTPUrl(S3AuthParams &auth_params, const string &http_query_string = "");
 };
 
 struct S3ConfigParams {
@@ -66,7 +75,16 @@ struct S3ConfigParams {
 	uint64_t max_parts_per_file;
 	uint64_t max_upload_threads;
 
-	static S3ConfigParams ReadFrom(FileOpener *opener);
+	static S3ConfigParams ReadFrom(optional_ptr<FileOpener> opener);
+};
+
+class S3SecretHelper {
+public:
+	//! Create an S3 type secret
+	static unique_ptr<KeyValueSecret> CreateSecret(vector<string> &prefix_paths_p, string &type, string &provider,
+	                                               string &name, S3AuthParams &params);
+	//! Parse S3AuthParams from secret
+	static S3AuthParams GetParams(const KeyValueSecret &secret);
 };
 
 class S3FileSystem;
@@ -99,23 +117,25 @@ class S3FileHandle : public HTTPFileHandle {
 	friend class S3FileSystem;
 
 public:
-	S3FileHandle(FileSystem &fs, string path_p, uint8_t flags, const HTTPParams &http_params,
+	S3FileHandle(FileSystem &fs, string path_p, FileOpenFlags flags, const HTTPParams &http_params,
 	             const S3AuthParams &auth_params_p, const S3ConfigParams &config_params_p)
 	    : HTTPFileHandle(fs, std::move(path_p), flags, http_params), auth_params(auth_params_p),
-	      config_params(config_params_p) {
-
-		if (flags & FileFlags::FILE_FLAGS_WRITE && flags & FileFlags::FILE_FLAGS_READ) {
+	      config_params(config_params_p), uploads_in_progress(0), parts_uploaded(0), upload_finalized(false),
+	      uploader_has_error(false), upload_exception(nullptr) {
+		if (flags.OpenForReading() && flags.OpenForWriting()) {
 			throw NotImplementedException("Cannot open an HTTP file for both reading and writing");
-		} else if (flags & FileFlags::FILE_FLAGS_APPEND) {
+		} else if (flags.OpenForAppending()) {
 			throw NotImplementedException("Cannot open an HTTP file for appending");
 		}
 	}
+	~S3FileHandle() override;
+
 	S3AuthParams auth_params;
 	const S3ConfigParams config_params;
 
 public:
 	void Close() override;
-	void Initialize(FileOpener *opener) override;
+	void Initialize(optional_ptr<FileOpener> opener) override;
 
 	shared_ptr<S3WriteBuffer> GetBuffer(uint16_t write_buffer_idx);
 
@@ -130,6 +150,7 @@ protected:
 	//! Synchronization for upload threads
 	mutex uploads_in_progress_lock;
 	std::condition_variable uploads_in_progress_cv;
+	std::condition_variable final_flush_cv;
 	uint16_t uploads_in_progress;
 
 	//! Etags are stored for each part
@@ -138,7 +159,7 @@ protected:
 
 	//! Info for upload
 	atomic<uint16_t> parts_uploaded;
-	bool upload_finalized;
+	bool upload_finalized = true;
 
 	//! Error handling in upload threads
 	atomic<bool> uploader_has_error {false};
@@ -159,24 +180,22 @@ public:
 	explicit S3FileSystem(BufferManager &buffer_manager) : buffer_manager(buffer_manager) {
 	}
 
-	// Global limits to write buffers
-	mutex buffers_available_lock;
-	std::condition_variable buffers_available_cv;
-	uint16_t buffers_in_use = 0;
-	uint16_t threads_waiting_for_memory = 0;
-
 	BufferManager &buffer_manager;
 	string GetName() const override;
 
 public:
-	unique_ptr<ResponseWrapper> HeadRequest(FileHandle &handle, string s3_url, HeaderMap header_map) override;
-	unique_ptr<ResponseWrapper> GetRangeRequest(FileHandle &handle, string s3_url, HeaderMap header_map,
-	                                            idx_t file_offset, char *buffer_out, idx_t buffer_out_len) override;
-	unique_ptr<ResponseWrapper> PostRequest(FileHandle &handle, string s3_url, HeaderMap header_map,
-	                                        unique_ptr<char[]> &buffer_out, idx_t &buffer_out_len, char *buffer_in,
-	                                        idx_t buffer_in_len, string http_params = "") override;
-	unique_ptr<ResponseWrapper> PutRequest(FileHandle &handle, string s3_url, HeaderMap header_map, char *buffer_in,
-	                                       idx_t buffer_in_len, string http_params = "") override;
+	duckdb::unique_ptr<ResponseWrapper> HeadRequest(FileHandle &handle, string s3_url, HeaderMap header_map) override;
+	duckdb::unique_ptr<ResponseWrapper> GetRequest(FileHandle &handle, string url, HeaderMap header_map) override;
+	duckdb::unique_ptr<ResponseWrapper> GetRangeRequest(FileHandle &handle, string s3_url, HeaderMap header_map,
+	                                                    idx_t file_offset, char *buffer_out,
+	                                                    idx_t buffer_out_len) override;
+	duckdb::unique_ptr<ResponseWrapper> PostRequest(FileHandle &handle, string s3_url, HeaderMap header_map,
+	                                                duckdb::unique_ptr<char[]> &buffer_out, idx_t &buffer_out_len,
+	                                                char *buffer_in, idx_t buffer_in_len,
+	                                                string http_params = "") override;
+	duckdb::unique_ptr<ResponseWrapper> PutRequest(FileHandle &handle, string s3_url, HeaderMap header_map,
+	                                               char *buffer_in, idx_t buffer_in_len,
+	                                               string http_params = "") override;
 
 	static void Verify();
 
@@ -210,13 +229,14 @@ public:
 	BufferHandle Allocate(idx_t part_size, uint16_t max_threads);
 
 	//! S3 is object storage so directories effectively always exist
-	bool DirectoryExists(const string &directory) override {
+	bool DirectoryExists(const string &directory, optional_ptr<FileOpener> opener = nullptr) override {
 		return true;
 	}
 
 protected:
-	unique_ptr<HTTPFileHandle> CreateHandle(const string &path, uint8_t flags, FileLockType lock,
-	                                        FileCompressionType compression, FileOpener *opener) override;
+	static void NotifyUploadsInProgress(S3FileHandle &file_handle);
+	duckdb::unique_ptr<HTTPFileHandle> CreateHandle(const string &path, FileOpenFlags flags,
+	                                                optional_ptr<FileOpener> opener) override;
 
 	void FlushBuffer(S3FileHandle &handle, shared_ptr<S3WriteBuffer> write_buffer);
 	string GetPayloadHash(char *buffer, idx_t buffer_len);
@@ -228,7 +248,7 @@ protected:
 // Helper class to do s3 ListObjectV2 api call https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html
 struct AWSListObjectV2 {
 	static string Request(string &path, HTTPParams &http_params, S3AuthParams &s3_auth_params,
-	                      string &continuation_token, HTTPStats *stats, bool use_delimiter = false);
+	                      string &continuation_token, optional_ptr<HTTPState> state, bool use_delimiter = false);
 	static void ParseKey(string &aws_response, vector<string> &result);
 	static vector<string> ParseCommonPrefix(string &aws_response);
 	static string ParseContinuationToken(string &aws_response);

@@ -46,8 +46,8 @@ SimpleFunction::SimpleFunction(string name_p, vector<LogicalType> arguments_p, L
 SimpleFunction::~SimpleFunction() {
 }
 
-string SimpleFunction::ToString() {
-	return Function::CallToString(name, arguments);
+string SimpleFunction::ToString() const {
+	return Function::CallToString(name, arguments, varargs);
 }
 
 bool SimpleFunction::HasVarArgs() const {
@@ -62,26 +62,26 @@ SimpleNamedParameterFunction::SimpleNamedParameterFunction(string name_p, vector
 SimpleNamedParameterFunction::~SimpleNamedParameterFunction() {
 }
 
-string SimpleNamedParameterFunction::ToString() {
+string SimpleNamedParameterFunction::ToString() const {
 	return Function::CallToString(name, arguments, named_parameters);
 }
 
-bool SimpleNamedParameterFunction::HasNamedParameters() {
+bool SimpleNamedParameterFunction::HasNamedParameters() const {
 	return !named_parameters.empty();
 }
 
 BaseScalarFunction::BaseScalarFunction(string name_p, vector<LogicalType> arguments_p, LogicalType return_type_p,
-                                       FunctionSideEffects side_effects, LogicalType varargs_p,
+                                       FunctionStability stability, LogicalType varargs_p,
                                        FunctionNullHandling null_handling)
     : SimpleFunction(std::move(name_p), std::move(arguments_p), std::move(varargs_p)),
-      return_type(std::move(return_type_p)), side_effects(side_effects), null_handling(null_handling) {
+      return_type(std::move(return_type_p)), stability(stability), null_handling(null_handling) {
 }
 
 BaseScalarFunction::~BaseScalarFunction() {
 }
 
-string BaseScalarFunction::ToString() {
-	return Function::CallToString(name, arguments, return_type);
+string BaseScalarFunction::ToString() const {
+	return Function::CallToString(name, arguments, varargs, return_type);
 }
 
 // add your initializer for new functions here
@@ -92,21 +92,15 @@ void BuiltinFunctions::Initialize() {
 	RegisterTableFunctions();
 	RegisterArrowFunctions();
 
-	RegisterAlgebraicAggregates();
 	RegisterDistributiveAggregates();
-	RegisterNestedAggregates();
-	RegisterHolisticAggregates();
-	RegisterRegressiveAggregates();
 
-	RegisterDateFunctions();
-	RegisterEnumFunctions();
+	RegisterCompressedMaterializationFunctions();
+
 	RegisterGenericFunctions();
-	RegisterMathFunctions();
 	RegisterOperators();
 	RegisterSequenceFunctions();
 	RegisterStringFunctions();
 	RegisterNestedFunctions();
-	RegisterTrigonometricsFunctions();
 
 	RegisterPragmaFunctions();
 
@@ -119,21 +113,27 @@ void BuiltinFunctions::Initialize() {
 hash_t BaseScalarFunction::Hash() const {
 	hash_t hash = return_type.Hash();
 	for (auto &arg : arguments) {
-		duckdb::CombineHash(hash, arg.Hash());
+		hash = duckdb::CombineHash(hash, arg.Hash());
 	}
 	return hash;
 }
 
-string Function::CallToString(const string &name, const vector<LogicalType> &arguments) {
+string Function::CallToString(const string &name, const vector<LogicalType> &arguments, const LogicalType &varargs) {
 	string result = name + "(";
-	result += StringUtil::Join(arguments, arguments.size(), ", ",
-	                           [](const LogicalType &argument) { return argument.ToString(); });
+	vector<string> string_arguments;
+	for (auto &arg : arguments) {
+		string_arguments.push_back(arg.ToString());
+	}
+	if (varargs.IsValid()) {
+		string_arguments.push_back("[" + varargs.ToString() + "...]");
+	}
+	result += StringUtil::Join(string_arguments, ", ");
 	return result + ")";
 }
 
-string Function::CallToString(const string &name, const vector<LogicalType> &arguments,
+string Function::CallToString(const string &name, const vector<LogicalType> &arguments, const LogicalType &varargs,
                               const LogicalType &return_type) {
-	string result = CallToString(name, arguments);
+	string result = CallToString(name, arguments, varargs);
 	result += " -> " + return_type.ToString();
 	return result;
 }

@@ -20,7 +20,10 @@ class Index;
 //! LogicalInsert represents an insertion of data into a base table
 class LogicalInsert : public LogicalOperator {
 public:
-	LogicalInsert(TableCatalogEntry *table, idx_t table_index);
+	static constexpr const LogicalOperatorType TYPE = LogicalOperatorType::LOGICAL_INSERT;
+
+public:
+	LogicalInsert(TableCatalogEntry &table, idx_t table_index);
 
 	vector<vector<unique_ptr<Expression>>> insert_values;
 	//! The insertion map ([table_index -> index in result, or DConstants::INVALID_INDEX if not specified])
@@ -28,7 +31,7 @@ public:
 	//! The expected types for the INSERT statement (obtained from the column types)
 	vector<LogicalType> expected_types;
 	//! The base table to insert into
-	TableCatalogEntry *table;
+	TableCatalogEntry &table;
 	idx_t table_index;
 	//! if returning option is used, return actual chunk to projection
 	bool return_chunk;
@@ -50,15 +53,15 @@ public:
 	// The types of the columns targeted by the DO UPDATE SET expressions
 	vector<LogicalType> set_types;
 	// The table_index referring to the column references qualified with 'excluded'
-	idx_t excluded_table_index;
+	idx_t excluded_table_index = 0;
 	// The columns to fetch from the 'destination' table
 	vector<column_t> columns_to_fetch;
 	// The columns to fetch from the 'source' table
 	vector<column_t> source_columns;
 
 public:
-	void Serialize(FieldWriter &writer) const override;
-	static unique_ptr<LogicalOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader);
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<LogicalOperator> Deserialize(Deserializer &deserializer);
 
 protected:
 	vector<ColumnBinding> GetColumnBindings() override;
@@ -66,5 +69,9 @@ protected:
 
 	idx_t EstimateCardinality(ClientContext &context) override;
 	vector<idx_t> GetTableIndex() const override;
+	string GetName() const override;
+
+private:
+	LogicalInsert(ClientContext &context, const unique_ptr<CreateInfo> table_info);
 };
 } // namespace duckdb

@@ -3,8 +3,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_parameter_expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
-#include "duckdb/storage/statistics/list_statistics.hpp"
-#include "duckdb/storage/statistics/validity_statistics.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 
 namespace duckdb {
 
@@ -27,8 +26,8 @@ static void ListConcatFunction(DataChunk &args, ExpressionState &state, Vector &
 	UnifiedVectorFormat rhs_data;
 	lhs.ToUnifiedFormat(count, lhs_data);
 	rhs.ToUnifiedFormat(count, rhs_data);
-	auto lhs_entries = (list_entry_t *)lhs_data.data;
-	auto rhs_entries = (list_entry_t *)rhs_data.data;
+	auto lhs_entries = UnifiedVectorFormat::GetData<list_entry_t>(lhs_data);
+	auto rhs_entries = UnifiedVectorFormat::GetData<list_entry_t>(rhs_data);
 
 	auto lhs_list_size = ListVector::GetListSize(lhs);
 	auto rhs_list_size = ListVector::GetListSize(rhs);
@@ -78,15 +77,21 @@ static unique_ptr<FunctionData> ListConcatBind(ClientContext &context, ScalarFun
                                                vector<unique_ptr<Expression>> &arguments) {
 	D_ASSERT(bound_function.arguments.size() == 2);
 
+	// if either argument is an array, we cast it to a list
+	arguments[0] = BoundCastExpression::AddArrayCastToList(context, std::move(arguments[0]));
+	arguments[1] = BoundCastExpression::AddArrayCastToList(context, std::move(arguments[1]));
+
 	auto &lhs = arguments[0]->return_type;
 	auto &rhs = arguments[1]->return_type;
+
 	if (lhs.id() == LogicalTypeId::UNKNOWN || rhs.id() == LogicalTypeId::UNKNOWN) {
 		throw ParameterNotResolvedException();
 	} else if (lhs.id() == LogicalTypeId::SQLNULL || rhs.id() == LogicalTypeId::SQLNULL) {
 		// we mimic postgres behaviour: list_concat(NULL, my_list) = my_list
-		bound_function.arguments[0] = lhs;
-		bound_function.arguments[1] = rhs;
-		bound_function.return_type = rhs.id() == LogicalTypeId::SQLNULL ? lhs : rhs;
+		auto return_type = rhs.id() == LogicalTypeId::SQLNULL ? lhs : rhs;
+		bound_function.arguments[0] = return_type;
+		bound_function.arguments[1] = return_type;
+		bound_function.return_type = return_type;
 	} else {
 		D_ASSERT(lhs.id() == LogicalTypeId::LIST);
 		D_ASSERT(rhs.id() == LogicalTypeId::LIST);
@@ -94,28 +99,29 @@ static unique_ptr<FunctionData> ListConcatBind(ClientContext &context, ScalarFun
 		// Resolve list type
 		LogicalType child_type = LogicalType::SQLNULL;
 		for (const auto &argument : arguments) {
-			child_type = LogicalType::MaxLogicalType(child_type, ListType::GetChildType(argument->return_type));
+			auto &next_type = ListType::GetChildType(argument->return_type);
+			if (!LogicalType::TryGetMaxLogicalType(context, child_type, next_type, child_type)) {
+				throw BinderException("Cannot concatenate lists of types %s[] and %s[] - an explicit cast is required",
+				                      child_type.ToString(), next_type.ToString());
+			}
 		}
-		auto list_type = LogicalType::LIST(std::move(child_type));
+		auto list_type = LogicalType::LIST(child_type);
 
 		bound_function.arguments[0] = list_type;
 		bound_function.arguments[1] = list_type;
 		bound_function.return_type = list_type;
 	}
-	return make_unique<VariableReturnBindData>(bound_function.return_type);
+	return make_uniq<VariableReturnBindData>(bound_function.return_type);
 }
 
 static unique_ptr<BaseStatistics> ListConcatStats(ClientContext &context, FunctionStatisticsInput &input) {
 	auto &child_stats = input.child_stats;
 	D_ASSERT(child_stats.size() == 2);
-	if (!child_stats[0] || !child_stats[1]) {
-		return nullptr;
-	}
 
-	auto &left_stats = (ListStatistics &)*child_stats[0];
-	auto &right_stats = (ListStatistics &)*child_stats[1];
+	auto &left_stats = child_stats[0];
+	auto &right_stats = child_stats[1];
 
-	auto stats = left_stats.Copy();
+	auto stats = left_stats.ToUnique();
 	stats->Merge(right_stats);
 
 	return stats;

@@ -8,12 +8,8 @@ CreateCopyFunctionInfo::CreateCopyFunctionInfo(CopyFunction function_p)
 	internal = true;
 }
 
-void CreateCopyFunctionInfo::SerializeInternal(Serializer &) const {
-	throw NotImplementedException("Cannot serialize '%s'", CatalogTypeToString(type));
-}
-
 unique_ptr<CreateInfo> CreateCopyFunctionInfo::Copy() const {
-	auto result = make_unique<CreateCopyFunctionInfo>(function);
+	auto result = make_uniq<CreateCopyFunctionInfo>(function);
 	CopyProperties(*result);
 	return std::move(result);
 }

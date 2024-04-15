@@ -1,3 +1,12 @@
+//===----------------------------------------------------------------------===//
+//
+//                         DuckDB
+//
+// capi_tester.hpp
+//
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "catch.hpp"
@@ -59,6 +68,12 @@ public:
 			REQUIRE(ErrorMessage() != nullptr);
 		}
 	}
+	void QueryPrepared(duckdb_prepared_statement statement) {
+		success = duckdb_execute_prepared(statement, &result) == DuckDBSuccess;
+		if (!success) {
+			REQUIRE(ErrorMessage() != nullptr);
+		}
+	}
 
 	duckdb_type ColumnType(idx_t col) {
 		return duckdb_column_type(&result, col);
@@ -73,7 +88,7 @@ public:
 		if (!chunk) {
 			return nullptr;
 		}
-		return make_unique<CAPIDataChunk>(chunk);
+		return make_uniq<CAPIDataChunk>(chunk);
 	}
 
 	bool IsStreaming() {
@@ -85,7 +100,7 @@ public:
 		if (!chunk) {
 			return nullptr;
 		}
-		return make_unique<CAPIDataChunk>(chunk);
+		return make_uniq<CAPIDataChunk>(chunk);
 	}
 
 	template <class T>
@@ -180,6 +195,8 @@ template <>
 duckdb_timestamp_struct CAPIResult::Fetch(idx_t col, idx_t row);
 template <>
 duckdb_hugeint CAPIResult::Fetch(idx_t col, idx_t row);
+template <>
+duckdb_uhugeint CAPIResult::Fetch(idx_t col, idx_t row);
 
 class CAPITester {
 public:
@@ -211,10 +228,16 @@ public:
 		return true;
 	}
 
-	unique_ptr<CAPIResult> Query(string query) {
+	duckdb::unique_ptr<CAPIResult> Query(string query) {
 		D_ASSERT(connection);
-		auto result = make_unique<CAPIResult>();
+		auto result = make_uniq<CAPIResult>();
 		result->Query(connection, query);
+		return result;
+	}
+	duckdb::unique_ptr<CAPIResult> QueryPrepared(duckdb_prepared_statement prepared) {
+		D_ASSERT(connection);
+		auto result = make_uniq<CAPIResult>();
+		result->QueryPrepared(prepared);
 		return result;
 	}
 
@@ -268,7 +291,7 @@ struct CAPIPending {
 	unique_ptr<CAPIResult> Execute() {
 		duckdb_result result;
 		auto success = duckdb_execute_pending(pending, &result) == DuckDBSuccess;
-		return make_unique<CAPIResult>(result, success);
+		return make_uniq<CAPIResult>(result, success);
 	}
 
 	duckdb_pending_result pending = nullptr;

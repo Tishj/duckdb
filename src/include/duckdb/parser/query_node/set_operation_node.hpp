@@ -17,11 +17,16 @@ namespace duckdb {
 
 class SetOperationNode : public QueryNode {
 public:
+	static constexpr const QueryNodeType TYPE = QueryNodeType::SET_OPERATION_NODE;
+
+public:
 	SetOperationNode() : QueryNode(QueryNodeType::SET_OPERATION_NODE) {
 	}
 
 	//! The type of set operation
 	SetOperationType setop_type = SetOperationType::NONE;
+	//! whether the ALL modifier was used or not
+	bool setop_all = false;
 	//! The left side of the set operation
 	unique_ptr<QueryNode> left;
 	//! The right side of the set operation
@@ -40,9 +45,10 @@ public:
 	unique_ptr<QueryNode> Copy() const override;
 
 	//! Serializes a QueryNode to a stand-alone binary blob
-	void Serialize(FieldWriter &writer) const override;
 	//! Deserializes a blob back into a QueryNode
-	static unique_ptr<QueryNode> Deserialize(FieldReader &reader);
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<QueryNode> Deserialize(Deserializer &source);
 };
 
 } // namespace duckdb

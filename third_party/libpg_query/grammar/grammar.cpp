@@ -370,6 +370,12 @@ insertSelectOptions(PGSelectStmt *stmt,
 					PGWithClause *withClause,
 					core_yyscan_t yyscanner)
 {
+	if (stmt->type != T_PGSelectStmt) {
+		ereport(ERROR,
+				(errcode(PG_ERRCODE_SYNTAX_ERROR),
+						errmsg("DESCRIBE/SHOW/SUMMARIZE with CTE/ORDER BY/... not allowed - wrap the statement in a subquery instead"),
+						parser_errposition(exprLocation((PGNode *) stmt))));
+	}
 	Assert(IsA(stmt, PGSelectStmt));
 
 	/*
@@ -446,8 +452,7 @@ SystemFuncName(const char *name)
 PGTypeName *
 SystemTypeName(const char *name)
 {
-	return makeTypeNameFromNameList(list_make2(makeString(DEFAULT_SCHEMA),
-											   makeString(name)));
+	return makeTypeNameFromNameList(list_make1(makeString(name)));
 }
 
 /* doNegate()
@@ -552,18 +557,6 @@ static PGNode *
 makeNotExpr(PGNode *expr, int location)
 {
 	return (PGNode *) makeBoolExpr(PG_NOT_EXPR, list_make1(expr), location);
-}
-
-static PGNode *
-makeSQLValueFunction(PGSQLValueFunctionOp op, int32_t typmod, int location)
-{
-	PGSQLValueFunction *svf = makeNode(PGSQLValueFunction);
-
-	svf->op = op;
-	/* svf->type will be filled during parse analysis */
-	svf->typmod = typmod;
-	svf->location = location;
-	return (PGNode *) svf;
 }
 
 /* Separate PGConstraint nodes from COLLATE clauses in a */

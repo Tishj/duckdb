@@ -3,15 +3,15 @@
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/main/connection.hpp"
+#include "duckdb/common/operator/cast_operators.hpp"
+#include "duckdb/common/operator/decimal_cast_operators.hpp"
+#include "duckdb/common/operator/string_cast.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/connection.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/data_table.hpp"
-#include "duckdb/common/string_util.hpp"
-#include "duckdb/common/operator/cast_operators.hpp"
-#include "duckdb/common/operator/string_cast.hpp"
-#include "duckdb/common/types/column_data_collection.hpp"
-#include "duckdb/common/operator/decimal_cast_operators.hpp"
 
 namespace duckdb {
 
@@ -20,8 +20,8 @@ BaseAppender::BaseAppender(Allocator &allocator, AppenderType type_p)
 }
 
 BaseAppender::BaseAppender(Allocator &allocator_p, vector<LogicalType> types_p, AppenderType type_p)
-    : allocator(allocator_p), types(std::move(types_p)),
-      collection(make_unique<ColumnDataCollection>(allocator, types)), column(0), appender_type(type_p) {
+    : allocator(allocator_p), types(std::move(types_p)), collection(make_uniq<ColumnDataCollection>(allocator, types)),
+      column(0), appender_type(type_p) {
 	InitializeChunk();
 }
 
@@ -36,7 +36,7 @@ void BaseAppender::Destructor() {
 	// wrapped in a try/catch because Close() can throw if the table was dropped in the meantime
 	try {
 		Close();
-	} catch (...) {
+	} catch (...) { // NOLINT
 	}
 }
 
@@ -60,7 +60,7 @@ Appender::Appender(Connection &con, const string &schema_name, const string &tab
 		types.push_back(column.Type());
 	}
 	InitializeChunk();
-	collection = make_unique<ColumnDataCollection>(allocator, types);
+	collection = make_uniq<ColumnDataCollection>(allocator, types);
 }
 
 Appender::Appender(Connection &con, const string &table_name) : Appender(con, DEFAULT_SCHEMA, table_name) {
@@ -102,7 +102,8 @@ void BaseAppender::AppendDecimalValueInternal(Vector &col, SRC input) {
 		D_ASSERT(type.id() == LogicalTypeId::DECIMAL);
 		auto width = DecimalType::GetWidth(type);
 		auto scale = DecimalType::GetScale(type);
-		TryCastToDecimal::Operation<SRC, DST>(input, FlatVector::GetData<DST>(col)[chunk.size()], nullptr, width,
+		CastParameters parameters;
+		TryCastToDecimal::Operation<SRC, DST>(input, FlatVector::GetData<DST>(col)[chunk.size()], parameters, width,
 		                                      scale);
 		return;
 	}
@@ -152,6 +153,9 @@ void BaseAppender::AppendValueInternal(T input) {
 	case LogicalTypeId::HUGEINT:
 		AppendValueInternal<T, hugeint_t>(col, input);
 		break;
+	case LogicalTypeId::UHUGEINT:
+		AppendValueInternal<T, uhugeint_t>(col, input);
+		break;
 	case LogicalTypeId::FLOAT:
 		AppendValueInternal<T, float>(col, input);
 		break;
@@ -184,8 +188,10 @@ void BaseAppender::AppendValueInternal(T input) {
 		AppendValueInternal<T, timestamp_t>(col, input);
 		break;
 	case LogicalTypeId::TIME:
-	case LogicalTypeId::TIME_TZ:
 		AppendValueInternal<T, dtime_t>(col, input);
+		break;
+	case LogicalTypeId::TIME_TZ:
+		AppendValueInternal<T, dtime_tz_t>(col, input);
 		break;
 	case LogicalTypeId::INTERVAL:
 		AppendValueInternal<T, interval_t>(col, input);
@@ -228,6 +234,11 @@ void BaseAppender::Append(int64_t value) {
 template <>
 void BaseAppender::Append(hugeint_t value) {
 	AppendValueInternal<hugeint_t>(value);
+}
+
+template <>
+void BaseAppender::Append(uhugeint_t value) {
+	AppendValueInternal<uhugeint_t>(value);
 }
 
 template <>
@@ -317,8 +328,15 @@ void BaseAppender::AppendValue(const Value &value) {
 }
 
 void BaseAppender::AppendDataChunk(DataChunk &chunk) {
-	if (chunk.GetTypes() != types) {
-		throw InvalidInputException("Type mismatch in Append DataChunk and the types required for appender");
+	auto chunk_types = chunk.GetTypes();
+	if (chunk_types != types) {
+		for (idx_t i = 0; i < chunk.ColumnCount(); i++) {
+			if (chunk.data[i].GetType() != types[i]) {
+				throw InvalidInputException("Type mismatch in Append DataChunk and the types required for appender, "
+				                            "expected %s but got %s for column %d",
+				                            types[i].ToString(), chunk.data[i].GetType().ToString(), i + 1);
+			}
+		}
 	}
 	collection->Append(chunk);
 	if (collection->Count() >= FLUSH_COUNT) {

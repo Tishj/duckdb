@@ -5,7 +5,7 @@
 namespace duckdb {
 
 SelectionData::SelectionData(idx_t count) {
-	owned_data = unique_ptr<sel_t[]>(new sel_t[count]);
+	owned_data = make_unsafe_uniq_array<sel_t>(count);
 #ifdef DEBUG
 	for (idx_t i = 0; i < count; i++) {
 		owned_data[i] = std::numeric_limits<sel_t>::max();
@@ -38,7 +38,7 @@ buffer_ptr<SelectionData> SelectionVector::Slice(const SelectionVector &sel, idx
 	for (idx_t i = 0; i < count; i++) {
 		auto new_idx = sel.get_index(i);
 		auto idx = this->get_index(new_idx);
-		result_ptr[i] = idx;
+		result_ptr[i] = UnsafeNumericCast<sel_t>(idx);
 	}
 	return data;
 }

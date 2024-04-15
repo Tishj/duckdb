@@ -1,4 +1,3 @@
-#include "duckdb/common/field_writer.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 
@@ -27,7 +26,7 @@ bool LogicalFilter::SplitPredicates(vector<unique_ptr<Expression>> &expressions)
 	bool found_conjunction = false;
 	for (idx_t i = 0; i < expressions.size(); i++) {
 		if (expressions[i]->type == ExpressionType::CONJUNCTION_AND) {
-			auto &conjunction = (BoundConjunctionExpression &)*expressions[i];
+			auto &conjunction = expressions[i]->Cast<BoundConjunctionExpression>();
 			found_conjunction = true;
 			// AND expression, append the other children
 			for (idx_t k = 1; k < conjunction.children.size(); k++) {
@@ -41,20 +40,6 @@ bool LogicalFilter::SplitPredicates(vector<unique_ptr<Expression>> &expressions)
 		}
 	}
 	return found_conjunction;
-}
-
-void LogicalFilter::Serialize(FieldWriter &writer) const {
-	writer.WriteSerializableList<Expression>(expressions);
-	writer.WriteList<idx_t>(projection_map);
-}
-
-unique_ptr<LogicalOperator> LogicalFilter::Deserialize(LogicalDeserializationState &state, FieldReader &reader) {
-	auto expressions = reader.ReadRequiredSerializableList<Expression>(state.gstate);
-	auto projection_map = reader.ReadRequiredList<idx_t>();
-	auto result = make_unique<LogicalFilter>();
-	result->expressions = std::move(expressions);
-	result->projection_map = std::move(projection_map);
-	return std::move(result);
 }
 
 } // namespace duckdb

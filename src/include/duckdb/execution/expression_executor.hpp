@@ -151,13 +151,13 @@ protected:
 
 private:
 	//! Client context
-	ClientContext *context;
+	optional_ptr<ClientContext> context;
 	//! The states of the expression executor; this holds any intermediates and temporary states of expressions
 	vector<unique_ptr<ExpressionExecutorState>> states;
 
 private:
 	// it is possible to create an expression executor without a ClientContext - but it should be avoided
 	DUCKDB_API ExpressionExecutor();
-	DUCKDB_API ExpressionExecutor(const vector<unique_ptr<Expression>> &exprs);
+	DUCKDB_API explicit ExpressionExecutor(const vector<unique_ptr<Expression>> &exprs);
 };
 } // namespace duckdb

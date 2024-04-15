@@ -12,11 +12,16 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/enums/on_create_conflict.hpp"
 
 namespace duckdb {
 
 struct AttachInfo : public ParseInfo {
-	AttachInfo() {
+public:
+	static constexpr const ParseInfoType TYPE = ParseInfoType::ATTACH_INFO;
+
+public:
+	AttachInfo() : ParseInfo(TYPE) {
 	}
 
 	//! The alias of the attached database
@@ -25,27 +30,15 @@ struct AttachInfo : public ParseInfo {
 	string path;
 	//! Set of (key, value) options
 	unordered_map<string, Value> options;
+	//! What to do on create conflict
+	OnCreateConflict on_conflict = OnCreateConflict::ERROR_ON_CONFLICT;
 
 public:
-	unique_ptr<AttachInfo> Copy() const {
-		auto result = make_unique<AttachInfo>();
-		result->name = name;
-		result->path = path;
-		result->options = options;
-		return result;
-	}
-	bool Equals(const AttachInfo *other) const {
-		if (name != other->name) {
-			return false;
-		}
-		if (path != other->path) {
-			return false;
-		}
-		if (options != other->options) {
-			return false;
-		}
-		return true;
-	}
+	unique_ptr<AttachInfo> Copy() const;
+	bool Equals(const AttachInfo *other) const;
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };
 
 } // namespace duckdb

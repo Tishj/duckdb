@@ -14,6 +14,7 @@
 #include "duckdb/planner/bound_tableref.hpp"
 #include "duckdb/parser/parsed_data/sample_options.hpp"
 #include "duckdb/parser/group_by_node.hpp"
+#include "duckdb/planner/expression_binder/select_bind_state.hpp"
 
 namespace duckdb {
 
@@ -25,16 +26,24 @@ public:
 	vector<GroupingSet> grouping_sets;
 };
 
+struct BoundUnnestNode {
+	//! The index of the UNNEST node
+	idx_t index;
+	//! The set of expressions
+	vector<unique_ptr<Expression>> expressions;
+};
+
 //! Bound equivalent of SelectNode
 class BoundSelectNode : public BoundQueryNode {
+public:
+	static constexpr const QueryNodeType TYPE = QueryNodeType::SELECT_NODE;
+
 public:
 	BoundSelectNode() : BoundQueryNode(QueryNodeType::SELECT_NODE) {
 	}
 
-	//! The original unparsed expressions. This is exported after binding, because the binding might change the
-	//! expressions (e.g. when a * clause is present)
-	vector<unique_ptr<ParsedExpression>> original_expressions;
-
+	//! Bind information
+	SelectBindState bind_state;
 	//! The projection list
 	vector<unique_ptr<Expression>> select_list;
 	//! The FROM clause
@@ -52,6 +61,8 @@ public:
 
 	//! The amount of columns in the final result
 	idx_t column_count;
+	//! The amount of bound columns in the select list
+	idx_t bound_column_count = 0;
 
 	//! Index used by the LogicalProjection
 	idx_t projection_index;
@@ -68,7 +79,7 @@ public:
 	vector<unique_ptr<Expression>> aggregates;
 
 	//! GROUPING function calls
-	vector<vector<idx_t>> grouping_functions;
+	vector<unsafe_vector<idx_t>> grouping_functions;
 
 	//! Map from aggregate function to aggregate index (used to eliminate duplicate aggregates)
 	expression_map_t<idx_t> aggregate_map;
@@ -78,9 +89,8 @@ public:
 	//! Window functions to compute (only used if HasWindow is true)
 	vector<unique_ptr<Expression>> windows;
 
-	idx_t unnest_index;
 	//! Unnest expression
-	vector<unique_ptr<Expression>> unnests;
+	unordered_map<idx_t, BoundUnnestNode> unnests;
 
 	//! Index of pruned node
 	idx_t prune_index;

@@ -32,7 +32,10 @@ enum class SQLLogicTokenType {
 	SQLLOGIC_REQUIRE,
 	SQLLOGIC_REQUIRE_ENV,
 	SQLLOGIC_LOAD,
-	SQLLOGIC_RESTART
+	SQLLOGIC_RESTART,
+	SQLLOGIC_RECONNECT,
+	SQLLOGIC_SLEEP,
+	SQLLOGIC_UNZIP
 };
 
 class SQLLogicToken {
@@ -79,7 +82,7 @@ public:
 	vector<string> ExtractExpectedResult();
 
 	//! Extract the expected error (in case of statement error)
-	string ExtractExpectedError(bool expect_ok);
+	string ExtractExpectedError(bool expect_ok, bool original_sqlite_test);
 
 	//! Tokenize the current line
 	SQLLogicToken Tokenize();

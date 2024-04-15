@@ -8,7 +8,7 @@ ExtensionStatement::ExtensionStatement(ParserExtension extension_p, unique_ptr<P
 }
 
 unique_ptr<SQLStatement> ExtensionStatement::Copy() const {
-	return make_unique<ExtensionStatement>(extension, parse_data->Copy());
+	return make_uniq<ExtensionStatement>(extension, parse_data->Copy());
 }
 
 bool ExtensionStatement::Equals(const SQLStatement *other_p) const {

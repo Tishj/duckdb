@@ -7,8 +7,9 @@
 namespace duckdb {
 
 PhysicalUnion::PhysicalUnion(vector<LogicalType> types, unique_ptr<PhysicalOperator> top,
-                             unique_ptr<PhysicalOperator> bottom, idx_t estimated_cardinality)
-    : PhysicalOperator(PhysicalOperatorType::UNION, std::move(types), estimated_cardinality) {
+                             unique_ptr<PhysicalOperator> bottom, idx_t estimated_cardinality, bool allow_out_of_order)
+    : PhysicalOperator(PhysicalOperatorType::UNION, std::move(types), estimated_cardinality),
+      allow_out_of_order(allow_out_of_order) {
 	children.push_back(std::move(top));
 	children.push_back(std::move(bottom));
 }
@@ -22,11 +23,25 @@ void PhysicalUnion::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipelin
 
 	// order matters if any of the downstream operators are order dependent,
 	// or if the sink preserves order, but does not support batch indices to do so
-	auto snk = meta_pipeline.GetSink();
-	bool order_matters = current.IsOrderDependent() || (snk && snk->IsOrderPreserving() && !snk->RequiresBatchIndex());
+	auto sink = meta_pipeline.GetSink();
+	bool order_matters = false;
+	if (!allow_out_of_order) {
+		order_matters = true;
+	}
+	if (current.IsOrderDependent()) {
+		order_matters = true;
+	}
+	if (sink) {
+		if (sink->SinkOrderDependent() || sink->RequiresBatchIndex()) {
+			order_matters = true;
+		}
+		if (!sink->ParallelSink()) {
+			order_matters = true;
+		}
+	}
 
 	// create a union pipeline that is identical to 'current'
-	auto union_pipeline = meta_pipeline.CreateUnionPipeline(current, order_matters);
+	auto &union_pipeline = meta_pipeline.CreateUnionPipeline(current, order_matters);
 
 	// continue with the current pipeline
 	children[0]->BuildPipelines(current, meta_pipeline);
@@ -37,15 +52,15 @@ void PhysicalUnion::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipelin
 	}
 
 	// build the union pipeline
-	children[1]->BuildPipelines(*union_pipeline, meta_pipeline);
+	children[1]->BuildPipelines(union_pipeline, meta_pipeline);
 
 	// Assign proper batch index to the union pipeline
 	// This needs to happen after the pipelines have been built because unions can be nested
 	meta_pipeline.AssignNextBatchIndex(union_pipeline);
 }
 
-vector<const PhysicalOperator *> PhysicalUnion::GetSources() const {
-	vector<const PhysicalOperator *> result;
+vector<const_reference<PhysicalOperator>> PhysicalUnion::GetSources() const {
+	vector<const_reference<PhysicalOperator>> result;
 	for (auto &child : children) {
 		auto child_sources = child->GetSources();
 		result.insert(result.end(), child_sources.begin(), child_sources.end());

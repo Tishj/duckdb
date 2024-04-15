@@ -9,7 +9,7 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/checkpoint/string_checkpoint_state.hpp"
 #include "duckdb/storage/segment/uncompressed.hpp"
-#include "duckdb/storage/statistics/string_statistics.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/string_uncompressed.hpp"
 #include "duckdb/storage/table/append_state.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
@@ -56,12 +56,14 @@ public:
 	static void StringScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result);
 	static void StringFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
 	                           idx_t result_idx);
-	static unique_ptr<CompressedSegmentState> StringInitSegment(ColumnSegment &segment, block_id_t block_id);
+	static unique_ptr<CompressedSegmentState> StringInitSegment(ColumnSegment &segment, block_id_t block_id,
+	                                                            optional_ptr<ColumnSegmentState> segment_state);
 
 	static unique_ptr<CompressionAppendState> StringInitAppend(ColumnSegment &segment) {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
+		// This block was initialized in StringInitSegment
 		auto handle = buffer_manager.Pin(segment.block);
-		return make_unique<CompressionAppendState>(std::move(handle));
+		return make_uniq<CompressionAppendState>(std::move(handle));
 	}
 
 	static idx_t StringAppend(CompressionAppendState &append_state, ColumnSegment &segment, SegmentStatistics &stats,
@@ -80,10 +82,10 @@ public:
 	                              UnifiedVectorFormat &data, idx_t offset, idx_t count) {
 		D_ASSERT(segment.GetBlockOffset() == 0);
 		auto handle_ptr = handle.Ptr();
-		auto source_data = (string_t *)data.data;
-		auto result_data = (int32_t *)(handle_ptr + DICTIONARY_HEADER_SIZE);
-		uint32_t *dictionary_size = (uint32_t *)handle_ptr;
-		uint32_t *dictionary_end = (uint32_t *)(handle_ptr + sizeof(uint32_t));
+		auto source_data = UnifiedVectorFormat::GetData<string_t>(data);
+		auto result_data = reinterpret_cast<int32_t *>(handle_ptr + DICTIONARY_HEADER_SIZE);
+		auto dictionary_size = reinterpret_cast<uint32_t *>(handle_ptr);
+		auto dictionary_end = reinterpret_cast<uint32_t *>(handle_ptr + sizeof(uint32_t));
 
 		idx_t remaining_space = RemainingSpace(segment, handle);
 		auto base_count = segment.count.load();
@@ -135,18 +137,19 @@ public:
 			if (DUCKDB_UNLIKELY(use_overflow_block)) {
 				// write to overflow blocks
 				block_id_t block;
-				int32_t offset;
+				int32_t current_offset;
 				// write the string into the current string block
-				WriteString(segment, source_data[source_idx], block, offset);
+				WriteString(segment, source_data[source_idx], block, current_offset);
 				*dictionary_size += BIG_STRING_MARKER_SIZE;
 				remaining_space -= BIG_STRING_MARKER_SIZE;
 				auto dict_pos = end - *dictionary_size;
 
 				// write a big string marker into the dictionary
-				WriteStringMarker(dict_pos, block, offset);
+				WriteStringMarker(dict_pos, block, current_offset);
 
 				// place the dictionary offset into the set of vectors
 				// note: for overflow strings we write negative value
+				D_ASSERT(*dictionary_size <= int32_t(Storage::BLOCK_SIZE));
 				result_data[target_idx] = -(*dictionary_size);
 			} else {
 				// string fits in block, append to dictionary and increment dictionary position
@@ -155,9 +158,10 @@ public:
 				remaining_space -= required_space;
 				auto dict_pos = end - *dictionary_size;
 				// now write the actual string data into the dictionary
-				memcpy(dict_pos, source_data[source_idx].GetDataUnsafe(), string_length);
+				memcpy(dict_pos, source_data[source_idx].GetData(), string_length);
 
 				// place the dictionary offset into the set of vectors
+				D_ASSERT(*dictionary_size <= int32_t(Storage::BLOCK_SIZE));
 				result_data[target_idx] = *dictionary_size;
 			}
 			D_ASSERT(RemainingSpace(segment, handle) <= Storage::BLOCK_SIZE);
@@ -173,8 +177,7 @@ public:
 
 public:
 	static inline void UpdateStringStats(SegmentStatistics &stats, const string_t &new_value) {
-		auto &sstats = (StringStatistics &)*stats.statistics;
-		sstats.Update(new_value);
+		StringStats::Update(stats.statistics, new_value);
 	}
 
 	static void SetDictionary(ColumnSegment &segment, BufferHandle &handle, StringDictionaryContainer dict);
@@ -195,5 +198,9 @@ public:
 	                                    data_ptr_t baseptr, int32_t dict_offset, uint32_t string_length);
 	static string_t FetchString(ColumnSegment &segment, StringDictionaryContainer dict, Vector &result,
 	                            data_ptr_t baseptr, string_location_t location, uint32_t string_length);
+
+	static unique_ptr<ColumnSegmentState> SerializeState(ColumnSegment &segment);
+	static unique_ptr<ColumnSegmentState> DeserializeState(Deserializer &deserializer);
+	static void CleanupState(ColumnSegment &segment);
 };
 } // namespace duckdb

@@ -43,13 +43,13 @@ class printf_precision_handler {
   template <typename T, FMT_ENABLE_IF(std::is_integral<T>::value)>
   int operator()(T value) {
     if (!int_checker<std::numeric_limits<T>::is_signed>::fits_in_int(value))
-      FMT_THROW(duckdb::Exception("number is too big"));
+      FMT_THROW(duckdb::InvalidInputException("number is too big"));
     return (std::max)(static_cast<int>(value), 0);
   }
 
   template <typename T, FMT_ENABLE_IF(!std::is_integral<T>::value)>
   int operator()(T) {
-    FMT_THROW(duckdb::Exception("precision is not integer"));
+    FMT_THROW(duckdb::InvalidInputException("precision is not integer"));
     return 0;
   }
 };
@@ -164,13 +164,13 @@ template <typename Char> class printf_width_handler {
       width = 0 - width;
     }
     unsigned int_max = max_value<int>();
-    if (width > int_max) FMT_THROW(duckdb::Exception("number is too big"));
+    if (width > int_max) FMT_THROW(duckdb::InvalidInputException("number is too big"));
     return static_cast<unsigned>(width);
   }
 
   template <typename T, FMT_ENABLE_IF(!std::is_integral<T>::value)>
   unsigned operator()(T) {
-    FMT_THROW(duckdb::Exception("width is not integer"));
+    FMT_THROW(duckdb::InvalidInputException("width is not integer"));
     return 0;
   }
 };
@@ -363,7 +363,7 @@ template <typename OutputIt, typename Char> class basic_printf_context {
 
   basic_format_parse_context<Char>& parse_context() { return parse_ctx_; }
 
-  FMT_CONSTEXPR void on_error(const char* message) {
+  FMT_CONSTEXPR void on_error(std::string message) {
     parse_ctx_.on_error(message);
   }
 
@@ -392,6 +392,15 @@ void basic_printf_context<OutputIt, Char>::parse_flags(format_specs& specs,
       break;
     case '#':
       specs.alt = true;
+      break;
+    case ',':
+      specs.thousands = ',';
+      break;
+    case '\'':
+      specs.thousands = '\'';
+      break;
+    case '_':
+      specs.thousands = '_';
       break;
     default:
       return;
@@ -472,6 +481,7 @@ OutputIt basic_printf_context<OutputIt, Char>::format() {
     if (arg_index == 0) on_error("argument index out of range");
 
     // Parse precision.
+	bool empty_precision = false;
     if (it != end && *it == '.') {
       ++it;
       c = it != end ? *it : 0;
@@ -484,6 +494,7 @@ OutputIt basic_printf_context<OutputIt, Char>::format() {
             static_cast<int>(visit_format_arg(internal::printf_precision_handler(), get_arg()));
       } else {
         specs.precision = 0;
+		empty_precision = true;
       }
     }
 
@@ -539,7 +550,7 @@ OutputIt basic_printf_context<OutputIt, Char>::format() {
     }
 
     // Parse type.
-    if (it == end) FMT_THROW(duckdb::Exception("invalid format string"));
+    if (it == end) FMT_THROW(duckdb::InvalidInputException("invalid format string"));
     specs.type = static_cast<char>(*it++);
     if (arg.is_integral()) {
       // Normalize type.
@@ -554,6 +565,9 @@ OutputIt basic_printf_context<OutputIt, Char>::format() {
         break;
       }
     }
+	if (specs.type == 'd' && empty_precision) {
+		specs.thousands = '.';
+	}
 
     start = it;
 

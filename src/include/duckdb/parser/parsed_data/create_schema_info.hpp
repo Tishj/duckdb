@@ -18,19 +18,35 @@ struct CreateSchemaInfo : public CreateInfo {
 
 public:
 	unique_ptr<CreateInfo> Copy() const override {
-		auto result = make_unique<CreateSchemaInfo>();
+		auto result = make_uniq<CreateSchemaInfo>();
 		CopyProperties(*result);
 		return std::move(result);
 	}
 
-	static unique_ptr<CreateSchemaInfo> Deserialize(Deserializer &deserializer) {
-		auto result = make_unique<CreateSchemaInfo>();
-		result->DeserializeBase(deserializer);
-		return result;
-	}
+	DUCKDB_API void Serialize(Serializer &serializer) const override;
+	DUCKDB_API static unique_ptr<CreateInfo> Deserialize(Deserializer &deserializer);
 
-protected:
-	void SerializeInternal(Serializer &) const override {
+	string ToString() const override {
+		string ret = "";
+		switch (on_conflict) {
+		case OnCreateConflict::ALTER_ON_CONFLICT: {
+			ret += "CREATE SCHEMA " + schema + " ON CONFLICT INSERT OR REPLACE;";
+			break;
+		}
+		case OnCreateConflict::IGNORE_ON_CONFLICT: {
+			ret += "CREATE SCHEMA " + schema + " IF NOT EXISTS;";
+			break;
+		}
+		case OnCreateConflict::REPLACE_ON_CONFLICT: {
+			ret += "CREATE OR REPLACE SCHEMA " + schema + ";";
+			break;
+		}
+		case OnCreateConflict::ERROR_ON_CONFLICT: {
+			ret += "CREATE SCHEMA " + schema + ";";
+			break;
+		}
+		}
+		return ret;
 	}
 };
 

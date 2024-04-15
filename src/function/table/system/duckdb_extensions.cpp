@@ -17,6 +17,7 @@ struct ExtensionInformation {
 	string file_path;
 	string description;
 	vector<Value> aliases;
+	string extension_version;
 };
 
 struct DuckDBExtensionsData : public GlobalTableFunctionState {
@@ -47,11 +48,14 @@ static unique_ptr<FunctionData> DuckDBExtensionsBind(ClientContext &context, Tab
 	names.emplace_back("aliases");
 	return_types.emplace_back(LogicalType::LIST(LogicalType::VARCHAR));
 
+	names.emplace_back("extension_version");
+	return_types.emplace_back(LogicalType::VARCHAR);
+
 	return nullptr;
 }
 
 unique_ptr<GlobalTableFunctionState> DuckDBExtensionsInit(ClientContext &context, TableFunctionInitInput &input) {
-	auto result = make_unique<DuckDBExtensionsData>();
+	auto result = make_uniq<DuckDBExtensionsData>();
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto &db = DatabaseInstance::GetDatabase(context);
@@ -75,7 +79,7 @@ unique_ptr<GlobalTableFunctionState> DuckDBExtensionsInit(ClientContext &context
 		}
 		installed_extensions[info.name] = std::move(info);
 	}
-
+#ifndef WASM_LOADABLE_EXTENSIONS
 	// scan the install directory for installed extensions
 	auto ext_directory = ExtensionHelper::ExtensionDirectory(context);
 	fs.ListFiles(ext_directory, [&](const string &path, bool is_directory) {
@@ -96,18 +100,22 @@ unique_ptr<GlobalTableFunctionState> DuckDBExtensionsInit(ClientContext &context
 			entry->second.installed = true;
 		}
 	});
-
+#endif
 	// now check the list of currently loaded extensions
-	auto &loaded_extensions = db.LoadedExtensions();
-	for (auto &ext_name : loaded_extensions) {
+	auto &loaded_extensions = db.LoadedExtensionsData();
+	for (auto &e : loaded_extensions) {
+		auto &ext_name = e.first;
+		auto &ext_info = e.second;
 		auto entry = installed_extensions.find(ext_name);
 		if (entry == installed_extensions.end()) {
 			ExtensionInformation info;
 			info.name = ext_name;
 			info.loaded = true;
+			info.extension_version = ext_info.extension_version;
 			installed_extensions[ext_name] = std::move(info);
 		} else {
 			entry->second.loaded = true;
+			entry->second.extension_version = ext_info.extension_version;
 		}
 	}
 
@@ -119,7 +127,7 @@ unique_ptr<GlobalTableFunctionState> DuckDBExtensionsInit(ClientContext &context
 }
 
 void DuckDBExtensionsFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-	auto &data = (DuckDBExtensionsData &)*data_p.global_state;
+	auto &data = data_p.global_state->Cast<DuckDBExtensionsData>();
 	if (data.offset >= data.entries.size()) {
 		// finished returning values
 		return;
@@ -143,6 +151,8 @@ void DuckDBExtensionsFunction(ClientContext &context, TableFunctionInput &data_p
 		output.SetValue(4, count, Value(entry.description));
 		// aliases     LogicalType::LIST(LogicalType::VARCHAR)
 		output.SetValue(5, count, Value::LIST(LogicalType::VARCHAR, entry.aliases));
+		// extension version     LogicalType::LIST(LogicalType::VARCHAR)
+		output.SetValue(6, count, Value(entry.extension_version));
 
 		data.offset++;
 		count++;

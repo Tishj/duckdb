@@ -1,7 +1,9 @@
 #include "duckdb/parser/expression/conjunction_expression.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/field_writer.hpp"
 #include "duckdb/parser/expression_util.hpp"
+
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -26,7 +28,7 @@ ConjunctionExpression::ConjunctionExpression(ExpressionType type, unique_ptr<Par
 void ConjunctionExpression::AddExpression(unique_ptr<ParsedExpression> expr) {
 	if (expr->type == type) {
 		// expr is a conjunction of the same type: merge the expression lists together
-		auto &other = (ConjunctionExpression &)*expr;
+		auto &other = expr->Cast<ConjunctionExpression>();
 		for (auto &child : other.children) {
 			children.push_back(std::move(child));
 		}
@@ -39,28 +41,20 @@ string ConjunctionExpression::ToString() const {
 	return ToString<ConjunctionExpression, ParsedExpression>(*this);
 }
 
-bool ConjunctionExpression::Equal(const ConjunctionExpression *a, const ConjunctionExpression *b) {
-	return ExpressionUtil::SetEquals(a->children, b->children);
+bool ConjunctionExpression::Equal(const ConjunctionExpression &a, const ConjunctionExpression &b) {
+	return ExpressionUtil::SetEquals(a.children, b.children);
 }
 
 unique_ptr<ParsedExpression> ConjunctionExpression::Copy() const {
 	vector<unique_ptr<ParsedExpression>> copy_children;
+	copy_children.reserve(children.size());
 	for (auto &expr : children) {
 		copy_children.push_back(expr->Copy());
 	}
-	auto copy = make_unique<ConjunctionExpression>(type, std::move(copy_children));
+
+	auto copy = make_uniq<ConjunctionExpression>(type, std::move(copy_children));
 	copy->CopyProperties(*this);
 	return std::move(copy);
-}
-
-void ConjunctionExpression::Serialize(FieldWriter &writer) const {
-	writer.WriteSerializableList(children);
-}
-
-unique_ptr<ParsedExpression> ConjunctionExpression::Deserialize(ExpressionType type, FieldReader &reader) {
-	auto result = make_unique<ConjunctionExpression>(type);
-	result->children = reader.ReadRequiredSerializableList<ParsedExpression>();
-	return std::move(result);
 }
 
 } // namespace duckdb

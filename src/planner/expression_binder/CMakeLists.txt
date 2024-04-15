@@ -3,6 +3,7 @@ add_library_unity(
   OBJECT
   aggregate_binder.cpp
   alter_binder.cpp
+  base_select_binder.cpp
   check_binder.cpp
   column_alias_binder.cpp
   constant_binder.cpp
@@ -16,6 +17,7 @@ add_library_unity(
   relation_binder.cpp
   returning_binder.cpp
   select_binder.cpp
+  select_bind_state.cpp
   table_function_binder.cpp
   update_binder.cpp
   where_binder.cpp)

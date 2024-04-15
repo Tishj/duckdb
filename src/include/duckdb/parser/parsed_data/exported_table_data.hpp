@@ -29,12 +29,23 @@ struct ExportedTableData {
 };
 
 struct ExportedTableInfo {
-	TableCatalogEntry *entry;
+	ExportedTableInfo(TableCatalogEntry &entry, ExportedTableData table_data)
+	    : entry(entry), table_data(std::move(table_data)) {
+	}
+
+	TableCatalogEntry &entry;
 	ExportedTableData table_data;
 };
 
 struct BoundExportData : public ParseInfo {
-	std::vector<ExportedTableInfo> data;
+public:
+	static constexpr const ParseInfoType TYPE = ParseInfoType::BOUND_EXPORT_DATA;
+
+public:
+	BoundExportData() : ParseInfo(TYPE) {
+	}
+
+	vector<ExportedTableInfo> data;
 };
 
 } // namespace duckdb

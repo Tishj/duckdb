@@ -17,6 +17,9 @@ class ScalarFunctionCatalogEntry;
 //! Represents a function call that has been bound to a base function
 class BoundFunctionExpression : public Expression {
 public:
+	static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_FUNCTION;
+
+public:
 	BoundFunctionExpression(LogicalType return_type, ScalarFunction bound_function,
 	                        vector<unique_ptr<Expression>> arguments, unique_ptr<FunctionData> bind_info,
 	                        bool is_operator = false);
@@ -31,17 +34,19 @@ public:
 	bool is_operator;
 
 public:
-	bool HasSideEffects() const override;
+	bool IsVolatile() const override;
+	bool IsConsistent() const override;
 	bool IsFoldable() const override;
 	string ToString() const override;
 	bool PropagatesNullValues() const override;
 	hash_t Hash() const override;
-	bool Equals(const BaseExpression *other) const override;
+	bool Equals(const BaseExpression &other) const override;
 
 	unique_ptr<Expression> Copy() override;
 	void Verify() const override;
 
-	void Serialize(FieldWriter &writer) const override;
-	static unique_ptr<Expression> Deserialize(ExpressionDeserializationState &state, FieldReader &reader);
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<Expression> Deserialize(Deserializer &deserializer);
 };
+
 } // namespace duckdb

@@ -5,6 +5,7 @@
 #include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_macro_function.hpp"
+#include "duckdb/function/table_macro_function.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/comparison_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
@@ -45,7 +46,7 @@ string MacroFunction::ValidateArguments(MacroFunction &macro_def, const string &
 		error = StringUtil::Format(
 		    "Macro function '%s(%s)' requires ", name,
 		    StringUtil::Join(parameters, parameters.size(), ", ", [](const unique_ptr<ParsedExpression> &p) {
-			    return ((ColumnRefExpression &)*p).column_names[0];
+			    return (p->Cast<ColumnRefExpression>()).column_names[0];
 		    }));
 		error += parameters.size() == 1 ? "a single positional argument"
 		                                : StringUtil::Format("%i positional arguments", parameters.size());
@@ -69,7 +70,7 @@ string MacroFunction::ValidateArguments(MacroFunction &macro_def, const string &
 	return error;
 }
 
-void MacroFunction::CopyProperties(MacroFunction &other) {
+void MacroFunction::CopyProperties(MacroFunction &other) const {
 	other.type = type;
 	for (auto &param : parameters) {
 		other.parameters.push_back(param->Copy());
@@ -79,7 +80,7 @@ void MacroFunction::CopyProperties(MacroFunction &other) {
 	}
 }
 
-string MacroFunction::ToSQL(const string &schema, const string &name) {
+string MacroFunction::ToSQL(const string &schema, const string &name) const {
 	vector<string> param_strings;
 	for (auto &param : parameters) {
 		param_strings.push_back(param->ToString());

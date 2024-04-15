@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "duckdb/common/types/column_data_collection.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/winapi.hpp"
 #include "duckdb/main/query_result.hpp"
 
@@ -18,13 +18,16 @@ class ClientContext;
 
 class MaterializedQueryResult : public QueryResult {
 public:
+	static constexpr const QueryResultType TYPE = QueryResultType::MATERIALIZED_RESULT;
+
+public:
 	friend class ClientContext;
 	//! Creates a successful query result with the specified names and types
 	DUCKDB_API MaterializedQueryResult(StatementType statement_type, StatementProperties properties,
 	                                   vector<string> names, unique_ptr<ColumnDataCollection> collection,
 	                                   ClientProperties client_properties);
 	//! Creates an unsuccessful query result with error condition
-	DUCKDB_API explicit MaterializedQueryResult(PreservedError error);
+	DUCKDB_API explicit MaterializedQueryResult(ErrorData error);
 
 public:
 	//! Fetches a DataChunk from the query result.

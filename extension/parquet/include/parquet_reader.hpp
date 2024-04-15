@@ -10,14 +10,16 @@
 
 #include "duckdb.hpp"
 #ifndef DUCKDB_AMALGAMATION
-#include "duckdb/planner/table_filter.hpp"
-#include "duckdb/planner/filter/constant_filter.hpp"
-#include "duckdb/planner/filter/null_filter.hpp"
-#include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/multi_file_reader.hpp"
+#include "duckdb/common/multi_file_reader_options.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/planner/filter/conjunction_filter.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/null_filter.hpp"
+#include "duckdb/planner/table_filter.hpp"
 #endif
 #include "column_reader.hpp"
 #include "parquet_file_metadata_cache.hpp"
@@ -38,6 +40,7 @@ class Allocator;
 class ClientContext;
 class BaseStatistics;
 class TableFilterSet;
+class ParquetEncryptionConfig;
 
 struct ParquetReaderPrefetchConfig {
 	// Percentage of data in a row group span that should be scanned for enabling whole group prefetch
@@ -47,14 +50,12 @@ struct ParquetReaderPrefetchConfig {
 struct ParquetReaderScanState {
 	vector<idx_t> group_idx_list;
 	int64_t current_group;
-	vector<column_t> column_ids;
 	idx_t group_offset;
 	unique_ptr<FileHandle> file_handle;
 	unique_ptr<ColumnReader> root_reader;
 	unique_ptr<duckdb_apache::thrift::protocol::TProtocol> thrift_file_proto;
 
 	bool finished;
-	TableFilterSet *filters;
 	SelectionVector sel;
 
 	ResizeableBuffer define_buf;
@@ -64,68 +65,62 @@ struct ParquetReaderScanState {
 	bool current_group_prefetched = false;
 };
 
+struct ParquetColumnDefinition {
+public:
+	static ParquetColumnDefinition FromSchemaValue(ClientContext &context, const Value &column_value);
+
+public:
+	int32_t field_id;
+	string name;
+	LogicalType type;
+	Value default_value;
+
+public:
+	void Serialize(Serializer &serializer) const;
+	static ParquetColumnDefinition Deserialize(Deserializer &deserializer);
+};
+
 struct ParquetOptions {
 	explicit ParquetOptions() {
 	}
 	explicit ParquetOptions(ClientContext &context);
 
 	bool binary_as_string = false;
-	bool filename = false;
 	bool file_row_number = false;
-	bool hive_partitioning = false;
-	bool union_by_name = false;
+	shared_ptr<ParquetEncryptionConfig> encryption_config;
+
+	MultiFileReaderOptions file_options;
+	vector<ParquetColumnDefinition> schema;
 
 public:
-	void Serialize(FieldWriter &writer) const;
-	void Deserialize(FieldReader &reader);
+	void Serialize(Serializer &serializer) const;
+	static ParquetOptions Deserialize(Deserializer &deserializer);
 };
 
 class ParquetReader {
 public:
-	ParquetReader(Allocator &allocator, unique_ptr<FileHandle> file_handle_p,
-	              const vector<LogicalType> &expected_types_p, const string &initial_filename_p = string());
-	ParquetReader(Allocator &allocator, unique_ptr<FileHandle> file_handle_p)
-	    : ParquetReader(allocator, std::move(file_handle_p), vector<LogicalType>(), string()) {
-	}
-
-	ParquetReader(ClientContext &context, string file_name, const vector<string> &names,
-	              const vector<LogicalType> &expected_types_p, const vector<column_t> &column_ids,
-	              ParquetOptions parquet_options, const string &initial_filename = string());
-	ParquetReader(ClientContext &context, string file_name, ParquetOptions parquet_options)
-	    : ParquetReader(context, std::move(file_name), vector<string>(), vector<LogicalType>(), vector<column_t>(),
-	                    parquet_options, string()) {
-	}
-	ParquetReader(ClientContext &context, string file_name, const vector<LogicalType> &expected_types_p,
-	              ParquetOptions parquet_options)
-	    : ParquetReader(context, std::move(file_name), vector<string>(), expected_types_p, vector<column_t>(),
-	                    parquet_options, string()) {
-	}
+	ParquetReader(ClientContext &context, string file_name, ParquetOptions parquet_options);
+	ParquetReader(ClientContext &context, ParquetOptions parquet_options,
+	              shared_ptr<ParquetFileMetadataCache> metadata);
 	~ParquetReader();
 
+	FileSystem &fs;
 	Allocator &allocator;
 	string file_name;
-	FileOpener *file_opener;
 	vector<LogicalType> return_types;
 	vector<string> names;
 	shared_ptr<ParquetFileMetadataCache> metadata;
 	ParquetOptions parquet_options;
-	//! maps hive partition names to string columns
-	unique_ptr<std::map<string, string>> hive_map;
+	MultiFileReaderData reader_data;
+	unique_ptr<ColumnReader> root_reader;
 
-	//! when reading multiple parquet files (with union by name option)
-	//! TableFunction might return more cols than any single parquet file. Even all parquet files have same
-	//! cols, those files might have cols at different positions and with different logical type.
-	//! e.g. p1.parquet (a INT , b VARCHAR) p2.parquet (c VARCHAR, a VARCHAR)
-	vector<idx_t> union_idx_map;
-	//! If the parquet file dont have union_cols5  union_null_cols[5] will be true.
-	//! some parquet files may not have all union cols.
-	vector<bool> union_null_cols;
-	//! All union cols will cast to same type.
-	vector<LogicalType> union_col_types;
+	//! Index of the file_row_number column
+	idx_t file_row_number_idx = DConstants::INVALID_INDEX;
+	//! Parquet schema for the generated columns
+	vector<duckdb_parquet::format::SchemaElement> generated_column_schema;
 
 public:
-	void InitializeScan(ParquetReaderScanState &state, vector<column_t> column_ids, vector<idx_t> groups_to_read,
-	                    TableFilterSet *table_filters);
+	void InitializeScan(ParquetReaderScanState &state, vector<idx_t> groups_to_read);
 	void Scan(ParquetReaderScanState &state, DataChunk &output);
 
 	idx_t NumRows();
@@ -133,18 +128,33 @@ public:
 
 	const duckdb_parquet::format::FileMetaData *GetFileMetadata();
 
-	static unique_ptr<BaseStatistics> ReadStatistics(ParquetReader &reader, LogicalType &type, column_t column_index,
-	                                                 const duckdb_parquet::format::FileMetaData *file_meta_data);
+	uint32_t Read(duckdb_apache::thrift::TBase &object, TProtocol &iprot);
+	uint32_t ReadData(duckdb_apache::thrift::protocol::TProtocol &iprot, const data_ptr_t buffer,
+	                  const uint32_t buffer_size);
+
+	unique_ptr<BaseStatistics> ReadStatistics(const string &name);
 	static LogicalType DeriveLogicalType(const SchemaElement &s_ele, bool binary_as_string);
 
-private:
-	void InitializeSchema(const vector<string> &names, const vector<LogicalType> &expected_types_p,
-	                      const vector<column_t> &column_ids, const string &initial_filename_p);
-	bool ScanInternal(ParquetReaderScanState &state, DataChunk &output);
-	unique_ptr<ColumnReader> CreateReader(const duckdb_parquet::format::FileMetaData *file_meta_data);
+	FileHandle &GetHandle() {
+		return *file_handle;
+	}
 
-	unique_ptr<ColumnReader> CreateReaderRecursive(const duckdb_parquet::format::FileMetaData *file_meta_data,
-	                                               idx_t depth, idx_t max_define, idx_t max_repeat,
+	const string &GetFileName() {
+		return file_name;
+	}
+	const vector<string> &GetNames() {
+		return names;
+	}
+	const vector<LogicalType> &GetTypes() {
+		return return_types;
+	}
+
+private:
+	void InitializeSchema();
+	bool ScanInternal(ParquetReaderScanState &state, DataChunk &output);
+	unique_ptr<ColumnReader> CreateReader();
+
+	unique_ptr<ColumnReader> CreateReaderRecursive(idx_t depth, idx_t max_define, idx_t max_repeat,
 	                                               idx_t &next_schema_idx, idx_t &next_file_idx);
 	const duckdb_parquet::format::RowGroup &GetGroup(ParquetReaderScanState &state);
 	uint64_t GetGroupCompressedSize(ParquetReaderScanState &state);
@@ -153,7 +163,6 @@ private:
 	uint64_t GetGroupSpan(ParquetReaderScanState &state);
 	void PrepareRowGroupBuffer(ParquetReaderScanState &state, idx_t out_col_idx);
 	LogicalType DeriveLogicalType(const SchemaElement &s_ele);
-	void RearrangeChildReaders(unique_ptr<duckdb::ColumnReader> &root_reader, vector<column_t> &column_ids);
 
 	template <typename... Args>
 	std::runtime_error FormatException(const string fmt_str, Args... params) {
@@ -163,12 +172,6 @@ private:
 
 private:
 	unique_ptr<FileHandle> file_handle;
-	//! column-id map, used when reading multiple parquet files since separate parquet files might have columns at
-	//! different positions e.g. the first file might have column "a" at position 0, the second at position 1, etc
-	vector<column_t> column_id_map;
-	//! Map of column_id -> cast, used when reading multiple parquet files when parquet files have diverging types
-	//! for the same column
-	unordered_map<column_t, LogicalType> cast_map;
 };
 
 } // namespace duckdb

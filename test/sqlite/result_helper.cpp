@@ -13,7 +13,7 @@
 namespace duckdb {
 
 bool TestResultHelper::CheckQueryResult(const Query &query, ExecuteContext &context,
-                                        unique_ptr<MaterializedQueryResult> owned_result) {
+                                        duckdb::unique_ptr<MaterializedQueryResult> owned_result) {
 	auto &result = *owned_result;
 	auto &runner = query.runner;
 	auto expected_column_count = query.expected_column_count;
@@ -240,7 +240,7 @@ bool TestResultHelper::CheckQueryResult(const Query &query, ExecuteContext &cont
 }
 
 bool TestResultHelper::CheckStatementResult(const Statement &statement, ExecuteContext &context,
-                                            unique_ptr<MaterializedQueryResult> owned_result) {
+                                            duckdb::unique_ptr<MaterializedQueryResult> owned_result) {
 	auto &result = *owned_result;
 	bool error = result.HasError();
 
@@ -256,8 +256,12 @@ bool TestResultHelper::CheckStatementResult(const Statement &statement, ExecuteC
 		// internal errors are never expected
 		// neither are "unoptimized result differs from original result" errors
 
-		bool internal_error =
-		    result.HasError() ? TestIsInternalError(runner.always_fail_error_messages, result.GetError()) : false;
+		bool internal_error = false;
+		if (result.HasError()) {
+			if (TestIsInternalError(runner.always_fail_error_messages, result.GetError())) {
+				internal_error = true;
+			}
+		}
 		if (!internal_error) {
 			if (expected_result == ExpectedResult::RESULT_UNKNOWN) {
 				error = false;
@@ -300,12 +304,12 @@ vector<string> TestResultHelper::LoadResultFromFile(string fname, vector<string>
 		if (i > 0) {
 			struct_definition += ", ";
 		}
-		struct_definition += KeywordHelper::WriteOptionallyQuoted(names[i]) + " := 'VARCHAR'";
+		struct_definition += StringUtil::Format("%s := VARCHAR", SQLIdentifier(names[i]));
 	}
 	struct_definition += ")";
 
-	auto csv_result =
-	    con.Query("SELECT * FROM read_csv('" + fname + "', header=1, sep='|', columns=" + struct_definition + ")");
+	auto csv_result = con.Query("SELECT * FROM read_csv('" + fname +
+	                            "', header=1, sep='|', columns=" + struct_definition + ", auto_detect=false)");
 	if (csv_result->HasError()) {
 		error = StringUtil::Format("Could not read CSV File \"%s\": %s", fname, csv_result->GetError());
 		return vector<string>();

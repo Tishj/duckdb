@@ -8,7 +8,7 @@ struct DuckDBDatabasesData : public GlobalTableFunctionState {
 	DuckDBDatabasesData() : offset(0) {
 	}
 
-	vector<AttachedDatabase *> entries;
+	vector<reference<AttachedDatabase>> entries;
 	idx_t offset;
 };
 
@@ -23,17 +23,23 @@ static unique_ptr<FunctionData> DuckDBDatabasesBind(ClientContext &context, Tabl
 	names.emplace_back("path");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
+	names.emplace_back("comment");
+	return_types.emplace_back(LogicalType::VARCHAR);
+
 	names.emplace_back("internal");
 	return_types.emplace_back(LogicalType::BOOLEAN);
 
 	names.emplace_back("type");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
+	names.emplace_back("readonly");
+	return_types.emplace_back(LogicalType::BOOLEAN);
+
 	return nullptr;
 }
 
 unique_ptr<GlobalTableFunctionState> DuckDBDatabasesInit(ClientContext &context, TableFunctionInitInput &input) {
-	auto result = make_unique<DuckDBDatabasesData>();
+	auto result = make_uniq<DuckDBDatabasesData>();
 
 	// scan all the schemas for tables and collect them and collect them
 	auto &db_manager = DatabaseManager::Get(context);
@@ -42,7 +48,7 @@ unique_ptr<GlobalTableFunctionState> DuckDBDatabasesInit(ClientContext &context,
 }
 
 void DuckDBDatabasesFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-	auto &data = (DuckDBDatabasesData &)*data_p.global_state;
+	auto &data = data_p.global_state->Cast<DuckDBDatabasesData>();
 	if (data.offset >= data.entries.size()) {
 		// finished returning values
 		return;
@@ -53,7 +59,7 @@ void DuckDBDatabasesFunction(ClientContext &context, TableFunctionInput &data_p,
 	while (data.offset < data.entries.size() && count < STANDARD_VECTOR_SIZE) {
 		auto &entry = data.entries[data.offset++];
 
-		auto &attached = (AttachedDatabase &)*entry;
+		auto &attached = entry.get().Cast<AttachedDatabase>();
 		// return values:
 
 		idx_t col = 0;
@@ -61,8 +67,9 @@ void DuckDBDatabasesFunction(ClientContext &context, TableFunctionInput &data_p,
 		output.SetValue(col++, count, attached.GetName());
 		// database_oid, BIGINT
 		output.SetValue(col++, count, Value::BIGINT(attached.oid));
-		// path, VARCHAR
 		bool is_internal = attached.IsSystem() || attached.IsTemporary();
+		bool is_readonly = attached.IsReadOnly();
+		// path, VARCHAR
 		Value db_path;
 		if (!is_internal) {
 			bool in_memory = attached.GetCatalog().InMemory();
@@ -71,10 +78,14 @@ void DuckDBDatabasesFunction(ClientContext &context, TableFunctionInput &data_p,
 			}
 		}
 		output.SetValue(col++, count, db_path);
+		// comment, VARCHAR
+		output.SetValue(col++, count, Value(attached.comment));
 		// internal, BOOLEAN
 		output.SetValue(col++, count, Value::BOOLEAN(is_internal));
 		// type, VARCHAR
 		output.SetValue(col++, count, Value(attached.GetCatalog().GetCatalogType()));
+		// readonly, BOOLEAN
+		output.SetValue(col++, count, Value::BOOLEAN(is_readonly));
 
 		count++;
 	}

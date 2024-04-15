@@ -24,7 +24,7 @@ public:
 
 	void LoadBenchmark();
 	//! Initialize the benchmark state
-	unique_ptr<BenchmarkState> Initialize(BenchmarkConfiguration &config) override;
+	duckdb::unique_ptr<BenchmarkState> Initialize(BenchmarkConfiguration &config) override;
 	//! Run the benchmark
 	void Run(BenchmarkState *state) override;
 	//! Cleanup the benchmark, called after each Run
@@ -69,6 +69,10 @@ private:
 
 	string benchmark_path;
 	string cache_db = "";
+	string cache_file = "";
+	// check the existence of a cached db, but do not connect
+	// can be used to test accessing data from a different db in a non-persistent connection
+	bool cache_no_connect = false;
 	std::unordered_set<string> extensions;
 	int64_t result_column_count = 0;
 	vector<vector<string>> result_values;

@@ -24,7 +24,7 @@ void StatisticsPropagator::AddCardinalities(unique_ptr<NodeStatistics> &stats, N
 }
 
 unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalSetOperation &setop,
-                                                                     unique_ptr<LogicalOperator> *node_ptr) {
+                                                                     unique_ptr<LogicalOperator> &node_ptr) {
 	// first propagate statistics in the child nodes
 	auto left_stats = PropagateStatistics(setop.children[0]);
 	auto right_stats = PropagateStatistics(setop.children[1]);
@@ -47,18 +47,18 @@ unique_ptr<NodeStatistics> StatisticsPropagator::PropagateStatistics(LogicalSetO
 		switch (setop.type) {
 		case LogicalOperatorType::LOGICAL_UNION:
 			// union: merge the stats of the LHS and RHS together
-			new_stats = left_entry->second->Copy();
+			new_stats = left_entry->second->ToUnique();
 			new_stats->Merge(*right_entry->second);
 			break;
 		case LogicalOperatorType::LOGICAL_EXCEPT:
 			// except: use the stats of the LHS
-			new_stats = left_entry->second->Copy();
+			new_stats = left_entry->second->ToUnique();
 			break;
 		case LogicalOperatorType::LOGICAL_INTERSECT:
 			// intersect: intersect the two stats
 			// FIXME: for now we just use the stats of the LHS, as this is correct
 			// however, the stats can be further refined to the minimal subset of the LHS and RHS
-			new_stats = left_entry->second->Copy();
+			new_stats = left_entry->second->ToUnique();
 			break;
 		default:
 			throw InternalException("Unsupported setop type");

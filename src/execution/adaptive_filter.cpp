@@ -1,13 +1,13 @@
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/execution/adaptive_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
-#include <vector>
+#include "duckdb/common/vector.hpp"
 
 namespace duckdb {
 
 AdaptiveFilter::AdaptiveFilter(const Expression &expr)
     : iteration_count(0), observe_interval(10), execute_interval(20), warmup(true) {
-	auto &conj_expr = (const BoundConjunctionExpression &)expr;
+	auto &conj_expr = expr.Cast<BoundConjunctionExpression>();
 	D_ASSERT(conj_expr.children.size() > 1);
 	for (idx_t idx = 0; idx < conj_expr.children.size(); idx++) {
 		permutation.push_back(idx);
@@ -57,7 +57,7 @@ void AdaptiveFilter::AdaptRuntimeStatistics(double duration) {
 			prev_mean = runtime_sum / iteration_count;
 
 			// get swap index and swap likeliness
-			std::uniform_int_distribution<int> distribution(1, right_random_border); // a <= i <= b
+			std::uniform_int_distribution<int> distribution(1, NumericCast<int>(right_random_border)); // a <= i <= b
 			idx_t random_number = distribution(generator) - 1;
 
 			swap_idx = random_number / 100;                    // index to be swapped

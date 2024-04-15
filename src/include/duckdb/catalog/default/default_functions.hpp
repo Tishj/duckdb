@@ -23,19 +23,19 @@ struct DefaultMacro {
 
 class DefaultFunctionGenerator : public DefaultGenerator {
 public:
-	DefaultFunctionGenerator(Catalog &catalog, SchemaCatalogEntry *schema);
+	DefaultFunctionGenerator(Catalog &catalog, SchemaCatalogEntry &schema);
 
-	SchemaCatalogEntry *schema;
+	SchemaCatalogEntry &schema;
 
-	DUCKDB_API static unique_ptr<CreateMacroInfo> CreateInternalMacroInfo(DefaultMacro &default_macro);
-	DUCKDB_API static unique_ptr<CreateMacroInfo> CreateInternalTableMacroInfo(DefaultMacro &default_macro);
+	DUCKDB_API static unique_ptr<CreateMacroInfo> CreateInternalMacroInfo(const DefaultMacro &default_macro);
+	DUCKDB_API static unique_ptr<CreateMacroInfo> CreateInternalTableMacroInfo(const DefaultMacro &default_macro);
 
 public:
 	unique_ptr<CatalogEntry> CreateDefaultEntry(ClientContext &context, const string &entry_name) override;
 	vector<string> GetDefaultEntries() override;
 
 private:
-	static unique_ptr<CreateMacroInfo> CreateInternalTableMacroInfo(DefaultMacro &default_macro,
+	static unique_ptr<CreateMacroInfo> CreateInternalTableMacroInfo(const DefaultMacro &default_macro,
 	                                                                unique_ptr<MacroFunction> function);
 };
 

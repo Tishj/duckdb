@@ -9,7 +9,7 @@
 namespace duckdb {
 
 unique_ptr<BoundQueryNode> Binder::BindNode(RecursiveCTENode &statement) {
-	auto result = make_unique<BoundRecursiveCTENode>();
+	auto result = make_uniq<BoundRecursiveCTENode>();
 
 	// first recursively visit the recursive CTE operations
 	// the left side is visited first and is added to the BindContext of the right side
@@ -40,6 +40,9 @@ unique_ptr<BoundQueryNode> Binder::BindNode(RecursiveCTENode &statement) {
 	result->right_binder->bind_context.AddCTEBinding(result->setop_index, statement.ctename, result->names,
 	                                                 result->types);
 	result->right = result->right_binder->BindNode(*statement.right);
+	for (auto &c : result->left_binder->correlated_columns) {
+		result->right_binder->AddCorrelatedColumn(c);
+	}
 
 	// move the correlated expressions from the child binders to this binder
 	MoveCorrelatedExpressions(*result->left_binder);

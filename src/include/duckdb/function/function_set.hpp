@@ -18,7 +18,7 @@ namespace duckdb {
 template <class T>
 class FunctionSet {
 public:
-	explicit FunctionSet(string name) : name(name) {
+	explicit FunctionSet(string name) : name(std::move(name)) {
 	}
 
 	//! The name of the function set
@@ -63,14 +63,18 @@ public:
 
 class ScalarFunctionSet : public FunctionSet<ScalarFunction> {
 public:
+	DUCKDB_API explicit ScalarFunctionSet();
 	DUCKDB_API explicit ScalarFunctionSet(string name);
+	DUCKDB_API explicit ScalarFunctionSet(ScalarFunction fun);
 
 	DUCKDB_API ScalarFunction GetFunctionByArguments(ClientContext &context, const vector<LogicalType> &arguments);
 };
 
 class AggregateFunctionSet : public FunctionSet<AggregateFunction> {
 public:
+	DUCKDB_API explicit AggregateFunctionSet();
 	DUCKDB_API explicit AggregateFunctionSet(string name);
+	DUCKDB_API explicit AggregateFunctionSet(AggregateFunction fun);
 
 	DUCKDB_API AggregateFunction GetFunctionByArguments(ClientContext &context, const vector<LogicalType> &arguments);
 };
@@ -78,14 +82,15 @@ public:
 class TableFunctionSet : public FunctionSet<TableFunction> {
 public:
 	DUCKDB_API explicit TableFunctionSet(string name);
+	DUCKDB_API explicit TableFunctionSet(TableFunction fun);
 
 	TableFunction GetFunctionByArguments(ClientContext &context, const vector<LogicalType> &arguments);
 };
 
 class PragmaFunctionSet : public FunctionSet<PragmaFunction> {
 public:
-	explicit PragmaFunctionSet(string name) : FunctionSet(std::move(name)) {
-	}
+	DUCKDB_API explicit PragmaFunctionSet(string name);
+	DUCKDB_API explicit PragmaFunctionSet(PragmaFunction fun);
 };
 
 } // namespace duckdb

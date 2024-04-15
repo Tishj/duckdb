@@ -1,21 +1,28 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb_python/pyresult.hpp
+// duckdb_python/pyrelation.hpp
 //
 //
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include "duckdb_python/pybind_wrapper.hpp"
+#include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb.hpp"
-#include "arrow_array_stream.hpp"
+#include "duckdb_python/arrow/arrow_array_stream.hpp"
 #include "duckdb/main/external_dependencies.hpp"
-#include "duckdb_python/pandas_type.hpp"
-#include "duckdb_python/registered_py_object.hpp"
+#include "duckdb_python/numpy/numpy_type.hpp"
+#include "duckdb_python/pybind11/registered_py_object.hpp"
 #include "duckdb_python/pyresult.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
+#include "duckdb/parser/statement/explain_statement.hpp"
+#include "duckdb_python/pybind11/conversions/explain_enum.hpp"
+#include "duckdb_python/pybind11/conversions/render_mode_enum.hpp"
+#include "duckdb_python/pybind11/conversions/null_handling_enum.hpp"
+#include "duckdb_python/pybind11/dataframe.hpp"
+#include "duckdb_python/python_objects.hpp"
+#include "duckdb/common/box_renderer.hpp"
 
 namespace duckdb {
 
@@ -23,6 +30,13 @@ struct DuckDBPyConnection;
 
 class PythonDependencies : public ExternalDependency {
 public:
+	explicit PythonDependencies() : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY) {
+	}
+	~PythonDependencies() override {
+		py::gil_scoped_acquire gil;
+		py_object_list.clear();
+	}
+
 	explicit PythonDependencies(py::function map_function)
 	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY), map_function(std::move(map_function)) {};
 	explicit PythonDependencies(unique_ptr<RegisteredObject> py_object)
@@ -43,6 +57,7 @@ struct DuckDBPyRelation {
 public:
 	explicit DuckDBPyRelation(shared_ptr<Relation> rel);
 	explicit DuckDBPyRelation(unique_ptr<DuckDBPyResult> result);
+	~DuckDBPyRelation();
 
 public:
 	static void Initialize(py::handle &m);
@@ -51,67 +66,24 @@ public:
 
 	void Close();
 
-	static unique_ptr<DuckDBPyRelation> FromDf(const DataFrame &df, shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> Values(py::object values = py::list(),
-	                                           shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> FromQuery(const string &query, const string &alias,
-	                                              shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> RunQuery(const string &query, const string &alias,
-	                                             shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> FromParquet(const string &file_glob, bool binary_as_string,
-	                                                bool file_row_number, bool filename, bool hive_partitioning,
-	                                                bool union_by_name, shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> FromParquets(const vector<string> &file_globs, bool binary_as_string,
-	                                                 bool file_row_number, bool filename, bool hive_partitioning,
-	                                                 bool union_by_name, shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> FromSubstrait(py::bytes &proto, shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> GetSubstrait(const string &query, shared_ptr<DuckDBPyConnection> conn = nullptr,
-	                                                 bool enable_optimizer = true);
-
-	static unique_ptr<DuckDBPyRelation>
-	GetSubstraitJSON(const string &query, shared_ptr<DuckDBPyConnection> conn = nullptr, bool enable_optimizer = true);
-	static unique_ptr<DuckDBPyRelation> FromSubstraitJSON(const string &json,
-	                                                      shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> FromParquetDefault(const string &filename,
-	                                                       shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	static unique_ptr<DuckDBPyRelation> FromArrow(py::object &arrow_object,
-	                                              shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	unique_ptr<DuckDBPyRelation> Project(const string &expr);
-
-	static unique_ptr<DuckDBPyRelation> ProjectDf(const DataFrame &df, const string &expr,
-	                                              shared_ptr<DuckDBPyConnection> conn = nullptr);
+	unique_ptr<DuckDBPyRelation> GetAttribute(const string &name);
 
 	py::str GetAlias();
 
+	static unique_ptr<DuckDBPyRelation> EmptyResult(const std::shared_ptr<ClientContext> &context,
+	                                                const vector<LogicalType> &types, vector<string> names);
+
 	unique_ptr<DuckDBPyRelation> SetAlias(const string &expr);
 
-	static unique_ptr<DuckDBPyRelation> AliasDF(const DataFrame &df, const string &expr,
-	                                            shared_ptr<DuckDBPyConnection> conn = nullptr);
+	unique_ptr<DuckDBPyRelation> ProjectFromExpression(const string &expr);
+	unique_ptr<DuckDBPyRelation> ProjectFromTypes(const py::object &types);
+	unique_ptr<DuckDBPyRelation> Project(const py::args &args, const py::kwargs &kwargs = py::kwargs());
 
-	unique_ptr<DuckDBPyRelation> Filter(const string &expr);
-
-	static unique_ptr<DuckDBPyRelation> FilterDf(const DataFrame &df, const string &expr,
-	                                             shared_ptr<DuckDBPyConnection> conn = nullptr);
-
+	unique_ptr<DuckDBPyRelation> Filter(const py::object &expr);
+	unique_ptr<DuckDBPyRelation> FilterFromExpression(const string &expr);
 	unique_ptr<DuckDBPyRelation> Limit(int64_t n, int64_t offset = 0);
-
-	static unique_ptr<DuckDBPyRelation> LimitDF(const DataFrame &df, int64_t n,
-	                                            shared_ptr<DuckDBPyConnection> conn = nullptr);
-
 	unique_ptr<DuckDBPyRelation> Order(const string &expr);
-
-	static unique_ptr<DuckDBPyRelation> OrderDf(const DataFrame &df, const string &expr,
-	                                            shared_ptr<DuckDBPyConnection> conn = nullptr);
+	unique_ptr<DuckDBPyRelation> Sort(const py::args &args);
 
 	unique_ptr<DuckDBPyRelation> Aggregate(const string &expr, const string &groups = "");
 
@@ -119,44 +91,79 @@ public:
 	                                               const string &groups = "", const string &function_parameter = "",
 	                                               const string &projected_columns = "");
 
-	unique_ptr<DuckDBPyRelation> Sum(const string &sum_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Count(const string &count_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Median(const string &median_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Quantile(const string &q, const string &quantile_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Min(const string &min_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Max(const string &max_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Mean(const string &mean_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Var(const string &var_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> STD(const string &std_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> ValueCounts(const string &std_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> MAD(const string &aggr_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Mode(const string &aggr_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Abs(const string &aggr_columns);
-	unique_ptr<DuckDBPyRelation> Prod(const string &aggr_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Skew(const string &aggr_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> Kurt(const string &aggr_columns, const string &groups = "");
-
-	unique_ptr<DuckDBPyRelation> SEM(const string &aggr_columns, const string &groups = "");
+	/* General aggregate functions */
+	unique_ptr<DuckDBPyRelation> AnyValue(const string &column, const string &groups = "",
+	                                      const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> ArgMax(const string &arg_column, const string &value_column, const string &groups = "",
+	                                    const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> ArgMin(const string &arg_column, const string &value_column, const string &groups = "",
+	                                    const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Avg(const string &column, const string &groups = "", const string &window_spec = "",
+	                                 const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> BitAnd(const string &column, const string &groups = "", const string &window_spec = "",
+	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> BitOr(const string &column, const string &groups = "", const string &window_spec = "",
+	                                   const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> BitXor(const string &column, const string &groups = "", const string &window_spec = "",
+	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> BitStringAgg(const string &column, const Optional<py::object> &min,
+	                                          const Optional<py::object> &max, const string &groups = "",
+	                                          const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> BoolAnd(const string &column, const string &groups = "",
+	                                     const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> BoolOr(const string &column, const string &groups = "", const string &window_spec = "",
+	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> ValueCounts(const string &column, const string &groups = "");
+	unique_ptr<DuckDBPyRelation> Count(const string &column, const string &groups = "", const string &window_spec = "",
+	                                   const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> FAvg(const string &column, const string &groups = "", const string &window_spec = "",
+	                                  const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> First(const string &column, const string &groups = "",
+	                                   const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> FSum(const string &column, const string &groups = "", const string &window_spec = "",
+	                                  const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> GeoMean(const string &column, const string &groups = "",
+	                                     const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Histogram(const string &column, const string &groups = "",
+	                                       const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Last(const string &column, const string &groups = "",
+	                                  const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> List(const string &column, const string &groups = "", const string &window_spec = "",
+	                                  const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Max(const string &column, const string &groups = "", const string &window_spec = "",
+	                                 const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Min(const string &column, const string &groups = "", const string &window_spec = "",
+	                                 const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Product(const string &column, const string &groups = "",
+	                                     const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> StringAgg(const string &column, const string &sep = ",", const string &groups = "",
+	                                       const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Sum(const string &column, const string &groups = "", const string &window_spec = "",
+	                                 const string &projected_columns = "");
+	/* TODO: Approximate aggregate functions */
+	/* TODO: Statistical aggregate functions */
+	unique_ptr<DuckDBPyRelation> Median(const string &column, const string &groups = "", const string &window_spec = "",
+	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Mode(const string &column, const string &groups = "", const string &window_spec = "",
+	                                  const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> QuantileCont(const string &column, const py::object &q, const string &groups = "",
+	                                          const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> QuantileDisc(const string &column, const py::object &q, const string &groups = "",
+	                                          const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> StdPop(const string &column, const string &groups = "", const string &window_spec = "",
+	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> StdSamp(const string &column, const string &groups = "",
+	                                     const string &window_spec = "", const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> VarPop(const string &column, const string &groups = "", const string &window_spec = "",
+	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> VarSamp(const string &column, const string &groups = "",
+	                                     const string &window_spec = "", const string &projected_columns = "");
 
 	unique_ptr<DuckDBPyRelation> Describe();
 
 	string ToSQL();
 
-	duckdb::pyarrow::RecordBatchReader FetchRecordBatchReader(idx_t chunk_size);
+	duckdb::pyarrow::RecordBatchReader FetchRecordBatchReader(idx_t rows_per_batch);
 
 	idx_t Length();
 
@@ -164,20 +171,35 @@ public:
 
 	unique_ptr<DuckDBPyRelation> Unique(const string &aggr_columns);
 
-	unique_ptr<DuckDBPyRelation> GenericWindowFunction(const string &function_name, const string &aggr_columns);
-	unique_ptr<DuckDBPyRelation> CumSum(const string &aggr_columns);
-	unique_ptr<DuckDBPyRelation> CumProd(const string &aggr_columns);
-	unique_ptr<DuckDBPyRelation> CumMax(const string &aggr_columns);
-	unique_ptr<DuckDBPyRelation> CumMin(const string &aggr_columns);
+	unique_ptr<DuckDBPyRelation> GenericWindowFunction(const string &function_name, const string &function_parameters,
+	                                                   const string &aggr_columns, const string &window_spec,
+	                                                   const bool &ignore_nulls, const string &projected_columns);
 
-	static unique_ptr<DuckDBPyRelation> AggregateDF(const DataFrame &df, const string &expr, const string &groups = "",
-	                                                shared_ptr<DuckDBPyConnection> conn = nullptr);
+	/* General purpose window functions */
+	unique_ptr<DuckDBPyRelation> RowNumber(const string &window_spec, const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> Rank(const string &window_spec, const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> DenseRank(const string &window_spec, const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> PercentRank(const string &window_spec, const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> CumeDist(const string &window_spec, const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> FirstValue(const string &column, const string &window_spec = "",
+	                                        const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> NTile(const string &window_spec, const int &num_buckets,
+	                                   const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> Lag(const string &column, const string &window_spec, const int &offset,
+	                                 const string &default_value, const bool &ignore_nulls,
+	                                 const string &projected_columns);
+	unique_ptr<DuckDBPyRelation> LastValue(const string &column, const string &window_spec = "",
+	                                       const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> Lead(const string &column, const string &window_spec, const int &offset,
+	                                  const string &default_value, const bool &ignore_nulls,
+	                                  const string &projected_columns);
+
+	unique_ptr<DuckDBPyRelation> NthValue(const string &column, const string &window_spec, const int &offset,
+	                                      const bool &ignore_nulls, const string &projected_columns);
 
 	unique_ptr<DuckDBPyRelation> Distinct();
 
-	static unique_ptr<DuckDBPyRelation> DistinctDF(const DataFrame &df, shared_ptr<DuckDBPyConnection> conn = nullptr);
-
-	DataFrame FetchDF(bool date_as_object);
+	PandasDataFrame FetchDF(bool date_as_object);
 
 	Optional<py::tuple> FetchOne();
 
@@ -193,9 +215,11 @@ public:
 
 	py::dict FetchNumpyInternal(bool stream = false, idx_t vectors_per_chunk = 1);
 
-	DataFrame FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object);
+	PandasDataFrame FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object);
 
 	duckdb::pyarrow::Table ToArrowTable(idx_t batch_size);
+
+	duckdb::pyarrow::Table ToArrowTableInternal(idx_t batch_size, bool to_polars);
 
 	PolarsDataFrame ToPolars(idx_t batch_size);
 
@@ -207,9 +231,9 @@ public:
 
 	unique_ptr<DuckDBPyRelation> Intersect(DuckDBPyRelation *other);
 
-	unique_ptr<DuckDBPyRelation> Map(py::function fun);
+	unique_ptr<DuckDBPyRelation> Map(py::function fun, Optional<py::object> schema);
 
-	unique_ptr<DuckDBPyRelation> Join(DuckDBPyRelation *other, const string &condition, const string &type);
+	unique_ptr<DuckDBPyRelation> Join(DuckDBPyRelation *other, const py::object &condition, const string &type);
 
 	void ToParquet(const string &filename, const py::object &compression = py::none());
 
@@ -217,9 +241,9 @@ public:
 	           const py::object &header = py::none(), const py::object &quotechar = py::none(),
 	           const py::object &escapechar = py::none(), const py::object &date_format = py::none(),
 	           const py::object &timestamp_format = py::none(), const py::object &quoting = py::none(),
-	           const py::object &encoding = py::none(), const py::object &compression = py::none());
-
-	static void WriteCsvDF(const DataFrame &df, const string &file, shared_ptr<DuckDBPyConnection> conn = nullptr);
+	           const py::object &encoding = py::none(), const py::object &compression = py::none(),
+	           const py::object &overwrite = py::none(), const py::object &per_thread_output = py::none(),
+	           const py::object &use_tmp_file = py::none(), const py::object &partition_by = py::none());
 
 	// should this return a rel with the new view?
 	unique_ptr<DuckDBPyRelation> CreateView(const string &view_name, bool replace = true);
@@ -228,9 +252,6 @@ public:
 
 	// Update the internal result of the relation
 	DuckDBPyRelation &Execute();
-
-	static unique_ptr<DuckDBPyRelation> QueryDF(const DataFrame &df, const string &view_name, const string &sql_query,
-	                                            shared_ptr<DuckDBPyConnection> conn = nullptr);
 
 	void InsertInto(const string &table);
 
@@ -243,21 +264,35 @@ public:
 	py::list ColumnTypes();
 
 	string ToString();
-	void Print();
+	void Print(const Optional<py::int_> &max_width, const Optional<py::int_> &max_rows,
+	           const Optional<py::int_> &max_col_width, const Optional<py::str> &null_value,
+	           const py::object &render_mode);
 
-	string Explain();
+	string Explain(ExplainType type);
 
 	static bool IsRelation(const py::object &object);
 
+	bool CanBeRegisteredBy(Connection &con);
+
 	Relation &GetRel();
 
+	bool ContainsColumnByName(const string &name) const;
+
 private:
+	string ToStringInternal(const BoxRendererConfig &config, bool invalidate_cache = false);
 	string GenerateExpressionList(const string &function_name, const string &aggregated_columns,
 	                              const string &groups = "", const string &function_parameter = "",
-	                              const string &projected_columns = "", const string &window_function = "");
-	string GenerateExpressionList(const string &function_name, const vector<string> &aggregated_columns,
+	                              bool ignore_nulls = false, const string &projected_columns = "",
+	                              const string &window_spec = "");
+	string GenerateExpressionList(const string &function_name, vector<string> aggregated_columns,
 	                              const string &groups = "", const string &function_parameter = "",
-	                              const string &projected_columns = "", const string &window_function = "");
+	                              bool ignore_nulls = false, const string &projected_columns = "",
+	                              const string &window_spec = "");
+	unique_ptr<DuckDBPyRelation> ApplyAggOrWin(const string &function_name, const string &agg_columns,
+	                                           const string &function_parameters = "", const string &groups = "",
+	                                           const string &window_spec = "", const string &projected_columns = "",
+	                                           bool ignore_nulls = false);
+
 	void AssertResult() const;
 	void AssertResultOpen() const;
 	void AssertRelation() const;
@@ -265,6 +300,8 @@ private:
 	unique_ptr<QueryResult> ExecuteInternal(bool stream_result = false);
 
 private:
+	//! Whether the relation has been executed at least once
+	bool executed;
 	shared_ptr<Relation> rel;
 	vector<LogicalType> types;
 	vector<string> names;
