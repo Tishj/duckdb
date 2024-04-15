@@ -12,6 +12,18 @@ unique_ptr<SQLStatement> CreateStatement::Copy() const {
 	return unique_ptr<CreateStatement>(new CreateStatement(*this));
 }
 
+bool CreateStatement::Equals(const SQLStatement *other_p) const {
+	if (!other_p) {
+		return false;
+	}
+	if (type != other_p->type) {
+		return false;
+	}
+	auto other = (const CreateStatement &)*other_p;
+
+	return other.info->Equals(info.get());
+}
+
 string CreateStatement::ToString() const {
 	return info->ToString();
 }

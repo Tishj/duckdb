@@ -22,6 +22,7 @@ public:
 
 public:
 	unique_ptr<UpdateSetInfo> Copy() const;
+	bool Equals(const UpdateSetInfo &other) const;
 
 public:
 	// The condition that needs to be met to perform the update
@@ -56,6 +57,7 @@ protected:
 public:
 	string ToString() const override;
 	unique_ptr<SQLStatement> Copy() const override;
+	bool Equals(const SQLStatement *other) const override;
 };
 
 } // namespace duckdb

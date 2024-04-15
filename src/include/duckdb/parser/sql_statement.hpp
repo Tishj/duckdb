@@ -49,6 +49,7 @@ public:
 		                        StatementTypeToString(type));
 	}
 	//! Create a copy of this SelectStatement
+	DUCKDB_API virtual bool Equals(const SQLStatement *other) const = 0;
 	DUCKDB_API virtual unique_ptr<SQLStatement> Copy() const = 0;
 
 public:

@@ -45,6 +45,31 @@ public:
 		return result;
 	}
 
+	bool Equals(const PragmaInfo &other) const {
+		if (name != other.name) {
+			return false;
+		}
+		if (parameters != other.parameters) {
+			return false;
+		}
+		if (named_parameters.size() != other.named_parameters.size()) {
+			return false;
+		}
+		auto it = named_parameters.begin();
+		auto jt = other.named_parameters.begin();
+		for (; it != named_parameters.end();) {
+			if (it->first != jt->first) {
+				return false;
+			}
+			if (!it->second->Equals(*jt->second)) {
+				return false;
+			}
+			it++;
+			jt++;
+		}
+		return true;
+	}
+
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };

@@ -35,6 +35,19 @@ public:
 		return result;
 	}
 
+	bool Equals(const LoadInfo &other) const {
+		if (filename != other.filename) {
+			return false;
+		}
+		if (repository != other.repository) {
+			return false;
+		}
+		if (load_type != other.load_type) {
+			return false;
+		}
+		return true;
+	}
+
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };

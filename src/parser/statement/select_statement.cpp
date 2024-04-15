@@ -5,6 +5,9 @@
 
 namespace duckdb {
 
+SelectStatement::SelectStatement() : SQLStatement(StatementType::SELECT_STATEMENT) {
+}
+
 SelectStatement::SelectStatement(const SelectStatement &other) : SQLStatement(other), node(other.node->Copy()) {
 }
 
@@ -12,11 +15,14 @@ unique_ptr<SQLStatement> SelectStatement::Copy() const {
 	return unique_ptr<SelectStatement>(new SelectStatement(*this));
 }
 
-bool SelectStatement::Equals(const SQLStatement &other_p) const {
-	if (type != other_p.type) {
+bool SelectStatement::Equals(const SQLStatement *other_p) const {
+	if (!other_p) {
 		return false;
 	}
-	auto &other = other_p.Cast<SelectStatement>();
+	if (type != other_p->type) {
+		return false;
+	}
+	auto &other = other_p->Cast<SelectStatement>();
 	return node->Equals(other.node.get());
 }
 

@@ -15,6 +15,32 @@ UpdateSetInfo::UpdateSetInfo(const UpdateSetInfo &other) : columns(other.columns
 	}
 }
 
+bool UpdateSetInfo::Equals(const UpdateSetInfo &other) const {
+	if (!condition && !other.condition) {
+	} else if (!condition || !other.condition) {
+		return false;
+	} else if (!condition->Equals(*other.condition)) {
+		return false;
+	}
+
+	if (columns != other.columns) {
+		return false;
+	}
+
+	if (expressions.size() != other.expressions.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < expressions.size(); i++) {
+		auto &lhs = expressions[i];
+		auto &rhs = other.expressions[i];
+
+		if (!lhs->Equals(*rhs)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 unique_ptr<UpdateSetInfo> UpdateSetInfo::Copy() const {
 	return unique_ptr<UpdateSetInfo>(new UpdateSetInfo(*this));
 }
@@ -73,6 +99,44 @@ string UpdateStatement::ToString() const {
 
 unique_ptr<SQLStatement> UpdateStatement::Copy() const {
 	return unique_ptr<UpdateStatement>(new UpdateStatement(*this));
+}
+
+bool UpdateStatement::Equals(const SQLStatement *other_p) const {
+	if (other_p->type != type) {
+		return false;
+	}
+	auto &other = (const UpdateStatement &)*other_p;
+
+	D_ASSERT(other.set_info);
+	if (!set_info->Equals(*other.set_info)) {
+		return false;
+	}
+
+	D_ASSERT(table);
+	if (!table->Equals(*other.table)) {
+		return false;
+	}
+
+	if (!from_table && !other.from_table) {
+	} else if (!from_table || !other.from_table) {
+		return false;
+	} else if (!from_table->Equals(*other.from_table)) {
+		return false;
+	}
+
+	if (returning_list.size() != other.returning_list.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < returning_list.size(); i++) {
+		auto &lhs = returning_list[i];
+		auto &rhs = other.returning_list[i];
+
+		if (!lhs->Equals(*rhs)) {
+			return false;
+		}
+	}
+
+	return cte_map.Equals(other.cte_map);
 }
 
 } // namespace duckdb

@@ -42,6 +42,7 @@ public:
 		return reinterpret_cast<const TARGET &>(*this);
 	}
 	virtual unique_ptr<ExtraDropInfo> Copy() const = 0;
+	virtual bool Equals(const ExtraDropInfo &other) const = 0;
 
 	virtual void Serialize(Serializer &serializer) const;
 	static unique_ptr<ExtraDropInfo> Deserialize(Deserializer &deserializer);
@@ -58,6 +59,7 @@ struct ExtraDropSecretInfo : public ExtraDropInfo {
 
 public:
 	unique_ptr<ExtraDropInfo> Copy() const override;
+	virtual bool Equals(const ExtraDropInfo &other) const override;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ExtraDropInfo> Deserialize(Deserializer &deserializer);

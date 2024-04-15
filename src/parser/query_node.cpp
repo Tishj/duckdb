@@ -1,6 +1,7 @@
 #include "duckdb/parser/query_node.hpp"
 
 #include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/query_node/set_operation_node.hpp"
 #include "duckdb/parser/query_node/recursive_cte_node.hpp"
 #include "duckdb/parser/query_node/cte_node.hpp"
@@ -25,6 +26,25 @@ CommonTableExpressionMap CommonTableExpressionMap::Copy() const {
 		res.map[kv.first] = std::move(kv_info);
 	}
 	return res;
+}
+
+bool CommonTableExpressionMap::Equals(const CommonTableExpressionMap &other) const {
+	if (map.size() != other.map.size()) {
+		return false;
+	}
+	for (auto it = map.begin(); it != map.end(); it++) {
+		auto &lhs_name = it->first;
+		auto &lhs_info = it->second;
+
+		auto rhs_it = other.map.find(lhs_name);
+		if (rhs_it == other.map.end()) {
+			return false;
+		}
+		if (!lhs_info->Equals(*rhs_it->second)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 string CommonTableExpressionMap::ToString() const {
@@ -139,7 +159,7 @@ bool QueryNode::Equals(const QueryNode *other) const {
 		if (entry.second->aliases != other_entry->second->aliases) {
 			return false;
 		}
-		if (!entry.second->query->Equals(*other_entry->second->query)) {
+		if (!entry.second->query->Equals(other_entry->second->query.get())) {
 			return false;
 		}
 	}

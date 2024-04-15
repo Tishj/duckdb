@@ -11,4 +11,20 @@ unique_ptr<AttachInfo> AttachInfo::Copy() const {
 	return result;
 }
 
+bool AttachInfo::Equals(const AttachInfo *other) const {
+	if (name != other->name) {
+		return false;
+	}
+	if (path != other->path) {
+		return false;
+	}
+	if (options != other->options) {
+		return false;
+	}
+	if (on_conflict != other.on_conflict) {
+		return false;
+	}
+	return true;
+}
+
 } // namespace duckdb

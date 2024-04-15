@@ -28,6 +28,8 @@ public:
 public:
 	unique_ptr<DetachInfo> Copy() const;
 
+	bool Equals(const DetachInfo &other) const;
+
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };

@@ -14,4 +14,16 @@ unique_ptr<SQLStatement> TransactionStatement::Copy() const {
 	return unique_ptr<TransactionStatement>(new TransactionStatement(*this));
 }
 
+bool TransactionStatement::Equals(const SQLStatement *other_p) const {
+	if (other_p->type != type) {
+		return false;
+	}
+	auto &other = (const TransactionStatement &)*other_p;
+	D_ASSERT(info);
+	if (!info->Equals(*other.info)) {
+		return false;
+	}
+	return true;
+}
+
 } // namespace duckdb

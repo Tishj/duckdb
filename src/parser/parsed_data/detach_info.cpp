@@ -12,4 +12,14 @@ unique_ptr<DetachInfo> DetachInfo::Copy() const {
 	return result;
 }
 
+bool DetachInfo::Equals(const DetachInfo &other) const {
+	if (name != other.name) {
+		return false;
+	}
+	if (if_not_found != other.if_not_found) {
+		return false;
+	}
+	return true;
+}
+
 } // namespace duckdb

@@ -15,4 +15,18 @@ unique_ptr<ExtraDropInfo> ExtraDropSecretInfo::Copy() const {
 	return std::move(make_uniq<ExtraDropSecretInfo>(*this));
 }
 
+bool ExtraDropSecretInfo::Equals(const ExtraDropInfo &other_p) const {
+	if (other_p.info_type != ExtraDropInfoType::SECRET_INFO) {
+		return false;
+	}
+	auto &other = other_p.Cast<ExtraDropSecretInfo>();
+	if (other.persist_mode != persist_mode) {
+		return false;
+	}
+	if (other.secret_storage != secret_storage) {
+		return false;
+	}
+	return true;
+}
+
 } // namespace duckdb

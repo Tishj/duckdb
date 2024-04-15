@@ -764,11 +764,14 @@ unique_ptr<PendingQueryResult> ClientContext::PendingStatementOrPreparedStatemen
     shared_ptr<PreparedStatementData> &prepared, const PendingQueryParameters &parameters) {
 	// check if we are on AutoCommit. In this case we should start a transaction.
 	if (statement && config.AnyVerification()) {
+
 		// query verification is enabled
 		// create a copy of the statement, and use the copy
 		// this way we verify that the copy correctly copies all properties
 		auto copied_statement = statement->Copy();
-		switch (statement->type) {
+		auto original_statement = std::move(statement);
+		bool from_string = false;
+		switch (original_statement->type) {
 		case StatementType::SELECT_STATEMENT: {
 			// in case this is a select query, we verify the original statement
 			ErrorData error;
@@ -781,6 +784,7 @@ unique_ptr<PendingQueryResult> ClientContext::PendingStatementOrPreparedStatemen
 				// error in verifying query
 				return ErrorResult<PendingQueryResult>(std::move(error), query);
 			}
+			original_statement = nullptr;
 			statement = std::move(copied_statement);
 			break;
 		}
@@ -801,12 +805,31 @@ unique_ptr<PendingQueryResult> ClientContext::PendingStatementOrPreparedStatemen
 				return ErrorResult<PendingQueryResult>(std::move(error), query);
 			}
 			statement = std::move(parser.statements[0]);
+			from_string = true;
 			break;
 		}
 #endif
 		default:
 			statement = std::move(copied_statement);
 			break;
+		}
+		// When the StatementType is SELECT_STATEMENT, we will have already consumed the 'original_statement'
+		// Verify that the newly generated statement equals the original
+		ErrorData error;
+		try {
+			if (!from_string && original_statement && !original_statement->Equals(statement.get())) {
+				error = InternalException("Verification statement does not equal the original statement");
+			}
+		} catch (NotImplementedException &ex) {
+			// Ignore the exception, Equals is not implemented
+			(void)ex;
+		} catch (Exception &ex) {
+			error = ErrorData(ex);
+		} catch (std::exception &ex) {
+			error = ErrorData(ex);
+		}
+		if (error.HasError()) {
+			return make_uniq<PendingQueryResult>(error);
 		}
 	}
 	return PendingStatementOrPreparedStatement(lock, query, std::move(statement), prepared, parameters);

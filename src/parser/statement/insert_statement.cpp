@@ -98,6 +98,7 @@ string InsertStatement::ToString() const {
 	auto values_list = GetValuesList();
 	if (values_list) {
 		D_ASSERT(!default_values);
+		// FIXME: THIS IS NOT CONST
 		values_list->alias = string();
 		result += values_list->ToString();
 	} else if (select_statement) {
@@ -191,6 +192,49 @@ optional_ptr<ExpressionListRef> InsertStatement::GetValuesList() const {
 		return nullptr;
 	}
 	return &node.from_table->Cast<ExpressionListRef>();
+}
+
+bool InsertStatement::Equals(const SQLStatement *other_p) const {
+	if (type != other_p->type) {
+		return false;
+	}
+	auto other = (const InsertStatement &)*other_p;
+
+	if (columns != other.columns) {
+		return false;
+	}
+
+	if (!select_statement && !other.select_statement) {
+
+	} else if (!select_statement || !other.select_statement) {
+		return false;
+	} else if (!select_statement->Equals(other.select_statement.get())) {
+		return false;
+	}
+
+	if (table != other.table) {
+		return false;
+	}
+	if (schema != other.schema) {
+		return false;
+	}
+	if (catalog != other.catalog) {
+		return false;
+	}
+
+	if (returning_list.size() != other.returning_list.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < returning_list.size(); i++) {
+		auto &lhs = returning_list[i];
+		auto &rhs = other.returning_list[i];
+
+		if (!lhs->Equals(*rhs)) {
+			return false;
+		}
+	}
+
+	return cte_map.Equals(other.cte_map);
 }
 
 } // namespace duckdb

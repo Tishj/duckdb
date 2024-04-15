@@ -48,6 +48,35 @@ public:
 public:
 	unique_ptr<VacuumInfo> Copy();
 
+	bool Equals(const VacuumInfo &other) const {
+		// FIXME: blocked by open PR
+
+		if (other.options.vacuum != options.vacuum) {
+			return false;
+		}
+		if (other.options.analyze != options.analyze) {
+			return false;
+		}
+
+		if (has_table != other.has_table) {
+			return false;
+		}
+
+		if (!ref && !other.ref) {
+
+		} else if (!ref || !other.ref) {
+			return false;
+		} else if (!ref->Equals(*other.ref)) {
+			return false;
+		}
+
+		if (table != other.table) {
+			// FIXME: TableCatalogEntry does not have an Equals method, cant check equality here
+			throw NotImplementedException("VACUUM_INFO");
+		}
+		return true;
+	}
+
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 };

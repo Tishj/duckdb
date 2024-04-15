@@ -26,8 +26,7 @@ public:
 	static constexpr const StatementType TYPE = StatementType::SELECT_STATEMENT;
 
 public:
-	SelectStatement() : SQLStatement(StatementType::SELECT_STATEMENT) {
-	}
+	SelectStatement();
 
 	//! The main query node
 	unique_ptr<QueryNode> node;
@@ -41,7 +40,7 @@ public:
 	//! Create a copy of this SelectStatement
 	DUCKDB_API unique_ptr<SQLStatement> Copy() const override;
 	//! Whether or not the statements are equivalent
-	bool Equals(const SQLStatement &other) const;
+	virtual bool Equals(const SQLStatement *other) const override;
 
 	void Serialize(Serializer &serializer) const;
 	static unique_ptr<SelectStatement> Deserialize(Deserializer &deserializer);

@@ -35,7 +35,7 @@ bool SubqueryExpression::Equal(const SubqueryExpression &a, const SubqueryExpres
 		return false;
 	}
 	return a.comparison_type == b.comparison_type && a.subquery_type == b.subquery_type &&
-	       a.subquery->Equals(*b.subquery);
+	       a.subquery->Equals(b.subquery.get());
 }
 
 unique_ptr<ParsedExpression> SubqueryExpression::Copy() const {

@@ -40,7 +40,7 @@ public:
 	bool IsScalar() const override;
 	bool HasParameter() const override;
 
-	bool Equals(const BaseExpression &other) const override;
+	virtual bool Equals(const BaseExpression &other) const override;
 	hash_t Hash() const override;
 
 	//! Create a copy of this expression

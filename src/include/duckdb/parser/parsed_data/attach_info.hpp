@@ -35,6 +35,7 @@ public:
 
 public:
 	unique_ptr<AttachInfo> Copy() const;
+	bool Equals(const AttachInfo *other) const;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);

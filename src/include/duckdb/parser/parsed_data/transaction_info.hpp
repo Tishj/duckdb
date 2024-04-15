@@ -25,6 +25,13 @@ public:
 	TransactionType type;
 
 public:
+	unique_ptr<ParseInfo> Copy() const {
+		return make_uniq<TransactionInfo>(type);
+	}
+	virtual bool Equals(const TransactionInfo &other) const {
+		return type == other.type;
+	}
+
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ParseInfo> Deserialize(Deserializer &deserializer);
 

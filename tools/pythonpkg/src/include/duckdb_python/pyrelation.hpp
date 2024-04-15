@@ -15,6 +15,7 @@
 #include "duckdb_python/numpy/numpy_type.hpp"
 #include "duckdb_python/pybind11/registered_py_object.hpp"
 #include "duckdb_python/pyresult.hpp"
+#include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/statement/explain_statement.hpp"
 #include "duckdb_python/pybind11/conversions/explain_enum.hpp"
 #include "duckdb_python/pybind11/conversions/render_mode_enum.hpp"

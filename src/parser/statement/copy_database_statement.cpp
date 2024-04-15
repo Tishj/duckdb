@@ -17,6 +17,24 @@ unique_ptr<SQLStatement> CopyDatabaseStatement::Copy() const {
 	return unique_ptr<CopyDatabaseStatement>(new CopyDatabaseStatement(*this));
 }
 
+bool CopyDatabaseStatement::Equals(const SQLStatement *other_p) const {
+	if (type != other_p->type) {
+		return false;
+	}
+	auto other = (const CopyDatabaseStatement &)*other_p;
+
+	if (other.from_database != from_database) {
+		return false;
+	}
+	if (other.to_database != to_database) {
+		return false;
+	}
+	if (other.copy_type != copy_type) {
+		return false;
+	}
+	return true;
+}
+
 string CopyDatabaseStatement::ToString() const {
 	string result;
 	result = "COPY FROM DATABASE ";

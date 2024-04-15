@@ -14,6 +14,7 @@ string TableRef::BaseToString(string result) const {
 }
 
 string TableRef::BaseToString(string result, const vector<string> &column_name_alias) const {
+
 	if (!alias.empty()) {
 		result += StringUtil::Format(" AS %s", SQLIdentifier(alias));
 	}

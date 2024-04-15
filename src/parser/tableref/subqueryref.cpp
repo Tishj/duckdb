@@ -24,7 +24,7 @@ bool SubqueryRef::Equals(const TableRef &other_p) const {
 		return false;
 	}
 	auto &other = other_p.Cast<SubqueryRef>();
-	return subquery->Equals(*other.subquery);
+	return subquery->Equals(other.subquery.get());
 }
 
 unique_ptr<TableRef> SubqueryRef::Copy() {

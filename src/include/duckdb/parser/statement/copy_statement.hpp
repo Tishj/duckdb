@@ -31,6 +31,7 @@ protected:
 	CopyStatement(const CopyStatement &other);
 
 public:
+	DUCKDB_API bool Equals(const SQLStatement *other) const override;
 	DUCKDB_API unique_ptr<SQLStatement> Copy() const override;
 
 private:
