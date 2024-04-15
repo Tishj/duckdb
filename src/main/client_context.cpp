@@ -763,6 +763,11 @@ unique_ptr<PendingQueryResult> ClientContext::PendingStatementOrPreparedStatemen
     ClientContextLock &lock, const string &query, unique_ptr<SQLStatement> statement,
     shared_ptr<PreparedStatementData> &prepared, const PendingQueryParameters &parameters) {
 	// check if we are on AutoCommit. In this case we should start a transaction.
+	#ifdef DUCKDB_ALTERNATIVE_VERIFY2
+	if (statement) {
+		statement = statement->Copy();
+	}
+	#endif
 	if (statement && config.AnyVerification()) {
 		// query verification is enabled
 		// create a copy of the statement, and use the copy

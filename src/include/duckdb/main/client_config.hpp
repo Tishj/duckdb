@@ -56,11 +56,7 @@ struct ClientConfig {
 	idx_t max_expression_depth = 1000;
 
 	//! Whether or not aggressive query verification is enabled
-	#ifdef DUCKDB_ALTERNATIVE_VERIFY2
-	bool query_verification_enabled = true;
-	#else
 	bool query_verification_enabled = false;
-	#endif
 	//! Whether or not verification of external operators is enabled, used for testing
 	bool verify_external = false;
 	//! Whether or not verification of fetch row code is enabled, used for testing
