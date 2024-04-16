@@ -551,7 +551,11 @@ unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(vector<unique_ptr<SQ
 			py::gil_scoped_release release;
 			unique_lock<std::mutex> lock(py_connection_lock);
 			auto pending_query = prep->PendingQuery(named_values);
-			res = CompletePendingQuery(*pending_query);
+			if (pending_query->HasError()) {
+				res = make_uniq<MaterializedQueryResult>(pending_query->GetErrorObject());
+			} else {
+				res = CompletePendingQuery(*pending_query);
+			}
 
 			if (res->HasError()) {
 				res->ThrowError();

@@ -66,23 +66,23 @@ py::object PythonTableArrowArrayStreamFactory::ProduceScanner(py::object &arrow_
 	auto &column_list = parameters.projected_columns.columns;
 	auto &filter_to_col = parameters.projected_columns.filter_to_col;
 	bool has_filter = filters && !filters->filters.empty();
-	py::list projection_list = py::cast(column_list);
+	py::dict kwargs = py::dict();
 	if (has_filter) {
 		auto filter = TransformFilter(*filters, parameters.projected_columns.projection_map, filter_to_col,
 		                              client_properties, arrow_table);
-		if (column_list.empty()) {
-			return arrow_scanner(arrow_obj_handle, py::arg("filter") = filter);
-		} else {
-			return arrow_scanner(arrow_obj_handle, py::arg("columns") = projection_list, py::arg("filter") = filter);
-		}
-	} else {
-		if (column_list.empty()) {
-			return arrow_scanner(arrow_obj_handle);
-		} else {
-			return arrow_scanner(arrow_obj_handle, py::arg("columns") = projection_list);
-		}
+		kwargs["filter"] = filter;
+	}
+	if (!column_list.empty()) {
+		py::list projection_list = py::cast(column_list);
+		kwargs["columns"] = projection_list;
+	}
+	try {
+		return arrow_scanner(arrow_obj_handle, **kwargs);
+	} catch (py::error_already_set &e) {
+		throw InvalidInputException(e.what());
 	}
 }
+
 unique_ptr<ArrowArrayStreamWrapper> PythonTableArrowArrayStreamFactory::Produce(uintptr_t factory_ptr,
                                                                                 ArrowStreamParameters &parameters) {
 	py::gil_scoped_acquire acquire;
