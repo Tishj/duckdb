@@ -65,6 +65,28 @@ static void long_running_query(Connection *conn, bool *correct) {
 	*correct = result->HasError();
 }
 
+TEST_CASE("Test concurrent ATTACH", "[attach]") {
+	auto test_directory = TestDirectoryPath();
+	duckdb::DBConfig config;
+	duckdb::DuckDB db("", &config);
+	duckdb::Connection con(db);
+
+	auto db_path = StringUtil::Format("%s/test.db", test_directory);
+	auto attach_query = StringUtil::Format("attach '%s'", db_path);
+
+	REQUIRE_NO_FAIL(con.Query(attach_query));
+	REQUIRE_NO_FAIL(con.Query("create table test.tbl as select 1 as a;"));
+	REQUIRE_NO_FAIL(con.Query("detach test"));
+	REQUIRE_NO_FAIL(con.Query(attach_query));
+	REQUIRE_NO_FAIL(con.Query("select * from test.tbl"));
+
+	duckdb::DBConfig config2;
+	duckdb::DuckDB db2("", &config2);
+	duckdb::Connection con2(db2);
+	REQUIRE_NO_FAIL(con2.Query(attach_query));
+	REQUIRE_NO_FAIL(con2.Query("select * from test.tbl"));
+}
+
 TEST_CASE("Test closing database during long running query", "[api]") {
 	auto db = make_uniq<DuckDB>(nullptr);
 	auto conn = make_uniq<Connection>(*db);
