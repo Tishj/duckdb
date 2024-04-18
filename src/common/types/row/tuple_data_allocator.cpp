@@ -3,13 +3,14 @@
 #include "duckdb/common/types/row/tuple_data_segment.hpp"
 #include "duckdb/common/types/row/tuple_data_states.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include "duckdb/common/fast_mem.hpp"
 
 namespace duckdb {
 
 using ValidityBytes = TupleDataLayout::ValidityBytes;
 
 TupleDataBlock::TupleDataBlock(BufferManager &buffer_manager, idx_t capacity_p) : capacity(capacity_p), size(0) {
-	buffer_manager.Allocate(capacity, false, &handle);
+	buffer_manager.Allocate(MemoryTag::HASH_TABLE, capacity, false, &handle);
 }
 
 TupleDataBlock::TupleDataBlock(TupleDataBlock &&other) noexcept {
@@ -82,6 +83,18 @@ void TupleDataAllocator::Build(TupleDataSegment &segment, TupleDataPinState &pin
 			segment.data_size += chunk_part.total_heap_size;
 		}
 
+		if (layout.HasDestructor()) {
+			const auto base_row_ptr = GetRowPointer(pin_state, chunk_part);
+			for (auto &aggr_idx : layout.GetAggregateDestructorIndices()) {
+				const auto aggr_offset = layout.GetOffsets()[layout.ColumnCount() + aggr_idx];
+				auto &aggr_fun = layout.GetAggregates()[aggr_idx];
+				for (idx_t i = 0; i < next; i++) {
+					duckdb::FastMemset(base_row_ptr + i * layout.GetRowWidth() + aggr_offset, '\0',
+					                   aggr_fun.payload_size);
+				}
+			}
+		}
+
 		offset += next;
 		chunk_part_indices.emplace_back(chunks.size() - 1, chunk.parts.size() - 1);
 	}
@@ -110,12 +123,12 @@ TupleDataChunkPart TupleDataAllocator::BuildChunkPart(TupleDataPinState &pin_sta
 	if (row_blocks.empty() || row_blocks.back().RemainingCapacity() < layout.GetRowWidth()) {
 		row_blocks.emplace_back(buffer_manager, (idx_t)Storage::BLOCK_SIZE);
 	}
-	result.row_block_index = row_blocks.size() - 1;
+	result.row_block_index = NumericCast<uint32_t>(row_blocks.size() - 1);
 	auto &row_block = row_blocks[result.row_block_index];
-	result.row_block_offset = row_block.size;
+	result.row_block_offset = NumericCast<uint32_t>(row_block.size);
 
 	// Set count (might be reduced later when checking heap space)
-	result.count = MinValue<idx_t>(row_block.RemainingCapacity(layout.GetRowWidth()), append_count);
+	result.count = NumericCast<uint32_t>(MinValue(row_block.RemainingCapacity(layout.GetRowWidth()), append_count));
 	if (!layout.AllConstant()) {
 		const auto heap_sizes = FlatVector::GetData<idx_t>(chunk_state.heap_sizes);
 
@@ -138,21 +151,21 @@ TupleDataChunkPart TupleDataAllocator::BuildChunkPart(TupleDataPinState &pin_sta
 				const auto size = MaxValue<idx_t>((idx_t)Storage::BLOCK_SIZE, heap_sizes[append_offset]);
 				heap_blocks.emplace_back(buffer_manager, size);
 			}
-			result.heap_block_index = heap_blocks.size() - 1;
+			result.heap_block_index = NumericCast<uint32_t>(heap_blocks.size() - 1);
 			auto &heap_block = heap_blocks[result.heap_block_index];
-			result.heap_block_offset = heap_block.size;
+			result.heap_block_offset = NumericCast<uint32_t>(heap_block.size);
 
 			const auto heap_remaining = heap_block.RemainingCapacity();
 			if (total_heap_size <= heap_remaining) {
 				// Everything fits
-				result.total_heap_size = total_heap_size;
+				result.total_heap_size = NumericCast<uint32_t>(total_heap_size);
 			} else {
 				// Not everything fits - determine how many we can read next
 				result.total_heap_size = 0;
 				for (idx_t i = 0; i < result.count; i++) {
 					const auto &heap_size = heap_sizes[append_offset + i];
 					if (result.total_heap_size + heap_size > heap_remaining) {
-						result.count = i;
+						result.count = NumericCast<uint32_t>(i);
 						break;
 					}
 					result.total_heap_size += heap_size;
@@ -347,7 +360,8 @@ void TupleDataAllocator::RecomputeHeapPointers(Vector &old_heap_ptrs, const Sele
 			VerifyStrings(type.id(), row_locations, col_idx, base_col_offset, col_offset, offset, count);
 			break;
 		}
-		case PhysicalType::LIST: {
+		case PhysicalType::LIST:
+		case PhysicalType::ARRAY: {
 			for (idx_t i = 0; i < count; i++) {
 				const auto idx = offset + i;
 				const auto &row_location = row_locations[idx] + base_col_offset;

@@ -74,7 +74,7 @@ public:
 	template <class FUNC, class CATALOG_ENTRY>
 	static pair<FUNC, unique_ptr<FunctionData>> Deserialize(Deserializer &deserializer, CatalogType catalog_type,
 	                                                        vector<unique_ptr<Expression>> &children,
-	                                                        LogicalType return_type) {
+	                                                        LogicalType return_type) { // NOLINT: clang-tidy bug
 		auto &context = deserializer.Get<ClientContext &>();
 		auto entry = DeserializeBase<FUNC, CATALOG_ENTRY>(deserializer, catalog_type);
 		auto &function = entry.first;
@@ -86,9 +86,10 @@ public:
 		} else if (function.bind) {
 			try {
 				bind_data = function.bind(context, function, children);
-			} catch (Exception &ex) {
-				// FIXME
-				throw SerializationException("Error during bind of function in deserialization: %s", ex.what());
+			} catch (std::exception &ex) {
+				ErrorData error(ex);
+				throw SerializationException("Error during bind of function in deserialization: %s",
+				                             error.RawMessage());
 			}
 		}
 		function.return_type = std::move(return_type);

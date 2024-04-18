@@ -45,13 +45,13 @@ protected:
 	virtual void WriteSequence(SequenceCatalogEntry &table, Serializer &serializer);
 	virtual void WriteMacro(ScalarMacroCatalogEntry &table, Serializer &serializer);
 	virtual void WriteTableMacro(TableMacroCatalogEntry &table, Serializer &serializer);
-	virtual void WriteIndex(IndexCatalogEntry &index_catalog, Serializer &serializer);
+	virtual void WriteIndex(IndexCatalogEntry &index_catalog_entry, Serializer &serializer);
 	virtual void WriteType(TypeCatalogEntry &type, Serializer &serializer);
 };
 
 class CheckpointReader {
 public:
-	CheckpointReader(Catalog &catalog) : catalog(catalog) {
+	explicit CheckpointReader(Catalog &catalog) : catalog(catalog) {
 	}
 	virtual ~CheckpointReader() {
 	}
@@ -80,7 +80,7 @@ public:
 	    : CheckpointReader(Catalog::GetCatalog(storage.GetAttached())), storage(storage) {
 	}
 
-	void LoadFromStorage();
+	void LoadFromStorage(optional_ptr<ClientContext> context = nullptr);
 	MetadataManager &GetMetadataManager();
 
 	//! The database
@@ -102,9 +102,9 @@ public:
 	//! connection is available because right now the checkpointing cannot be done online. (TODO)
 	void CreateCheckpoint();
 
-	virtual MetadataWriter &GetMetadataWriter() override;
-	virtual MetadataManager &GetMetadataManager() override;
-	virtual unique_ptr<TableDataWriter> GetTableDataWriter(TableCatalogEntry &table) override;
+	MetadataWriter &GetMetadataWriter() override;
+	MetadataManager &GetMetadataManager() override;
+	unique_ptr<TableDataWriter> GetTableDataWriter(TableCatalogEntry &table) override;
 
 	BlockManager &GetBlockManager();
 

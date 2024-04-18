@@ -36,8 +36,6 @@ struct Type {
   };
 };
 
-extern const std::map<int, const char*> _Type_VALUES_TO_NAMES;
-
 std::ostream& operator<<(std::ostream& out, const Type::type& val);
 
 struct ConvertedType {
@@ -67,8 +65,6 @@ struct ConvertedType {
   };
 };
 
-extern const std::map<int, const char*> _ConvertedType_VALUES_TO_NAMES;
-
 std::ostream& operator<<(std::ostream& out, const ConvertedType::type& val);
 
 struct FieldRepetitionType {
@@ -78,8 +74,6 @@ struct FieldRepetitionType {
     REPEATED = 2
   };
 };
-
-extern const std::map<int, const char*> _FieldRepetitionType_VALUES_TO_NAMES;
 
 std::ostream& operator<<(std::ostream& out, const FieldRepetitionType::type& val);
 
@@ -97,8 +91,6 @@ struct Encoding {
   };
 };
 
-extern const std::map<int, const char*> _Encoding_VALUES_TO_NAMES;
-
 std::ostream& operator<<(std::ostream& out, const Encoding::type& val);
 
 struct CompressionCodec {
@@ -109,11 +101,10 @@ struct CompressionCodec {
     LZO = 3,
     BROTLI = 4,
     LZ4 = 5,
-    ZSTD = 6
+    ZSTD = 6,
+	LZ4_RAW = 7
   };
 };
-
-extern const std::map<int, const char*> _CompressionCodec_VALUES_TO_NAMES;
 
 std::ostream& operator<<(std::ostream& out, const CompressionCodec::type& val);
 
@@ -126,8 +117,6 @@ struct PageType {
   };
 };
 
-extern const std::map<int, const char*> _PageType_VALUES_TO_NAMES;
-
 std::ostream& operator<<(std::ostream& out, const PageType::type& val);
 
 struct BoundaryOrder {
@@ -137,8 +126,6 @@ struct BoundaryOrder {
     DESCENDING = 2
   };
 };
-
-extern const std::map<int, const char*> _BoundaryOrder_VALUES_TO_NAMES;
 
 std::ostream& operator<<(std::ostream& out, const BoundaryOrder::type& val);
 

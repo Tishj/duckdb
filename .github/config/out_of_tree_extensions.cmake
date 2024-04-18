@@ -4,29 +4,43 @@
 # to build duckdb with this configuration run:
 #   EXTENSION_CONFIGS=.github/config/out_of_tree_extensions.cmake make
 #
+#  Note that many of these packages require vcpkg, and a merged manifest must be created to
+#  compile multiple of them.
+#
+#  After setting up vcpkg, build using e.g. the following commands:
+#  USE_MERGED_VCPKG_MANIFEST=1 BUILD_ALL_EXT=1 make extension_configuration
+#  USE_MERGED_VCPKG_MANIFEST=1 BUILD_ALL_EXT=1 make debug
+#
+#  Make sure the VCPKG_TOOLCHAIN_PATH and VCPKG_TARGET_TRIPLET are set. For example:
+#  VCPKG_TOOLCHAIN_PATH=~/vcpkg/scripts/buildsystems/vcpkg.cmake
+#  VCPKG_TARGET_TRIPLET=arm64-osx
 
 ################# ARROW
-if (NOT WIN32)
+if (NOT MINGW)
     duckdb_extension_load(arrow
             LOAD_TESTS DONT_LINK
-            GIT_URL https://github.com/duckdblabs/arrow
-            GIT_TAG 1b5b9649d28cd7f79496fb3f2e4dd7b03bf90ac5
+            GIT_URL https://github.com/duckdb/arrow
+            GIT_TAG 9e10240da11f61ea7fbfe3fc9988ffe672ccd40f
             )
 endif()
 
-################# AWS
-duckdb_extension_load(aws
-        LOAD_TESTS
-        GIT_URL https://github.com/duckdblabs/duckdb_aws
-        GIT_TAG 348ae2625de86ab760f80a43eb76e4441cd01354
-        )
+################## AWS
+if (NOT MINGW)
+    duckdb_extension_load(aws
+            LOAD_TESTS
+            GIT_URL https://github.com/duckdb/duckdb_aws
+            GIT_TAG f7b8729f1cce5ada5d4add70e1486de50763fb97
+            )
+endif()
 
 ################# AZURE
-duckdb_extension_load(azure
-        LOAD_TESTS
-        GIT_URL https://github.com/duckdblabs/duckdb_azure
-        GIT_TAG 10d4cf6a0ed00ea8aecb9bf1433fdfff166e6c44
-        )
+if (NOT MINGW)
+    duckdb_extension_load(azure
+            LOAD_TESTS
+            GIT_URL https://github.com/duckdb/duckdb_azure
+            GIT_TAG 09623777a366572bfb8fa53e47acdf72133a360e
+            )
+endif()
 
 ################# ICEBERG
 # Windows tests for iceberg currently not working
@@ -36,29 +50,33 @@ else ()
     set(LOAD_ICEBERG_TESTS "")
 endif()
 
-duckdb_extension_load(iceberg
-        ${LOAD_ICEBERG_TESTS}
-        GIT_URL https://github.com/duckdblabs/duckdb_iceberg
-        GIT_TAG 51ba9564859698c29db4165f17143a2f6af2bb18
-        )
+if (NOT MINGW)
+    duckdb_extension_load(iceberg
+            ${LOAD_ICEBERG_TESTS}
+            GIT_URL https://github.com/duckdb/duckdb_iceberg
+            GIT_TAG d89423c2ff90a0b98a093a133c8dfe2a55b9e092
+            )
+endif()
 
 ################# POSTGRES_SCANNER
 # Note: tests for postgres_scanner are currently not run. All of them need a postgres server running. One test
 #       uses a remote rds server but that's not something we want to run here.
-duckdb_extension_load(postgres_scanner
-        DONT_LINK
-        GIT_URL https://github.com/duckdblabs/postgres_scanner
-        GIT_TAG 844f46536b5d5f9e65b57b7ff92f4ce3346e2829
-        )
+if (NOT MINGW)
+    duckdb_extension_load(postgres_scanner
+            DONT_LINK
+            GIT_URL https://github.com/duckdb/postgres_scanner
+            GIT_TAG 96206f41d5ca7015920a66b54e936c986fe0b0f8
+            )
+endif()
 
 ################# SPATIAL
 duckdb_extension_load(spatial
-        DONT_LINK LOAD_TESTS
-        GIT_URL https://github.com/duckdblabs/duckdb_spatial.git
-        GIT_TAG 36e5a126976ac3b66716893360ef7e6295707082
-        INCLUDE_DIR spatial/include
-        TEST_DIR test/sql
-        )
+    DONT_LINK LOAD_TESTS
+    GIT_URL https://github.com/duckdb/duckdb_spatial.git
+    GIT_TAG 8ac803e986ccda34f32dee82a7faae95b72b3492
+    INCLUDE_DIR spatial/include
+    TEST_DIR test/sql
+    )
 
 ################# SQLITE_SCANNER
 # Static linking on windows does not properly work due to symbol collision
@@ -70,15 +88,24 @@ endif()
 
 duckdb_extension_load(sqlite_scanner
         ${STATIC_LINK_SQLITE} LOAD_TESTS
-        GIT_URL https://github.com/duckdblabs/sqlite_scanner
-        GIT_TAG 3443b2999ae1e68a108568fd32145705237a5760
+        GIT_URL https://github.com/duckdb/sqlite_scanner
+        GIT_TAG 091197efb34579c7195afa43dfb5925023c915c0
         )
 
 ################# SUBSTRAIT
 if (NOT WIN32)
     duckdb_extension_load(substrait
             LOAD_TESTS DONT_LINK
-            GIT_URL https://github.com/duckdblabs/substrait
-            GIT_TAG 5d621b1d7d16fe86f8b1930870c8e6bf05bcb92a
+            GIT_URL https://github.com/duckdb/substrait
+            GIT_TAG 1116fb580edd3e26e675436dbdbdf4a0aa5e456e
             )
 endif()
+
+
+################# VSS
+duckdb_extension_load(vss
+        LOAD_TESTS
+        GIT_URL https://github.com/duckdb/duckdb_vss
+        GIT_TAG 8145f41d97178e82bed3376215eb8d02bcf1eec5
+        TEST_DIR test/sql
+    )

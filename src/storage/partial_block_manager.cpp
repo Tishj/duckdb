@@ -95,7 +95,7 @@ bool PartialBlockManager::GetPartialBlock(idx_t segment_size, unique_ptr<Partial
 	return true;
 }
 
-void PartialBlockManager::RegisterPartialBlock(PartialBlockAllocation &&allocation) {
+void PartialBlockManager::RegisterPartialBlock(PartialBlockAllocation allocation) {
 	auto &state = allocation.partial_block->state;
 	D_ASSERT(checkpoint_type != CheckpointType::FULL_CHECKPOINT || state.block_id >= 0);
 	if (state.block_use_count < max_use_count) {
@@ -119,7 +119,7 @@ void PartialBlockManager::RegisterPartialBlock(PartialBlockAllocation &&allocati
 		// Free the page with the least space free.
 		auto itr = partially_filled_blocks.begin();
 		block_to_free = std::move(itr->second);
-		free_space = state.block_size - itr->first;
+		free_space = itr->first;
 		partially_filled_blocks.erase(itr);
 	}
 	// Flush any block that we're not going to reuse.
@@ -139,7 +139,7 @@ void PartialBlockManager::Merge(PartialBlockManager &other) {
 		if (!e.second) {
 			throw InternalException("Empty partially filled block found");
 		}
-		auto used_space = Storage::BLOCK_SIZE - e.first;
+		auto used_space = NumericCast<uint32_t>(Storage::BLOCK_SIZE - e.first);
 		if (HasBlockAllocation(used_space)) {
 			// we can merge this block into an existing block - merge them
 			// merge blocks

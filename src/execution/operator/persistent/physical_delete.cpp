@@ -47,6 +47,7 @@ SinkResultType PhysicalDelete::Sink(ExecutionContext &context, DataChunk &chunk,
 
 	lock_guard<mutex> delete_guard(gstate.delete_lock);
 	if (return_chunk) {
+		ustate.delete_chunk.Reset();
 		row_identifiers.Flatten(chunk.size());
 		table.Fetch(transaction, ustate.delete_chunk, column_ids, row_identifiers, chunk.size(), cfs);
 		gstate.return_collection.Append(ustate.delete_chunk);
@@ -90,7 +91,7 @@ SourceResultType PhysicalDelete::GetData(ExecutionContext &context, DataChunk &c
 	auto &g = sink_state->Cast<DeleteGlobalState>();
 	if (!return_chunk) {
 		chunk.SetCardinality(1);
-		chunk.SetValue(0, 0, Value::BIGINT(g.deleted_count));
+		chunk.SetValue(0, 0, Value::BIGINT(NumericCast<int64_t>(g.deleted_count)));
 		return SourceResultType::FINISHED;
 	}
 

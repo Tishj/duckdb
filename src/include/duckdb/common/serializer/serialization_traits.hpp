@@ -4,12 +4,14 @@
 #include <atomic>
 
 #include "duckdb/common/vector.hpp"
+#include "duckdb/common/map.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/common/set.hpp"
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/optional_ptr.hpp"
+#include "duckdb/common/optional_idx.hpp"
 
 namespace duckdb {
 
@@ -23,6 +25,7 @@ const field_id_t MESSAGE_TERMINATOR_FIELD_ID = 0xFFFF;
 template <class...>
 using void_t = void;
 
+// NOLINTBEGIN: match STL case
 // Check for anything implementing a `void Serialize(Serializer &Serializer)` method
 template <typename T, typename = T>
 struct has_serialize : std::false_type {};
@@ -144,6 +147,8 @@ struct is_atomic<std::atomic<T>> : std::true_type {
 	typedef T TYPE;
 };
 
+// NOLINTEND
+
 struct SerializationDefaultValue {
 
 	template <typename T = void>
@@ -256,6 +261,16 @@ struct SerializationDefaultValue {
 	template <typename T = void>
 	static inline bool IsDefault(const typename std::enable_if<std::is_same<T, string>::value, T>::type &value) {
 		return value.empty();
+	}
+
+	template <typename T = void>
+	static inline typename std::enable_if<std::is_same<T, optional_idx>::value, T>::type GetDefault() {
+		return optional_idx();
+	}
+
+	template <typename T = void>
+	static inline bool IsDefault(const typename std::enable_if<std::is_same<T, optional_idx>::value, T>::type &value) {
+		return !value.IsValid();
 	}
 };
 

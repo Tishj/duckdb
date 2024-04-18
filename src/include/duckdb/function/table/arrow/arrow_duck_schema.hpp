@@ -35,21 +35,21 @@ enum class ArrowDateTimeType : uint8_t {
 class ArrowType {
 public:
 	//! From a DuckDB type
-	ArrowType(LogicalType type_p)
+	ArrowType(LogicalType type_p) // NOLINT: allow implicit conversion
 	    : type(std::move(type_p)), size_type(ArrowVariableSizeType::NORMAL),
 	      date_time_precision(ArrowDateTimeType::DAYS) {};
 
 	//! From a DuckDB type + fixed_size
-	ArrowType(LogicalType type_p, idx_t fixed_size_p)
+	ArrowType(LogicalType type_p, idx_t fixed_size_p) // NOLINT: work-around bug in clang-tidy
 	    : type(std::move(type_p)), size_type(ArrowVariableSizeType::FIXED_SIZE),
 	      date_time_precision(ArrowDateTimeType::DAYS), fixed_size(fixed_size_p) {};
 
 	//! From a DuckDB type + variable size type
-	ArrowType(LogicalType type_p, ArrowVariableSizeType size_type_p)
+	ArrowType(LogicalType type_p, ArrowVariableSizeType size_type_p) // NOLINT: work-around bug in clang-tidy
 	    : type(std::move(type_p)), size_type(size_type_p), date_time_precision(ArrowDateTimeType::DAYS) {};
 
 	//! From a DuckDB type + datetime type
-	ArrowType(LogicalType type_p, ArrowDateTimeType date_time_precision_p)
+	ArrowType(LogicalType type_p, ArrowDateTimeType date_time_precision_p) // NOLINT: work-around bug in clang-tidy
 	    : type(std::move(type_p)), size_type(ArrowVariableSizeType::NORMAL),
 	      date_time_precision(date_time_precision_p) {};
 
@@ -57,7 +57,7 @@ public:
 
 	void AssignChildren(vector<unique_ptr<ArrowType>> children);
 
-	const LogicalType &GetDuckType() const;
+	LogicalType GetDuckType(bool use_dictionary = false) const;
 
 	ArrowVariableSizeType GetSizeType() const;
 
@@ -65,9 +65,15 @@ public:
 
 	void SetDictionary(unique_ptr<ArrowType> dictionary);
 
+	bool HasDictionary() const;
+
 	ArrowDateTimeType GetDateTimeType() const;
 
+	void SetRunEndEncoded();
+
 	const ArrowType &GetDictionary() const;
+
+	bool RunEndEncoded() const;
 
 	const ArrowType &operator[](idx_t index) const;
 
@@ -83,6 +89,8 @@ private:
 	idx_t fixed_size = 0;
 	//! Hold the optional type if the array is a dictionary
 	unique_ptr<ArrowType> dictionary_type;
+	//! Is run-end-encoded
+	bool run_end_encoded = false;
 };
 
 using arrow_column_map_t = unordered_map<idx_t, unique_ptr<ArrowType>>;

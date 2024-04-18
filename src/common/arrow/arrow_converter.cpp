@@ -187,7 +187,11 @@ void SetArrowFormat(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &child, co
 		break;
 	}
 	case LogicalTypeId::LIST: {
-		child.format = "+l";
+		if (options.arrow_offset_size == ArrowOffsetSize::LARGE) {
+			child.format = "+L";
+		} else {
+			child.format = "+l";
+		}
 		child.n_children = 1;
 		root_holder.nested_children.emplace_back();
 		root_holder.nested_children.back().resize(1);
@@ -202,7 +206,7 @@ void SetArrowFormat(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &child, co
 	case LogicalTypeId::STRUCT: {
 		child.format = "+s";
 		auto &child_types = StructType::GetChildTypes(type);
-		child.n_children = child_types.size();
+		child.n_children = NumericCast<int64_t>(child_types.size());
 		root_holder.nested_children.emplace_back();
 		root_holder.nested_children.back().resize(child_types.size());
 		root_holder.nested_children_ptr.emplace_back();
@@ -222,6 +226,23 @@ void SetArrowFormat(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &child, co
 		}
 		break;
 	}
+	case LogicalTypeId::ARRAY: {
+		auto array_size = ArrayType::GetSize(type);
+		auto &child_type = ArrayType::GetChildType(type);
+		auto format = "+w:" + to_string(array_size);
+		root_holder.owned_type_names.push_back(AddName(format));
+		child.format = root_holder.owned_type_names.back().get();
+
+		child.n_children = 1;
+		root_holder.nested_children.emplace_back();
+		root_holder.nested_children.back().resize(1);
+		root_holder.nested_children_ptr.emplace_back();
+		root_holder.nested_children_ptr.back().push_back(&root_holder.nested_children.back()[0]);
+		InitializeChild(root_holder.nested_children.back()[0], root_holder);
+		child.children = &root_holder.nested_children_ptr.back()[0];
+		SetArrowFormat(root_holder, **child.children, child_type, options);
+		break;
+	}
 	case LogicalTypeId::MAP: {
 		SetArrowMapFormat(root_holder, child, type, options);
 		break;
@@ -230,7 +251,7 @@ void SetArrowFormat(DuckDBArrowSchemaHolder &root_holder, ArrowSchema &child, co
 		std::string format = "+us:";
 
 		auto &child_types = UnionType::CopyMemberTypes(type);
-		child.n_children = child_types.size();
+		child.n_children = NumericCast<int64_t>(child_types.size());
 		root_holder.nested_children.emplace_back();
 		root_holder.nested_children.back().resize(child_types.size());
 		root_holder.nested_children_ptr.emplace_back();
@@ -302,7 +323,7 @@ void ArrowConverter::ToArrowSchema(ArrowSchema *out_schema, const vector<Logical
 		root_holder->children_ptrs[i] = &root_holder->children[i];
 	}
 	out_schema->children = root_holder->children_ptrs.data();
-	out_schema->n_children = column_count;
+	out_schema->n_children = NumericCast<int64_t>(column_count);
 
 	// Store the schema
 	out_schema->format = "+s"; // struct apparently

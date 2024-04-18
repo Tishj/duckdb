@@ -2,9 +2,10 @@
 
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/common/serializer/binary_serializer.hpp"
 #include "duckdb/storage/table/column_checkpoint_state.hpp"
 #include "duckdb/storage/table/table_statistics.hpp"
-#include "duckdb/common/serializer/binary_serializer.hpp"
+#include "duckdb/parallel/task_scheduler.hpp"
 
 namespace duckdb {
 
@@ -24,9 +25,12 @@ CompressionType TableDataWriter::GetColumnCompressionType(idx_t i) {
 	return table.GetColumn(LogicalIndex(i)).CompressionType();
 }
 
-void TableDataWriter::AddRowGroup(RowGroupPointer &&row_group_pointer, unique_ptr<RowGroupWriter> &&writer) {
+void TableDataWriter::AddRowGroup(RowGroupPointer &&row_group_pointer, unique_ptr<RowGroupWriter> writer) {
 	row_group_pointers.push_back(std::move(row_group_pointer));
-	writer.reset();
+}
+
+TaskScheduler &TableDataWriter::GetScheduler() {
+	return TaskScheduler::GetScheduler(table.ParentCatalog().GetDatabase());
 }
 
 SingleFileTableDataWriter::SingleFileTableDataWriter(SingleFileCheckpointWriter &checkpoint_manager,
@@ -38,8 +42,8 @@ unique_ptr<RowGroupWriter> SingleFileTableDataWriter::GetRowGroupWriter(RowGroup
 	return make_uniq<SingleFileRowGroupWriter>(table, checkpoint_manager.partial_block_manager, table_data_writer);
 }
 
-void SingleFileTableDataWriter::FinalizeTable(TableStatistics &&global_stats, DataTableInfo *info,
-                                              Serializer &metadata_serializer) {
+void SingleFileTableDataWriter::FinalizeTable(const TableStatistics &global_stats, DataTableInfo *info,
+                                              Serializer &serializer) {
 	// store the current position in the metadata writer
 	// this is where the row groups for this table start
 	auto pointer = table_data_writer.GetMetaBlockPointer();
@@ -66,13 +70,16 @@ void SingleFileTableDataWriter::FinalizeTable(TableStatistics &&global_stats, Da
 		row_group_serializer.End();
 	}
 
-	auto index_pointers = info->indexes.SerializeIndexes(table_data_writer);
-
 	// Now begin the metadata as a unit
 	// Pointer to the table itself goes to the metadata stream.
-	metadata_serializer.WriteProperty(101, "table_pointer", pointer);
-	metadata_serializer.WriteProperty(102, "total_rows", total_rows);
-	metadata_serializer.WriteProperty(103, "index_pointers", index_pointers);
+	serializer.WriteProperty(101, "table_pointer", pointer);
+	serializer.WriteProperty(102, "total_rows", total_rows);
+
+	auto index_storage_infos = info->indexes.GetStorageInfos();
+	// write empty block pointers for forwards compatibility
+	vector<BlockPointer> compat_block_pointers;
+	serializer.WriteProperty(103, "index_pointers", compat_block_pointers);
+	serializer.WritePropertyWithDefault(104, "index_storage_infos", index_storage_infos);
 }
 
 } // namespace duckdb

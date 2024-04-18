@@ -33,7 +33,7 @@ MetadataHandle MetadataManager::AllocateHandle() {
 
 	// select the first free metadata block we can find
 	MetadataPointer pointer;
-	pointer.block_index = free_block;
+	pointer.block_index = UnsafeNumericCast<idx_t>(free_block);
 	auto &block = blocks[free_block];
 	if (block.block->BlockId() < MAXIMUM_BLOCK) {
 		// this block is a disk-backed block, yet we are planning to write to it
@@ -67,7 +67,7 @@ void MetadataManager::ConvertToTransient(MetadataBlock &block) {
 
 	// allocate a new transient block to replace it
 	shared_ptr<BlockHandle> new_block;
-	auto new_buffer = buffer_manager.Allocate(Storage::BLOCK_SIZE, false, &new_block);
+	auto new_buffer = buffer_manager.Allocate(MemoryTag::METADATA, Storage::BLOCK_SIZE, false, &new_block);
 
 	// copy the data to the transient block
 	memcpy(new_buffer.Ptr(), old_buffer.Ptr(), Storage::BLOCK_SIZE);
@@ -82,10 +82,10 @@ block_id_t MetadataManager::AllocateNewBlock() {
 	auto new_block_id = GetNextBlockId();
 
 	MetadataBlock new_block;
-	auto handle = buffer_manager.Allocate(Storage::BLOCK_SIZE, false, &new_block.block);
+	auto handle = buffer_manager.Allocate(MemoryTag::METADATA, Storage::BLOCK_SIZE, false, &new_block.block);
 	new_block.block_id = new_block_id;
 	for (idx_t i = 0; i < METADATA_BLOCK_COUNT; i++) {
-		new_block.free_blocks.push_back(METADATA_BLOCK_COUNT - i - 1);
+		new_block.free_blocks.push_back(NumericCast<uint8_t>(METADATA_BLOCK_COUNT - i - 1));
 	}
 	// zero-initialize the handle
 	memset(handle.Ptr(), 0, Storage::BLOCK_SIZE);
@@ -134,8 +134,8 @@ MetadataPointer MetadataManager::FromDiskPointer(MetaBlockPointer pointer) {
 		                        pointer.block_pointer);
 	} // LCOV_EXCL_STOP
 	MetadataPointer result;
-	result.block_index = block_id;
-	result.index = index;
+	result.block_index = UnsafeNumericCast<idx_t>(block_id);
+	result.index = UnsafeNumericCast<uint8_t>(index);
 	return result;
 }
 
@@ -165,7 +165,7 @@ MetaBlockPointer MetadataManager::FromBlockPointer(BlockPointer block_pointer) {
 	D_ASSERT(offset < MetadataManager::METADATA_BLOCK_SIZE);
 	MetaBlockPointer result;
 	result.block_pointer = idx_t(block_pointer.block_id) | index << 56ULL;
-	result.offset = offset;
+	result.offset = UnsafeNumericCast<uint32_t>(offset);
 	return result;
 }
 
@@ -247,7 +247,7 @@ void MetadataBlock::FreeBlocksFromInteger(idx_t free_list) {
 		auto index = i - 1;
 		idx_t mask = idx_t(1) << index;
 		if (free_list & mask) {
-			free_blocks.push_back(index);
+			free_blocks.push_back(UnsafeNumericCast<uint8_t>(index));
 		}
 	}
 }

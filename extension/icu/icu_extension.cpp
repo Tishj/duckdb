@@ -221,9 +221,8 @@ static void SetICUCalendar(ClientContext &context, SetScope scope, Value &parame
 	}
 }
 
-void IcuExtension::Load(DuckDB &ddb) {
+static void LoadInternal(DuckDB &ddb) {
 	auto &db = *ddb.instance;
-	auto &catalog = Catalog::GetSystemCatalog(db);
 
 	// iterate over all the collations
 	int32_t count;
@@ -239,7 +238,7 @@ void IcuExtension::Load(DuckDB &ddb) {
 		}
 		collation = StringUtil::Lower(collation);
 
-		CreateCollationInfo info(collation, GetICUFunction(collation), false, true);
+		CreateCollationInfo info(collation, GetICUFunction(collation), false, false);
 		ExtensionUtil::RegisterCollation(db, info);
 	}
 	ScalarFunction sort_key("icu_sort_key", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
@@ -276,6 +275,10 @@ void IcuExtension::Load(DuckDB &ddb) {
 	ExtensionUtil::RegisterFunction(db, cal_names);
 }
 
+void IcuExtension::Load(DuckDB &ddb) {
+	LoadInternal(ddb);
+}
+
 std::string IcuExtension::Name() {
 	return "icu";
 }
@@ -286,7 +289,7 @@ extern "C" {
 
 DUCKDB_EXTENSION_API void icu_init(duckdb::DatabaseInstance &db) { // NOLINT
 	duckdb::DuckDB db_wrapper(db);
-	db_wrapper.LoadExtension<duckdb::IcuExtension>();
+	duckdb::LoadInternal(db_wrapper);
 }
 
 DUCKDB_EXTENSION_API const char *icu_version() { // NOLINT

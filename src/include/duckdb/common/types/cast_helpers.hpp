@@ -9,10 +9,12 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/types/string_type.hpp"
 #include "duckdb/common/types/decimal.hpp"
 #include "duckdb/common/types/interval.hpp"
 #include "duckdb/common/types/hugeint.hpp"
+#include "duckdb/common/types/uhugeint.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "fmt/format.h"
 
@@ -31,7 +33,7 @@ public:
 	template <class SIGNED, class UNSIGNED>
 	static int SignedLength(SIGNED value) {
 		int sign = -(value < 0);
-		UNSIGNED unsigned_value = (value ^ sign) - sign;
+		UNSIGNED unsigned_value = UnsafeNumericCast<UNSIGNED>((value ^ sign) - sign);
 		return UnsignedLength(unsigned_value) - sign;
 	}
 
@@ -42,26 +44,27 @@ public:
 			// Integer division is slow so do it for a group of two digits instead
 			// of for every digit. The idea comes from the talk by Alexandrescu
 			// "Three Optimization Tips for C++".
-			auto index = static_cast<unsigned>((value % 100) * 2);
+			auto index = NumericCast<unsigned>((value % 100) * 2);
 			value /= 100;
 			*--ptr = duckdb_fmt::internal::data::digits[index + 1];
 			*--ptr = duckdb_fmt::internal::data::digits[index];
 		}
 		if (value < 10) {
-			*--ptr = static_cast<char>('0' + value);
+			*--ptr = NumericCast<char>('0' + value);
 			return ptr;
 		}
-		auto index = static_cast<unsigned>(value * 2);
+		auto index = NumericCast<unsigned>(value * 2);
 		*--ptr = duckdb_fmt::internal::data::digits[index + 1];
 		*--ptr = duckdb_fmt::internal::data::digits[index];
 		return ptr;
 	}
 
-	template <class SIGNED, class UNSIGNED>
-	static string_t FormatSigned(SIGNED value, Vector &vector) {
-		int sign = -(value < 0);
-		UNSIGNED unsigned_value = UNSIGNED(value ^ sign) - sign;
-		int length = UnsignedLength<UNSIGNED>(unsigned_value) - sign;
+	template <class T>
+	static string_t FormatSigned(T value, Vector &vector) {
+		typedef typename MakeUnsigned<T>::type unsigned_t;
+		int8_t sign = -(value < 0);
+		unsigned_t unsigned_value = unsigned_t(value ^ T(sign)) + unsigned_t(AbsValue(sign));
+		auto length = UnsafeNumericCast<idx_t>(UnsignedLength<unsigned_t>(unsigned_value) + AbsValue(sign));
 		string_t result = StringVector::EmptyString(vector, length);
 		auto dataptr = result.GetDataWriteable();
 		auto endptr = dataptr + length;
@@ -91,6 +94,9 @@ int NumericHelper::UnsignedLength(uint64_t value);
 template <>
 std::string NumericHelper::ToString(hugeint_t value);
 
+template <>
+std::string NumericHelper::ToString(uhugeint_t value);
+
 struct DecimalToString {
 	template <class SIGNED, class UNSIGNED>
 	static int DecimalLength(SIGNED value, uint8_t width, uint8_t scale) {
@@ -118,16 +124,18 @@ struct DecimalToString {
 			*dst = '-';
 		}
 		if (scale == 0) {
-			NumericHelper::FormatUnsigned<UNSIGNED>(value, end);
+			NumericHelper::FormatUnsigned<UNSIGNED>(UnsafeNumericCast<UNSIGNED>(value), end);
 			return;
 		}
 		// we write two numbers:
 		// the numbers BEFORE the decimal (major)
 		// and the numbers AFTER the decimal (minor)
-		UNSIGNED minor = value % (UNSIGNED)NumericHelper::POWERS_OF_TEN[scale];
-		UNSIGNED major = value / (UNSIGNED)NumericHelper::POWERS_OF_TEN[scale];
+		auto minor =
+		    UnsafeNumericCast<UNSIGNED>(value) % UnsafeNumericCast<UNSIGNED>(NumericHelper::POWERS_OF_TEN[scale]);
+		auto major =
+		    UnsafeNumericCast<UNSIGNED>(value) / UnsafeNumericCast<UNSIGNED>(NumericHelper::POWERS_OF_TEN[scale]);
 		// write the number after the decimal
-		dst = NumericHelper::FormatUnsigned<UNSIGNED>(minor, end);
+		dst = NumericHelper::FormatUnsigned<UNSIGNED>(UnsafeNumericCast<UNSIGNED>(minor), end);
 		// (optionally) pad with zeros and add the decimal point
 		while (dst > (end - scale)) {
 			*--dst = '0';
@@ -137,15 +145,15 @@ struct DecimalToString {
 		D_ASSERT(width > scale || major == 0);
 		if (width > scale) {
 			// there are numbers after the comma
-			dst = NumericHelper::FormatUnsigned<UNSIGNED>(major, dst);
+			dst = NumericHelper::FormatUnsigned<UNSIGNED>(UnsafeNumericCast<UNSIGNED>(major), dst);
 		}
 	}
 
 	template <class SIGNED, class UNSIGNED>
 	static string_t Format(SIGNED value, uint8_t width, uint8_t scale, Vector &vector) {
 		int len = DecimalLength<SIGNED, UNSIGNED>(value, width, scale);
-		string_t result = StringVector::EmptyString(vector, len);
-		FormatDecimal<SIGNED, UNSIGNED>(value, width, scale, result.GetDataWriteable(), len);
+		string_t result = StringVector::EmptyString(vector, NumericCast<size_t>(len));
+		FormatDecimal<SIGNED, UNSIGNED>(value, width, scale, result.GetDataWriteable(), UnsafeNumericCast<idx_t>(len));
 		result.Finalize();
 		return result;
 	}
@@ -235,7 +243,7 @@ struct HugeintToStringCast {
 			// the remainder is small (i.e. less than 10000000000000000)
 			ptr = NumericHelper::FormatUnsigned<uint64_t>(remainder, ptr);
 
-			int format_length = startptr - ptr;
+			int format_length = UnsafeNumericCast<int>(startptr - ptr);
 			// pad with zero
 			for (int i = format_length; i < 17; i++) {
 				*--ptr = '0';
@@ -248,10 +256,14 @@ struct HugeintToStringCast {
 	static string_t FormatSigned(hugeint_t value, Vector &vector) {
 		int negative = value.upper < 0;
 		if (negative) {
+			if (value == NumericLimits<hugeint_t>::Minimum()) {
+				string_t result = StringVector::AddString(vector, Hugeint::HUGEINT_MINIMUM_STRING);
+				return result;
+			}
 			Hugeint::NegateInPlace(value);
 		}
 		int length = UnsignedLength(value) + negative;
-		string_t result = StringVector::EmptyString(vector, length);
+		string_t result = StringVector::EmptyString(vector, NumericCast<size_t>(length));
 		auto dataptr = result.GetDataWriteable();
 		auto endptr = dataptr + length;
 		if (value.upper == 0) {
@@ -269,7 +281,9 @@ struct HugeintToStringCast {
 	}
 
 	static int DecimalLength(hugeint_t value, uint8_t width, uint8_t scale) {
+		D_ASSERT(value > NumericLimits<hugeint_t>::Minimum());
 		int negative;
+
 		if (value.upper < 0) {
 			Hugeint::NegateInPlace(value);
 			negative = 1;
@@ -328,12 +342,24 @@ struct HugeintToStringCast {
 
 	static string_t FormatDecimal(hugeint_t value, uint8_t width, uint8_t scale, Vector &vector) {
 		int length = DecimalLength(value, width, scale);
-		string_t result = StringVector::EmptyString(vector, length);
+		string_t result = StringVector::EmptyString(vector, NumericCast<idx_t>(length));
 
 		auto dst = result.GetDataWriteable();
 
 		FormatDecimal(value, width, scale, dst, length);
 
+		result.Finalize();
+		return result;
+	}
+};
+
+struct UhugeintToStringCast {
+	static string_t Format(uhugeint_t value, Vector &vector) {
+		std::string str = value.ToString();
+		string_t result = StringVector::EmptyString(vector, str.length());
+		auto data = result.GetDataWriteable();
+
+		memcpy(data, str.data(), str.length()); // NOLINT: null-termination not required
 		result.Finalize();
 		return result;
 	}
@@ -376,9 +402,9 @@ struct DateToStringCast {
 			ptr[0] = '-';
 			if (date[i] < 10) {
 				ptr[1] = '0';
-				ptr[2] = '0' + date[i];
+				ptr[2] = '0' + UnsafeNumericCast<char>(date[i]);
 			} else {
-				auto index = static_cast<unsigned>(date[i] * 2);
+				auto index = UnsafeNumericCast<idx_t>(date[i] * 2);
 				ptr[1] = duckdb_fmt::internal::data::digits[index];
 				ptr[2] = duckdb_fmt::internal::data::digits[index + 1];
 			}
@@ -386,16 +412,16 @@ struct DateToStringCast {
 		}
 		// optionally add BC to the end of the date
 		if (add_bc) {
-			memcpy(ptr, " (BC)", 5);
+			memcpy(ptr, " (BC)", 5); // NOLINT
 		}
 	}
 };
 
 struct TimeToStringCast {
 	//! Format microseconds to a buffer of length 6. Returns the number of trailing zeros
-	static int32_t FormatMicros(uint32_t microseconds, char micro_buffer[]) {
+	static int32_t FormatMicros(int32_t microseconds, char micro_buffer[]) {
 		char *endptr = micro_buffer + 6;
-		endptr = NumericHelper::FormatUnsigned<uint32_t>(microseconds, endptr);
+		endptr = NumericHelper::FormatUnsigned<int32_t>(microseconds, endptr);
 		while (endptr > micro_buffer) {
 			*--endptr = '0';
 		}
@@ -406,7 +432,7 @@ struct TimeToStringCast {
 			}
 			trailing_zeros++;
 		}
-		return trailing_zeros;
+		return UnsafeNumericCast<int32_t>(trailing_zeros);
 	}
 
 	static idx_t Length(int32_t time[], char micro_buffer[]) {
@@ -424,7 +450,7 @@ struct TimeToStringCast {
 			// we write backwards and pad with zeros to the left
 			// now we figure out how many digits we need to include by looking backwards
 			// and checking how many zeros we encounter
-			length -= FormatMicros(time[3], micro_buffer);
+			length -= NumericCast<idx_t>(FormatMicros(time[3], micro_buffer));
 		}
 		return length;
 	}
@@ -433,9 +459,9 @@ struct TimeToStringCast {
 		D_ASSERT(value >= 0 && value <= 99);
 		if (value < 10) {
 			ptr[0] = '0';
-			ptr[1] = '0' + value;
+			ptr[1] = '0' + UnsafeNumericCast<char>(value);
 		} else {
-			auto index = static_cast<unsigned>(value * 2);
+			auto index = UnsafeNumericCast<unsigned>(value * 2);
 			ptr[0] = duckdb_fmt::internal::data::digits[index];
 			ptr[1] = duckdb_fmt::internal::data::digits[index + 1];
 		}
@@ -461,8 +487,8 @@ struct TimeToStringCast {
 struct IntervalToStringCast {
 	static void FormatSignedNumber(int64_t value, char buffer[], idx_t &length) {
 		int sign = -(value < 0);
-		uint64_t unsigned_value = (value ^ sign) - sign;
-		length += NumericHelper::UnsignedLength<uint64_t>(unsigned_value) - sign;
+		auto unsigned_value = NumericCast<uint64_t>((value ^ sign) - sign);
+		length += NumericCast<idx_t>(NumericHelper::UnsignedLength<uint64_t>(unsigned_value) - sign);
 		auto endptr = buffer + length;
 		endptr = NumericHelper::FormatUnsigned<uint64_t>(unsigned_value, endptr);
 		if (sign) {
@@ -471,7 +497,7 @@ struct IntervalToStringCast {
 	}
 
 	static void FormatTwoDigits(int64_t value, char buffer[], idx_t &length) {
-		TimeToStringCast::FormatTwoDigits(buffer + length, value);
+		TimeToStringCast::FormatTwoDigits(buffer + length, UnsafeNumericCast<int32_t>(value));
 		length += 2;
 	}
 
@@ -487,7 +513,7 @@ struct IntervalToStringCast {
 		// append the name together with a potential "s" (for plurals)
 		memcpy(buffer + length, name, name_len);
 		length += name_len;
-		if (value != 1) {
+		if (value != 1 && value != -1) {
 			buffer[length++] = 's';
 		}
 	}
@@ -543,12 +569,12 @@ struct IntervalToStringCast {
 			FormatTwoDigits(sec, buffer, length);
 			if (micros != 0) {
 				buffer[length++] = '.';
-				auto trailing_zeros = TimeToStringCast::FormatMicros(micros, buffer + length);
-				length += 6 - trailing_zeros;
+				auto trailing_zeros = TimeToStringCast::FormatMicros(NumericCast<int32_t>(micros), buffer + length);
+				length += NumericCast<idx_t>(6 - trailing_zeros);
 			}
 		} else if (length == 0) {
 			// empty interval: default to 00:00:00
-			memcpy(buffer, "00:00:00", 8);
+			memcpy(buffer, "00:00:00", 8); // NOLINT
 			return 8;
 		}
 		return length;

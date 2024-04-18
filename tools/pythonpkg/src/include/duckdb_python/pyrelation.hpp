@@ -31,6 +31,11 @@ class PythonDependencies : public ExternalDependency {
 public:
 	explicit PythonDependencies() : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY) {
 	}
+	~PythonDependencies() override {
+		py::gil_scoped_acquire gil;
+		py_object_list.clear();
+	}
+
 	explicit PythonDependencies(py::function map_function)
 	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY), map_function(std::move(map_function)) {};
 	explicit PythonDependencies(unique_ptr<RegisteredObject> py_object)
@@ -51,6 +56,7 @@ struct DuckDBPyRelation {
 public:
 	explicit DuckDBPyRelation(shared_ptr<Relation> rel);
 	explicit DuckDBPyRelation(unique_ptr<DuckDBPyResult> result);
+	~DuckDBPyRelation();
 
 public:
 	static void Initialize(py::handle &m);
@@ -106,6 +112,7 @@ public:
 	                                     const string &window_spec = "", const string &projected_columns = "");
 	unique_ptr<DuckDBPyRelation> BoolOr(const string &column, const string &groups = "", const string &window_spec = "",
 	                                    const string &projected_columns = "");
+	unique_ptr<DuckDBPyRelation> ValueCounts(const string &column, const string &groups = "");
 	unique_ptr<DuckDBPyRelation> Count(const string &column, const string &groups = "", const string &window_spec = "",
 	                                   const string &projected_columns = "");
 	unique_ptr<DuckDBPyRelation> FAvg(const string &column, const string &groups = "", const string &window_spec = "",
@@ -211,6 +218,8 @@ public:
 
 	duckdb::pyarrow::Table ToArrowTable(idx_t batch_size);
 
+	duckdb::pyarrow::Table ToArrowTableInternal(idx_t batch_size, bool to_polars);
+
 	PolarsDataFrame ToPolars(idx_t batch_size);
 
 	duckdb::pyarrow::RecordBatchReader ToRecordBatch(idx_t batch_size);
@@ -231,7 +240,9 @@ public:
 	           const py::object &header = py::none(), const py::object &quotechar = py::none(),
 	           const py::object &escapechar = py::none(), const py::object &date_format = py::none(),
 	           const py::object &timestamp_format = py::none(), const py::object &quoting = py::none(),
-	           const py::object &encoding = py::none(), const py::object &compression = py::none());
+	           const py::object &encoding = py::none(), const py::object &compression = py::none(),
+	           const py::object &overwrite = py::none(), const py::object &per_thread_output = py::none(),
+	           const py::object &use_tmp_file = py::none(), const py::object &partition_by = py::none());
 
 	// should this return a rel with the new view?
 	unique_ptr<DuckDBPyRelation> CreateView(const string &view_name, bool replace = true);
@@ -260,6 +271,8 @@ public:
 
 	static bool IsRelation(const py::object &object);
 
+	bool CanBeRegisteredBy(Connection &con);
+
 	Relation &GetRel();
 
 	bool ContainsColumnByName(const string &name) const;
@@ -270,7 +283,7 @@ private:
 	                              const string &groups = "", const string &function_parameter = "",
 	                              bool ignore_nulls = false, const string &projected_columns = "",
 	                              const string &window_spec = "");
-	string GenerateExpressionList(const string &function_name, vector<string> &&aggregated_columns,
+	string GenerateExpressionList(const string &function_name, vector<string> aggregated_columns,
 	                              const string &groups = "", const string &function_parameter = "",
 	                              bool ignore_nulls = false, const string &projected_columns = "",
 	                              const string &window_spec = "");

@@ -1,17 +1,14 @@
 #include "catch.hpp"
-
 #include "duckdb.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/main/extension/generated_extension_loader.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "test_helpers.hpp"
-
 #include "sqllogic_test_runner.hpp"
+#include "test_helpers.hpp"
 
 #include <functional>
 #include <string>
 #include <vector>
-
-#include "duckdb/main/extension/generated_extension_loader.hpp"
 
 using namespace duckdb;
 using namespace std;
@@ -62,8 +59,8 @@ static void testRunner() {
 
 		std::size_t found = name.rfind("test/sql");
 		if (found == std::string::npos) {
-			throw Exception("Failed to auto detect working dir for test '" + name +
-			                "' because a non-standard path was used!");
+			throw InvalidInputException("Failed to auto detect working dir for test '" + name +
+			                            "' because a non-standard path was used!");
 		}
 		auto test_working_dir = name.substr(0, found);
 
@@ -206,7 +203,7 @@ void RegisterSqllogictests() {
 	});
 
 #if defined(GENERATED_EXTENSION_HEADERS) && GENERATED_EXTENSION_HEADERS && !defined(DUCKDB_AMALGAMATION)
-	for (auto extension_test_path : loaded_extension_test_paths) {
+	for (const auto &extension_test_path : LoadedExtensionTestPaths()) {
 		listFiles(*fs, extension_test_path, [&](const string &path) {
 			if (endsWith(path, ".test") || endsWith(path, ".test_slow") || endsWith(path, ".test_coverage")) {
 				auto fun = testRunner<false, true>;

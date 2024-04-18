@@ -172,7 +172,7 @@ void FixedSizeFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t ro
 	auto handle = buffer_manager.Pin(segment.block);
 
 	// first fetch the data from the base table
-	auto data_ptr = handle.Ptr() + segment.GetBlockOffset() + row_id * sizeof(T);
+	auto data_ptr = handle.Ptr() + segment.GetBlockOffset() + NumericCast<idx_t>(row_id) * sizeof(T);
 
 	memcpy(FlatVector::GetData(result) + result_idx * sizeof(T), data_ptr, sizeof(T));
 }
@@ -284,6 +284,8 @@ CompressionFunction FixedSizeUncompressed::GetFunction(PhysicalType data_type) {
 		return FixedSizeGetFunction<uint64_t>(data_type);
 	case PhysicalType::INT128:
 		return FixedSizeGetFunction<hugeint_t>(data_type);
+	case PhysicalType::UINT128:
+		return FixedSizeGetFunction<uhugeint_t>(data_type);
 	case PhysicalType::FLOAT:
 		return FixedSizeGetFunction<float>(data_type);
 	case PhysicalType::DOUBLE:

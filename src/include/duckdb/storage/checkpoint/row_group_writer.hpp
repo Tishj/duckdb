@@ -34,9 +34,6 @@ public:
 
 	virtual MetadataWriter &GetPayloadWriter() = 0;
 
-	void RegisterPartialBlock(PartialBlockAllocation &&allocation);
-	PartialBlockAllocation GetBlockAllocation(uint32_t segment_size);
-
 	PartialBlockManager &GetPartialBlockManager() {
 		return partial_block_manager;
 	}
@@ -59,10 +56,9 @@ public:
 	MetadataWriter &table_data_writer;
 
 public:
-	virtual void WriteColumnDataPointers(ColumnCheckpointState &column_checkpoint_state,
-	                                     Serializer &serializer) override;
+	void WriteColumnDataPointers(ColumnCheckpointState &column_checkpoint_state, Serializer &serializer) override;
 
-	virtual MetadataWriter &GetPayloadWriter() override;
+	MetadataWriter &GetPayloadWriter() override;
 };
 
 } // namespace duckdb

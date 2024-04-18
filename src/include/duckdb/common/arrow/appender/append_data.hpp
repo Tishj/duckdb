@@ -27,6 +27,7 @@ typedef void (*finalize_t)(ArrowAppendData &append_data, const LogicalType &type
 // ArrowAppendState
 struct ArrowAppendData {
 	explicit ArrowAppendData(ClientProperties &options_p) : options(options_p) {
+		dictionary.release = nullptr;
 	}
 	// the buffers of the arrow vector
 	ArrowBuffer validity;
@@ -48,6 +49,9 @@ struct ArrowAppendData {
 	unique_ptr<ArrowArray> array;
 	duckdb::array<const void *, 3> buffers = {{nullptr, nullptr, nullptr}};
 	vector<ArrowArray *> child_pointers;
+	// Arrays so the children can be moved
+	vector<ArrowArray> child_arrays;
+	ArrowArray dictionary;
 
 	ClientProperties options;
 };
@@ -55,6 +59,7 @@ struct ArrowAppendData {
 //===--------------------------------------------------------------------===//
 // Append Helper Functions
 //===--------------------------------------------------------------------===//
+
 static void GetBitPosition(idx_t row_idx, idx_t &current_byte, uint8_t &current_bit) {
 	current_byte = row_idx / 8;
 	current_bit = row_idx % 8;

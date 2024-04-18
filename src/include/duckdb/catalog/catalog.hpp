@@ -16,6 +16,9 @@
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/enums/on_entry_not_found.hpp"
+#include "duckdb/common/error_data.hpp"
+#include "duckdb/common/exception/catalog_exception.hpp"
+#include "duckdb/common/enums/catalog_lookup_behavior.hpp"
 #include <functional>
 
 namespace duckdb {
@@ -88,6 +91,7 @@ public:
 	DUCKDB_API static Catalog &GetCatalog(AttachedDatabase &db);
 
 	DUCKDB_API AttachedDatabase &GetAttached();
+	DUCKDB_API const AttachedDatabase &GetAttached() const;
 	DUCKDB_API DatabaseInstance &GetDatabase();
 
 	virtual bool IsDuckCatalog() {
@@ -104,7 +108,7 @@ public:
 	DUCKDB_API idx_t ModifyCatalog();
 
 	//! Returns the catalog name - based on how the catalog was attached
-	DUCKDB_API const string &GetName();
+	DUCKDB_API const string &GetName() const;
 	DUCKDB_API idx_t GetOid();
 	DUCKDB_API virtual string GetCatalogType() = 0;
 
@@ -190,6 +194,10 @@ public:
 	DUCKDB_API optional_ptr<SchemaCatalogEntry> GetSchema(ClientContext &context, const string &name,
 	                                                      OnEntryNotFound if_not_found,
 	                                                      QueryErrorContext error_context = QueryErrorContext());
+	//! Overloadable method for giving warnings on ambiguous naming id.tab due to a database and schema with name id
+	DUCKDB_API virtual bool CheckAmbiguousCatalogOrSchema(ClientContext &context, const string &name) {
+		return !!GetSchema(context, name, OnEntryNotFound::RETURN_NULL);
+	}
 	DUCKDB_API SchemaCatalogEntry &GetSchema(CatalogTransaction transaction, const string &name,
 	                                         QueryErrorContext error_context = QueryErrorContext());
 	DUCKDB_API virtual optional_ptr<SchemaCatalogEntry>
@@ -204,6 +212,7 @@ public:
 	                                                             QueryErrorContext error_context = QueryErrorContext());
 	//! Scans all the schemas in the system one-by-one, invoking the callback for each entry
 	DUCKDB_API virtual void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) = 0;
+
 	//! Gets the "schema.name" entry of the specified type, if entry does not exist behavior depends on OnEntryNotFound
 	DUCKDB_API optional_ptr<CatalogEntry> GetEntry(ClientContext &context, CatalogType type, const string &schema,
 	                                               const string &name, OnEntryNotFound if_not_found,
@@ -238,7 +247,7 @@ public:
 			return nullptr;
 		}
 		if (entry->type != T::Type) {
-			throw CatalogException(error_context.FormatError("%s is not an %s", name, T::Name));
+			throw CatalogException(error_context, "%s is not an %s", name, T::Name);
 		}
 		return &entry->template Cast<T>();
 	}
@@ -272,6 +281,11 @@ public:
 	virtual bool InMemory() = 0;
 	virtual string GetDBPath() = 0;
 
+	//! Whether or not this catalog should search a specific type with the standard priority
+	DUCKDB_API virtual CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const {
+		return CatalogLookupBehavior::STANDARD;
+	}
+
 public:
 	template <class T>
 	static optional_ptr<T> GetEntry(ClientContext &context, const string &catalog_name, const string &schema_name,
@@ -282,7 +296,7 @@ public:
 			return nullptr;
 		}
 		if (entry->type != T::Type) {
-			throw CatalogException(error_context.FormatError("%s is not an %s", name, T::Name));
+			throw CatalogException(error_context, "%s is not an %s", name, T::Name);
 		}
 		return &entry->template Cast<T>();
 	}
@@ -306,13 +320,14 @@ public:
 	//! Autoload the extension required for `configuration_name` or throw a CatalogException
 	static void AutoloadExtensionByConfigName(ClientContext &context, const string &configuration_name);
 	//! Autoload the extension required for `function_name` or throw a CatalogException
-	static bool AutoLoadExtensionByCatalogEntry(ClientContext &context, CatalogType type, const string &entry_name);
+	static bool AutoLoadExtensionByCatalogEntry(DatabaseInstance &db, CatalogType type, const string &entry_name);
 	DUCKDB_API static bool TryAutoLoad(ClientContext &context, const string &extension_name) noexcept;
 
 protected:
 	//! Reference to the database
 	AttachedDatabase &db;
 
+public:
 private:
 	//! Lookup an entry in the schema, returning a lookup with the entry and schema if they exist
 	CatalogEntryLookup TryLookupEntryInternal(CatalogTransaction transaction, CatalogType type, const string &schema,
@@ -347,13 +362,13 @@ private:
 public:
 	template <class TARGET>
 	TARGET &Cast() {
-		D_ASSERT(dynamic_cast<TARGET *>(this));
+		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<TARGET &>(*this);
 	}
 
 	template <class TARGET>
 	const TARGET &Cast() const {
-		D_ASSERT(dynamic_cast<const TARGET *>(this));
+		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
 };

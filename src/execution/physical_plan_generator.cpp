@@ -9,12 +9,13 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/operator/logical_extension_operator.hpp"
 #include "duckdb/planner/operator/list.hpp"
+#include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 
 namespace duckdb {
 
 class DependencyExtractor : public LogicalOperatorVisitor {
 public:
-	explicit DependencyExtractor(DependencyList &dependencies) : dependencies(dependencies) {
+	explicit DependencyExtractor(LogicalDependencyList &dependencies) : dependencies(dependencies) {
 	}
 
 protected:
@@ -27,7 +28,7 @@ protected:
 	}
 
 private:
-	DependencyList &dependencies;
+	LogicalDependencyList &dependencies;
 };
 
 PhysicalPlanGenerator::PhysicalPlanGenerator(ClientContext &context) : context(context) {
@@ -92,9 +93,6 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	case LogicalOperatorType::LOGICAL_LIMIT:
 		plan = CreatePlan(op.Cast<LogicalLimit>());
 		break;
-	case LogicalOperatorType::LOGICAL_LIMIT_PERCENT:
-		plan = CreatePlan(op.Cast<LogicalLimitPercent>());
-		break;
 	case LogicalOperatorType::LOGICAL_SAMPLE:
 		plan = CreatePlan(op.Cast<LogicalSample>());
 		break;
@@ -153,11 +151,11 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	case LogicalOperatorType::LOGICAL_CREATE_INDEX:
 		plan = CreatePlan(op.Cast<LogicalCreateIndex>());
 		break;
+	case LogicalOperatorType::LOGICAL_CREATE_SECRET:
+		plan = CreatePlan(op.Cast<LogicalCreateSecret>());
+		break;
 	case LogicalOperatorType::LOGICAL_EXPLAIN:
 		plan = CreatePlan(op.Cast<LogicalExplain>());
-		break;
-	case LogicalOperatorType::LOGICAL_SHOW:
-		plan = CreatePlan(op.Cast<LogicalShow>());
 		break;
 	case LogicalOperatorType::LOGICAL_DISTINCT:
 		plan = CreatePlan(op.Cast<LogicalDistinct>());
@@ -178,10 +176,12 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	case LogicalOperatorType::LOGICAL_PRAGMA:
 		plan = CreatePlan(op.Cast<LogicalPragma>());
 		break;
+	case LogicalOperatorType::LOGICAL_VACUUM:
+		plan = CreatePlan(op.Cast<LogicalVacuum>());
+		break;
 	case LogicalOperatorType::LOGICAL_TRANSACTION:
 	case LogicalOperatorType::LOGICAL_ALTER:
 	case LogicalOperatorType::LOGICAL_DROP:
-	case LogicalOperatorType::LOGICAL_VACUUM:
 	case LogicalOperatorType::LOGICAL_LOAD:
 	case LogicalOperatorType::LOGICAL_ATTACH:
 	case LogicalOperatorType::LOGICAL_DETACH:
@@ -208,6 +208,9 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	case LogicalOperatorType::LOGICAL_PIVOT:
 		plan = CreatePlan(op.Cast<LogicalPivot>());
 		break;
+	case LogicalOperatorType::LOGICAL_COPY_DATABASE:
+		plan = CreatePlan(op.Cast<LogicalCopyDatabase>());
+		break;
 	case LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR:
 		plan = op.Cast<LogicalExtensionOperator>().CreatePlan(context, *this);
 
@@ -226,6 +229,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	}
 
 	plan->estimated_cardinality = op.estimated_cardinality;
+#ifdef DUCKDB_VERIFY_VECTOR_OPERATOR
+	auto verify = make_uniq<PhysicalVerifyVector>(std::move(plan));
+	plan = std::move(verify);
+#endif
 
 	return plan;
 }

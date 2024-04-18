@@ -43,7 +43,7 @@ struct ApproxCountDistinctFunction {
 	template <class T, class STATE>
 	static void Finalize(STATE &state, T &target, AggregateFinalizeData &finalize_data) {
 		if (state.log) {
-			target = state.log->Count();
+			target = UnsafeNumericCast<T>(state.log->Count());
 		} else {
 			target = 0;
 		}
@@ -129,16 +129,17 @@ AggregateFunctionSet ApproxCountDistinctFun::GetFunctions() {
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::USMALLINT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::UINTEGER));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::UBIGINT));
+	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::UHUGEINT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::TINYINT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::SMALLINT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::BIGINT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::HUGEINT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::FLOAT));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::DOUBLE));
-	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::VARCHAR));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::TIMESTAMP));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::TIMESTAMP_TZ));
 	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::BLOB));
+	approx_count.AddFunction(GetApproxCountDistinctFunction(LogicalType::ANY_PARAMS(LogicalType::VARCHAR, 150)));
 	return approx_count;
 }
 

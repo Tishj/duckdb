@@ -23,7 +23,10 @@ LogicalGet::LogicalGet(idx_t table_index, TableFunction function, unique_ptr<Fun
 }
 
 optional_ptr<TableCatalogEntry> LogicalGet::GetTable() const {
-	return TableScanFunction::GetTableEntry(function, bind_data.get());
+	if (!function.get_bind_info) {
+		return nullptr;
+	}
+	return function.get_bind_info(bind_data.get()).table;
 }
 
 string LogicalGet::ParamsToString() const {
@@ -162,7 +165,7 @@ unique_ptr<LogicalOperator> LogicalGet::Deserialize(Deserializer &deserializer) 
 		deserializer.ReadProperty(208, "input_table_types", result->input_table_types);
 		deserializer.ReadProperty(209, "input_table_names", result->input_table_names);
 		TableFunctionBindInput input(result->parameters, result->named_parameters, result->input_table_types,
-		                             result->input_table_names, function.function_info.get());
+		                             result->input_table_names, function.function_info.get(), nullptr);
 
 		vector<LogicalType> bind_return_types;
 		vector<string> bind_names;

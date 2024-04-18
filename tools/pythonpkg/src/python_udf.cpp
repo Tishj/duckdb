@@ -65,7 +65,7 @@ static void ConvertPyArrowToDataChunk(const py::object &table, Vector &out, Clie
 	vector<LogicalType> input_types;
 	vector<string> input_names;
 
-	auto bind_input = TableFunctionBindInput(children, named_params, input_types, input_names, nullptr);
+	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr);
 	vector<LogicalType> return_types;
 	vector<string> return_names;
 
@@ -141,13 +141,17 @@ static scalar_function_t CreateVectorizedFunction(PyObject *function, PythonExce
 
 			single_array[0] = python_object;
 			single_name[0] = "c0";
-			python_object = py::module_::import("pyarrow").attr("lib").attr("Table").attr("from_arrays")(
-			    single_array, py::arg("names") = single_name);
+			try {
+				python_object = py::module_::import("pyarrow").attr("lib").attr("Table").attr("from_arrays")(
+				    single_array, py::arg("names") = single_name);
+			} catch (py::error_already_set &) {
+				throw InvalidInputException("Could not convert the result into an Arrow Table");
+			}
 		}
 		// Convert the pyarrow result back to a DuckDB datachunk
 		ConvertPyArrowToDataChunk(python_object, result, state.GetContext(), count);
 
-		if (input.AllConstant()) {
+		if (input.size() == 1) {
 			result.SetVectorType(VectorType::CONSTANT_VECTOR);
 		}
 	};
@@ -158,7 +162,7 @@ static scalar_function_t CreateNativeFunction(PyObject *function, PythonExceptio
                                               const ClientProperties &client_properties) {
 	// Through the capture of the lambda, we have access to the function pointer
 	// We just need to make sure that it doesn't get garbage collected
-	scalar_function_t func = [=](DataChunk &input, ExpressionState &state, Vector &result) -> void {
+	scalar_function_t func = [=](DataChunk &input, ExpressionState &state, Vector &result) -> void { // NOLINT
 		py::gil_scoped_acquire gil;
 
 		// owning references
@@ -279,9 +283,20 @@ public:
 		}
 	}
 
-	void AnalyzeSignature(const py::object &udf) {
+	py::object GetSignature(const py::object &udf) {
+		const int32_t PYTHON_3_10_HEX = 0x030a00f0;
+		auto python_version = PY_VERSION_HEX;
+
 		auto signature_func = py::module_::import("inspect").attr("signature");
-		auto signature = signature_func(udf);
+		if (python_version >= PYTHON_3_10_HEX) {
+			return signature_func(udf, py::arg("eval_str") = true);
+		} else {
+			return signature_func(udf);
+		}
+	}
+
+	void AnalyzeSignature(const py::object &udf) {
+		auto signature = GetSignature(udf);
 		auto sig_params = signature.attr("parameters");
 		auto return_annotation = signature.attr("return_annotation");
 		if (!py::none().is(return_annotation)) {
@@ -311,14 +326,19 @@ public:
 
 	ScalarFunction GetFunction(const py::function &udf, PythonExceptionHandling exception_handling, bool side_effects,
 	                           const ClientProperties &client_properties) {
+
+		auto &import_cache = *DuckDBPyConnection::ImportCache();
+		// Import this module, because importing this from a non-main thread causes a segfault
+		(void)import_cache.numpy.core.multiarray();
+
 		scalar_function_t func;
 		if (vectorized) {
 			func = CreateVectorizedFunction(udf.ptr(), exception_handling);
 		} else {
 			func = CreateNativeFunction(udf.ptr(), exception_handling, client_properties);
 		}
-		FunctionSideEffects function_side_effects =
-		    side_effects ? FunctionSideEffects::HAS_SIDE_EFFECTS : FunctionSideEffects::NO_SIDE_EFFECTS;
+		FunctionStability function_side_effects =
+		    side_effects ? FunctionStability::VOLATILE : FunctionStability::CONSISTENT;
 		ScalarFunction scalar_function(name, std::move(parameters), return_type, func, nullptr, nullptr, nullptr,
 		                               nullptr, varargs, function_side_effects, null_handling);
 		return scalar_function;
