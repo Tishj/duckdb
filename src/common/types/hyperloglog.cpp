@@ -1,7 +1,9 @@
 #include "duckdb/common/types/hyperloglog.hpp"
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/field_writer.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
+
 #include "hyperloglog.hpp"
 
 namespace duckdb {
@@ -52,7 +54,7 @@ HyperLogLog *HyperLogLog::MergePointer(HyperLogLog &other) {
 	hlls[1] = other.hll;
 	auto new_hll = duckdb_hll::hll_merge(hlls, 2);
 	if (!new_hll) {
-		throw Exception("Could not merge HLLs");
+		throw InternalException("Could not merge HLLs");
 	}
 	return new HyperLogLog(new_hll);
 }
@@ -88,17 +90,17 @@ unique_ptr<HyperLogLog> HyperLogLog::Copy() {
 	return result;
 }
 
-void HyperLogLog::Serialize(FieldWriter &writer) const {
-	writer.WriteField<HLLStorageType>(HLLStorageType::UNCOMPRESSED);
-	writer.WriteBlob(GetPtr(), GetSize());
+void HyperLogLog::Serialize(Serializer &serializer) const {
+	serializer.WriteProperty(100, "type", HLLStorageType::UNCOMPRESSED);
+	serializer.WriteProperty(101, "data", GetPtr(), GetSize());
 }
 
-unique_ptr<HyperLogLog> HyperLogLog::Deserialize(FieldReader &reader) {
+unique_ptr<HyperLogLog> HyperLogLog::Deserialize(Deserializer &deserializer) {
 	auto result = make_uniq<HyperLogLog>();
-	auto storage_type = reader.ReadRequired<HLLStorageType>();
+	auto storage_type = deserializer.ReadProperty<HLLStorageType>(100, "type");
 	switch (storage_type) {
 	case HLLStorageType::UNCOMPRESSED:
-		reader.ReadBlob(result->GetPtr(), GetSize());
+		deserializer.ReadProperty(101, "data", result->GetPtr(), GetSize());
 		break;
 	default:
 		throw SerializationException("Unknown HyperLogLog storage type!");
@@ -123,6 +125,12 @@ inline uint64_t TemplatedHash(const T &elem) {
 
 template <>
 inline uint64_t TemplatedHash(const hugeint_t &elem) {
+	return TemplatedHash<uint64_t>(Load<uint64_t>(const_data_ptr_cast(&elem.upper))) ^
+	       TemplatedHash<uint64_t>(elem.lower);
+}
+
+template <>
+inline uint64_t TemplatedHash(const uhugeint_t &elem) {
 	return TemplatedHash<uint64_t>(Load<uint64_t>(const_data_ptr_cast(&elem.upper))) ^
 	       TemplatedHash<uint64_t>(elem.lower);
 }
@@ -163,6 +171,8 @@ inline uint64_t HashOtherSize(const_data_ptr_t &data, const idx_t &len) {
 		CreateIntegerRecursive<1>(data, x);
 		break;
 	case 0:
+	default:
+		D_ASSERT((len & 7) == 0);
 		break;
 	}
 	return TemplatedHash<uint64_t>(x);
@@ -224,9 +234,10 @@ static void ComputeHashes(UnifiedVectorFormat &vdata, const LogicalType &type, u
 	case PhysicalType::DOUBLE:
 		return TemplatedComputeHashes<uint64_t>(vdata, count, hashes);
 	case PhysicalType::INT128:
+	case PhysicalType::UINT128:
 	case PhysicalType::INTERVAL:
-		static_assert(sizeof(hugeint_t) == sizeof(interval_t), "ComputeHashes assumes these are the same size!");
-		return TemplatedComputeHashes<hugeint_t>(vdata, count, hashes);
+		static_assert(sizeof(uhugeint_t) == sizeof(interval_t), "ComputeHashes assumes these are the same size!");
+		return TemplatedComputeHashes<uhugeint_t>(vdata, count, hashes);
 	case PhysicalType::VARCHAR:
 		return TemplatedComputeHashes<string_t>(vdata, count, hashes);
 	default:

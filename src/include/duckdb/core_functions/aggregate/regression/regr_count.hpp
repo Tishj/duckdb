@@ -5,6 +5,7 @@
 //
 //
 //===----------------------------------------------------------------------===//
+// REGR_COUNT(y, x)
 
 #pragma once
 
@@ -27,7 +28,7 @@ struct RegrCountFunction {
 
 	template <class T, class STATE>
 	static void Finalize(STATE &state, T &target, AggregateFinalizeData &finalize_data) {
-		target = state;
+		target = static_cast<T>(state);
 	}
 	static bool IgnoreNull() {
 		return true;

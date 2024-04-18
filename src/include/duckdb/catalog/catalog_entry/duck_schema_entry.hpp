@@ -15,7 +15,7 @@ namespace duckdb {
 //! A schema in the catalog
 class DuckSchemaEntry : public SchemaCatalogEntry {
 public:
-	DuckSchemaEntry(Catalog &catalog, string name, bool is_internal);
+	DuckSchemaEntry(Catalog &catalog, CreateSchemaInfo &info);
 
 private:
 	//! The catalog set holding the tables
@@ -41,7 +41,7 @@ public:
 	optional_ptr<CatalogEntry> AddEntry(CatalogTransaction transaction, unique_ptr<StandardEntry> entry,
 	                                    OnCreateConflict on_conflict);
 	optional_ptr<CatalogEntry> AddEntryInternal(CatalogTransaction transaction, unique_ptr<StandardEntry> entry,
-	                                            OnCreateConflict on_conflict, DependencyList dependencies);
+	                                            OnCreateConflict on_conflict, LogicalDependencyList dependencies);
 
 	optional_ptr<CatalogEntry> CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) override;
 	optional_ptr<CatalogEntry> CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) override;
@@ -63,6 +63,8 @@ public:
 	void DropEntry(ClientContext &context, DropInfo &info) override;
 	optional_ptr<CatalogEntry> GetEntry(CatalogTransaction transaction, CatalogType type, const string &name) override;
 	SimilarCatalogEntry GetSimilarEntry(CatalogTransaction transaction, CatalogType type, const string &name) override;
+
+	unique_ptr<CatalogEntry> Copy(ClientContext &context) const override;
 
 	void Verify(Catalog &catalog) override;
 

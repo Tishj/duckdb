@@ -8,6 +8,7 @@
 #include "duckdb/catalog/dependency_manager.hpp"
 #include "duckdb/storage/table/chunk_info.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
+#include "duckdb/storage/table/row_version_manager.hpp"
 
 namespace duckdb {
 
@@ -23,8 +24,9 @@ void CleanupState::CleanupEntry(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::CATALOG_ENTRY: {
 		auto catalog_entry = Load<CatalogEntry *>(data);
 		D_ASSERT(catalog_entry);
-		D_ASSERT(catalog_entry->set);
-		catalog_entry->set->CleanupEntry(*catalog_entry);
+		auto &entry = *catalog_entry;
+		D_ASSERT(entry.set);
+		entry.set->CleanupEntry(entry);
 		break;
 	}
 	case UndoFlags::DELETE_TUPLE: {
@@ -68,8 +70,15 @@ void CleanupState::CleanupDelete(DeleteInfo &info) {
 	indexed_tables[current_table->info->table] = current_table;
 
 	count = 0;
-	for (idx_t i = 0; i < info.count; i++) {
-		row_numbers[count++] = info.vinfo->start + info.rows[i];
+	if (info.is_consecutive) {
+		for (idx_t i = 0; i < info.count; i++) {
+			row_numbers[count++] = UnsafeNumericCast<int64_t>(info.base_row + i);
+		}
+	} else {
+		auto rows = info.GetRows();
+		for (idx_t i = 0; i < info.count; i++) {
+			row_numbers[count++] = UnsafeNumericCast<int64_t>(info.base_row + rows[i]);
+		}
 	}
 	Flush();
 }
@@ -85,7 +94,7 @@ void CleanupState::Flush() {
 	// delete the tuples from all the indexes
 	try {
 		current_table->RemoveFromIndexes(row_identifiers, count);
-	} catch (...) {
+	} catch (...) { // NOLINT: ignore errors here
 	}
 
 	count = 0;

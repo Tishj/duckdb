@@ -4,6 +4,7 @@
 
 #include "duckdb/parser/transformer.hpp"
 #include "duckdb/common/types/decimal.hpp"
+#include "duckdb/common/types/vector.hpp"
 
 namespace duckdb {
 
@@ -13,6 +14,22 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName &type_n
 	}
 	auto stack_checker = StackCheck();
 
+	if (type_name.names->length > 1) {
+		// qualified typename
+		vector<string> names;
+		for (auto cell = type_name.names->head; cell; cell = cell->next) {
+			names.push_back(PGPointerCast<duckdb_libpgquery::PGValue>(cell->data.ptr_value)->val.str);
+		}
+		switch (type_name.names->length) {
+		case 2:
+			return LogicalType::USER(INVALID_CATALOG, std::move(names[0]), std::move(names[1]));
+		case 3:
+			return LogicalType::USER(std::move(names[0]), std::move(names[1]), std::move(names[2]));
+		default:
+			throw ParserException(
+			    "Too many qualifications for type name - expected [catalog.schema.name] or [schema.name]");
+		}
+	}
 	auto name = PGPointerCast<duckdb_libpgquery::PGValue>(type_name.names->tail->data.ptr_value)->val.str;
 	// transform it to the SQL type
 	LogicalTypeId base_type = TransformStringToLogicalTypeId(name);
@@ -21,7 +38,21 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName &type_n
 	if (base_type == LogicalTypeId::LIST) {
 		throw ParserException("LIST is not valid as a stand-alone type");
 	} else if (base_type == LogicalTypeId::ENUM) {
-		throw ParserException("ENUM is not valid as a stand-alone type");
+		if (!type_name.typmods || type_name.typmods->length == 0) {
+			throw ParserException("Enum needs a set of entries");
+		}
+		Vector enum_vector(LogicalType::VARCHAR, NumericCast<idx_t>(type_name.typmods->length));
+		auto string_data = FlatVector::GetData<string_t>(enum_vector);
+		idx_t pos = 0;
+		for (auto node = type_name.typmods->head; node; node = node->next) {
+			auto constant_value = PGPointerCast<duckdb_libpgquery::PGAConst>(node->data.ptr_value);
+			if (constant_value->type != duckdb_libpgquery::T_PGAConst ||
+			    constant_value->val.type != duckdb_libpgquery::T_PGString) {
+				throw ParserException("Enum type requires a set of strings as type modifiers");
+			}
+			string_data[pos++] = StringVector::AddString(enum_vector, constant_value->val.val.str);
+		}
+		return LogicalType::ENUM(enum_vector, NumericCast<idx_t>(type_name.typmods->length));
 	} else if (base_type == LogicalTypeId::STRUCT) {
 		if (!type_name.typmods || type_name.typmods->length == 0) {
 			throw ParserException("Struct needs a name and entries");
@@ -101,7 +132,7 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName &type_n
 		D_ASSERT(!children.empty());
 		result_type = LogicalType::UNION(std::move(children));
 	} else {
-		int64_t width, scale;
+		idx_t width, scale;
 		if (base_type == LogicalTypeId::DECIMAL) {
 			// default decimal width/scale
 			width = 18;
@@ -123,12 +154,12 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName &type_n
 					throw ParserException("Negative modifier not supported");
 				}
 				if (modifier_idx == 0) {
-					width = const_val.val.val.ival;
+					width = NumericCast<idx_t>(const_val.val.val.ival);
 					if (base_type == LogicalTypeId::BIT && const_val.location != -1) {
 						width = 0;
 					}
 				} else if (modifier_idx == 1) {
-					scale = const_val.val.val.ival;
+					scale = NumericCast<idx_t>(const_val.val.val.ival);
 				} else {
 					throw ParserException("A maximum of two modifiers is supported");
 				}
@@ -155,7 +186,7 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName &type_n
 			if (scale > width) {
 				throw ParserException("Scale cannot be bigger than width");
 			}
-			result_type = LogicalType::DECIMAL(width, scale);
+			result_type = LogicalType::DECIMAL(NumericCast<uint8_t>(width), NumericCast<uint8_t>(scale));
 			break;
 		case LogicalTypeId::INTERVAL:
 			if (modifier_idx > 1) {
@@ -209,8 +240,23 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName &type_n
 		// array bounds: turn the type into a list
 		idx_t extra_stack = 0;
 		for (auto cell = type_name.arrayBounds->head; cell != nullptr; cell = cell->next) {
-			result_type = LogicalType::LIST(result_type);
 			StackCheck(extra_stack++);
+			auto val = PGPointerCast<duckdb_libpgquery::PGValue>(cell->data.ptr_value);
+			if (val->type != duckdb_libpgquery::T_PGInteger) {
+				throw ParserException("Expected integer value as array bound");
+			}
+			auto array_size = val->val.ival;
+			if (array_size < 0) {
+				// -1 if bounds are empty
+				result_type = LogicalType::LIST(result_type);
+			} else if (array_size == 0) {
+				// Empty arrays are not supported
+				throw ParserException("Arrays must have a size of at least 1");
+			} else if (array_size > static_cast<int64_t>(ArrayType::MAX_ARRAY_SIZE)) {
+				throw ParserException("Arrays must have a size of at most %d", ArrayType::MAX_ARRAY_SIZE);
+			} else {
+				result_type = LogicalType::ARRAY(result_type, NumericCast<idx_t>(array_size));
+			}
 		}
 	}
 	return result_type;

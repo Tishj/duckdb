@@ -8,6 +8,8 @@
 #include "duckdb/common/chrono.hpp"
 #include "duckdb/common/operator/add.hpp"
 #include "duckdb/common/operator/multiply.hpp"
+#include "duckdb/common/operator/subtract.hpp"
+#include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/common/limits.hpp"
 #include <ctime>
 
@@ -20,6 +22,38 @@ static_assert(sizeof(timestamp_t) == sizeof(int64_t), "timestamp_t was padded");
 // T may be a space
 // Z is optional
 // ISO 8601
+
+// arithmetic operators
+timestamp_t timestamp_t::operator+(const double &value) const {
+	timestamp_t result;
+	if (!TryAddOperator::Operation(this->value, int64_t(value), result.value)) {
+		throw OutOfRangeException("Overflow in timestamp addition");
+	}
+	return result;
+}
+
+int64_t timestamp_t::operator-(const timestamp_t &other) const {
+	int64_t result;
+	if (!TrySubtractOperator::Operation(value, int64_t(other.value), result)) {
+		throw OutOfRangeException("Overflow in timestamp subtraction");
+	}
+	return result;
+}
+
+// in-place operators
+timestamp_t &timestamp_t::operator+=(const int64_t &delta) {
+	if (!TryAddOperator::Operation(value, delta, value)) {
+		throw OutOfRangeException("Overflow in timestamp increment");
+	}
+	return *this;
+}
+
+timestamp_t &timestamp_t::operator-=(const int64_t &delta) {
+	if (!TrySubtractOperator::Operation(value, delta, value)) {
+		throw OutOfRangeException("Overflow in timestamp decrement");
+	}
+	return *this;
+}
 
 bool Timestamp::TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &result, bool &has_offset, string_t &tz) {
 	idx_t pos;
@@ -59,7 +93,10 @@ bool Timestamp::TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &r
 			pos++;
 			has_offset = true;
 		} else if (Timestamp::TryParseUTCOffset(str, pos, len, hour_offset, minute_offset)) {
-			result -= hour_offset * Interval::MICROS_PER_HOUR + minute_offset * Interval::MICROS_PER_MINUTE;
+			const int64_t delta = hour_offset * Interval::MICROS_PER_HOUR + minute_offset * Interval::MICROS_PER_MINUTE;
+			if (!TrySubtractOperator::Operation(result.value, delta, result.value)) {
+				return false;
+			}
 			has_offset = true;
 		} else {
 			// Parse a time zone: / [A-Za-z0-9/_]+/
@@ -72,7 +109,7 @@ bool Timestamp::TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &r
 			}
 			auto tz_len = str + pos - tz_name;
 			if (tz_len) {
-				tz = string_t(tz_name, tz_len);
+				tz = string_t(tz_name, UnsafeNumericCast<uint32_t>(tz_len));
 			}
 			// Note that the caller must reinterpret the instant we return to the given time zone
 		}
@@ -235,10 +272,22 @@ bool Timestamp::TryFromDatetime(date_t date, dtime_t time, timestamp_t &result) 
 	return Timestamp::IsFinite(result);
 }
 
+bool Timestamp::TryFromDatetime(date_t date, dtime_tz_t timetz, timestamp_t &result) {
+	if (!TryFromDatetime(date, timetz.time(), result)) {
+		return false;
+	}
+	// Offset is in seconds
+	const auto offset = int64_t(timetz.offset() * Interval::MICROS_PER_SEC);
+	if (!TryAddOperator::Operation(result.value, -offset, result.value)) {
+		return false;
+	}
+	return Timestamp::IsFinite(result);
+}
+
 timestamp_t Timestamp::FromDatetime(date_t date, dtime_t time) {
 	timestamp_t result;
 	if (!TryFromDatetime(date, time, result)) {
-		throw Exception("Overflow exception in date/time -> timestamp conversion");
+		throw ConversionException("Overflow exception in date/time -> timestamp conversion");
 	}
 	return result;
 }
@@ -260,7 +309,7 @@ timestamp_t Timestamp::GetCurrentTimestamp() {
 	return Timestamp::FromEpochMs(epoch_ms);
 }
 
-timestamp_t Timestamp::FromEpochSeconds(int64_t sec) {
+timestamp_t Timestamp::FromEpochSecondsPossiblyInfinite(int64_t sec) {
 	int64_t result;
 	if (!TryMultiplyOperator::Operation(sec, Interval::MICROS_PER_SEC, result)) {
 		throw ConversionException("Could not convert Timestamp(S) to Timestamp(US)");
@@ -268,7 +317,12 @@ timestamp_t Timestamp::FromEpochSeconds(int64_t sec) {
 	return timestamp_t(result);
 }
 
-timestamp_t Timestamp::FromEpochMs(int64_t ms) {
+timestamp_t Timestamp::FromEpochSeconds(int64_t sec) {
+	D_ASSERT(Timestamp::IsFinite(timestamp_t(sec)));
+	return FromEpochSecondsPossiblyInfinite(sec);
+}
+
+timestamp_t Timestamp::FromEpochMsPossiblyInfinite(int64_t ms) {
 	int64_t result;
 	if (!TryMultiplyOperator::Operation(ms, Interval::MICROS_PER_MSEC, result)) {
 		throw ConversionException("Could not convert Timestamp(MS) to Timestamp(US)");
@@ -276,19 +330,31 @@ timestamp_t Timestamp::FromEpochMs(int64_t ms) {
 	return timestamp_t(result);
 }
 
+timestamp_t Timestamp::FromEpochMs(int64_t ms) {
+	D_ASSERT(Timestamp::IsFinite(timestamp_t(ms)));
+	return FromEpochMsPossiblyInfinite(ms);
+}
+
 timestamp_t Timestamp::FromEpochMicroSeconds(int64_t micros) {
 	return timestamp_t(micros);
 }
 
-timestamp_t Timestamp::FromEpochNanoSeconds(int64_t ns) {
+timestamp_t Timestamp::FromEpochNanoSecondsPossiblyInfinite(int64_t ns) {
 	return timestamp_t(ns / 1000);
 }
 
+timestamp_t Timestamp::FromEpochNanoSeconds(int64_t ns) {
+	D_ASSERT(Timestamp::IsFinite(timestamp_t(ns)));
+	return FromEpochNanoSecondsPossiblyInfinite(ns);
+}
+
 int64_t Timestamp::GetEpochSeconds(timestamp_t timestamp) {
+	D_ASSERT(Timestamp::IsFinite(timestamp));
 	return timestamp.value / Interval::MICROS_PER_SEC;
 }
 
 int64_t Timestamp::GetEpochMs(timestamp_t timestamp) {
+	D_ASSERT(Timestamp::IsFinite(timestamp));
 	return timestamp.value / Interval::MICROS_PER_MSEC;
 }
 
@@ -296,12 +362,28 @@ int64_t Timestamp::GetEpochMicroSeconds(timestamp_t timestamp) {
 	return timestamp.value;
 }
 
+bool Timestamp::TryGetEpochNanoSeconds(timestamp_t timestamp, int64_t &result) {
+	constexpr static const int64_t NANOSECONDS_IN_MICROSECOND = 1000;
+	D_ASSERT(Timestamp::IsFinite(timestamp));
+	if (!TryMultiplyOperator::Operation(timestamp.value, NANOSECONDS_IN_MICROSECOND, result)) {
+		return false;
+	}
+	return true;
+}
+
 int64_t Timestamp::GetEpochNanoSeconds(timestamp_t timestamp) {
 	int64_t result;
-	int64_t ns_in_us = 1000;
-	if (!TryMultiplyOperator::Operation(timestamp.value, ns_in_us, result)) {
+	D_ASSERT(Timestamp::IsFinite(timestamp));
+	if (!TryGetEpochNanoSeconds(timestamp, result)) {
 		throw ConversionException("Could not convert Timestamp(US) to Timestamp(NS)");
 	}
+	return result;
+}
+
+double Timestamp::GetJulianDay(timestamp_t timestamp) {
+	double result = double(Timestamp::GetTime(timestamp).micros);
+	result /= Interval::MICROS_PER_DAY;
+	result += double(Date::ExtractJulianDay(Timestamp::GetDate(timestamp)));
 	return result;
 }
 

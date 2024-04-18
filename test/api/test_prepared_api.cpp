@@ -57,7 +57,7 @@ TEST_CASE("Test type resolution of function with parameter expressions", "[api]"
 
 	// can deduce type of prepared parameter here
 	auto prepared = con.Prepare("select 1 + $1");
-	REQUIRE(!prepared->error);
+	REQUIRE(!prepared->error.HasError());
 
 	result = prepared->Execute(1);
 	REQUIRE(CHECK_COLUMN(result, 0, {2}));
@@ -196,12 +196,12 @@ TEST_CASE("Test incorrect usage of prepared statements API", "[api]") {
 	auto prepare = con.Prepare("SELEC COUNT(*) FROM a WHERE i=$1");
 	// we cannot execute this prepared statement
 	REQUIRE(prepare->HasError());
-	REQUIRE_THROWS(prepare->Execute(12));
+	REQUIRE_FAIL(prepare->Execute(12));
 
 	// cannot prepare multiple statements at once
 	prepare = con.Prepare("SELECT COUNT(*) FROM a WHERE i=$1; SELECT 42+$2;");
 	REQUIRE(prepare->HasError());
-	REQUIRE_THROWS(prepare->Execute(12));
+	REQUIRE_FAIL(prepare->Execute(12));
 
 	// also not in the Query syntax
 	REQUIRE_FAIL(con.Query("SELECT COUNT(*) FROM a WHERE i=$1; SELECT 42+$2", 11));

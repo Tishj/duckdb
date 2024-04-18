@@ -1,5 +1,4 @@
 #include "duckdb_python/numpy/physical_numpy_collector.hpp"
-#include "duckdb/common/types/chunk_collection.hpp"
 #include "duckdb_python/numpy/numpy_query_result.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb_python/numpy/array_wrapper.hpp"
@@ -67,13 +66,14 @@ SinkResultType PhysicalNumpyCollector::Sink(ExecutionContext &context, DataChunk
 	return SinkResultType::NEED_MORE_INPUT;
 }
 
-void PhysicalNumpyCollector::Combine(ExecutionContext &context, GlobalSinkState &gstate_p,
-                                     LocalSinkState &lstate_p) const {
-	auto &gstate = gstate_p.Cast<NumpyCollectorGlobalState>();
-	auto &lstate = lstate_p.Cast<NumpyCollectorLocalState>();
+SinkCombineResultType PhysicalNumpyCollector::Combine(ExecutionContext &context,
+                                                      OperatorSinkCombineInput &input) const {
+	auto &gstate = input.global_state.Cast<NumpyCollectorGlobalState>();
+	auto &lstate = input.local_state.Cast<NumpyCollectorLocalState>();
 
 	lock_guard<mutex> l(gstate.glock);
 	gstate.collections.push_back(std::move(lstate.collection));
+	return SinkCombineResultType::FINISHED;
 }
 
 unique_ptr<GlobalSinkState> PhysicalNumpyCollector::GetGlobalSinkState(ClientContext &context) const {
@@ -83,10 +83,13 @@ unique_ptr<GlobalSinkState> PhysicalNumpyCollector::GetGlobalSinkState(ClientCon
 }
 
 unique_ptr<LocalSinkState> PhysicalNumpyCollector::GetLocalSinkState(ExecutionContext &context) const {
+	auto &client = context.client;
+	auto client_properties = client.GetClientProperties();
 	auto state = make_uniq<NumpyCollectorLocalState>();
 	{
 		py::gil_scoped_acquire gil;
-		state->collection = make_uniq<NumpyResultConversion>(types, STANDARD_VECTOR_SIZE);
+		// FIXME: propagate whether this is to pandas or not?
+		state->collection = make_uniq<NumpyResultConversion>(types, STANDARD_VECTOR_SIZE, client_properties);
 	}
 	return std::move(state);
 }

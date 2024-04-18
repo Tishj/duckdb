@@ -23,6 +23,8 @@ public:
 	ValidityColumnData validity;
 
 public:
+	bool HasUpdates() const override;
+
 	void SetStart(idx_t new_start) override;
 	bool CheckZonemap(ColumnScanState &state, TableFilter &filter) override;
 
@@ -54,9 +56,10 @@ public:
 	void CheckpointScan(ColumnSegment &segment, ColumnScanState &state, idx_t row_group_start, idx_t count,
 	                    Vector &scan_vector) override;
 
-	void DeserializeColumn(Deserializer &source) override;
+	void GetColumnSegmentInfo(duckdb::idx_t row_group_index, vector<duckdb::idx_t> col_path,
+	                          vector<duckdb::ColumnSegmentInfo> &result) override;
 
-	void GetStorageInfo(idx_t row_group_index, vector<idx_t> col_path, TableStorageInfo &result) override;
+	void DeserializeColumn(Deserializer &deserializer, BaseStatistics &target_stats) override;
 
 	void Verify(RowGroup &parent) override;
 };

@@ -1,4 +1,5 @@
 #include "duckdb/parser/statement/drop_statement.hpp"
+#include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parser/transformer.hpp"
 
 namespace duckdb {
@@ -34,20 +35,11 @@ unique_ptr<SQLStatement> Transformer::TransformDrop(duckdb_libpgquery::PGDropStm
 	case duckdb_libpgquery::PG_OBJECT_TYPE:
 		info.type = CatalogType::TYPE_ENTRY;
 		break;
-	case duckdb_libpgquery::PG_OBJECT_DATABASE:
-		info.type = CatalogType::DATABASE_ENTRY;
-		break;
 	default:
 		throw NotImplementedException("Cannot drop this type yet");
 	}
 
 	switch (stmt.removeType) {
-	case duckdb_libpgquery::PG_OBJECT_TYPE: {
-		auto view_list = PGPointerCast<duckdb_libpgquery::PGList>(stmt.objects);
-		auto target = PGPointerCast<duckdb_libpgquery::PGTypeName>(view_list->head->data.ptr_value);
-		info.name = PGPointerCast<duckdb_libpgquery::PGValue>(target->names->tail->data.ptr_value)->val.str;
-		break;
-	}
 	case duckdb_libpgquery::PG_OBJECT_SCHEMA: {
 		auto view_list = PGPointerCast<duckdb_libpgquery::PGList>(stmt.objects->head->data.ptr_value);
 		if (view_list->length == 2) {
@@ -80,6 +72,30 @@ unique_ptr<SQLStatement> Transformer::TransformDrop(duckdb_libpgquery::PGDropStm
 	info.cascade = stmt.behavior == duckdb_libpgquery::PGDropBehavior::PG_DROP_CASCADE;
 	info.if_not_found = TransformOnEntryNotFound(stmt.missing_ok);
 	return std::move(result);
+}
+
+unique_ptr<DropStatement> Transformer::TransformDropSecret(duckdb_libpgquery::PGDropSecretStmt &stmt) {
+	auto result = make_uniq<DropStatement>();
+	auto info = make_uniq<DropInfo>();
+	auto extra_info = make_uniq<ExtraDropSecretInfo>();
+
+	info->type = CatalogType::SECRET_ENTRY;
+	info->name = stmt.secret_name;
+	info->if_not_found = stmt.missing_ok ? OnEntryNotFound::RETURN_NULL : OnEntryNotFound::THROW_EXCEPTION;
+
+	extra_info->persist_mode = EnumUtil::FromString<SecretPersistType>(StringUtil::Upper(stmt.persist_type));
+	extra_info->secret_storage = stmt.secret_storage;
+
+	if (extra_info->persist_mode == SecretPersistType::TEMPORARY) {
+		if (!extra_info->secret_storage.empty()) {
+			throw ParserException("Can not combine TEMPORARY with specifying a storage for drop secret");
+		}
+	}
+
+	info->extra_drop_info = std::move(extra_info);
+	result->info = std::move(info);
+
+	return result;
 }
 
 } // namespace duckdb

@@ -56,6 +56,7 @@ void DuckTransaction::PushCatalogEntry(CatalogEntry &entry, data_ptr_t extra_dat
 	if (extra_data_size > 0) {
 		alloc_size += extra_data_size + sizeof(idx_t);
 	}
+
 	auto baseptr = undo_buffer.CreateEntry(UndoFlags::CATALOG_ENTRY, alloc_size);
 	// store the pointer to the catalog entry
 	Store<CatalogEntry *>(&entry, baseptr);
@@ -70,14 +71,36 @@ void DuckTransaction::PushCatalogEntry(CatalogEntry &entry, data_ptr_t extra_dat
 	}
 }
 
-void DuckTransaction::PushDelete(DataTable &table, ChunkVectorInfo *vinfo, row_t rows[], idx_t count, idx_t base_row) {
-	auto delete_info = reinterpret_cast<DeleteInfo *>(
-	    undo_buffer.CreateEntry(UndoFlags::DELETE_TUPLE, sizeof(DeleteInfo) + sizeof(row_t) * count));
-	delete_info->vinfo = vinfo;
+void DuckTransaction::PushDelete(DataTable &table, RowVersionManager &info, idx_t vector_idx, row_t rows[], idx_t count,
+                                 idx_t base_row) {
+	bool is_consecutive = true;
+	// check if the rows are consecutive
+	for (idx_t i = 0; i < count; i++) {
+		if (rows[i] != row_t(i)) {
+			is_consecutive = false;
+			break;
+		}
+	}
+	idx_t alloc_size = sizeof(DeleteInfo);
+	if (!is_consecutive) {
+		// if rows are not consecutive we need to allocate row identifiers
+		alloc_size += sizeof(uint16_t) * count;
+	}
+
+	auto delete_info = reinterpret_cast<DeleteInfo *>(undo_buffer.CreateEntry(UndoFlags::DELETE_TUPLE, alloc_size));
+	delete_info->version_info = &info;
+	delete_info->vector_idx = vector_idx;
 	delete_info->table = &table;
 	delete_info->count = count;
 	delete_info->base_row = base_row;
-	memcpy(delete_info->rows, rows, sizeof(row_t) * count);
+	delete_info->is_consecutive = is_consecutive;
+	if (!is_consecutive) {
+		// if rows are not consecutive
+		auto delete_rows = delete_info->GetRows();
+		for (idx_t i = 0; i < count; i++) {
+			delete_rows[i] = NumericCast<uint16_t>(rows[i]);
+		}
+	}
 }
 
 void DuckTransaction::PushAppend(DataTable &table, idx_t start_row, idx_t row_count) {
@@ -108,7 +131,7 @@ bool DuckTransaction::AutomaticCheckpoint(AttachedDatabase &db) {
 	return storage_manager.AutomaticCheckpoint(storage->EstimatedSize() + undo_buffer.EstimatedSize());
 }
 
-string DuckTransaction::Commit(AttachedDatabase &db, transaction_t commit_id, bool checkpoint) noexcept {
+ErrorData DuckTransaction::Commit(AttachedDatabase &db, transaction_t commit_id, bool checkpoint) noexcept {
 	// "checkpoint" parameter indicates if the caller will checkpoint. If checkpoint ==
 	//    true: Then this function will NOT write to the WAL or flush/persist.
 	//          This method only makes commit in memory, expecting caller to checkpoint/flush.
@@ -126,6 +149,7 @@ string DuckTransaction::Commit(AttachedDatabase &db, transaction_t commit_id, bo
 	} else {
 		log = nullptr;
 	}
+
 	try {
 		storage->Commit(commit_state, *this);
 		undo_buffer.Commit(iterator_state, log, commit_id);
@@ -138,9 +162,10 @@ string DuckTransaction::Commit(AttachedDatabase &db, transaction_t commit_id, bo
 		if (storage_commit_state) {
 			storage_commit_state->FlushCommit();
 		}
-		return string();
+		return ErrorData();
 	} catch (std::exception &ex) {
-		return ex.what();
+		undo_buffer.RevertCommit(iterator_state, this->transaction_id);
+		return ErrorData(ex);
 	}
 }
 

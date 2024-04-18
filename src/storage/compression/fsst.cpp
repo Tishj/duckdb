@@ -178,7 +178,8 @@ idx_t FSSTStorage::StringFinalAnalyze(AnalyzeState &state_p) {
 		compressed_dict_size += size;
 		max_compressed_string_length = MaxValue(max_compressed_string_length, size);
 	}
-	D_ASSERT(compressed_dict_size == (compressed_ptrs[res - 1] - compressed_ptrs[0]) + compressed_sizes[res - 1]);
+	D_ASSERT(compressed_dict_size ==
+	         (uint64_t)(compressed_ptrs[res - 1] - compressed_ptrs[0]) + compressed_sizes[res - 1]);
 
 	auto minimum_width = BitpackingPrimitives::MinimumBitWidth(max_compressed_string_length);
 	auto bitpacked_offsets_size =
@@ -249,7 +250,7 @@ public:
 		current_dictionary.Verify();
 
 		// We just push the string length to effectively delta encode the strings
-		index_buffer.push_back(compressed_string_len);
+		index_buffer.push_back(NumericCast<uint32_t>(compressed_string_len));
 
 		max_compressed_string_length = MaxValue(max_compressed_string_length, compressed_string_len);
 
@@ -348,7 +349,8 @@ public:
 			memset(base_ptr + symbol_table_offset, 0, fsst_serialized_symbol_table_size);
 		}
 
-		Store<uint32_t>(symbol_table_offset, data_ptr_cast(&header_ptr->fsst_symbol_table_offset));
+		Store<uint32_t>(NumericCast<uint32_t>(symbol_table_offset),
+		                data_ptr_cast(&header_ptr->fsst_symbol_table_offset));
 		Store<uint32_t>((uint32_t)current_width, data_ptr_cast(&header_ptr->bitpacking_width));
 
 		if (total_size >= FSSTStorage::COMPACTION_FLUSH_LIMIT) {
@@ -392,17 +394,17 @@ public:
 
 unique_ptr<CompressionState> FSSTStorage::InitCompression(ColumnDataCheckpointer &checkpointer,
                                                           unique_ptr<AnalyzeState> analyze_state_p) {
-	auto analyze_state = static_cast<FSSTAnalyzeState *>(analyze_state_p.get());
+	auto &analyze_state = analyze_state_p->Cast<FSSTAnalyzeState>();
 	auto compression_state = make_uniq<FSSTCompressionState>(checkpointer);
 
-	if (analyze_state->fsst_encoder == nullptr) {
+	if (analyze_state.fsst_encoder == nullptr) {
 		throw InternalException("No encoder found during FSST compression");
 	}
 
-	compression_state->fsst_encoder = analyze_state->fsst_encoder;
+	compression_state->fsst_encoder = analyze_state.fsst_encoder;
 	compression_state->fsst_serialized_symbol_table_size =
 	    duckdb_fsst_export(compression_state->fsst_encoder, &compression_state->fsst_serialized_symbol_table[0]);
-	analyze_state->fsst_encoder = nullptr;
+	analyze_state.fsst_encoder = nullptr;
 
 	return std::move(compression_state);
 }
@@ -461,7 +463,7 @@ void FSSTStorage::Compress(CompressionState &state_p, Vector &scan_vector, idx_t
 	    &sizes_in[0],         /* IN: byte-lengths of the inputs */
 	    &strings_in[0],       /* IN: input string start pointers. */
 	    compress_buffer_size, /* IN: byte-length of output buffer. */
-	    &compress_buffer[0],  /* OUT: memorxy buffer to put the compressed strings in (one after the other). */
+	    &compress_buffer[0],  /* OUT: memory buffer to put the compressed strings in (one after the other). */
 	    &sizes_out[0],        /* OUT: byte-lengths of the compressed strings. */
 	    &strings_out[0]       /* OUT: output string start pointers. Will all point into [output,output+size). */
 	);
@@ -605,7 +607,8 @@ void FSSTStorage::StringScanPartial(ColumnSegment &segment, ColumnScanState &sta
 		for (idx_t i = 0; i < scan_count; i++) {
 			uint32_t string_length = bitunpack_buffer[i + offsets.scan_offset];
 			result_data[i] = UncompressedStringStorage::FetchStringFromDict(
-			    segment, dict, result, baseptr, delta_decode_buffer[i + offsets.unused_delta_decoded_values],
+			    segment, dict, result, baseptr,
+			    UnsafeNumericCast<int32_t>(delta_decode_buffer[i + offsets.unused_delta_decoded_values]),
 			    string_length);
 			FSSTVector::SetCount(result, scan_count);
 		}
@@ -614,7 +617,8 @@ void FSSTStorage::StringScanPartial(ColumnSegment &segment, ColumnScanState &sta
 		for (idx_t i = 0; i < scan_count; i++) {
 			uint32_t str_len = bitunpack_buffer[i + offsets.scan_offset];
 			auto str_ptr = FSSTStorage::FetchStringPointer(
-			    dict, baseptr, delta_decode_buffer[i + offsets.unused_delta_decoded_values]);
+			    dict, baseptr,
+			    UnsafeNumericCast<int32_t>(delta_decode_buffer[i + offsets.unused_delta_decoded_values]));
 
 			if (str_len > 0) {
 				result_data[i + result_offset] =
@@ -626,7 +630,7 @@ void FSSTStorage::StringScanPartial(ColumnSegment &segment, ColumnScanState &sta
 	}
 
 	scan_state.StoreLastDelta(delta_decode_buffer[scan_count + offsets.unused_delta_decoded_values - 1],
-	                          start + scan_count - 1);
+	                          UnsafeNumericCast<int64_t>(start + scan_count - 1));
 }
 
 void FSSTStorage::StringScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result) {
@@ -654,7 +658,7 @@ void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state
 	if (have_symbol_table) {
 		// We basically just do a scan of 1 which is kinda expensive as we need to repeatedly delta decode until we
 		// reach the row we want, we could consider a more clever caching trick if this is slow
-		auto offsets = CalculateBpDeltaOffsets(-1, row_id, 1);
+		auto offsets = CalculateBpDeltaOffsets(-1, UnsafeNumericCast<idx_t>(row_id), 1);
 
 		auto bitunpack_buffer = unique_ptr<uint32_t[]>(new uint32_t[offsets.total_bitunpack_count]);
 		BitUnpackRange(base_data, data_ptr_cast(bitunpack_buffer.get()), offsets.total_bitunpack_count,
@@ -666,7 +670,8 @@ void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state
 		uint32_t string_length = bitunpack_buffer[offsets.scan_offset];
 
 		string_t compressed_string = UncompressedStringStorage::FetchStringFromDict(
-		    segment, dict, result, base_ptr, delta_decode_buffer[offsets.unused_delta_decoded_values], string_length);
+		    segment, dict, result, base_ptr,
+		    UnsafeNumericCast<int32_t>(delta_decode_buffer[offsets.unused_delta_decoded_values]), string_length);
 
 		result_data[result_idx] = FSSTPrimitives::DecompressValue((void *)&decoder, result, compressed_string.GetData(),
 		                                                          compressed_string.GetSize());

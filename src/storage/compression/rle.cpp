@@ -132,8 +132,7 @@ struct RLECompressState : public CompressionState {
 	static idx_t MaxRLECount() {
 		auto entry_size = sizeof(T) + sizeof(rle_count_t);
 		auto entry_count = (Storage::BLOCK_SIZE - RLEConstants::RLE_HEADER_SIZE) / entry_size;
-		auto max_vector_count = entry_count / STANDARD_VECTOR_SIZE;
-		return max_vector_count * STANDARD_VECTOR_SIZE;
+		return entry_count;
 	}
 
 	explicit RLECompressState(ColumnDataCheckpointer &checkpointer_p)
@@ -166,8 +165,8 @@ struct RLECompressState : public CompressionState {
 	void WriteValue(T value, rle_count_t count, bool is_null) {
 		// write the RLE entry
 		auto handle_ptr = handle.Ptr() + RLEConstants::RLE_HEADER_SIZE;
-		auto data_pointer = (T *)handle_ptr;
-		auto index_pointer = (rle_count_t *)(handle_ptr + max_rle_count * sizeof(T));
+		auto data_pointer = reinterpret_cast<T *>(handle_ptr);
+		auto index_pointer = reinterpret_cast<rle_count_t *>(handle_ptr + max_rle_count * sizeof(T));
 		data_pointer[entry_count] = value;
 		index_pointer[entry_count] = count;
 		entry_count++;
@@ -228,7 +227,7 @@ unique_ptr<CompressionState> RLEInitCompression(ColumnDataCheckpointer &checkpoi
 
 template <class T, bool WRITE_STATISTICS>
 void RLECompress(CompressionState &state_p, Vector &scan_vector, idx_t count) {
-	auto &state = (RLECompressState<T, WRITE_STATISTICS> &)state_p;
+	auto &state = state_p.Cast<RLECompressState<T, WRITE_STATISTICS>>();
 	UnifiedVectorFormat vdata;
 	scan_vector.ToUnifiedFormat(count, vdata);
 
@@ -237,7 +236,7 @@ void RLECompress(CompressionState &state_p, Vector &scan_vector, idx_t count) {
 
 template <class T, bool WRITE_STATISTICS>
 void RLEFinalizeCompress(CompressionState &state_p) {
-	auto &state = (RLECompressState<T, WRITE_STATISTICS> &)state_p;
+	auto &state = state_p.Cast<RLECompressState<T, WRITE_STATISTICS>>();
 	state.Finalize();
 }
 
@@ -251,13 +250,13 @@ struct RLEScanState : public SegmentScanState {
 		handle = buffer_manager.Pin(segment.block);
 		entry_pos = 0;
 		position_in_entry = 0;
-		rle_count_offset = Load<uint64_t>(handle.Ptr() + segment.GetBlockOffset());
+		rle_count_offset = UnsafeNumericCast<uint32_t>(Load<uint64_t>(handle.Ptr() + segment.GetBlockOffset()));
 		D_ASSERT(rle_count_offset <= Storage::BLOCK_SIZE);
 	}
 
 	void Skip(ColumnSegment &segment, idx_t skip_count) {
 		auto data = handle.Ptr() + segment.GetBlockOffset();
-		auto index_pointer = (rle_count_t *)(data + rle_count_offset);
+		auto index_pointer = reinterpret_cast<rle_count_t *>(data + rle_count_offset);
 
 		for (idx_t i = 0; i < skip_count; i++) {
 			// assign the current value
@@ -272,7 +271,6 @@ struct RLEScanState : public SegmentScanState {
 	}
 
 	BufferHandle handle;
-	uint32_t rle_offset;
 	idx_t entry_pos;
 	idx_t position_in_entry;
 	uint32_t rle_count_offset;
@@ -293,14 +291,63 @@ void RLESkip(ColumnSegment &segment, ColumnScanState &state, idx_t skip_count) {
 	scan_state.Skip(segment, skip_count);
 }
 
+template <bool ENTIRE_VECTOR>
+static bool CanEmitConstantVector(idx_t position, idx_t run_length, idx_t scan_count) {
+	if (!ENTIRE_VECTOR) {
+		return false;
+	}
+	if (scan_count != STANDARD_VECTOR_SIZE) {
+		// Only when we can fill an entire Vector can we emit a ConstantVector, because subsequent scans require the
+		// input Vector to be flat
+		return false;
+	}
+	D_ASSERT(position < run_length);
+	auto remaining_in_run = run_length - position;
+	// The amount of values left in this run are equal or greater than the amount of values we need to scan
+	return remaining_in_run >= scan_count;
+}
+
 template <class T>
-void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
-                    idx_t result_offset) {
+inline static void ForwardToNextRun(RLEScanState<T> &scan_state) {
+	// handled all entries in this RLE value
+	// move to the next entry
+	scan_state.entry_pos++;
+	scan_state.position_in_entry = 0;
+}
+
+template <class T>
+inline static bool ExhaustedRun(RLEScanState<T> &scan_state, rle_count_t *index_pointer) {
+	return scan_state.position_in_entry >= index_pointer[scan_state.entry_pos];
+}
+
+template <class T>
+static void RLEScanConstant(RLEScanState<T> &scan_state, rle_count_t *index_pointer, T *data_pointer, idx_t scan_count,
+                            Vector &result) {
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	auto result_data = ConstantVector::GetData<T>(result);
+	result_data[0] = data_pointer[scan_state.entry_pos];
+	scan_state.position_in_entry += scan_count;
+	if (ExhaustedRun(scan_state, index_pointer)) {
+		ForwardToNextRun(scan_state);
+	}
+	return;
+}
+
+template <class T, bool ENTIRE_VECTOR>
+void RLEScanPartialInternal(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
+                            idx_t result_offset) {
 	auto &scan_state = state.scan_state->Cast<RLEScanState<T>>();
 
 	auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
-	auto data_pointer = (T *)(data + RLEConstants::RLE_HEADER_SIZE);
-	auto index_pointer = (rle_count_t *)(data + scan_state.rle_count_offset);
+	auto data_pointer = reinterpret_cast<T *>(data + RLEConstants::RLE_HEADER_SIZE);
+	auto index_pointer = reinterpret_cast<rle_count_t *>(data + scan_state.rle_count_offset);
+
+	// If we are scanning an entire Vector and it contains only a single run
+	if (CanEmitConstantVector<ENTIRE_VECTOR>(scan_state.position_in_entry, index_pointer[scan_state.entry_pos],
+	                                         scan_count)) {
+		RLEScanConstant<T>(scan_state, index_pointer, data_pointer, scan_count, result);
+		return;
+	}
 
 	auto result_data = FlatVector::GetData<T>(result);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -308,19 +355,21 @@ void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_c
 		// assign the current value
 		result_data[result_offset + i] = data_pointer[scan_state.entry_pos];
 		scan_state.position_in_entry++;
-		if (scan_state.position_in_entry >= index_pointer[scan_state.entry_pos]) {
-			// handled all entries in this RLE value
-			// move to the next entry
-			scan_state.entry_pos++;
-			scan_state.position_in_entry = 0;
+		if (ExhaustedRun(scan_state, index_pointer)) {
+			ForwardToNextRun(scan_state);
 		}
 	}
 }
 
 template <class T>
+void RLEScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
+                    idx_t result_offset) {
+	return RLEScanPartialInternal<T, false>(segment, state, scan_count, result, result_offset);
+}
+
+template <class T>
 void RLEScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result) {
-	// FIXME: emit constant vector if repetition of single value is >= scan_count
-	RLEScanPartial<T>(segment, state, scan_count, result, 0);
+	RLEScanPartialInternal<T, true>(segment, state, scan_count, result, 0);
 }
 
 //===--------------------------------------------------------------------===//
@@ -329,10 +378,10 @@ void RLEScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, V
 template <class T>
 void RLEFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
 	RLEScanState<T> scan_state(segment);
-	scan_state.Skip(segment, row_id);
+	scan_state.Skip(segment, NumericCast<idx_t>(row_id));
 
 	auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
-	auto data_pointer = (T *)(data + RLEConstants::RLE_HEADER_SIZE);
+	auto data_pointer = reinterpret_cast<T *>(data + RLEConstants::RLE_HEADER_SIZE);
 	auto result_data = FlatVector::GetData<T>(result);
 	result_data[result_idx] = data_pointer[scan_state.entry_pos];
 }
@@ -361,6 +410,8 @@ CompressionFunction RLEFun::GetFunction(PhysicalType type) {
 		return GetRLEFunction<int64_t>(type);
 	case PhysicalType::INT128:
 		return GetRLEFunction<hugeint_t>(type);
+	case PhysicalType::UINT128:
+		return GetRLEFunction<uhugeint_t>(type);
 	case PhysicalType::UINT8:
 		return GetRLEFunction<uint8_t>(type);
 	case PhysicalType::UINT16:
@@ -392,6 +443,7 @@ bool RLEFun::TypeIsSupported(PhysicalType type) {
 	case PhysicalType::UINT16:
 	case PhysicalType::UINT32:
 	case PhysicalType::UINT64:
+	case PhysicalType::UINT128:
 	case PhysicalType::FLOAT:
 	case PhysicalType::DOUBLE:
 	case PhysicalType::LIST:

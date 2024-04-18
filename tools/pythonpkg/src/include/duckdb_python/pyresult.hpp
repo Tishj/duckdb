@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "duckdb_python/numpy/array_wrapper.hpp"
+#include "duckdb_python/numpy/numpy_result_conversion.hpp"
 #include "duckdb.hpp"
 #include "duckdb_python/pybind11/pybind_wrapper.hpp"
 #include "duckdb_python/python_objects.hpp"
@@ -19,6 +19,7 @@ namespace duckdb {
 struct DuckDBPyResult {
 public:
 	explicit DuckDBPyResult(unique_ptr<QueryResult> result);
+	~DuckDBPyResult();
 
 public:
 	Optional<py::tuple> Fetchone();
@@ -29,11 +30,12 @@ public:
 
 	py::dict FetchNumpy();
 
-	py::dict FetchNumpyInternal(bool stream = false, idx_t vectors_per_chunk = 1);
+	py::dict FetchNumpyInternal(bool stream = false, idx_t vectors_per_chunk = 1,
+	                            unique_ptr<NumpyResultConversion> conversion = nullptr);
 
 	PandasDataFrame FetchDF(bool date_as_object);
 
-	duckdb::pyarrow::Table FetchArrowTable(idx_t rows_per_batch);
+	duckdb::pyarrow::Table FetchArrowTable(idx_t rows_per_batch, bool to_polars);
 
 	PandasDataFrame FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object);
 
@@ -55,12 +57,12 @@ public:
 	const vector<LogicalType> &GetTypes();
 
 private:
-	py::list FetchAllArrowChunks(idx_t rows_per_batch);
+	py::list FetchAllArrowChunks(idx_t rows_per_batch, bool to_polars);
 
 	py::dict FillDictionary(NumpyResultConversion &conversion);
 	void FillNumpy(py::dict &res, idx_t col_idx, NumpyResultConversion &conversion, const char *name);
 
-	bool FetchArrowChunk(QueryResult *result, py::list &batches, idx_t rows_per_batch);
+	bool FetchArrowChunk(ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch, bool to_polars);
 
 	PandasDataFrame FrameFromNumpy(bool date_as_object, const py::handle &o);
 
@@ -68,6 +70,7 @@ private:
 	void ChangeDateToDatetime(PandasDataFrame &df);
 	unique_ptr<DataChunk> FetchNext(QueryResult &result);
 	unique_ptr<DataChunk> FetchNextRaw(QueryResult &result);
+	unique_ptr<NumpyResultConversion> InitializeNumpyConversion(bool pandas = false);
 
 private:
 	idx_t chunk_offset = 0;

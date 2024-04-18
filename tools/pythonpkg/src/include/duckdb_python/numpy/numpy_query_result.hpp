@@ -10,8 +10,9 @@
 
 #include "duckdb/common/winapi.hpp"
 #include "duckdb_python/numpy/array_wrapper.hpp"
+#include "duckdb_python/numpy/numpy_result_conversion.hpp"
 #include "duckdb/main/query_result.hpp"
-#include "duckdb/common/preserved_error.hpp"
+#include "duckdb/common/error_data.hpp"
 
 namespace duckdb {
 
@@ -27,7 +28,7 @@ public:
 	DUCKDB_API NumpyQueryResult(StatementType statement_type, StatementProperties properties, vector<string> names,
 	                            unique_ptr<NumpyResultConversion> collection, ClientProperties client_properties);
 	//! Creates an unsuccessful query result with error condition
-	DUCKDB_API explicit NumpyQueryResult(PreservedError error);
+	DUCKDB_API explicit NumpyQueryResult(ErrorData error);
 
 public:
 	//! Fetches a DataChunk from the query result.

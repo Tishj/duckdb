@@ -3,7 +3,8 @@
 #include "duckdb/core_functions/aggregate/holistic_functions.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/common/queue.hpp"
-#include "duckdb/common/field_writer.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 #include <algorithm>
 #include <stdlib.h>
@@ -21,15 +22,17 @@ struct ReservoirQuantileState {
 		if (new_len <= len) {
 			return;
 		}
+		T *old_v = v;
 		v = (T *)realloc(v, new_len * sizeof(T));
 		if (!v) {
+			free(old_v);
 			throw InternalException("Memory allocation failure");
 		}
 		len = new_len;
 	}
 
 	void ReplaceElement(T &input) {
-		v[r_samp->min_entry] = input;
+		v[r_samp->min_weighted_entry_index] = input;
 		r_samp->ReplaceElement();
 	}
 
@@ -38,8 +41,8 @@ struct ReservoirQuantileState {
 			v[pos++] = element;
 			r_samp->InitializeReservoir(pos, len);
 		} else {
-			D_ASSERT(r_samp->next_index >= r_samp->current_count);
-			if (r_samp->next_index == r_samp->current_count) {
+			D_ASSERT(r_samp->next_index_to_sample >= r_samp->num_entries_to_skip_b4_next_sample);
+			if (r_samp->next_index_to_sample == r_samp->num_entries_to_skip_b4_next_sample) {
 				ReplaceElement(element);
 			}
 		}
@@ -47,11 +50,13 @@ struct ReservoirQuantileState {
 };
 
 struct ReservoirQuantileBindData : public FunctionData {
-	ReservoirQuantileBindData(double quantile_p, int32_t sample_size_p)
+	ReservoirQuantileBindData() {
+	}
+	ReservoirQuantileBindData(double quantile_p, idx_t sample_size_p)
 	    : quantiles(1, quantile_p), sample_size(sample_size_p) {
 	}
 
-	ReservoirQuantileBindData(vector<double> quantiles_p, int32_t sample_size_p)
+	ReservoirQuantileBindData(vector<double> quantiles_p, idx_t sample_size_p)
 	    : quantiles(std::move(quantiles_p)), sample_size(sample_size_p) {
 	}
 
@@ -64,22 +69,22 @@ struct ReservoirQuantileBindData : public FunctionData {
 		return quantiles == other.quantiles && sample_size == other.sample_size;
 	}
 
-	static void Serialize(FieldWriter &writer, const FunctionData *bind_data_p, const AggregateFunction &function) {
-		D_ASSERT(bind_data_p);
+	static void Serialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data_p,
+	                      const AggregateFunction &function) {
 		auto &bind_data = bind_data_p->Cast<ReservoirQuantileBindData>();
-		writer.WriteList<double>(bind_data.quantiles);
-		writer.WriteField<int32_t>(bind_data.sample_size);
+		serializer.WriteProperty(100, "quantiles", bind_data.quantiles);
+		serializer.WriteProperty(101, "sample_size", bind_data.sample_size);
 	}
 
-	static unique_ptr<FunctionData> Deserialize(ClientContext &context, FieldReader &reader,
-	                                            AggregateFunction &bound_function) {
-		auto quantiles = reader.ReadRequiredList<double>();
-		auto sample_size = reader.ReadRequired<int32_t>();
-		return make_uniq<ReservoirQuantileBindData>(std::move(quantiles), sample_size);
+	static unique_ptr<FunctionData> Deserialize(Deserializer &deserializer, AggregateFunction &function) {
+		auto result = make_uniq<ReservoirQuantileBindData>();
+		deserializer.ReadProperty(100, "quantiles", result->quantiles);
+		deserializer.ReadProperty(101, "sample_size", result->sample_size);
+		return std::move(result);
 	}
 
 	vector<double> quantiles;
-	int32_t sample_size;
+	idx_t sample_size;
 };
 
 struct ReservoirQuantileOperation {
@@ -325,7 +330,7 @@ unique_ptr<FunctionData> BindReservoirQuantile(ClientContext &context, Aggregate
 		} else {
 			arguments.pop_back();
 		}
-		return make_uniq<ReservoirQuantileBindData>(quantiles, 8192);
+		return make_uniq<ReservoirQuantileBindData>(quantiles, 8192ULL);
 	}
 	if (!arguments[2]->IsFoldable()) {
 		throw BinderException("RESERVOIR_QUANTILE can only take constant sample size parameters");
@@ -343,7 +348,7 @@ unique_ptr<FunctionData> BindReservoirQuantile(ClientContext &context, Aggregate
 	// remove the quantile argument so we can use the unary aggregate
 	Function::EraseArgument(function, arguments, arguments.size() - 1);
 	Function::EraseArgument(function, arguments, arguments.size() - 1);
-	return make_uniq<ReservoirQuantileBindData>(quantiles, sample_size);
+	return make_uniq<ReservoirQuantileBindData>(quantiles, NumericCast<idx_t>(sample_size));
 }
 
 unique_ptr<FunctionData> BindReservoirQuantileDecimal(ClientContext &context, AggregateFunction &function,

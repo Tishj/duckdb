@@ -12,13 +12,14 @@
 #include "duckdb/transaction/transaction_manager.hpp"
 #include "duckdb/common/serializer/buffered_file_reader.hpp"
 #include "duckdb/main/attached_database.hpp"
+#include "duckdb/main/database_manager.hpp"
 
 namespace duckdb {
 
 StorageManager::StorageManager(AttachedDatabase &db, string path_p, bool read_only)
     : db(db), path(std::move(path_p)), read_only(read_only) {
 	if (path.empty()) {
-		path = ":memory:";
+		path = IN_MEMORY_PATH;
 	} else {
 		auto &fs = FileSystem::Get(db);
 		this->path = fs.ExpandPath(path);
@@ -43,6 +44,10 @@ BufferManager &BufferManager::GetBufferManager(ClientContext &context) {
 	return BufferManager::GetBufferManager(*context.db);
 }
 
+const BufferManager &BufferManager::GetBufferManager(const ClientContext &context) {
+	return BufferManager::GetBufferManager(*context.db);
+}
+
 ObjectCache &ObjectCache::GetObjectCache(ClientContext &context) {
 	return context.db->GetObjectCache();
 }
@@ -51,19 +56,45 @@ bool ObjectCache::ObjectCacheEnabled(ClientContext &context) {
 	return context.db->config.options.object_cache_enable;
 }
 
-bool StorageManager::InMemory() {
-	D_ASSERT(!path.empty());
-	return path == ":memory:";
+optional_ptr<WriteAheadLog> StorageManager::GetWriteAheadLog() {
+	if (InMemory() || read_only || !load_complete) {
+		return nullptr;
+	}
+
+	if (wal) {
+		return wal.get();
+	}
+
+	// lazy WAL creation
+	wal = make_uniq<WriteAheadLog>(db, GetWALPath());
+	return wal.get();
 }
 
-void StorageManager::Initialize() {
+string StorageManager::GetWALPath() {
+
+	std::size_t question_mark_pos = path.find('?');
+	auto wal_path = path;
+	if (question_mark_pos != std::string::npos) {
+		wal_path.insert(question_mark_pos, ".wal");
+	} else {
+		wal_path += ".wal";
+	}
+	return wal_path;
+}
+
+bool StorageManager::InMemory() {
+	D_ASSERT(!path.empty());
+	return path == IN_MEMORY_PATH;
+}
+
+void StorageManager::Initialize(optional_ptr<ClientContext> context) {
 	bool in_memory = InMemory();
 	if (in_memory && read_only) {
 		throw CatalogException("Cannot launch in-memory database in read-only mode!");
 	}
 
 	// create or load the database from disk, if not in-memory mode
-	LoadDatabase();
+	LoadDatabase(context);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -81,69 +112,79 @@ public:
 	BlockManager &GetBlockManagerForRowData() override {
 		return block_manager;
 	}
+	MetadataManager &GetMetadataManager() override {
+		return block_manager.GetMetadataManager();
+	}
 };
 
 SingleFileStorageManager::SingleFileStorageManager(AttachedDatabase &db, string path, bool read_only)
     : StorageManager(db, std::move(path), read_only) {
 }
 
-void SingleFileStorageManager::LoadDatabase() {
+void SingleFileStorageManager::LoadDatabase(optional_ptr<ClientContext> context) {
 	if (InMemory()) {
 		block_manager = make_uniq<InMemoryBlockManager>(BufferManager::GetBufferManager(db));
 		table_io_manager = make_uniq<SingleFileTableIOManager>(*block_manager);
 		return;
 	}
 
-	string wal_path = path + ".wal";
 	auto &fs = FileSystem::Get(db);
 	auto &config = DBConfig::Get(db);
-	bool truncate_wal = false;
+	if (!config.options.enable_external_access) {
+		if (!db.IsInitialDatabase()) {
+			throw PermissionException("Attaching on-disk databases is disabled through configuration");
+		}
+	}
 
 	StorageManagerOptions options;
 	options.read_only = read_only;
 	options.use_direct_io = config.options.use_direct_io;
 	options.debug_initialize = config.options.debug_initialize;
+
 	// first check if the database exists
-	if (!fs.FileExists(path)) {
-		if (read_only) {
-			throw CatalogException("Cannot open database \"%s\" in read-only mode: database does not exist", path);
-		}
-		// check if the WAL exists
+	if (!read_only && !fs.FileExists(path)) {
+		// file does not exist and we are in read-write mode
+		// create a new file
+
+		// check if a WAL file already exists
+		auto wal_path = GetWALPath();
 		if (fs.FileExists(wal_path)) {
 			// WAL file exists but database file does not
 			// remove the WAL
 			fs.RemoveFile(wal_path);
 		}
+
 		// initialize the block manager while creating a new db file
 		auto sf_block_manager = make_uniq<SingleFileBlockManager>(db, path, options);
 		sf_block_manager->CreateNewDatabase();
 		block_manager = std::move(sf_block_manager);
 		table_io_manager = make_uniq<SingleFileTableIOManager>(*block_manager);
 	} else {
+		// either the file exists, or we are in read-only mode
+		// try to read the existing file on disk
+
 		// initialize the block manager while loading the current db file
 		auto sf_block_manager = make_uniq<SingleFileBlockManager>(db, path, options);
 		sf_block_manager->LoadExistingDatabase();
 		block_manager = std::move(sf_block_manager);
 		table_io_manager = make_uniq<SingleFileTableIOManager>(*block_manager);
 
-		//! Load from storage
-		auto checkpointer = SingleFileCheckpointReader(*this);
-		checkpointer.LoadFromStorage();
-		// finish load checkpoint, clear the cached handles of meta blocks
-		block_manager->ClearMetaBlockHandles();
+		// load the db from storage
+		auto checkpoint_reader = SingleFileCheckpointReader(*this);
+		checkpoint_reader.LoadFromStorage(context);
+
 		// check if the WAL file exists
-		if (fs.FileExists(wal_path)) {
+		auto wal_path = GetWALPath();
+		auto handle = fs.OpenFile(wal_path, FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_NULL_IF_NOT_EXISTS);
+		if (handle) {
 			// replay the WAL
-			truncate_wal = WriteAheadLog::Replay(db, wal_path);
+			if (WriteAheadLog::Replay(db, std::move(handle))) {
+				fs.RemoveFile(wal_path);
+			}
 		}
 	}
-	// initialize the WAL file
-	if (!read_only) {
-		wal = make_uniq<WriteAheadLog>(db, wal_path);
-		if (truncate_wal) {
-			wal->Truncate(0);
-		}
-	}
+
+	load_complete = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -163,7 +204,7 @@ public:
 			wal.skip_writing = false;
 			if (wal.GetTotalWritten() > initial_written) {
 				// remove any entries written into the WAL by truncating it
-				wal.Truncate(initial_wal_size);
+				wal.Truncate(NumericCast<int64_t>(initial_wal_size));
 			}
 		}
 	}
@@ -212,7 +253,7 @@ unique_ptr<StorageCommitState> SingleFileStorageManager::GenStorageCommitState(T
 	return make_uniq<SingleFileStorageCommitState>(*this, checkpoint);
 }
 
-bool SingleFileStorageManager::IsCheckpointClean(block_id_t checkpoint_id) {
+bool SingleFileStorageManager::IsCheckpointClean(MetaBlockPointer checkpoint_id) {
 	return block_manager->IsRootBlock(checkpoint_id);
 }
 
@@ -223,8 +264,13 @@ void SingleFileStorageManager::CreateCheckpoint(bool delete_wal, bool force_chec
 	auto &config = DBConfig::Get(db);
 	if (wal->GetWALSize() > 0 || config.options.force_checkpoint || force_checkpoint) {
 		// we only need to checkpoint if there is anything in the WAL
-		SingleFileCheckpointWriter checkpointer(db, *block_manager);
-		checkpointer.CreateCheckpoint();
+		try {
+			SingleFileCheckpointWriter checkpointer(db, *block_manager);
+			checkpointer.CreateCheckpoint();
+		} catch (std::exception &ex) {
+			ErrorData error(ex);
+			throw FatalException("Failed to create checkpoint because of error: %s", error.RawMessage());
+		}
 	}
 	if (delete_wal) {
 		wal->Delete();
@@ -242,10 +288,15 @@ DatabaseSize SingleFileStorageManager::GetDatabaseSize() {
 		ds.used_blocks = ds.total_blocks - ds.free_blocks;
 		ds.bytes = (ds.total_blocks * ds.block_size);
 		if (auto wal = GetWriteAheadLog()) {
-			ds.wal_size = wal->GetWALSize();
+			ds.wal_size = NumericCast<idx_t>(wal->GetWALSize());
 		}
 	}
 	return ds;
+}
+
+vector<MetadataBlockInfo> SingleFileStorageManager::GetMetadataInfo() {
+	auto &metadata_manager = block_manager->GetMetadataManager();
+	return metadata_manager.GetMetadataInfo();
 }
 
 bool SingleFileStorageManager::AutomaticCheckpoint(idx_t estimated_wal_bytes) {
@@ -255,7 +306,7 @@ bool SingleFileStorageManager::AutomaticCheckpoint(idx_t estimated_wal_bytes) {
 	}
 
 	auto &config = DBConfig::Get(db);
-	auto initial_size = log->GetWALSize();
+	auto initial_size = NumericCast<idx_t>(log->GetWALSize());
 	idx_t expected_wal_size = initial_size + estimated_wal_bytes;
 	return expected_wal_size > config.options.checkpoint_wal_size;
 }

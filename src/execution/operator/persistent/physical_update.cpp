@@ -140,11 +140,13 @@ unique_ptr<LocalSinkState> PhysicalUpdate::GetLocalSinkState(ExecutionContext &c
 	return make_uniq<UpdateLocalState>(context.client, expressions, table.GetTypes(), bound_defaults);
 }
 
-void PhysicalUpdate::Combine(ExecutionContext &context, GlobalSinkState &gstate, LocalSinkState &lstate) const {
-	auto &state = lstate.Cast<UpdateLocalState>();
+SinkCombineResultType PhysicalUpdate::Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const {
+	auto &state = input.local_state.Cast<UpdateLocalState>();
 	auto &client_profiler = QueryProfiler::Get(context.client);
 	context.thread.profiler.Flush(*this, state.default_executor, "default_executor", 1);
 	client_profiler.Flush(context.thread.profiler);
+
+	return SinkCombineResultType::FINISHED;
 }
 
 //===--------------------------------------------------------------------===//
@@ -173,7 +175,7 @@ SourceResultType PhysicalUpdate::GetData(ExecutionContext &context, DataChunk &c
 	auto &g = sink_state->Cast<UpdateGlobalState>();
 	if (!return_chunk) {
 		chunk.SetCardinality(1);
-		chunk.SetValue(0, 0, Value::BIGINT(g.updated_count));
+		chunk.SetValue(0, 0, Value::BIGINT(NumericCast<int64_t>(g.updated_count)));
 		return SourceResultType::FINISHED;
 	}
 

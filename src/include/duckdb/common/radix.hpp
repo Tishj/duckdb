@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "duckdb/common/bswap.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types.hpp"
@@ -19,18 +20,6 @@
 #include <limits.h>
 
 namespace duckdb {
-
-#define BSWAP16(x) ((uint16_t)((((uint16_t)(x)&0xff00) >> 8) | (((uint16_t)(x)&0x00ff) << 8)))
-
-#define BSWAP32(x)                                                                                                     \
-	((uint32_t)((((uint32_t)(x)&0xff000000) >> 24) | (((uint32_t)(x)&0x00ff0000) >> 8) |                               \
-	            (((uint32_t)(x)&0x0000ff00) << 8) | (((uint32_t)(x)&0x000000ff) << 24)))
-
-#define BSWAP64(x)                                                                                                     \
-	((uint64_t)((((uint64_t)(x)&0xff00000000000000ull) >> 56) | (((uint64_t)(x)&0x00ff000000000000ull) >> 40) |        \
-	            (((uint64_t)(x)&0x0000ff0000000000ull) >> 24) | (((uint64_t)(x)&0x000000ff00000000ull) >> 8) |         \
-	            (((uint64_t)(x)&0x00000000ff000000ull) << 8) | (((uint64_t)(x)&0x0000000000ff0000ull) << 24) |         \
-	            (((uint64_t)(x)&0x000000000000ff00ull) << 40) | (((uint64_t)(x)&0x00000000000000ffull) << 56)))
 
 struct Radix {
 public:
@@ -61,7 +50,7 @@ public:
 	}
 
 	static inline uint32_t EncodeFloat(float x) {
-		uint64_t buff;
+		uint32_t buff;
 
 		//! zero
 		if (x == 0) {
@@ -128,25 +117,33 @@ inline void Radix::EncodeData(data_ptr_t dataptr, bool value) {
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, int8_t value) {
-	Store<uint8_t>(value, dataptr);
+	uint8_t bytes; // dance around signedness conversion check
+	Store<int8_t>(value, data_ptr_cast(&bytes));
+	Store<uint8_t>(bytes, dataptr);
 	dataptr[0] = FlipSign(dataptr[0]);
 }
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, int16_t value) {
-	Store<uint16_t>(BSWAP16(value), dataptr);
+	uint16_t bytes;
+	Store<int16_t>(value, data_ptr_cast(&bytes));
+	Store<uint16_t>(BSwap<uint16_t>(bytes), dataptr);
 	dataptr[0] = FlipSign(dataptr[0]);
 }
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, int32_t value) {
-	Store<uint32_t>(BSWAP32(value), dataptr);
+	uint32_t bytes;
+	Store<int32_t>(value, data_ptr_cast(&bytes));
+	Store<uint32_t>(BSwap<uint32_t>(bytes), dataptr);
 	dataptr[0] = FlipSign(dataptr[0]);
 }
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, int64_t value) {
-	Store<uint64_t>(BSWAP64(value), dataptr);
+	uint64_t bytes;
+	Store<int64_t>(value, data_ptr_cast(&bytes));
+	Store<uint64_t>(BSwap<uint64_t>(bytes), dataptr);
 	dataptr[0] = FlipSign(dataptr[0]);
 }
 
@@ -157,17 +154,17 @@ inline void Radix::EncodeData(data_ptr_t dataptr, uint8_t value) {
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, uint16_t value) {
-	Store<uint16_t>(BSWAP16(value), dataptr);
+	Store<uint16_t>(BSwap<uint16_t>(value), dataptr);
 }
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, uint32_t value) {
-	Store<uint32_t>(BSWAP32(value), dataptr);
+	Store<uint32_t>(BSwap<uint32_t>(value), dataptr);
 }
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, uint64_t value) {
-	Store<uint64_t>(BSWAP64(value), dataptr);
+	Store<uint64_t>(BSwap<uint64_t>(value), dataptr);
 }
 
 template <>
@@ -177,15 +174,21 @@ inline void Radix::EncodeData(data_ptr_t dataptr, hugeint_t value) {
 }
 
 template <>
+inline void Radix::EncodeData(data_ptr_t dataptr, uhugeint_t value) {
+	EncodeData<uint64_t>(dataptr, value.upper);
+	EncodeData<uint64_t>(dataptr + sizeof(value.upper), value.lower);
+}
+
+template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, float value) {
 	uint32_t converted_value = EncodeFloat(value);
-	Store<uint32_t>(BSWAP32(converted_value), dataptr);
+	Store<uint32_t>(BSwap<uint32_t>(converted_value), dataptr);
 }
 
 template <>
 inline void Radix::EncodeData(data_ptr_t dataptr, double value) {
 	uint64_t converted_value = EncodeDouble(value);
-	Store<uint64_t>(BSWAP64(converted_value), dataptr);
+	Store<uint64_t>(BSwap<uint64_t>(converted_value), dataptr);
 }
 
 template <>

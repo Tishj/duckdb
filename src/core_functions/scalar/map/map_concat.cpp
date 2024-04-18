@@ -97,7 +97,6 @@ static void MapConcatFunction(DataChunk &args, ExpressionState &state, Vector &r
 			auto &values = MapVector::GetValues(map);
 			values_list.push_back(values.GetValue(mapping.key_index));
 		}
-		idx_t entries_count = keys_list.size();
 		D_ASSERT(values_list.size() == keys_list.size());
 		result_entry.offset = ListVector::GetListSize(result);
 		result_entry.length = values_list.size();
@@ -105,7 +104,6 @@ static void MapConcatFunction(DataChunk &args, ExpressionState &state, Vector &r
 		for (auto &list_entry : list_entries) {
 			ListVector::PushBack(result, list_entry);
 		}
-		ListVector::SetListSize(result, ListVector::GetListSize(result) + entries_count);
 	}
 
 	if (args.AllConstant()) {
@@ -152,6 +150,9 @@ static unique_ptr<FunctionData> MapConcatBind(ClientContext &context, ScalarFunc
 		if (map.id() == LogicalTypeId::SQLNULL) {
 			// The maps are allowed to be NULL
 			continue;
+		}
+		if (map.id() != LogicalTypeId::MAP) {
+			throw InvalidInputException("MAP_CONCAT only takes map arguments");
 		}
 		is_null = false;
 		if (IsEmptyMap(map)) {

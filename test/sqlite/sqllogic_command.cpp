@@ -10,6 +10,8 @@
 #include "catch.hpp"
 #include <list>
 #include <thread>
+#include "duckdb/main/stream_query_result.hpp"
+#include <chrono>
 
 namespace duckdb {
 
@@ -88,8 +90,19 @@ unique_ptr<MaterializedQueryResult> Command::ExecuteQuery(ExecuteContext &contex
 	if (TestForceReload() && TestForceStorage()) {
 		RestartDatabase(context, connection, context.sql_query);
 	}
-
+#ifdef DUCKDB_ALTERNATIVE_VERIFY
+	auto ccontext = connection->context;
+	auto result = ccontext->Query(context.sql_query, true);
+	if (result->type == QueryResultType::STREAM_RESULT) {
+		auto &stream_result = result->Cast<StreamQueryResult>();
+		return stream_result.Materialize();
+	} else {
+		D_ASSERT(result->type == QueryResultType::MATERIALIZED_RESULT);
+		return unique_ptr_cast<QueryResult, MaterializedQueryResult>(std::move(result));
+	}
+#else
 	return connection->Query(context.sql_query);
+#endif
 }
 
 void Command::Execute(ExecuteContext &context) const {
@@ -121,6 +134,18 @@ ReconnectCommand::ReconnectCommand(SQLLogicTestRunner &runner) : Command(runner)
 
 LoopCommand::LoopCommand(SQLLogicTestRunner &runner, LoopDefinition definition_p)
     : Command(runner), definition(std::move(definition_p)) {
+}
+
+ModeCommand::ModeCommand(SQLLogicTestRunner &runner, string parameter_p)
+    : Command(runner), parameter(std::move(parameter_p)) {
+}
+
+SleepCommand::SleepCommand(SQLLogicTestRunner &runner, idx_t duration, SleepUnit unit)
+    : Command(runner), duration(duration), unit(unit) {
+}
+
+UnzipCommand::UnzipCommand(SQLLogicTestRunner &runner, string &input, string &output)
+    : Command(runner), input_path(input), extraction_path(output) {
 }
 
 struct ParallelExecuteContext {
@@ -173,8 +198,10 @@ void LoopCommand::ExecuteInternal(ExecuteContext &context) const {
 	LoopDefinition loop_def = definition;
 	loop_def.loop_idx = definition.loop_start;
 	if (loop_def.is_parallel) {
-		if (context.is_parallel || !context.running_loops.empty()) {
-			throw std::runtime_error("Nested parallel loop commands not allowed");
+		for (auto &running_loop : context.running_loops) {
+			if (running_loop.is_parallel) {
+				throw std::runtime_error("Nested parallel loop commands not allowed");
+			}
 		}
 		// parallel loop: launch threads
 		std::list<ParallelExecuteContext> contexts;
@@ -284,6 +311,54 @@ void ReconnectCommand::ExecuteInternal(ExecuteContext &context) const {
 	runner.Reconnect();
 }
 
+void ModeCommand::ExecuteInternal(ExecuteContext &context) const {
+	if (parameter == "output_hash") {
+		runner.output_hash_mode = true;
+	} else if (parameter == "output_result") {
+		runner.output_result_mode = true;
+	} else if (parameter == "no_output") {
+		runner.output_hash_mode = false;
+		runner.output_result_mode = false;
+	} else if (parameter == "debug") {
+		runner.debug_mode = true;
+	} else {
+		throw std::runtime_error("unrecognized mode: " + parameter);
+	}
+}
+
+void SleepCommand::ExecuteInternal(ExecuteContext &context) const {
+	switch (unit) {
+	case SleepUnit::NANOSECOND:
+		std::this_thread::sleep_for(std::chrono::duration<double, std::nano>(duration));
+		break;
+	case SleepUnit::MICROSECOND:
+		std::this_thread::sleep_for(std::chrono::duration<double, std::micro>(duration));
+		break;
+	case SleepUnit::MILLISECOND:
+		std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(duration));
+		break;
+	case SleepUnit::SECOND:
+		std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(duration * 1000));
+		break;
+	default:
+		throw std::runtime_error("Unrecognized sleep unit");
+	}
+}
+
+SleepUnit SleepCommand::ParseUnit(const string &unit) {
+	if (unit == "second" || unit == "seconds" || unit == "sec") {
+		return SleepUnit::SECOND;
+	} else if (unit == "millisecond" || unit == "milliseconds" || unit == "milli") {
+		return SleepUnit::MILLISECOND;
+	} else if (unit == "microsecond" || unit == "microseconds" || unit == "micro") {
+		return SleepUnit::MICROSECOND;
+	} else if (unit == "nanosecond" || unit == "nanoseconds" || unit == "nano") {
+		return SleepUnit::NANOSECOND;
+	} else {
+		throw std::runtime_error("Unrecognized sleep mode - expected second/millisecond/microescond/nanosecond");
+	}
+}
+
 void Statement::ExecuteInternal(ExecuteContext &context) const {
 	auto connection = CommandConnection(context);
 
@@ -313,6 +388,38 @@ void Statement::ExecuteInternal(ExecuteContext &context) const {
 		} else {
 			FAIL_LINE(file_name, query_line, 0);
 		}
+	}
+}
+
+void UnzipCommand::ExecuteInternal(ExecuteContext &context) const {
+	VirtualFileSystem vfs;
+
+	// input
+	FileOpenFlags in_flags(FileFlags::FILE_FLAGS_READ);
+	in_flags.SetCompression(FileCompressionType::GZIP);
+	auto compressed_file_handle = vfs.OpenFile(input_path, in_flags);
+	if (compressed_file_handle == nullptr) {
+		throw CatalogException("Cannot open the file \"%s\"", input_path);
+	}
+
+	// read the compressed data from the file
+	int64_t file_size = vfs.GetFileSize(*compressed_file_handle);
+	std::unique_ptr<char[]> compressed_buffer(new char[BUFFER_SIZE]);
+	int64_t bytes_read = vfs.Read(*compressed_file_handle, compressed_buffer.get(), BUFFER_SIZE);
+	if (bytes_read < file_size) {
+		throw CatalogException("Cannot read the file \"%s\"", input_path);
+	}
+
+	// output
+	FileOpenFlags out_flags(FileOpenFlags::FILE_FLAGS_FILE_CREATE | FileOpenFlags::FILE_FLAGS_WRITE);
+	auto output_file = vfs.OpenFile(extraction_path, out_flags);
+	if (!output_file) {
+		throw CatalogException("Cannot open the file \"%s\"", extraction_path);
+	}
+
+	int64_t bytes_written = vfs.Write(*output_file, compressed_buffer.get(), BUFFER_SIZE);
+	if (bytes_written < file_size) {
+		throw CatalogException("Cannot write the file \"%s\"", extraction_path);
 	}
 }
 

@@ -1,19 +1,24 @@
 #include "statement_generator.hpp"
 
-#include "duckdb/parser/query_node/select_node.hpp"
-#include "duckdb/parser/query_node/set_operation_node.hpp"
-#include "duckdb/parser/tableref/list.hpp"
-#include "duckdb/parser/parsed_expression_iterator.hpp"
-#include "duckdb/parser/expression/list.hpp"
-#include "duckdb/parser/statement/delete_statement.hpp"
-#include "duckdb/parser/statement/insert_statement.hpp"
-#include "duckdb/parser/statement/update_statement.hpp"
-#include "duckdb/parser/statement/select_statement.hpp"
-#include "duckdb/function/table/system_functions.hpp"
 #include "duckdb/catalog/catalog_entry/list.hpp"
-#include "duckdb/parser/expression/list.hpp"
 #include "duckdb/common/random_engine.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/function/table/system_functions.hpp"
+#include "duckdb/parser/expression/list.hpp"
+#include "duckdb/parser/parsed_data/create_schema_info.hpp"
+#include "duckdb/parser/parsed_data/create_table_info.hpp"
+#include "duckdb/parser/parsed_data/create_view_info.hpp"
+#include "duckdb/parser/parsed_data/create_function_info.hpp"
+#include "duckdb/parser/parsed_data/create_type_info.hpp"
+#include "duckdb/parser/parsed_expression_iterator.hpp"
+#include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/query_node/set_operation_node.hpp"
+#include "duckdb/parser/statement/create_statement.hpp"
+#include "duckdb/parser/statement/delete_statement.hpp"
+#include "duckdb/parser/statement/insert_statement.hpp"
+#include "duckdb/parser/statement/select_statement.hpp"
+#include "duckdb/parser/statement/update_statement.hpp"
+#include "duckdb/parser/tableref/list.hpp"
 
 namespace duckdb {
 
@@ -50,8 +55,15 @@ shared_ptr<GeneratorContext> StatementGenerator::GetDatabaseState(ClientContext 
 		auto &schema = schema_ref.get();
 		schema.Scan(context, CatalogType::SCALAR_FUNCTION_ENTRY,
 		            [&](CatalogEntry &entry) { result->scalar_functions.push_back(entry); });
-		schema.Scan(context, CatalogType::TABLE_FUNCTION_ENTRY,
-		            [&](CatalogEntry &entry) { result->table_functions.push_back(entry); });
+		schema.Scan(context, CatalogType::TABLE_FUNCTION_ENTRY, [&](CatalogEntry &entry) {
+			// don't include fuzz functions
+			if (entry.name.find("fuzzyduck") == std::string::npos &&
+			    entry.name.find("fuzz_all_functions") == std::string::npos &&
+			    entry.name.find("reduce_sql_statement") == std::string::npos &&
+			    entry.name.find("sqlsmith") == std::string::npos) {
+				result->table_functions.push_back(entry);
+			}
+		});
 		schema.Scan(context, CatalogType::PRAGMA_FUNCTION_ENTRY,
 		            [&](CatalogEntry &entry) { result->pragma_functions.push_back(entry); });
 		schema.Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
@@ -65,13 +77,18 @@ shared_ptr<GeneratorContext> StatementGenerator::GetDatabaseState(ClientContext 
 }
 
 unique_ptr<SQLStatement> StatementGenerator::GenerateStatement() {
-	return GenerateStatement(StatementType::SELECT_STATEMENT);
+	if (RandomPercentage(80)) {
+		return GenerateStatement(StatementType::SELECT_STATEMENT);
+	}
+	return GenerateStatement(StatementType::CREATE_STATEMENT);
 }
 
 unique_ptr<SQLStatement> StatementGenerator::GenerateStatement(StatementType type) {
 	switch (type) {
 	case StatementType::SELECT_STATEMENT:
 		return GenerateSelect();
+	case StatementType::CREATE_STATEMENT:
+		return GenerateCreate();
 	default:
 		throw InternalException("Unsupported type");
 	}
@@ -80,10 +97,69 @@ unique_ptr<SQLStatement> StatementGenerator::GenerateStatement(StatementType typ
 //===--------------------------------------------------------------------===//
 // Statements
 //===--------------------------------------------------------------------===//
-unique_ptr<SQLStatement> StatementGenerator::GenerateSelect() {
+unique_ptr<SelectStatement> StatementGenerator::GenerateSelect() {
 	auto select = make_uniq<SelectStatement>();
 	select->node = GenerateQueryNode();
-	return std::move(select);
+	return select;
+}
+
+unique_ptr<CreateStatement> StatementGenerator::GenerateCreate() {
+	auto create = make_uniq<CreateStatement>();
+	create->info = GenerateCreateInfo();
+	return create;
+}
+
+//===--------------------------------------------------------------------===//
+// Create Info Node
+//===--------------------------------------------------------------------===//
+
+unique_ptr<CreateInfo> StatementGenerator::GenerateCreateInfo() {
+	switch (RandomValue(4)) {
+	case 0: {
+		auto info = make_uniq<CreateTypeInfo>();
+		info->name = RandomString(5);
+		idx_t num_enums = RandomValue(10);
+		auto Enum_Vector = Vector(LogicalType::VARCHAR, num_enums);
+		for (idx_t i = 0; i < num_enums; i++) {
+			Enum_Vector.SetValue(i, Value(RandomString(10)));
+		}
+		info->type = LogicalType::ENUM("My_enum", Enum_Vector, num_enums);
+		return std::move(info);
+	}
+	case 1: {
+		auto info = make_uniq<CreateTableInfo>();
+		info->catalog = INVALID_CATALOG;
+		info->schema = DEFAULT_SCHEMA;
+		info->table = GenerateTableIdentifier();
+		if (RandomPercentage(50)) {
+			info->query = GenerateSelect();
+		} else {
+			idx_t num_cols = RandomValue(1000);
+			for (idx_t i = 0; i < num_cols; i++) {
+				info->columns.AddColumn(ColumnDefinition(GenerateIdentifier(), GenerateLogicalType()));
+			}
+		}
+		// TODO: add constraints to the columns (primary keys etc.);
+		return std::move(info);
+	}
+	case 2: {
+		auto info = make_uniq<CreateSchemaInfo>();
+		info->catalog = INVALID_CATALOG;
+		info->on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
+		info->schema = GenerateSchemaIdentifier();
+		return std::move(info);
+	}
+	case 3: {
+		auto info = make_uniq<CreateViewInfo>();
+		info->view_name = GenerateViewIdentifier();
+		info->query = GenerateSelect();
+		// TODO: add support for aliases in the view.
+		return std::move(info);
+	}
+	default:
+		break;
+	}
+	throw InternalException("Unsupported Create Info Type");
 }
 
 //===--------------------------------------------------------------------===//
@@ -541,7 +617,6 @@ unique_ptr<ParsedExpression> StatementGenerator::GenerateFunction() {
 		name = scalar_entry.name;
 		arguments = actual_function.arguments;
 		min_parameters = actual_function.arguments.size();
-		;
 		max_parameters = min_parameters;
 		if (actual_function.varargs.id() != LogicalTypeId::INVALID) {
 			max_parameters += 5;
@@ -555,7 +630,6 @@ unique_ptr<ParsedExpression> StatementGenerator::GenerateFunction() {
 
 		name = aggregate_entry.name;
 		min_parameters = actual_function.arguments.size();
-		;
 		max_parameters = min_parameters;
 		if (actual_function.varargs.id() != LogicalTypeId::INVALID) {
 			max_parameters += 5;
@@ -875,6 +949,18 @@ string StatementGenerator::GenerateIdentifier() {
 	return identifier;
 }
 
+string StatementGenerator::GenerateSchemaIdentifier() {
+	auto identifier = "s" + to_string(GetIndex());
+	// TODO: add support for current_schema_names
+	return identifier;
+}
+
+string StatementGenerator::GenerateViewIdentifier() {
+	auto identifier = "v" + to_string(GetIndex());
+	current_relation_names.push_back(identifier);
+	return identifier;
+}
+
 idx_t StatementGenerator::GetIndex() {
 	if (parent) {
 		return parent->GetIndex();
@@ -999,6 +1085,18 @@ idx_t StatementGenerator::RandomValue(idx_t max) {
 	return RandomEngine::Get(context).NextRandomInteger() % max;
 }
 
+string StatementGenerator::RandomString(idx_t length) {
+
+	const string charset = "$_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	string result = "";
+	for (int i = 0; i < length; ++i) {
+		int randomIndex = RandomValue(charset.length());
+		result += charset[randomIndex];
+	}
+
+	return result;
+}
+
 bool StatementGenerator::RandomBoolean() {
 	return RandomValue(2) == 0;
 }
@@ -1008,6 +1106,156 @@ bool StatementGenerator::RandomPercentage(idx_t percentage) {
 		return true;
 	}
 	return RandomValue(100) <= percentage;
+}
+
+//===--------------------------------------------------------------------===//
+// Exhaustive Function Generation
+//===--------------------------------------------------------------------===//
+bool StatementGenerator::FunctionArgumentsAlwaysNull(const string &name) {
+	// some functions run for a very long time with extreme parameters because they e.g. generate giant strings
+	// for that reason we skip testing those functions with extreme parameters
+	static case_insensitive_set_t always_null_functions {"rpad", "pad", "lpad", "repeat"};
+
+	return always_null_functions.find(name) != always_null_functions.end();
+}
+string StatementGenerator::GenerateTestAllTypes(BaseScalarFunction &base_function) {
+	auto select = make_uniq<SelectStatement>();
+	auto node = make_uniq<SelectNode>();
+
+	bool always_null = FunctionArgumentsAlwaysNull(base_function.name);
+
+	vector<unique_ptr<ParsedExpression>> children;
+	for (auto &arg : base_function.arguments) {
+		// look up the type
+		unique_ptr<ParsedExpression> argument;
+		if (!always_null) {
+			for (auto &test_type : generator_context->test_types) {
+				if (test_type.type.id() == arg.id()) {
+					argument = make_uniq<ColumnRefExpression>(test_type.name);
+				}
+			}
+		}
+		if (!argument) {
+			argument = make_uniq<ConstantExpression>(Value(arg));
+		}
+		children.push_back(std::move(argument));
+	}
+	auto from_clause = make_uniq<BaseTableRef>();
+	from_clause->table_name = "all_types";
+	node->from_table = std::move(from_clause);
+
+	auto function_expr = make_uniq<FunctionExpression>(base_function.name, std::move(children));
+	node->select_list.push_back(std::move(function_expr));
+
+	select->node = std::move(node);
+	return select->ToString();
+}
+
+string StatementGenerator::GenerateTestVectorTypes(BaseScalarFunction &base_function) {
+	auto select = make_uniq<SelectStatement>();
+	auto node = make_uniq<SelectNode>();
+
+	bool always_null = FunctionArgumentsAlwaysNull(base_function.name);
+
+	vector<unique_ptr<ParsedExpression>> children;
+	vector<unique_ptr<ParsedExpression>> test_vector_types;
+	vector<string> column_aliases;
+	for (auto &arg : base_function.arguments) {
+		unique_ptr<ParsedExpression> argument;
+		if (!always_null) {
+			string argument_name = "c" + to_string(column_aliases.size() + 1);
+			column_aliases.push_back(argument_name);
+			argument = make_uniq<ColumnRefExpression>(std::move(argument_name));
+			auto constant_expr = make_uniq<ConstantExpression>(Value());
+			auto cast = make_uniq<CastExpression>(arg, std::move(constant_expr));
+			test_vector_types.push_back(std::move(cast));
+		} else {
+			argument = make_uniq<ConstantExpression>(Value(arg));
+		}
+		children.push_back(std::move(argument));
+	}
+	auto from_clause = make_uniq<TableFunctionRef>();
+	auto vector_types_fun = make_uniq<FunctionExpression>("test_vector_types", std::move(test_vector_types));
+	from_clause->function = std::move(vector_types_fun);
+	from_clause->alias = "test_vector_types";
+	from_clause->column_name_alias = std::move(column_aliases);
+	node->from_table = std::move(from_clause);
+
+	auto function_expr = make_uniq<FunctionExpression>(base_function.name, std::move(children));
+	node->select_list.push_back(std::move(function_expr));
+
+	select->node = std::move(node);
+	return select->ToString();
+}
+
+string StatementGenerator::GenerateCast(const LogicalType &target, const string &source_name, bool add_varchar) {
+	auto select = make_uniq<SelectStatement>();
+	auto node = make_uniq<SelectNode>();
+
+	auto from_clause = make_uniq<BaseTableRef>();
+	from_clause->table_name = "all_types";
+	node->from_table = std::move(from_clause);
+
+	unique_ptr<ParsedExpression> source;
+	source = make_uniq<ColumnRefExpression>(source_name);
+	if (add_varchar) {
+		source = make_uniq<CastExpression>(LogicalType::VARCHAR, std::move(source));
+	}
+	auto cast = make_uniq<CastExpression>(target, std::move(source));
+	node->select_list.push_back(std::move(cast));
+
+	select->node = std::move(node);
+	return select->ToString();
+}
+
+void StatementGenerator::GenerateAllScalar(ScalarFunctionCatalogEntry &scalar_function, vector<string> &result) {
+	for (idx_t offset = 0; offset < scalar_function.functions.Size(); offset++) {
+		auto function = scalar_function.functions.GetFunctionByOffset(offset);
+
+		result.push_back(GenerateTestAllTypes(function));
+		result.push_back(GenerateTestVectorTypes(function));
+	}
+}
+
+void StatementGenerator::GenerateAllAggregate(AggregateFunctionCatalogEntry &aggregate_function,
+                                              vector<string> &result) {
+	for (idx_t offset = 0; offset < aggregate_function.functions.Size(); offset++) {
+		auto function = aggregate_function.functions.GetFunctionByOffset(offset);
+
+		result.push_back(GenerateTestAllTypes(function));
+		result.push_back(GenerateTestVectorTypes(function));
+	}
+}
+
+vector<string> StatementGenerator::GenerateAllFunctionCalls() {
+	// all scalar functions
+	vector<string> result;
+	for (auto &function_ref : generator_context->scalar_functions) {
+		auto &function = function_ref.get();
+		switch (function.type) {
+		case CatalogType::SCALAR_FUNCTION_ENTRY: {
+			auto &scalar_entry = function.Cast<ScalarFunctionCatalogEntry>();
+			GenerateAllScalar(scalar_entry, result);
+			break;
+		}
+		case CatalogType::AGGREGATE_FUNCTION_ENTRY: {
+			auto &aggregate_entry = function.Cast<AggregateFunctionCatalogEntry>();
+			GenerateAllAggregate(aggregate_entry, result);
+			break;
+		}
+		case CatalogType::MACRO_ENTRY:
+		default:
+			break;
+		}
+	}
+	// generate all casts
+	for (auto &source_type : generator_context->test_types) {
+		for (auto &target_type : generator_context->test_types) {
+			result.push_back(GenerateCast(target_type.type, source_type.name, false));
+			result.push_back(GenerateCast(target_type.type, source_type.name, true));
+		}
+	}
+	return result;
 }
 
 } // namespace duckdb

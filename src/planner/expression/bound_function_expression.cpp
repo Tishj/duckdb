@@ -3,6 +3,9 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types/hash.hpp"
 #include "duckdb/function/function_serialization.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
+#include "duckdb/core_functions/lambda_functions.hpp"
 
 namespace duckdb {
 
@@ -15,17 +18,32 @@ BoundFunctionExpression::BoundFunctionExpression(LogicalType return_type, Scalar
 	D_ASSERT(!function.name.empty());
 }
 
-bool BoundFunctionExpression::HasSideEffects() const {
-	return function.side_effects == FunctionSideEffects::HAS_SIDE_EFFECTS ? true : Expression::HasSideEffects();
+bool BoundFunctionExpression::IsVolatile() const {
+	return function.stability == FunctionStability::VOLATILE ? true : Expression::IsVolatile();
+}
+
+bool BoundFunctionExpression::IsConsistent() const {
+	return function.stability != FunctionStability::CONSISTENT ? false : Expression::IsConsistent();
 }
 
 bool BoundFunctionExpression::IsFoldable() const {
 	// functions with side effects cannot be folded: they have to be executed once for every row
-	return function.side_effects == FunctionSideEffects::HAS_SIDE_EFFECTS ? false : Expression::IsFoldable();
+	if (function.bind_lambda) {
+		// This is a lambda function
+		D_ASSERT(bind_info);
+		auto &lambda_bind_data = bind_info->Cast<ListLambdaBindData>();
+		if (lambda_bind_data.lambda_expr) {
+			auto &expr = *lambda_bind_data.lambda_expr;
+			if (expr.IsVolatile()) {
+				return false;
+			}
+		}
+	}
+	return function.stability == FunctionStability::VOLATILE ? false : Expression::IsFoldable();
 }
 
 string BoundFunctionExpression::ToString() const {
-	return FunctionExpression::ToString<BoundFunctionExpression, Expression>(*this, string(), function.name,
+	return FunctionExpression::ToString<BoundFunctionExpression, Expression>(*this, string(), string(), function.name,
 	                                                                         is_operator);
 }
 bool BoundFunctionExpression::PropagatesNullValues() const {
@@ -73,23 +91,23 @@ void BoundFunctionExpression::Verify() const {
 	D_ASSERT(!function.name.empty());
 }
 
-void BoundFunctionExpression::Serialize(FieldWriter &writer) const {
-	D_ASSERT(!function.name.empty());
-	D_ASSERT(return_type == function.return_type);
-	writer.WriteField(is_operator);
-	FunctionSerializer::Serialize<ScalarFunction>(writer, function, return_type, children, bind_info.get());
+void BoundFunctionExpression::Serialize(Serializer &serializer) const {
+	Expression::Serialize(serializer);
+	serializer.WriteProperty(200, "return_type", return_type);
+	serializer.WriteProperty(201, "children", children);
+	FunctionSerializer::Serialize(serializer, function, bind_info.get());
+	serializer.WriteProperty(202, "is_operator", is_operator);
 }
 
-unique_ptr<Expression> BoundFunctionExpression::Deserialize(ExpressionDeserializationState &state,
-                                                            FieldReader &reader) {
-	auto is_operator = reader.ReadRequired<bool>();
-	vector<unique_ptr<Expression>> children;
-	unique_ptr<FunctionData> bind_info;
-	auto function = FunctionSerializer::Deserialize<ScalarFunction, ScalarFunctionCatalogEntry>(
-	    reader, state, CatalogType::SCALAR_FUNCTION_ENTRY, children, bind_info);
-
-	auto return_type = function.return_type;
-	return make_uniq<BoundFunctionExpression>(std::move(return_type), std::move(function), std::move(children),
-	                                          std::move(bind_info), is_operator);
+unique_ptr<Expression> BoundFunctionExpression::Deserialize(Deserializer &deserializer) {
+	auto return_type = deserializer.ReadProperty<LogicalType>(200, "return_type");
+	auto children = deserializer.ReadProperty<vector<unique_ptr<Expression>>>(201, "children");
+	auto entry = FunctionSerializer::Deserialize<ScalarFunction, ScalarFunctionCatalogEntry>(
+	    deserializer, CatalogType::SCALAR_FUNCTION_ENTRY, children, return_type);
+	auto result = make_uniq<BoundFunctionExpression>(std::move(return_type), std::move(entry.first),
+	                                                 std::move(children), std::move(entry.second));
+	deserializer.ReadProperty(202, "is_operator", result->is_operator);
+	return std::move(result);
 }
+
 } // namespace duckdb

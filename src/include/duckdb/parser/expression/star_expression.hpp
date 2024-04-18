@@ -19,7 +19,7 @@ public:
 	static constexpr const ExpressionClass TYPE = ExpressionClass::STAR;
 
 public:
-	StarExpression(string relation_name = string());
+	explicit StarExpression(string relation_name = string());
 
 	//! The relation name in case of tbl.*, or empty if this is a normal *
 	string relation_name;
@@ -39,9 +39,7 @@ public:
 
 	unique_ptr<ParsedExpression> Copy() const override;
 
-	void Serialize(FieldWriter &writer) const override;
-	static unique_ptr<ParsedExpression> Deserialize(ExpressionType type, FieldReader &source);
-	void FormatSerialize(FormatSerializer &serializer) const override;
-	static unique_ptr<ParsedExpression> FormatDeserialize(ExpressionType type, FormatDeserializer &deserializer);
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ParsedExpression> Deserialize(Deserializer &deserializer);
 };
 } // namespace duckdb

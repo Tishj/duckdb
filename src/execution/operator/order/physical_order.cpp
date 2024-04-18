@@ -4,7 +4,7 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/base_pipeline_event.hpp"
-#include "duckdb/parallel/event.hpp"
+#include "duckdb/parallel/executor_task.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
 namespace duckdb {
@@ -101,16 +101,18 @@ SinkResultType PhysicalOrder::Sink(ExecutionContext &context, DataChunk &chunk, 
 	return SinkResultType::NEED_MORE_INPUT;
 }
 
-void PhysicalOrder::Combine(ExecutionContext &context, GlobalSinkState &gstate_p, LocalSinkState &lstate_p) const {
-	auto &gstate = gstate_p.Cast<OrderGlobalSinkState>();
-	auto &lstate = lstate_p.Cast<OrderLocalSinkState>();
+SinkCombineResultType PhysicalOrder::Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const {
+	auto &gstate = input.global_state.Cast<OrderGlobalSinkState>();
+	auto &lstate = input.local_state.Cast<OrderLocalSinkState>();
 	gstate.global_sort_state.AddLocalState(lstate.local_sort_state);
+
+	return SinkCombineResultType::FINISHED;
 }
 
 class PhysicalOrderMergeTask : public ExecutorTask {
 public:
 	PhysicalOrderMergeTask(shared_ptr<Event> event_p, ClientContext &context, OrderGlobalSinkState &state)
-	    : ExecutorTask(context), event(std::move(event_p)), context(context), state(state) {
+	    : ExecutorTask(context, std::move(event_p)), context(context), state(state) {
 	}
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
@@ -123,7 +125,6 @@ public:
 	}
 
 private:
-	shared_ptr<Event> event;
 	ClientContext &context;
 	OrderGlobalSinkState &state;
 };
@@ -142,7 +143,7 @@ public:
 
 		// Schedule tasks equal to the number of threads, which will each merge multiple partitions
 		auto &ts = TaskScheduler::GetScheduler(context);
-		idx_t num_threads = ts.NumberOfThreads();
+		auto num_threads = NumericCast<idx_t>(ts.NumberOfThreads());
 
 		vector<shared_ptr<Task>> merge_tasks;
 		for (idx_t tnum = 0; tnum < num_threads; tnum++) {
@@ -163,8 +164,8 @@ public:
 };
 
 SinkFinalizeType PhysicalOrder::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                         GlobalSinkState &gstate_p) const {
-	auto &state = gstate_p.Cast<OrderGlobalSinkState>();
+                                         OperatorSinkFinalizeInput &input) const {
+	auto &state = input.global_state.Cast<OrderGlobalSinkState>();
 	auto &global_sort_state = state.global_sort_state;
 
 	if (global_sort_state.sorted_blocks.empty()) {

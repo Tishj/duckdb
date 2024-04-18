@@ -1,8 +1,10 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types.hpp"
+#include "duckdb/common/helper.hpp" // defines DUCKDB_EXPLICIT_FALLTHROUGH which fmt will use to annotate
 #include "fmt/format.h"
 #include "fmt/printf.h"
 #include "duckdb/common/types/hugeint.hpp"
+#include "duckdb/common/types/uhugeint.hpp"
 #include "duckdb/parser/keyword_helper.hpp"
 
 namespace duckdb {
@@ -15,6 +17,9 @@ ExceptionFormatValue::ExceptionFormatValue(int64_t int_val)
 }
 ExceptionFormatValue::ExceptionFormatValue(hugeint_t huge_val)
     : type(ExceptionFormatValueType::FORMAT_VALUE_TYPE_STRING), str_val(Hugeint::ToString(huge_val)) {
+}
+ExceptionFormatValue::ExceptionFormatValue(uhugeint_t uhuge_val)
+    : type(ExceptionFormatValueType::FORMAT_VALUE_TYPE_STRING), str_val(Uhugeint::ToString(uhuge_val)) {
 }
 ExceptionFormatValue::ExceptionFormatValue(string str_val)
     : type(ExceptionFormatValueType::FORMAT_VALUE_TYPE_STRING), str_val(std::move(str_val)) {
@@ -66,6 +71,10 @@ template <>
 ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(hugeint_t value) {
 	return ExceptionFormatValue(value);
 }
+template <>
+ExceptionFormatValue ExceptionFormatValue::CreateFormatValue(uhugeint_t value) {
+	return ExceptionFormatValue(value);
+}
 
 string ExceptionFormatValue::Format(const string &msg, std::vector<ExceptionFormatValue> &values) {
 	try {
@@ -85,10 +94,14 @@ string ExceptionFormatValue::Format(const string &msg, std::vector<ExceptionForm
 		}
 		return duckdb_fmt::vsprintf(msg, duckdb_fmt::basic_format_args<duckdb_fmt::printf_context>(
 		                                     format_args.data(), static_cast<int>(format_args.size())));
-	} catch (std::exception &ex) {
+	} catch (std::exception &ex) { // LCOV_EXCL_START
+		// work-around for oss-fuzz limiting memory which causes issues here
+		if (StringUtil::Contains(ex.what(), "fuzz mode")) {
+			throw InvalidInputException(msg);
+		}
 		throw InternalException(std::string("Primary exception: ") + msg +
 		                        "\nSecondary exception in ExceptionFormatValue: " + ex.what());
-	}
+	} // LCOV_EXCL_STOP
 }
 
 } // namespace duckdb

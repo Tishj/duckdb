@@ -3,6 +3,7 @@
 #include "duckdb/parser/expression/list.hpp"
 #include "duckdb/parser/query_node.hpp"
 #include "duckdb/parser/query_node/recursive_cte_node.hpp"
+#include "duckdb/parser/query_node/cte_node.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/query_node/set_operation_node.hpp"
 #include "duckdb/parser/tableref/list.hpp"
@@ -140,6 +141,7 @@ void ParsedExpressionIterator::EnumerateChildren(
 	}
 	case ExpressionClass::BOUND_EXPRESSION:
 	case ExpressionClass::COLUMN_REF:
+	case ExpressionClass::LAMBDA_REF:
 	case ExpressionClass::CONSTANT:
 	case ExpressionClass::DEFAULT:
 	case ExpressionClass::PARAMETER:
@@ -238,7 +240,8 @@ void ParsedExpressionIterator::EnumerateTableRefChildren(
 		break;
 	}
 	case TableReferenceType::BASE_TABLE:
-	case TableReferenceType::EMPTY:
+	case TableReferenceType::EMPTY_FROM:
+	case TableReferenceType::SHOW_REF:
 		// these TableRefs do not need to be unfolded
 		break;
 	case TableReferenceType::INVALID:
@@ -254,6 +257,12 @@ void ParsedExpressionIterator::EnumerateQueryNodeChildren(
 		auto &rcte_node = node.Cast<RecursiveCTENode>();
 		EnumerateQueryNodeChildren(*rcte_node.left, callback);
 		EnumerateQueryNodeChildren(*rcte_node.right, callback);
+		break;
+	}
+	case QueryNodeType::CTE_NODE: {
+		auto &cte_node = node.Cast<CTENode>();
+		EnumerateQueryNodeChildren(*cte_node.query, callback);
+		EnumerateQueryNodeChildren(*cte_node.child, callback);
 		break;
 	}
 	case QueryNodeType::SELECT_NODE: {

@@ -12,8 +12,7 @@ NumpyQueryResult::NumpyQueryResult(StatementType statement_type, StatementProper
       collection(std::move(collection_p)) {
 }
 
-NumpyQueryResult::NumpyQueryResult(PreservedError error)
-    : QueryResult(QueryResultType::NUMPY_RESULT, std::move(error)) {
+NumpyQueryResult::NumpyQueryResult(ErrorData error) : QueryResult(QueryResultType::NUMPY_RESULT, std::move(error)) {
 }
 
 unique_ptr<DataChunk> NumpyQueryResult::Fetch() {

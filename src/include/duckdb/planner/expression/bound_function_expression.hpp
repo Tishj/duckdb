@@ -34,7 +34,8 @@ public:
 	bool is_operator;
 
 public:
-	bool HasSideEffects() const override;
+	bool IsVolatile() const override;
+	bool IsConsistent() const override;
 	bool IsFoldable() const override;
 	string ToString() const override;
 	bool PropagatesNullValues() const override;
@@ -44,7 +45,8 @@ public:
 	unique_ptr<Expression> Copy() override;
 	void Verify() const override;
 
-	void Serialize(FieldWriter &writer) const override;
-	static unique_ptr<Expression> Deserialize(ExpressionDeserializationState &state, FieldReader &reader);
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<Expression> Deserialize(Deserializer &deserializer);
 };
+
 } // namespace duckdb

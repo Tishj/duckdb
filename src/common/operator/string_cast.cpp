@@ -24,37 +24,37 @@ string_t StringCast::Operation(bool input, Vector &vector) {
 
 template <>
 string_t StringCast::Operation(int8_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<int8_t, uint8_t>(input, vector);
+	return NumericHelper::FormatSigned<int8_t>(input, vector);
 }
 
 template <>
 string_t StringCast::Operation(int16_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<int16_t, uint16_t>(input, vector);
+	return NumericHelper::FormatSigned<int16_t>(input, vector);
 }
 template <>
 string_t StringCast::Operation(int32_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<int32_t, uint32_t>(input, vector);
+	return NumericHelper::FormatSigned<int32_t>(input, vector);
 }
 
 template <>
 string_t StringCast::Operation(int64_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<int64_t, uint64_t>(input, vector);
+	return NumericHelper::FormatSigned<int64_t>(input, vector);
 }
 template <>
 duckdb::string_t StringCast::Operation(uint8_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<uint8_t, uint64_t>(input, vector);
+	return NumericHelper::FormatSigned<uint8_t>(input, vector);
 }
 template <>
 duckdb::string_t StringCast::Operation(uint16_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<uint16_t, uint64_t>(input, vector);
+	return NumericHelper::FormatSigned<uint16_t>(input, vector);
 }
 template <>
 duckdb::string_t StringCast::Operation(uint32_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<uint32_t, uint64_t>(input, vector);
+	return NumericHelper::FormatSigned<uint32_t>(input, vector);
 }
 template <>
 duckdb::string_t StringCast::Operation(uint64_t input, Vector &vector) {
-	return NumericHelper::FormatSigned<uint64_t, uint64_t>(input, vector);
+	return NumericHelper::FormatSigned<uint64_t>(input, vector);
 }
 
 template <>
@@ -79,6 +79,11 @@ string_t StringCast::Operation(interval_t input, Vector &vector) {
 template <>
 duckdb::string_t StringCast::Operation(hugeint_t input, Vector &vector) {
 	return HugeintToStringCast::FormatSigned(input, vector);
+}
+
+template <>
+duckdb::string_t StringCast::Operation(uhugeint_t input, Vector &vector) {
+	return UhugeintToStringCast::Format(input, vector);
 }
 
 template <>
@@ -161,24 +166,61 @@ duckdb::string_t StringCast::Operation(duckdb::string_t input, Vector &result) {
 }
 
 template <>
-string_t StringCastTZ::Operation(dtime_t input, Vector &vector) {
+string_t StringCastTZ::Operation(dtime_tz_t input, Vector &vector) {
 	int32_t time[4];
-	Time::Convert(input, time[0], time[1], time[2], time[3]);
+	Time::Convert(input.time(), time[0], time[1], time[2], time[3]);
 
-	// format for timetz is TIME+00
 	char micro_buffer[10];
 	const auto time_length = TimeToStringCast::Length(time, micro_buffer);
-	const idx_t length = time_length + 3;
+	idx_t length = time_length;
+
+	const auto offset = input.offset();
+	const bool negative = (offset < 0);
+	++length;
+
+	auto ss = std::abs(offset);
+	const auto hh = ss / Interval::SECS_PER_HOUR;
+
+	const auto hh_length = UnsafeNumericCast<idx_t>((hh < 100) ? 2 : NumericHelper::UnsignedLength(uint32_t(hh)));
+	length += hh_length;
+
+	ss %= Interval::SECS_PER_HOUR;
+	const auto mm = ss / Interval::SECS_PER_MINUTE;
+	if (mm) {
+		length += 3;
+	}
+
+	ss %= Interval::SECS_PER_MINUTE;
+	if (ss) {
+		length += 3;
+	}
 
 	string_t result = StringVector::EmptyString(vector, length);
 	auto data = result.GetDataWriteable();
 
 	idx_t pos = 0;
-	TimeToStringCast::Format(data + pos, length, time, micro_buffer);
+	TimeToStringCast::Format(data + pos, time_length, time, micro_buffer);
 	pos += time_length;
-	data[pos++] = '+';
-	data[pos++] = '0';
-	data[pos++] = '0';
+
+	data[pos++] = negative ? '-' : '+';
+	if (hh < 100) {
+		TimeToStringCast::FormatTwoDigits(data + pos, hh);
+	} else {
+		NumericHelper::FormatUnsigned(hh, data + pos + hh_length);
+	}
+	pos += hh_length;
+
+	if (mm) {
+		data[pos++] = ':';
+		TimeToStringCast::FormatTwoDigits(data + pos, mm);
+		pos += 2;
+	}
+
+	if (ss) {
+		data[pos++] = ':';
+		TimeToStringCast::FormatTwoDigits(data + pos, ss);
+		pos += 2;
+	}
 
 	result.Finalize();
 	return result;

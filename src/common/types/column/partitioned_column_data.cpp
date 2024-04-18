@@ -32,13 +32,13 @@ PartitionedColumnData::~PartitionedColumnData() {
 
 void PartitionedColumnData::InitializeAppendState(PartitionedColumnDataAppendState &state) const {
 	state.partition_sel.Initialize();
-	state.slice_chunk.Initialize(context, types);
+	state.slice_chunk.Initialize(BufferAllocator::Get(context), types);
 	InitializeAppendStateInternal(state);
 }
 
 unique_ptr<DataChunk> PartitionedColumnData::CreatePartitionBuffer() const {
 	auto result = make_uniq<DataChunk>();
-	result->Initialize(BufferManager::GetBufferManager(context).GetBufferAllocator(), types, BufferSize());
+	result->Initialize(BufferAllocator::Get(context), types, BufferSize());
 	return result;
 }
 
@@ -92,7 +92,7 @@ void PartitionedColumnData::Append(PartitionedColumnDataAppendState &state, Data
 	for (idx_t i = 0; i < count; i++) {
 		const auto &partition_index = partition_indices[i];
 		auto &partition_offset = partition_entries[partition_index].offset;
-		all_partitions_sel[partition_offset++] = i;
+		all_partitions_sel[partition_offset++] = NumericCast<sel_t>(i);
 	}
 
 	// Loop through the partitions to append the new data to the partition buffers, and flush the buffers if necessary

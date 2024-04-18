@@ -77,13 +77,13 @@ mutable struct DB <: DBInterface.Connection
     main_connection::Connection
 
     function DB(f::AbstractString, config::Config)
-        set_config(config, "threads", "1")
-        set_config(config, "external_threads", string(Threads.nthreads() - 1))
+        set_config(config, "threads", string(Threads.nthreads()))
+        set_config(config, "external_threads", string(Threads.nthreads())) # all threads are external
         handle = DuckDBHandle(f, config)
         main_connection = Connection(handle)
 
         db = new(handle, main_connection)
-        _add_data_frame_scan(db)
+        _add_table_scan(db)
         return db
     end
     function DB(f::AbstractString)

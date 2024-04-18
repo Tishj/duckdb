@@ -26,14 +26,16 @@ class StreamingWindowState : public OperatorState {
 public:
 	using StateBuffer = vector<data_t>;
 
-	StreamingWindowState() : initialized(false), statev(LogicalType::POINTER, data_ptr_cast(&state_ptr)) {
+	StreamingWindowState()
+	    : initialized(false), allocator(Allocator::DefaultAllocator()),
+	      statev(LogicalType::POINTER, data_ptr_cast(&state_ptr)) {
 	}
 
 	~StreamingWindowState() override {
 		for (size_t i = 0; i < aggregate_dtors.size(); ++i) {
 			auto dtor = aggregate_dtors[i];
 			if (dtor) {
-				AggregateInputData aggr_input_data(aggregate_bind_data[i], Allocator::DefaultAllocator());
+				AggregateInputData aggr_input_data(aggregate_bind_data[i], allocator);
 				state_ptr = aggregate_states[i].data();
 				dtor(statev, aggr_input_data, 1);
 			}
@@ -89,6 +91,7 @@ public:
 public:
 	bool initialized;
 	vector<unique_ptr<Vector>> const_vectors;
+	ArenaAllocator allocator;
 
 	// Aggregation
 	vector<StateBuffer> aggregate_states;
@@ -110,6 +113,7 @@ OperatorResultType PhysicalStreamingWindow::Execute(ExecutionContext &context, D
                                                     GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	auto &gstate = gstate_p.Cast<StreamingWindowGlobalState>();
 	auto &state = state_p.Cast<StreamingWindowState>();
+
 	if (!state.initialized) {
 		state.Initialize(context.client, input, select_list);
 	}
@@ -130,7 +134,7 @@ OperatorResultType PhysicalStreamingWindow::Execute(ExecutionContext &context, D
 			auto &aggregate = *wexpr.aggregate;
 			auto &statev = state.statev;
 			state.state_ptr = state.aggregate_states[expr_idx].data();
-			AggregateInputData aggr_input_data(wexpr.bind_info.get(), Allocator::DefaultAllocator());
+			AggregateInputData aggr_input_data(wexpr.bind_info.get(), state.allocator);
 
 			// Check for COUNT(*)
 			if (wexpr.children.empty()) {
@@ -138,7 +142,7 @@ OperatorResultType PhysicalStreamingWindow::Execute(ExecutionContext &context, D
 				auto data = FlatVector::GetData<int64_t>(result);
 				int64_t start_row = gstate.row_number;
 				for (idx_t i = 0; i < input.size(); ++i) {
-					data[i] = start_row + i;
+					data[i] = NumericCast<int64_t>(start_row + NumericCast<int64_t>(i));
 				}
 				break;
 			}
@@ -188,7 +192,7 @@ OperatorResultType PhysicalStreamingWindow::Execute(ExecutionContext &context, D
 			int64_t start_row = gstate.row_number;
 			auto rdata = FlatVector::GetData<int64_t>(chunk.data[col_idx]);
 			for (idx_t i = 0; i < count; i++) {
-				rdata[i] = start_row + i;
+				rdata[i] = NumericCast<int64_t>(start_row + NumericCast<int64_t>(i));
 			}
 			break;
 		}
@@ -196,7 +200,7 @@ OperatorResultType PhysicalStreamingWindow::Execute(ExecutionContext &context, D
 			throw NotImplementedException("%s for StreamingWindow", ExpressionTypeToString(expr.GetExpressionType()));
 		}
 	}
-	gstate.row_number += count;
+	gstate.row_number += NumericCast<int64_t>(count);
 	chunk.SetCardinality(count);
 	return OperatorResultType::NEED_MORE_INPUT;
 }

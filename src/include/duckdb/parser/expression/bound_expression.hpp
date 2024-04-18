@@ -9,7 +9,6 @@
 #pragma once
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/field_writer.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/planner/expression.hpp"
 
@@ -23,7 +22,7 @@ public:
 	static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_EXPRESSION;
 
 public:
-	BoundExpression(unique_ptr<Expression> expr);
+	explicit BoundExpression(unique_ptr<Expression> expr);
 
 	unique_ptr<Expression> expr;
 
@@ -37,9 +36,7 @@ public:
 
 	unique_ptr<ParsedExpression> Copy() const override;
 
-	void Serialize(FieldWriter &writer) const override;
-
-	void FormatSerialize(FormatSerializer &serializer) const override;
+	void Serialize(Serializer &serializer) const override;
 };
 
 } // namespace duckdb

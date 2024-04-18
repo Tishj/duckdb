@@ -16,7 +16,7 @@
 #include "duckdb_python/pyrelation.hpp"
 #include "duckdb_python/pytype.hpp"
 #include "duckdb_python/path_like.hpp"
-#include "duckdb/execution/operator/persistent/csv_reader_options.hpp"
+#include "duckdb/execution/operator/csv_scanner/csv_reader_options.hpp"
 #include "duckdb_python/pyfilesystem.hpp"
 #include "duckdb_python/pybind11/registered_py_object.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -52,6 +52,7 @@ public:
 public:
 	explicit DuckDBPyConnection() {
 	}
+	~DuckDBPyConnection();
 
 public:
 	static void Initialize(py::handle &m);
@@ -59,7 +60,7 @@ public:
 
 	shared_ptr<DuckDBPyConnection> Enter();
 
-	static bool Exit(DuckDBPyConnection &self, const py::object &exc_type, const py::object &exc,
+	static void Exit(DuckDBPyConnection &self, const py::object &exc_type, const py::object &exc,
 	                 const py::object &traceback);
 
 	static bool DetectAndGetEnvironment();
@@ -77,7 +78,10 @@ public:
 	        const py::object &parallel = py::none(), const py::object &date_format = py::none(),
 	        const py::object &timestamp_format = py::none(), const py::object &sample_size = py::none(),
 	        const py::object &all_varchar = py::none(), const py::object &normalize_names = py::none(),
-	        const py::object &filename = py::none(), const py::object &null_padding = py::none());
+	        const py::object &filename = py::none(), const py::object &null_padding = py::none(),
+	        const py::object &names = py::none());
+
+	py::list ExtractStatements(const string &query);
 
 	unique_ptr<DuckDBPyRelation> ReadJSON(const string &filename, const Optional<py::object> &columns = py::none(),
 	                                      const Optional<py::object> &sample_size = py::none(),
@@ -88,7 +92,8 @@ public:
 	shared_ptr<DuckDBPyType> MapType(const shared_ptr<DuckDBPyType> &key_type,
 	                                 const shared_ptr<DuckDBPyType> &value_type);
 	shared_ptr<DuckDBPyType> StructType(const py::object &fields);
-	shared_ptr<DuckDBPyType> ArrayType(const shared_ptr<DuckDBPyType> &type);
+	shared_ptr<DuckDBPyType> ListType(const shared_ptr<DuckDBPyType> &type);
+	shared_ptr<DuckDBPyType> ArrayType(const shared_ptr<DuckDBPyType> &type, idx_t size);
 	shared_ptr<DuckDBPyType> UnionType(const py::object &members);
 	shared_ptr<DuckDBPyType> EnumType(const string &name, const shared_ptr<DuckDBPyType> &type,
 	                                  const py::list &values_p);
@@ -100,15 +105,18 @@ public:
 	RegisterScalarUDF(const string &name, const py::function &udf, const py::object &arguments = py::none(),
 	                  const shared_ptr<DuckDBPyType> &return_type = nullptr, PythonUDFType type = PythonUDFType::NATIVE,
 	                  FunctionNullHandling null_handling = FunctionNullHandling::DEFAULT_NULL_HANDLING,
-	                  PythonExceptionHandling exception_handling = PythonExceptionHandling::FORWARD_ERROR);
+	                  PythonExceptionHandling exception_handling = PythonExceptionHandling::FORWARD_ERROR,
+	                  bool side_effects = false);
 
 	shared_ptr<DuckDBPyConnection> UnregisterUDF(const string &name);
 
-	shared_ptr<DuckDBPyConnection> ExecuteMany(const string &query, py::object params = py::list());
+	shared_ptr<DuckDBPyConnection> ExecuteMany(const py::object &query, py::object params = py::list());
 
-	unique_ptr<QueryResult> ExecuteInternal(const string &query, py::object params = py::list(), bool many = false);
+	unique_ptr<QueryResult> ExecuteInternal(vector<unique_ptr<SQLStatement>> statements, py::object params = py::list(),
+	                                        bool many = false);
 
-	shared_ptr<DuckDBPyConnection> Execute(const string &query, py::object params = py::list(), bool many = false);
+	shared_ptr<DuckDBPyConnection> Execute(const py::object &query, py::object params = py::list(), bool many = false);
+	shared_ptr<DuckDBPyConnection> ExecuteFromString(const string &query);
 
 	shared_ptr<DuckDBPyConnection> Append(const string &name, const PandasDataFrame &value, bool by_name);
 
@@ -118,8 +126,8 @@ public:
 
 	void LoadExtension(const string &extension);
 
-	unique_ptr<DuckDBPyRelation> FromQuery(const string &query, const string &alias = "query_relation");
-	unique_ptr<DuckDBPyRelation> RunQuery(const string &query, const string &alias = "query_relation");
+	unique_ptr<DuckDBPyRelation> RunQuery(const py::object &query, string alias = "",
+	                                      const py::object &params = py::none());
 
 	unique_ptr<DuckDBPyRelation> Table(const string &tname);
 
@@ -161,12 +169,16 @@ public:
 
 	void Close();
 
+	void Interrupt();
+
 	ModifiedMemoryFileSystem &GetObjectFileSystem();
 
 	// cursor() is stupid
 	shared_ptr<DuckDBPyConnection> Cursor();
 
 	Optional<py::list> GetDescription();
+
+	int GetRowcount();
 
 	// these should be functions on the result but well
 	Optional<py::tuple> FetchOne();
@@ -191,6 +203,7 @@ public:
 	static shared_ptr<DuckDBPyConnection> Connect(const string &database, bool read_only, const py::dict &config);
 
 	static vector<Value> TransformPythonParamList(const py::handle &params);
+	static case_insensitive_map_t<Value> TransformPythonParamDict(const py::dict &params);
 
 	void RegisterFilesystem(AbstractFileSystem filesystem);
 	void UnregisterFilesystem(const py::str &name);
@@ -214,8 +227,10 @@ private:
 	unique_lock<std::mutex> AcquireConnectionLock();
 	ScalarFunction CreateScalarUDF(const string &name, const py::function &udf, const py::object &parameters,
 	                               const shared_ptr<DuckDBPyType> &return_type, bool vectorized,
-	                               FunctionNullHandling null_handling, PythonExceptionHandling exception_handling);
+	                               FunctionNullHandling null_handling, PythonExceptionHandling exception_handling,
+	                               bool side_effects);
 	void RegisterArrowObject(const py::object &arrow_object, const string &name);
+	vector<unique_ptr<SQLStatement>> GetStatements(const py::object &query);
 
 	static PythonEnvironmentType environment;
 	static void DetectEnvironment();

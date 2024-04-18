@@ -5,7 +5,8 @@
 #include "duckdb/common/algorithm.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/common/field_writer.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -112,7 +113,8 @@ struct StringAggFunction {
 			// source is not set: skip combining
 			return;
 		}
-		PerformOperation(target, string_t(source.dataptr, source.size), aggr_input_data.bind_data);
+		PerformOperation(target, string_t(source.dataptr, UnsafeNumericCast<uint32_t>(source.size)),
+		                 aggr_input_data.bind_data);
 	}
 };
 
@@ -140,23 +142,22 @@ unique_ptr<FunctionData> StringAggBind(ClientContext &context, AggregateFunction
 	return make_uniq<StringAggBindData>(std::move(separator_string));
 }
 
-static void StringAggSerialize(FieldWriter &writer, const FunctionData *bind_data_p,
+static void StringAggSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data_p,
                                const AggregateFunction &function) {
-	D_ASSERT(bind_data_p);
 	auto bind_data = bind_data_p->Cast<StringAggBindData>();
-	writer.WriteString(bind_data.sep);
+	serializer.WriteProperty(100, "separator", bind_data.sep);
 }
 
-unique_ptr<FunctionData> StringAggDeserialize(ClientContext &context, FieldReader &reader,
-                                              AggregateFunction &bound_function) {
-	auto sep = reader.ReadRequired<string>();
+unique_ptr<FunctionData> StringAggDeserialize(Deserializer &deserializer, AggregateFunction &bound_function) {
+	auto sep = deserializer.ReadProperty<string>(100, "separator");
 	return make_uniq<StringAggBindData>(std::move(sep));
 }
 
 AggregateFunctionSet StringAggFun::GetFunctions() {
 	AggregateFunctionSet string_agg;
 	AggregateFunction string_agg_param(
-	    {LogicalType::VARCHAR}, LogicalType::VARCHAR, AggregateFunction::StateSize<StringAggState>,
+	    {LogicalType::ANY_PARAMS(LogicalType::VARCHAR)}, LogicalType::VARCHAR,
+	    AggregateFunction::StateSize<StringAggState>,
 	    AggregateFunction::StateInitialize<StringAggState, StringAggFunction>,
 	    AggregateFunction::UnaryScatterUpdate<StringAggState, string_t, StringAggFunction>,
 	    AggregateFunction::StateCombine<StringAggState, StringAggFunction>,

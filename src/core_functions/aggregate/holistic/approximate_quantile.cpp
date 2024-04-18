@@ -3,7 +3,8 @@
 #include "t_digest.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
-#include "duckdb/common/field_writer.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -17,6 +18,8 @@ struct ApproxQuantileState {
 };
 
 struct ApproximateQuantileBindData : public FunctionData {
+	ApproximateQuantileBindData() {
+	}
 	explicit ApproximateQuantileBindData(float quantile_p) : quantiles(1, quantile_p) {
 	}
 
@@ -36,16 +39,16 @@ struct ApproximateQuantileBindData : public FunctionData {
 		return true;
 	}
 
-	static void Serialize(FieldWriter &writer, const FunctionData *bind_data_p, const AggregateFunction &function) {
-		D_ASSERT(bind_data_p);
+	static void Serialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data_p,
+	                      const AggregateFunction &function) {
 		auto &bind_data = bind_data_p->Cast<ApproximateQuantileBindData>();
-		writer.WriteList<float>(bind_data.quantiles);
+		serializer.WriteProperty(100, "quantiles", bind_data.quantiles);
 	}
 
-	static unique_ptr<FunctionData> Deserialize(ClientContext &context, FieldReader &reader,
-	                                            AggregateFunction &bound_function) {
-		auto quantiles = reader.ReadRequiredList<float>();
-		return make_uniq<ApproximateQuantileBindData>(std::move(quantiles));
+	static unique_ptr<FunctionData> Deserialize(Deserializer &deserializer, AggregateFunction &function) {
+		auto result = make_uniq<ApproximateQuantileBindData>();
+		deserializer.ReadProperty(100, "quantiles", result->quantiles);
+		return std::move(result);
 	}
 
 	vector<float> quantiles;
@@ -118,7 +121,15 @@ struct ApproxQuantileScalarOperation : public ApproxQuantileOperation {
 		state.h->compress();
 		auto &bind_data = finalize_data.input.bind_data->template Cast<ApproximateQuantileBindData>();
 		D_ASSERT(bind_data.quantiles.size() == 1);
-		target = Cast::template Operation<SAVE_TYPE, TARGET_TYPE>(state.h->quantile(bind_data.quantiles[0]));
+		// The result is approximate, so clamp instead of overflowing.
+		const auto source = state.h->quantile(bind_data.quantiles[0]);
+		if (TryCast::Operation(source, target, false)) {
+			return;
+		} else if (source < 0) {
+			target = NumericLimits<TARGET_TYPE>::Minimum();
+		} else {
+			target = NumericLimits<TARGET_TYPE>::Maximum();
+		}
 	}
 };
 

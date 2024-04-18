@@ -41,7 +41,7 @@ PhysicalInsert::PhysicalInsert(vector<LogicalType> types_p, TableCatalogEntry &t
 		return;
 	}
 
-	D_ASSERT(set_expressions.size() == set_columns.size());
+	D_ASSERT(this->set_expressions.size() == this->set_columns.size());
 
 	// One or more columns are referenced from the existing table,
 	// we use the 'insert_types' to figure out which types these columns have
@@ -162,6 +162,7 @@ void PhysicalInsert::ResolveDefaults(const TableCatalogEntry &table, DataChunk &
 }
 
 bool AllConflictsMeetCondition(DataChunk &result) {
+	result.Flatten();
 	auto data = FlatVector::GetData<bool>(result.data[0]);
 	for (idx_t i = 0; i < result.size(); i++) {
 		if (!data[i]) {
@@ -236,6 +237,7 @@ static void CreateUpdateChunk(ExecutionContext &context, DataChunk &chunk, Table
 		ExpressionExecutor where_executor(context.client, *do_update_condition);
 		where_executor.Execute(chunk, do_update_filter_result);
 		do_update_filter_result.SetCardinality(chunk.size());
+		do_update_filter_result.Flatten();
 
 		ManagedSelection selection(chunk.size());
 
@@ -298,7 +300,7 @@ static void RegisterUpdatedRows(InsertLocalState &lstate, const Vector &row_ids,
 		auto result = updated_rows.insert(data[i]);
 		if (result.second == false) {
 			throw InvalidInputException(
-			    "ON CONFLICT DO UPDATE can not update the same row twice in the same command, Ensure that no rows "
+			    "ON CONFLICT DO UPDATE can not update the same row twice in the same command. Ensure that no rows "
 			    "proposed for insertion within the same command have duplicate constrained values");
 		}
 	}
@@ -431,14 +433,13 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 			gstate.initialized = true;
 		}
 
+		if (return_chunk) {
+			gstate.return_collection.Append(lstate.insert_chunk);
+		}
 		idx_t updated_tuples = OnConflictHandling(table, context, lstate);
 		gstate.insert_count += lstate.insert_chunk.size();
 		gstate.insert_count += updated_tuples;
 		storage.LocalAppend(gstate.append_state, table, context.client, lstate.insert_chunk, true);
-
-		if (return_chunk) {
-			gstate.return_collection.Append(lstate.insert_chunk);
-		}
 	} else {
 		D_ASSERT(!return_chunk);
 		// parallel append
@@ -447,7 +448,7 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 			auto &table_info = storage.info;
 			auto &block_manager = TableIOManager::Get(storage).GetBlockManagerForRowData();
 			lstate.local_collection =
-			    make_uniq<RowGroupCollection>(table_info, block_manager, insert_types, MAX_ROW_ID);
+			    make_uniq<RowGroupCollection>(table_info, block_manager, insert_types, NumericCast<idx_t>(MAX_ROW_ID));
 			lstate.local_collection->InitializeEmpty();
 			lstate.local_collection->InitializeAppend(lstate.local_append_state);
 			lstate.writer = &gstate.table.GetStorage().CreateOptimisticWriter(context.client);
@@ -463,19 +464,17 @@ SinkResultType PhysicalInsert::Sink(ExecutionContext &context, DataChunk &chunk,
 	return SinkResultType::NEED_MORE_INPUT;
 }
 
-void PhysicalInsert::Combine(ExecutionContext &context, GlobalSinkState &gstate_p, LocalSinkState &lstate_p) const {
-	auto &gstate = gstate_p.Cast<InsertGlobalState>();
-	auto &lstate = lstate_p.Cast<InsertLocalState>();
+SinkCombineResultType PhysicalInsert::Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const {
+	auto &gstate = input.global_state.Cast<InsertGlobalState>();
+	auto &lstate = input.local_state.Cast<InsertLocalState>();
 	auto &client_profiler = QueryProfiler::Get(context.client);
 	context.thread.profiler.Flush(*this, lstate.default_executor, "default_executor", 1);
 	client_profiler.Flush(context.thread.profiler);
 
-	if (!parallel) {
-		return;
+	if (!parallel || !lstate.local_collection) {
+		return SinkCombineResultType::FINISHED;
 	}
-	if (!lstate.local_collection) {
-		return;
-	}
+
 	// parallel append: finalize the append
 	TransactionData tdata(0, 0);
 	lstate.local_collection->FinalizeAppend(tdata, lstate.local_append_state);
@@ -484,7 +483,7 @@ void PhysicalInsert::Combine(ExecutionContext &context, GlobalSinkState &gstate_
 
 	lock_guard<mutex> lock(gstate.lock);
 	gstate.insert_count += append_count;
-	if (append_count < RowGroup::ROW_GROUP_SIZE) {
+	if (append_count < Storage::ROW_GROUP_SIZE) {
 		// we have few rows - append to the local storage directly
 		auto &table = gstate.table;
 		auto &storage = table.GetStorage();
@@ -497,14 +496,16 @@ void PhysicalInsert::Combine(ExecutionContext &context, GlobalSinkState &gstate_
 		storage.FinalizeLocalAppend(gstate.append_state);
 	} else {
 		// we have written rows to disk optimistically - merge directly into the transaction-local storage
-		gstate.table.GetStorage().FinalizeOptimisticWriter(context.client, *lstate.writer);
 		gstate.table.GetStorage().LocalMerge(context.client, *lstate.local_collection);
+		gstate.table.GetStorage().FinalizeOptimisticWriter(context.client, *lstate.writer);
 	}
+
+	return SinkCombineResultType::FINISHED;
 }
 
 SinkFinalizeType PhysicalInsert::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                          GlobalSinkState &state) const {
-	auto &gstate = state.Cast<InsertGlobalState>();
+                                          OperatorSinkFinalizeInput &input) const {
+	auto &gstate = input.global_state.Cast<InsertGlobalState>();
 	if (!parallel && gstate.initialized) {
 		auto &table = gstate.table;
 		auto &storage = table.GetStorage();
@@ -539,7 +540,7 @@ SourceResultType PhysicalInsert::GetData(ExecutionContext &context, DataChunk &c
 	auto &insert_gstate = sink_state->Cast<InsertGlobalState>();
 	if (!return_chunk) {
 		chunk.SetCardinality(1);
-		chunk.SetValue(0, 0, Value::BIGINT(insert_gstate.insert_count));
+		chunk.SetValue(0, 0, Value::BIGINT(NumericCast<int64_t>(insert_gstate.insert_count)));
 		return SourceResultType::FINISHED;
 	}
 

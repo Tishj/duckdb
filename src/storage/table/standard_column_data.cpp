@@ -4,8 +4,9 @@
 #include "duckdb/storage/table/append_state.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/planner/table_filter.hpp"
-#include "duckdb/transaction/transaction.hpp"
 #include "duckdb/storage/table/column_checkpoint_state.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -18,6 +19,10 @@ StandardColumnData::StandardColumnData(BlockManager &block_manager, DataTableInf
 void StandardColumnData::SetStart(idx_t new_start) {
 	ColumnData::SetStart(new_start);
 	validity.SetStart(new_start);
+}
+
+bool StandardColumnData::HasUpdates() const {
+	return ColumnData::HasUpdates() || validity.HasUpdates();
 }
 
 bool StandardColumnData::CheckZonemap(ColumnScanState &state, TableFilter &filter) {
@@ -104,6 +109,7 @@ idx_t StandardColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &re
 	// fetch validity mask
 	if (state.child_states.empty()) {
 		ColumnScanState child_state;
+		child_state.scan_options = state.scan_options;
 		state.child_states.push_back(std::move(child_state));
 	}
 	auto scan_count = ColumnData::Fetch(state, row_id, result);
@@ -173,9 +179,10 @@ public:
 		return std::move(global_stats);
 	}
 
-	void WriteDataPointers(RowGroupWriter &writer) override {
-		ColumnCheckpointState::WriteDataPointers(writer);
-		validity_state->WriteDataPointers(writer);
+	void WriteDataPointers(RowGroupWriter &writer, Serializer &serializer) override {
+		ColumnCheckpointState::WriteDataPointers(writer, serializer);
+		serializer.WriteObject(101, "validity",
+		                       [&](Serializer &serializer) { validity_state->WriteDataPointers(writer, serializer); });
 	}
 };
 
@@ -187,8 +194,13 @@ StandardColumnData::CreateCheckpointState(RowGroup &row_group, PartialBlockManag
 unique_ptr<ColumnCheckpointState> StandardColumnData::Checkpoint(RowGroup &row_group,
                                                                  PartialBlockManager &partial_block_manager,
                                                                  ColumnCheckpointInfo &checkpoint_info) {
-	auto validity_state = validity.Checkpoint(row_group, partial_block_manager, checkpoint_info);
+	// we need to checkpoint the main column data first
+	// that is because the checkpointing of the main column data ALSO scans the validity data
+	// to prevent reading the validity data immediately after it is checkpointed we first checkpoint the main column
+	// this is necessary for concurrent checkpointing as due to the partial block manager checkpointed data might be
+	// flushed to disk by a different thread than the one that wrote it, causing a data race
 	auto base_state = ColumnData::Checkpoint(row_group, partial_block_manager, checkpoint_info);
+	auto validity_state = validity.Checkpoint(row_group, partial_block_manager, checkpoint_info);
 	auto &checkpoint_state = base_state->Cast<StandardColumnCheckpointState>();
 	checkpoint_state.validity_state = std::move(validity_state);
 	return base_state;
@@ -202,15 +214,17 @@ void StandardColumnData::CheckpointScan(ColumnSegment &segment, ColumnScanState 
 	validity.ScanCommittedRange(row_group_start, offset_in_row_group, count, scan_vector);
 }
 
-void StandardColumnData::DeserializeColumn(Deserializer &source) {
-	ColumnData::DeserializeColumn(source);
-	validity.DeserializeColumn(source);
+void StandardColumnData::DeserializeColumn(Deserializer &deserializer, BaseStatistics &target_stats) {
+	ColumnData::DeserializeColumn(deserializer, target_stats);
+	deserializer.ReadObject(
+	    101, "validity", [&](Deserializer &deserializer) { validity.DeserializeColumn(deserializer, target_stats); });
 }
 
-void StandardColumnData::GetStorageInfo(idx_t row_group_index, vector<idx_t> col_path, TableStorageInfo &result) {
-	ColumnData::GetStorageInfo(row_group_index, col_path, result);
+void StandardColumnData::GetColumnSegmentInfo(duckdb::idx_t row_group_index, vector<duckdb::idx_t> col_path,
+                                              vector<duckdb::ColumnSegmentInfo> &result) {
+	ColumnData::GetColumnSegmentInfo(row_group_index, col_path, result);
 	col_path.push_back(0);
-	validity.GetStorageInfo(row_group_index, std::move(col_path), result);
+	validity.GetColumnSegmentInfo(row_group_index, std::move(col_path), result);
 }
 
 void StandardColumnData::Verify(RowGroup &parent) {

@@ -14,20 +14,18 @@
 namespace duckdb {
 
 struct PivotColumnEntry {
-	//! The set of values to match on
+	//! The set of values to match on (PIVOT only)
 	vector<Value> values;
-	//! The star expression (UNPIVOT only)
-	unique_ptr<ParsedExpression> star_expr;
+	//! The expression (UNPIVOT only)
+	unique_ptr<ParsedExpression> expr;
 	//! The alias of the pivot column entry
 	string alias;
 
 	bool Equals(const PivotColumnEntry &other) const;
-	void Serialize(Serializer &serializer) const;
 	PivotColumnEntry Copy() const;
-	static PivotColumnEntry Deserialize(Deserializer &source);
 
-	void FormatSerialize(FormatSerializer &serializer) const;
-	static PivotColumnEntry FormatDeserialize(FormatDeserializer &source);
+	void Serialize(Serializer &serializer) const;
+	static PivotColumnEntry Deserialize(Deserializer &source);
 };
 
 struct PivotValueElement {
@@ -49,12 +47,10 @@ struct PivotColumn {
 
 	string ToString() const;
 	bool Equals(const PivotColumn &other) const;
-	void Serialize(Serializer &serializer) const;
 	PivotColumn Copy() const;
-	static PivotColumn Deserialize(Deserializer &source);
 
-	void FormatSerialize(FormatSerializer &serializer) const;
-	static PivotColumn FormatDeserialize(FormatDeserializer &source);
+	void Serialize(Serializer &serializer) const;
+	static PivotColumn Deserialize(Deserializer &source);
 };
 
 //! Represents a PIVOT or UNPIVOT expression
@@ -93,12 +89,8 @@ public:
 
 	unique_ptr<TableRef> Copy() override;
 
-	//! Serializes a blob into a JoinRef
-	void Serialize(FieldWriter &serializer) const override;
-	//! Deserializes a blob back into a JoinRef
-	static unique_ptr<TableRef> Deserialize(FieldReader &source);
-
-	void FormatSerialize(FormatSerializer &serializer) const override;
-	static unique_ptr<TableRef> FormatDeserialize(FormatDeserializer &source);
+	//! Deserializes a blob back into a PivotRef
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<TableRef> Deserialize(Deserializer &source);
 };
 } // namespace duckdb
