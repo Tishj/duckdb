@@ -59,6 +59,7 @@ public:
 private:
 	py::list FetchAllArrowChunks(idx_t rows_per_batch, bool to_polars);
 
+	py::dict FillDictionary(NumpyResultConversion &conversion);
 	void FillNumpy(py::dict &res, idx_t col_idx, NumpyResultConversion &conversion, const char *name);
 
 	bool FetchArrowChunk(ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch, bool to_polars);
@@ -76,10 +77,9 @@ private:
 
 	unique_ptr<QueryResult> result;
 	unique_ptr<DataChunk> current_chunk;
-	// Holds the categories of Categorical/ENUM types
-	unordered_map<idx_t, py::list> categories;
-	// Holds the categorical type of Categorical/ENUM types
-	unordered_map<idx_t, py::object> categories_type;
+
+	string timezone_config;
+
 	bool result_closed = false;
 };
 

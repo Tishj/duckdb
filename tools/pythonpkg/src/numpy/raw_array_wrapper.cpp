@@ -13,7 +13,7 @@
 
 namespace duckdb {
 
-static idx_t GetNumpyTypeWidth(const LogicalType &type) {
+idx_t RawArrayWrapper::DuckDBToNumpyTypeWidth(const LogicalType &type) {
 	switch (type.id()) {
 	case LogicalTypeId::BOOLEAN:
 		return sizeof(bool);
@@ -65,8 +65,13 @@ static idx_t GetNumpyTypeWidth(const LogicalType &type) {
 	}
 }
 
-RawArrayWrapper::RawArrayWrapper(const LogicalType &type) : data(nullptr), type(type), count(0) {
-	type_width = GetNumpyTypeWidth(type);
+RawArrayWrapper::RawArrayWrapper(py::array array_p, idx_t count_p, const LogicalType &type)
+    : array(std::move(array_p)), data(data_ptr_cast(array.mutable_data())), type(type), count(count_p) {
+	type_width = DuckDBToNumpyTypeWidth(type);
+}
+
+RawArrayWrapper::RawArrayWrapper(const LogicalType &type) : array(), data(nullptr), type(type), count(0) {
+	type_width = DuckDBToNumpyTypeWidth(type);
 }
 
 string RawArrayWrapper::DuckDBToNumpyDtype(const LogicalType &type) {
@@ -139,6 +144,7 @@ string RawArrayWrapper::DuckDBToNumpyDtype(const LogicalType &type) {
 }
 
 void RawArrayWrapper::Initialize(idx_t capacity) {
+	D_ASSERT(py::gil_check());
 	string dtype = DuckDBToNumpyDtype(type);
 
 	array = py::array(py::dtype(dtype), capacity);
@@ -146,6 +152,7 @@ void RawArrayWrapper::Initialize(idx_t capacity) {
 }
 
 void RawArrayWrapper::Resize(idx_t new_capacity) {
+	D_ASSERT(py::gil_check());
 	vector<py::ssize_t> new_shape {py::ssize_t(new_capacity)};
 	array.resize(new_shape, false);
 	data = data_ptr_cast(array.mutable_data());

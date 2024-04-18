@@ -297,12 +297,11 @@ static py::object InternalCreateList(Vector &input, idx_t total_size, idx_t offs
 
 	D_ASSERT(offset + size <= total_size);
 	result.Append(0, input, total_size, offset, size);
-	return result.ToArray();
+	return result.ToArray(size);
 }
 
 struct ListConvert {
 	static py::object ConvertValue(Vector &input, idx_t chunk_offset, NumpyAppendData &append_data) {
-		auto &client_properties = append_data.client_properties;
 		auto &list_data = append_data.idata;
 
 		// Get the list entry information from the parent
@@ -453,12 +452,10 @@ static bool ConvertColumnTemplated(NumpyAppendData &append_data) {
 
 template <class DUCKDB_T, class NUMPY_T, class CONVERT>
 static bool ConvertColumn(NumpyAppendData &append_data) {
-	auto target_offset = append_data.target_offset;
 	auto target_data = append_data.target_data;
 	auto &idata = append_data.idata;
 
 	auto src_ptr = UnifiedVectorFormat::GetData<DUCKDB_T>(idata);
-	auto out_ptr = reinterpret_cast<NUMPY_T *>(target_data);
 	if (!idata.validity.AllValid()) {
 		if (append_data.pandas) {
 			return ConvertColumnTemplated<DUCKDB_T, NUMPY_T, CONVERT, /*has_nulls=*/true, /*pandas=*/true>(append_data);
@@ -627,6 +624,10 @@ static bool ConvertDecimal(NumpyAppendData &append_data) {
 	}
 }
 
+ArrayWrapper::ArrayWrapper(unique_ptr<RawArrayWrapper> data_p, unique_ptr<RawArrayWrapper> mask_p, bool requires_mask)
+    : data(std::move(data_p)), mask(std::move(mask_p)), requires_mask(requires_mask) {
+}
+
 ArrayWrapper::ArrayWrapper(const LogicalType &type, const ClientProperties &client_properties_p, bool pandas)
     : requires_mask(false), client_properties(client_properties_p), pandas(pandas) {
 	data = make_uniq<RawArrayWrapper>(type);
@@ -778,13 +779,18 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t source_size
 	mask->count += count;
 }
 
-py::object ArrayWrapper::ToArray() const {
+const LogicalType &ArrayWrapper::Type() const {
+	return data->type;
+}
+
+py::object ArrayWrapper::ToArray(idx_t count) const {
+	D_ASSERT(py::gil_check());
 	D_ASSERT(data->array && mask->array);
-	data->Resize(data->count);
+	data->Resize(count);
 	if (!requires_mask) {
 		return std::move(data->array);
 	}
-	mask->Resize(mask->count);
+	mask->Resize(count);
 	// construct numpy arrays from the data and the mask
 	auto values = std::move(data->array);
 	auto nullmask = std::move(mask->array);
