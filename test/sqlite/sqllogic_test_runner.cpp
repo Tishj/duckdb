@@ -8,6 +8,7 @@
 #include "duckdb/main/extension_entries.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include "duckdb/common/file_open_flags.hpp"
+#include "test_file_system.hpp"
 
 #ifdef DUCKDB_OUT_OF_TREE
 #include DUCKDB_EXTENSION_HEADER
@@ -84,8 +85,13 @@ void SQLLogicTestRunner::LoadDatabase(string dbpath) {
 	db.reset();
 	con.reset();
 	named_connection_map.clear();
-	// now re-open the current database
 
+	// Set the filesystem wrapper to ensure we are not writing to files outside of our control
+	auto test_directory = TestDirectoryPath();
+	auto &db_config = *config;
+	db_config.file_system = make_uniq<TestFileSystem>(test_directory);
+
+	// now re-open the current database
 	db = make_uniq<DuckDB>(dbpath, config.get());
 	Reconnect();
 
