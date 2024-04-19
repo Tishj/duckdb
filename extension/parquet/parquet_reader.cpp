@@ -248,7 +248,7 @@ LogicalType ParquetReader::DeriveLogicalType(const SchemaElement &s_ele, bool bi
 		case ConvertedType::LIST:
 		case ConvertedType::BSON:
 		default:
-			throw IOException("Unsupported converted type");
+			throw IOException("Unsupported converted type (%d)", static_cast<int32_t>(s_ele.converted_type));
 		}
 	} else {
 		// no converted type set
