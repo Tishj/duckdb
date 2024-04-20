@@ -13,7 +13,6 @@
 #include "duckdb_python/pybind11/exceptions.hpp"
 #include "duckdb_python/typing.hpp"
 #include "duckdb_python/functional.hpp"
-#include "duckdb_python/connection_wrapper.hpp"
 #include "duckdb_python/pybind11/conversions/pyconnection_default.hpp"
 #include "duckdb/common/box_renderer.hpp"
 #include "duckdb/function/function.hpp"
@@ -72,6 +71,7 @@ static py::list PyTokenize(const string &query) {
 }
 
 static void InitializeConnectionMethods(py::module_ &m) {
+<<<<<<< HEAD
 	m.def("cursor", &PyConnectionWrapper::Cursor, "Create a duplicate of the current connection",
 	      py::arg("connection") = py::none())
 	    .def("duplicate", &PyConnectionWrapper::Cursor, "Create a duplicate of the current connection",
@@ -272,6 +272,49 @@ static void InitializeConnectionMethods(py::module_ &m) {
 	    .def("filesystem_is_registered", &PyConnectionWrapper::FileSystemIsRegistered,
 	         "Check if a filesystem with the provided name is currently registered", py::arg("name"),
 	         py::arg("connection") = py::none());
+=======
+	// We define these "wrapper" methods manually because they are overloaded
+	m.def(
+	    "arrow",
+	    [](idx_t rows_per_batch, shared_ptr<DuckDBPyConnection> conn) -> duckdb::pyarrow::Table {
+		    if (!conn) {
+			    conn = DuckDBPyConnection::DefaultConnection();
+		    }
+		    return conn->FetchArrow(rows_per_batch);
+	    },
+	    "Fetch a result as Arrow table following execute()", py::arg("rows_per_batch") = 1000000, py::kw_only(),
+	    py::arg("connection") = py::none());
+	m.def(
+	    "arrow",
+	    [](py::object &arrow_object, shared_ptr<DuckDBPyConnection> conn) -> unique_ptr<DuckDBPyRelation> {
+		    if (!conn) {
+			    conn = DuckDBPyConnection::DefaultConnection();
+		    }
+		    return conn->FromArrow(arrow_object);
+	    },
+	    "Create a relation object from an Arrow object", py::arg("arrow_object"), py::kw_only(),
+	    py::arg("connection") = py::none());
+	m.def(
+	    "df",
+	    [](bool date_as_object, shared_ptr<DuckDBPyConnection> conn) -> PandasDataFrame {
+		    if (!conn) {
+			    conn = DuckDBPyConnection::DefaultConnection();
+		    }
+		    return conn->FetchDF(date_as_object);
+	    },
+	    "Fetch a result as DataFrame following execute()", py::kw_only(), py::arg("date_as_object") = false,
+	    py::arg("connection") = py::none());
+	m.def(
+	    "df",
+	    [](const PandasDataFrame &value, shared_ptr<DuckDBPyConnection> conn) -> unique_ptr<DuckDBPyRelation> {
+		    if (!conn) {
+			    conn = DuckDBPyConnection::DefaultConnection();
+		    }
+		    return conn->FromDF(value);
+	    },
+	    "Create a relation object from the DataFrame df", py::arg("df"), py::kw_only(),
+	    py::arg("connection") = py::none());
+>>>>>>> upstream/main
 }
 
 static void RegisterStatementType(py::handle &m) {
