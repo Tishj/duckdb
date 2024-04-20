@@ -11,6 +11,7 @@ unique_ptr<LogicalOperator> Binder::CreatePlan(BoundSubqueryRef &ref) {
 	if (ref.binder->has_unplanned_dependent_joins) {
 		has_unplanned_dependent_joins = true;
 	}
+	subquery->AddExternalDependency(ref.external_dependency);
 	return subquery;
 }
 

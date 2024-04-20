@@ -19,6 +19,7 @@
 #include "duckdb/main/relation/value_relation.hpp"
 #include "duckdb/main/relation/filter_relation.hpp"
 #include "duckdb_python/expression/pyexpression.hpp"
+#include "duckdb_python/python_context_state.hpp"
 
 namespace duckdb {
 
@@ -26,12 +27,39 @@ DuckDBPyRelation::DuckDBPyRelation(shared_ptr<Relation> rel_p) : rel(std::move(r
 	if (!rel) {
 		throw InternalException("DuckDBPyRelation created without a relation");
 	}
+
+	auto &context = *rel->context.GetContext();
+	auto &state = PythonContextState::GetState(context);
+
+	case_insensitive_map_t<unique_ptr<TableRef>> replacements;
+	for (auto &dep_p : rel->external_dependencies) {
+		if (dep_p->type != ExternalDependenciesType::PYTHON_DEPENDENCY) {
+			continue;
+		}
+		auto &dep = dynamic_cast<PythonDependencies &>(*dep_p);
+		if (!dep.HasName()) {
+			// This dependency is not connected to a replacement scan
+			continue;
+		}
+		auto name = dep.GetName();
+		auto lookup = state.cache.Lookup(name);
+		// This dependency was produced when we bound the Relation
+		// FIXME: is this always true?, can we somehow get dependencies that were created beforehand?
+		D_ASSERT(lookup);
+		replacements.emplace(name, std::move(lookup));
+	}
+	replacement_cache = make_shared<ReplacementCacheOverride>(std::move(replacements));
+
 	this->executed = false;
 	auto &columns = rel->Columns();
 	for (auto &col : columns) {
 		names.push_back(col.GetName());
 		types.push_back(col.GetType());
 	}
+}
+
+shared_ptr<ReplacementCacheOverride> DuckDBPyRelation::GetOverride() {
+	return replacement_cache;
 }
 
 bool DuckDBPyRelation::CanBeRegisteredBy(Connection &con) {
@@ -1299,8 +1327,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Map(py::function fun, Optional<py
 	params.emplace_back(Value::POINTER(CastPointerToValue(schema.ptr())));
 	auto relation = make_uniq<DuckDBPyRelation>(rel->TableFunction("python_map_function", params));
 	auto rel_dependency = make_uniq<PythonDependencies>();
-	rel_dependency->map_function = std::move(fun);
-	rel_dependency->py_object_list.push_back(make_uniq<RegisteredObject>(std::move(schema)));
+	rel_dependency->AddObject("map", std::move(fun));
+	rel_dependency->AddObject("schema", std::move(schema));
 	relation->rel->AddExternalDependency(std::move(rel_dependency));
 	return relation;
 }

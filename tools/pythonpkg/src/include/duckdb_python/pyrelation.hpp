@@ -26,31 +26,7 @@
 namespace duckdb {
 
 struct DuckDBPyConnection;
-
-class PythonDependencies : public ExternalDependency {
-public:
-	explicit PythonDependencies() : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY) {
-	}
-	~PythonDependencies() override {
-		py::gil_scoped_acquire gil;
-		py_object_list.clear();
-	}
-
-	explicit PythonDependencies(py::function map_function)
-	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY), map_function(std::move(map_function)) {};
-	explicit PythonDependencies(unique_ptr<RegisteredObject> py_object)
-	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY) {
-		py_object_list.push_back(std::move(py_object));
-	};
-	explicit PythonDependencies(unique_ptr<RegisteredObject> py_object_original,
-	                            unique_ptr<RegisteredObject> py_object_copy)
-	    : ExternalDependency(ExternalDependenciesType::PYTHON_DEPENDENCY) {
-		py_object_list.push_back(std::move(py_object_original));
-		py_object_list.push_back(std::move(py_object_copy));
-	};
-	py::function map_function;
-	vector<unique_ptr<RegisteredObject>> py_object_list;
-};
+class ReplacementCacheOverride;
 
 struct DuckDBPyRelation {
 public:
@@ -277,6 +253,8 @@ public:
 
 	bool ContainsColumnByName(const string &name) const;
 
+	shared_ptr<ReplacementCacheOverride> GetOverride();
+
 private:
 	string ToStringInternal(const BoxRendererConfig &config, bool invalidate_cache = false);
 	string GenerateExpressionList(const string &function_name, const string &aggregated_columns,
@@ -306,6 +284,9 @@ private:
 	vector<string> names;
 	unique_ptr<DuckDBPyResult> result;
 	std::string rendered_result;
+
+	//! The state of the replacement cache at the time of creation
+	shared_ptr<ReplacementCacheOverride> replacement_cache;
 };
 
 } // namespace duckdb

@@ -25,6 +25,7 @@ unique_ptr<BoundTableRef> Binder::Bind(SubqueryRef &ref, optional_ptr<CommonTabl
 		subquery_alias = ref.alias;
 	}
 	auto result = make_uniq<BoundSubqueryRef>(std::move(binder), std::move(subquery));
+	result->external_dependency = ref.external_dependency;
 	bind_context.AddSubquery(bind_index, subquery_alias, ref, *result->subquery);
 	MoveCorrelatedExpressions(*result->binder);
 	return std::move(result);

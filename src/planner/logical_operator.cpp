@@ -48,6 +48,9 @@ string LogicalOperator::GetName() const {
 }
 
 void LogicalOperator::AddExternalDependency(shared_ptr<ExternalDependency> dependency) {
+	if (!dependency) {
+		return;
+	}
 	external_dependencies.push_back(std::move(dependency));
 }
 

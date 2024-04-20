@@ -8,6 +8,12 @@
 
 namespace duckdb {
 
+void TableRef::BindBegin() {
+}
+
+void TableRef::BindEnd() {
+}
+
 string TableRef::BaseToString(string result) const {
 	vector<string> column_name_alias;
 	return BaseToString(std::move(result), column_name_alias);

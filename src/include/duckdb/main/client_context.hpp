@@ -73,6 +73,7 @@ public:
 	shared_ptr<DatabaseInstance> db;
 	//! Whether or not the query is interrupted
 	atomic<bool> interrupted;
+	// FIXME: move this into a ClientContextState instead
 	//! External Objects (e.g., Python objects) that views depend of
 	unordered_map<string, vector<shared_ptr<ExternalDependency>>> external_dependencies;
 	//! Set of optional states (e.g. Caches) that can be held by the ClientContext

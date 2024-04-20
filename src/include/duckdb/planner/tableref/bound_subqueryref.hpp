@@ -28,5 +28,7 @@ public:
 	shared_ptr<Binder> binder;
 	//! The bound subquery node
 	unique_ptr<BoundQueryNode> subquery;
+	// External dependencies of this tableref
+	shared_ptr<ExternalDependency> external_dependency;
 };
 } // namespace duckdb

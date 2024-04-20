@@ -34,6 +34,9 @@ public:
 	optional_idx query_location;
 
 public:
+	virtual void BindBegin();
+	virtual void BindEnd();
+
 	//! Convert the object to a string
 	virtual string ToString() const = 0;
 	string BaseToString(string result) const;
