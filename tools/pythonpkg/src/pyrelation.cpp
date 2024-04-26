@@ -43,6 +43,15 @@ bool DuckDBPyRelation::CanBeRegisteredBy(Connection &con) {
 	return context == con.context;
 }
 
+bool DuckDBPyRelation::CanBeRegisteredBy(ClientContext &con) {
+	if (!rel) {
+		// PyRelation without an internal relation can not be registered
+		return false;
+	}
+	auto context = rel->context.GetContext();
+	return context == con.context;
+}
+
 DuckDBPyRelation::~DuckDBPyRelation() {
 	// FIXME: It makes sense to release the GIL here, but it causes a crash
 	// because pybind11's gil_scoped_acquire and gil_scoped_release can not be nested

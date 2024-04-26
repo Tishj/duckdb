@@ -247,6 +247,7 @@ public:
 	static bool IsRelation(const py::object &object);
 
 	bool CanBeRegisteredBy(Connection &con);
+	bool CanBeRegisteredBy(ClientContext &con);
 
 	Relation &GetRel();
 

@@ -31,14 +31,14 @@ static void CreateArrowScan(const string &name, py::object entry, TableFunctionR
 	table_function.external_dependency = std::move(dependency);
 }
 
-static unique_ptr<TableRef> TryReplacementObject(const py::object &entry, const string &name,
-                                                 ClientProperties &client_properties) {
+static unique_ptr<TableRef> TryReplacementObject(const py::object &entry, const string &name, ClientContext &context) {
 	auto table_function = make_uniq<TableFunctionRef>();
 	vector<unique_ptr<ParsedExpression>> children;
 	NumpyObjectType numpytype; // Identify the type of accepted numpy objects.
 	if (DuckDBPyConnection::IsPandasDataframe(entry)) {
 		if (PandasDataFrame::IsPyArrowBacked(entry)) {
 			auto table = PandasDataFrame::ToArrowTable(entry);
+			auto client_properties = context.GetClientProperties();
 			CreateArrowScan(name, table, *table_function, children, client_properties);
 		} else {
 			string name = "df_" + StringUtil::GenerateRandomName();
@@ -51,8 +51,10 @@ static unique_ptr<TableRef> TryReplacementObject(const py::object &entry, const 
 			table_function->external_dependency = std::move(dependency);
 		}
 	} else if (DuckDBPyConnection::IsAcceptedArrowObject(entry)) {
+		auto client_properties = context.GetClientProperties();
 		CreateArrowScan(name, entry, *table_function, children, client_properties);
 	} else if (DuckDBPyRelation::IsRelation(entry)) {
+
 		auto pyrel = py::cast<DuckDBPyRelation *>(entry);
 		// create a subquery from the underlying relation object
 		auto select = make_uniq<SelectStatement>();
@@ -64,10 +66,12 @@ static unique_ptr<TableRef> TryReplacementObject(const py::object &entry, const 
 		return std::move(subquery);
 	} else if (PolarsDataFrame::IsDataFrame(entry)) {
 		auto arrow_dataset = entry.attr("to_arrow")();
+		auto client_properties = context.GetClientProperties();
 		CreateArrowScan(name, arrow_dataset, *table_function, children, client_properties);
 	} else if (PolarsDataFrame::IsLazyFrame(entry)) {
 		auto materialized = entry.attr("collect")();
 		auto arrow_dataset = materialized.attr("to_arrow")();
+		auto client_properties = context.GetClientProperties();
 		CreateArrowScan(name, arrow_dataset, *table_function, children, client_properties);
 	} else if ((numpytype = DuckDBPyConnection::IsAcceptedNumpyObject(entry)) != NumpyObjectType::INVALID) {
 		string name = "np_" + StringUtil::GenerateRandomName();
@@ -111,7 +115,7 @@ static unique_ptr<TableRef> TryReplacementObject(const py::object &entry, const 
 	return std::move(table_function);
 }
 
-static unique_ptr<TableRef> TryReplacement(py::dict &dict, const string &name, ClientProperties &client_properties,
+static unique_ptr<TableRef> TryReplacement(py::dict &dict, const string &name, ClientContext &context,
                                            py::object &current_frame) {
 	auto table_name = py::str(name);
 	if (!dict.contains(table_name)) {
@@ -119,7 +123,7 @@ static unique_ptr<TableRef> TryReplacement(py::dict &dict, const string &name, C
 		return nullptr;
 	}
 	const py::object &entry = dict[table_name];
-	auto result = TryReplacementObject(entry, name, client_properties);
+	auto result = TryReplacementObject(entry, name, context);
 	if (!result) {
 		std::string location = py::cast<py::str>(current_frame.attr("f_code").attr("co_filename"));
 		location += ":";
@@ -140,12 +144,11 @@ static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string
 	py::gil_scoped_acquire acquire;
 	// Here we do an exhaustive search on the frame lineage
 	auto current_frame = py::module::import("inspect").attr("currentframe")();
-	auto client_properties = context.GetClientProperties();
 	while (hasattr(current_frame, "f_locals")) {
 		auto local_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_locals"));
 		// search local dictionary
 		if (local_dict) {
-			auto result = TryReplacement(local_dict, table_name, client_properties, current_frame);
+			auto result = TryReplacement(local_dict, table_name, context, current_frame);
 			if (result) {
 				return result;
 			}
@@ -153,7 +156,7 @@ static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string
 		// search global dictionary
 		auto global_dict = py::reinterpret_borrow<py::dict>(current_frame.attr("f_globals"));
 		if (global_dict) {
-			auto result = TryReplacement(global_dict, table_name, client_properties, current_frame);
+			auto result = TryReplacement(global_dict, table_name, context, current_frame);
 			if (result) {
 				return result;
 			}
@@ -163,6 +166,7 @@ static unique_ptr<TableRef> ReplaceInternal(ClientContext &context, const string
 	// Not found :(
 	return nullptr;
 }
+
 unique_ptr<TableRef> PythonReplacementScan::Replace(ClientContext &context, ReplacementScanInput &input,
                                                     ReplacementScanData *data) {
 	auto &table_name = input.table_name;
