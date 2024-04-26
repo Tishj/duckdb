@@ -87,6 +87,27 @@ class TestReplacementScan(object):
         assert type(pyrel3) == duckdb.DuckDBPyRelation
         assert pyrel3.fetchall() == [(142,), (184,)]
 
+    def test_cross_connection_replacement(self):
+        con1 = duckdb.connect(':memory:1')
+        con2 = duckdb.connect(':memory:2')
+
+        con1.execute("create table tbl as from range(0, 3)")
+        con2.execute("create table tbl as from range(3, 6)")
+        rel1 = con1.sql("select * from tbl")
+        with pytest.raises(
+            duckdb.InvalidInputException,
+            match=r"The relation you are attempting to register was not made from this connection",
+        ):
+            rel2 = con2.sql("select * from rel1")
+
+        rel1.close()
+
+        with pytest.raises(
+            duckdb.InvalidInputException,
+            match=r"The relation you are attempting to register was not made from this connection",
+        ):
+            rel2 = con2.sql("select * from rel1")
+
     def test_replacement_scan_alias(self):
         con = duckdb.connect()
         pyrel1 = con.query('from (values (1, 2)) t(i, j)')
