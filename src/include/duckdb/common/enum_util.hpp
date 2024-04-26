@@ -128,7 +128,7 @@ enum class ExpressionType : uint8_t;
 
 enum class ExtensionLoadResult : uint8_t;
 
-enum class ExternalDependenciesType : uint8_t;
+enum class ExternalDependencyItemType : uint8_t;
 
 enum class ExtraDropInfoType : uint8_t;
 
@@ -472,7 +472,7 @@ template<>
 const char* EnumUtil::ToChars<ExtensionLoadResult>(ExtensionLoadResult value);
 
 template<>
-const char* EnumUtil::ToChars<ExternalDependenciesType>(ExternalDependenciesType value);
+const char* EnumUtil::ToChars<ExternalDependencyItemType>(ExternalDependencyItemType value);
 
 template<>
 const char* EnumUtil::ToChars<ExtraDropInfoType>(ExtraDropInfoType value);
@@ -914,7 +914,7 @@ template<>
 ExtensionLoadResult EnumUtil::FromString<ExtensionLoadResult>(const char *value);
 
 template<>
-ExternalDependenciesType EnumUtil::FromString<ExternalDependenciesType>(const char *value);
+ExternalDependencyItemType EnumUtil::FromString<ExternalDependencyItemType>(const char *value);
 
 template<>
 ExtraDropInfoType EnumUtil::FromString<ExtraDropInfoType>(const char *value);
