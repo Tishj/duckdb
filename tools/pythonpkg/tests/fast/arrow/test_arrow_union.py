@@ -1,29 +1,28 @@
 from pytest import importorskip
 
-importorskip('pyarrow')
+pa = importorskip('pyarrow')
 
 import duckdb
-from pyarrow import scalar, string, large_string, list_, int32, types
 
 
 def test_nested(duckdb_cursor):
     res = run(duckdb_cursor, 'select 42::UNION(name VARCHAR, attr UNION(age INT, veteran BOOL)) as res')
-    assert types.is_union(res.type)
-    assert res.value.value == scalar(42, type=int32())
+    assert pa.types.is_union(res.type)
+    assert res.value.value == pa.scalar(42, type=pa.int32())
 
 
 def test_union_contains_nested_data(duckdb_cursor):
     _ = importorskip("pyarrow", minversion="11")
     res = run(duckdb_cursor, "select ['hello']::UNION(first_name VARCHAR, middle_names VARCHAR[]) as res")
-    assert types.is_union(res.type)
-    assert res.value == scalar(['hello'], type=list_(string()))
+    assert pa.types.is_union(res.type)
+    assert res.value == pa.scalar(['hello'], type=pa.list_(pa.string()))
 
 
 def test_unions_inside_lists_structs_maps(duckdb_cursor):
     res = run(duckdb_cursor, "select [union_value(name := 'Frank')] as res")
-    assert types.is_list(res.type)
-    assert types.is_union(res.type.value_type)
-    assert res[0].value == scalar('Frank', type=string())
+    assert pa.types.is_list(res.type)
+    assert pa.types.is_union(res.type.value_type)
+    assert res[0].value == pa.scalar('Frank', type=pa.string())
 
 
 def test_unions_with_struct(duckdb_cursor):
