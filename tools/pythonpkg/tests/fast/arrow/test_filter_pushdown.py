@@ -39,44 +39,70 @@ def numeric_operators(connection, data_type, tbl_name, create_table):
         )
     """
     )
+
+    rel = connection.sql("select * from test_all_types()")
+    relevant_columns = rel.select_types([data_type])
+    assert len(relevant_columns.columns) == 1
+    inserted_rel = relevant_columns.query('x', f'select (COLUMNS(*) / 2)::{data_type} as a from x offset 1 limit 1')
+    print(inserted_rel)
+    values = inserted_rel.query("y", "select a, a, a from y")
+
+    # Insert the min value (previously hardcoded to 1)
     connection.execute(
         f"""
-        INSERT INTO {tbl_name} VALUES
-            (1,1,1),
-            (10,10,10),
-            (100,10,100),
-            (NULL,NULL,NULL)
+        INSERT INTO {tbl_name} select *, *, * from relevant_columns offset 0 limit 1
     """
     )
+    # Insert the medium value (previously hardcoded to 10)
+    connection.execute(
+        f"""
+        INSERT INTO {tbl_name} select * from values
+    """
+    )
+    # Insert the max value (and NULL) (previously hardcoded to 100)
+    connection.execute(
+        f"""
+        INSERT INTO {tbl_name} select *, *, * from relevant_columns offset 1 limit 2
+    """
+    )
+    connection.table(tbl_name).show()
+
+    tuples = [x[0] for x in connection.table(tbl_name).query('x', "select a from x").fetchall()]
+    min, med, max, null = tuple(tuples)
+    print(min, med, max, null)
+
     duck_tbl = connection.table(tbl_name)
     arrow_table = create_table(duck_tbl)
 
     # Try ==
-    assert connection.execute("SELECT count(*) from arrow_table where a = 1").fetchone()[0] == 1
+    assert connection.execute(f"SELECT count(*) from arrow_table where a = {min}").fetchone()[0] == 1
     # Try >
-    assert connection.execute("SELECT count(*) from arrow_table where a > 1").fetchone()[0] == 2
+    assert connection.execute(f"SELECT count(*) from arrow_table where a > {min}").fetchone()[0] == 2
     # Try >=
-    assert connection.execute("SELECT count(*) from arrow_table where a >= 10").fetchone()[0] == 2
+    assert connection.execute(f"SELECT count(*) from arrow_table where a >= {med}").fetchone()[0] == 2
     # Try <
-    assert connection.execute("SELECT count(*) from arrow_table where a < 10").fetchone()[0] == 1
+    assert connection.execute(f"SELECT count(*) from arrow_table where a < {med}").fetchone()[0] == 1
     # Try <=
-    assert connection.execute("SELECT count(*) from arrow_table where a <= 10").fetchone()[0] == 2
+    assert connection.execute(f"SELECT count(*) from arrow_table where a <= {med}").fetchone()[0] == 2
 
     # Try Is Null
-    assert connection.execute("SELECT count(*) from arrow_table where a IS NULL").fetchone()[0] == 1
+    assert connection.execute(f"SELECT count(*) from arrow_table where a IS NULL").fetchone()[0] == 1
     # Try Is Not Null
-    assert connection.execute("SELECT count(*) from arrow_table where a IS NOT NULL").fetchone()[0] == 3
+    assert connection.execute(f"SELECT count(*) from arrow_table where a IS NOT NULL").fetchone()[0] == 3
 
     # Try And
-    assert connection.execute("SELECT count(*) from arrow_table where a = 10 and b = 1").fetchone()[0] == 0
+    assert connection.execute(f"SELECT count(*) from arrow_table where a = {med} and b = {min}").fetchone()[0] == 0
     assert (
-        connection.execute("SELECT count(*) from arrow_table where a = 100 and b = 10 and c = 100").fetchone()[0] == 1
+        connection.execute(f"SELECT count(*) from arrow_table where a = {max} and b = {med} and c = {max}").fetchone()[
+            0
+        ]
+        == 1
     )
 
     # Try Or
-    assert connection.execute("SELECT count(*) from arrow_table where a = 100 or b = 1").fetchone()[0] == 2
+    assert connection.execute(f"SELECT count(*) from arrow_table where a = {max} or b = {min}").fetchone()[0] == 2
 
-    connection.execute("EXPLAIN SELECT count(*) from arrow_table where a = 100 or b = 1")
+    connection.execute(f"EXPLAIN SELECT count(*) from arrow_table where a = {max} or b = {min}")
     print(connection.fetchall())
 
 
@@ -173,9 +199,9 @@ class TestArrowFilterPushdown(object):
             'DOUBLE',
             'HUGEINT',
             'DECIMAL(4,1)',
-            'DECIMAL(9,1)',
-            'DECIMAL(18,4)',
-            'DECIMAL(30,12)',
+            'DECIMAL(9,4)',
+            'DECIMAL(18,6)',
+            'DECIMAL(38,10)',
         ],
     )
     @pytest.mark.parametrize('create_table', [create_pyarrow_pandas, create_pyarrow_table])
