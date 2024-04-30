@@ -17,7 +17,9 @@ re = pytest.importorskip("re")
 def create_pyarrow_pandas(rel):
     if not pandas_supports_arrow_backend():
         pytest.skip(reason="Pandas version doesn't support 'pyarrow' backend")
-    return rel.df().convert_dtypes(dtype_backend='pyarrow')
+    intermediate = rel.df()
+    print(intermediate)
+    return intermediate.convert_dtypes(dtype_backend='pyarrow')
 
 
 def create_pyarrow_table(rel):
@@ -69,7 +71,6 @@ def numeric_operators(connection, data_type, tbl_name, create_table):
 
     tuples = [x[0] for x in connection.table(tbl_name).query('x', "select a from x").fetchall()]
     min, med, max, null = tuple(tuples)
-    print(min, med, max, null)
 
     duck_tbl = connection.table(tbl_name)
     arrow_table = create_table(duck_tbl)
@@ -93,7 +94,7 @@ def numeric_operators(connection, data_type, tbl_name, create_table):
     # Try And
     assert connection.execute(f"SELECT count(*) from arrow_table where a = {med} and b = {min}").fetchone()[0] == 0
     assert (
-        connection.execute(f"SELECT count(*) from arrow_table where a = {max} and b = {med} and c = {max}").fetchone()[
+        connection.execute(f"SELECT count(*) from arrow_table where a = {max} and b = {max} and c = {max}").fetchone()[
             0
         ]
         == 1
