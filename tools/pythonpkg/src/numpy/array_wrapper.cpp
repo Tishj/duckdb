@@ -572,7 +572,22 @@ static bool ConvertColumnRegular(NumpyAppendData &append_data) {
 }
 
 template <class DUCKDB_T>
-static bool ConvertDecimalInternal(NumpyAppendData &append_data, double division) {
+static PyObject *ConstructDecimal(DUCKDB_T value, uint8_t width, uint8_t scale) {
+	auto decimal_length = DecimalToString::DecimalLength<DUCKDB_T>(value, width, scale);
+
+	auto &python_import_cache = *DuckDBPyConnection::ImportCache();
+	auto decimal = python_import_cache.decimal.Decimal();
+
+	unique_ptr<char[]> raw_string(new char[decimal_length]);
+	DecimalToString::FormatDecimal<DUCKDB_T>(value, width, scale, raw_string.get(),
+	                                         UnsafeNumericCast<idx_t>(decimal_length));
+	auto stringified = string(raw_string.get(), decimal_length);
+	auto py_obj = decimal(py::str(stringified));
+	return py_obj.release().ptr();
+}
+
+template <class DUCKDB_T>
+static bool ConvertDecimalInternal(NumpyAppendData &append_data, const LogicalType &type) {
 	auto target_offset = append_data.target_offset;
 	auto target_data = append_data.target_data;
 	auto target_mask = append_data.target_mask;
@@ -580,18 +595,21 @@ static bool ConvertDecimalInternal(NumpyAppendData &append_data, double division
 	auto count = append_data.count;
 	auto source_offset = append_data.source_offset;
 
+	auto width = DecimalType::GetWidth(type);
+	auto scale = DecimalType::GetScale(type);
+
 	auto src_ptr = UnifiedVectorFormat::GetData<DUCKDB_T>(idata);
-	auto out_ptr = reinterpret_cast<double *>(target_data);
+	auto out_ptr = reinterpret_cast<PyObject **>(target_data);
+
 	if (!idata.validity.AllValid()) {
 		for (idx_t i = 0; i < count; i++) {
 			idx_t src_idx = idata.sel->get_index(i + source_offset);
 			idx_t offset = target_offset + i;
 			if (!idata.validity.RowIsValidUnsafe(src_idx)) {
+				out_ptr[offset] = nullptr;
 				target_mask[offset] = true;
 			} else {
-				out_ptr[offset] =
-				    duckdb_py_convert::IntegralConvert::ConvertValue<DUCKDB_T, double>(src_ptr[src_idx], append_data) /
-				    division;
+				out_ptr[offset] = ConstructDecimal(src_ptr[src_idx], width, scale);
 				target_mask[offset] = false;
 			}
 		}
@@ -600,9 +618,7 @@ static bool ConvertDecimalInternal(NumpyAppendData &append_data, double division
 		for (idx_t i = 0; i < count; i++) {
 			idx_t src_idx = idata.sel->get_index(i + source_offset);
 			idx_t offset = target_offset + i;
-			out_ptr[offset] =
-			    duckdb_py_convert::IntegralConvert::ConvertValue<DUCKDB_T, double>(src_ptr[src_idx], append_data) /
-			    division;
+			out_ptr[offset] = ConstructDecimal(src_ptr[src_idx], width, scale);
 			target_mask[offset] = false;
 		}
 		return false;
@@ -611,17 +627,15 @@ static bool ConvertDecimalInternal(NumpyAppendData &append_data, double division
 
 static bool ConvertDecimal(NumpyAppendData &append_data) {
 	auto &decimal_type = append_data.input.GetType();
-	auto dec_scale = DecimalType::GetScale(decimal_type);
-	double division = pow(10, dec_scale);
 	switch (decimal_type.InternalType()) {
 	case PhysicalType::INT16:
-		return ConvertDecimalInternal<int16_t>(append_data, division);
+		return ConvertDecimalInternal<int16_t>(append_data, decimal_type);
 	case PhysicalType::INT32:
-		return ConvertDecimalInternal<int32_t>(append_data, division);
+		return ConvertDecimalInternal<int32_t>(append_data, decimal_type);
 	case PhysicalType::INT64:
-		return ConvertDecimalInternal<int64_t>(append_data, division);
+		return ConvertDecimalInternal<int64_t>(append_data, decimal_type);
 	case PhysicalType::INT128:
-		return ConvertDecimalInternal<hugeint_t>(append_data, division);
+		return ConvertDecimalInternal<hugeint_t>(append_data, decimal_type);
 	default:
 		throw NotImplementedException("Unimplemented internal type for DECIMAL");
 	}
@@ -721,9 +735,10 @@ void ArrayWrapper::Append(idx_t current_offset, Vector &input, idx_t source_size
 	case LogicalTypeId::DOUBLE:
 		may_have_null = ConvertColumnRegular<double>(append_data);
 		break;
-	case LogicalTypeId::DECIMAL:
+	case LogicalTypeId::DECIMAL: {
 		may_have_null = ConvertDecimal(append_data);
 		break;
+	}
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_SEC:
