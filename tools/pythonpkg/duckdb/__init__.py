@@ -1043,6 +1043,7 @@ def project(df, project_expr, **kwargs):
     locals['project_expr'] = project_expr
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).project(project_expr, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('project')
@@ -1057,6 +1058,7 @@ def distinct(df, **kwargs):
     locals = previous_frame.f_locals.copy()
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).distinct(**kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('distinct')
@@ -1072,6 +1074,7 @@ def write_csv(df, *args, **kwargs):
     locals['args'] = args
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).write_csv(*args, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('write_csv')
@@ -1088,6 +1091,7 @@ def aggregate(df, aggr_expr, group_expr = "", **kwargs):
     locals['group_expr'] = group_expr
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).aggregate(aggr_expr, group_expr, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('aggregate')
@@ -1103,6 +1107,7 @@ def alias(df, alias, **kwargs):
     locals['alias'] = alias
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).set_alias(alias, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('alias')
@@ -1118,6 +1123,7 @@ def filter(df, filter_expr, **kwargs):
     locals['filter_expr'] = filter_expr
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).filter(filter_expr, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('filter')
@@ -1134,6 +1140,7 @@ def limit(df, n, offset = 0, **kwargs):
     locals['offset'] = offset
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).limit(n, offset, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('limit')
@@ -1149,6 +1156,7 @@ def order(df, order_expr, **kwargs):
     locals['order_expr'] = order_expr
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).order(order_expr, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('order')
@@ -1165,6 +1173,7 @@ def query_df(df, virtual_table_name, sql_query, **kwargs):
     locals['sql_query'] = sql_query
     locals['conn'] = conn
     locals['kwargs'] = kwargs
+    locals['df'] = df
     exec('result = conn.from_df(df).query(virtual_table_name, sql_query, **kwargs)', globals, locals)
     return locals['result']
 _exported_symbols.append('query_df')

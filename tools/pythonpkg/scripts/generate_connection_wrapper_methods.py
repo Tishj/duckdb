@@ -94,7 +94,7 @@ def generate():
         duck_call += function_name
         return duck_call
 
-    def generate_function_call(method, duck_call, parameters) -> str:
+    def generate_function_call(name, method, duck_call, parameters) -> str:
         lines = []
         lines.append('previous_frame = inspect.currentframe().f_back')
         lines.append('globals = previous_frame.f_globals')
@@ -107,6 +107,8 @@ def generate():
                 arguments.append(res.replace('*', ''))
         arguments.append('conn')
         arguments.append('kwargs')
+        if name in SPECIAL_METHOD_NAMES:
+            arguments.append('df')
 
         for arg in arguments:
             lines.append(f"locals['{arg}'] = {arg}")
@@ -118,7 +120,7 @@ def generate():
         arguments = generate_arguments(name, method)
         parameters = generate_parameters(name, method)
         duck_call = generate_duck_call(name)
-        function_call = generate_function_call(method, duck_call, parameters)
+        function_call = generate_function_call(name, method, duck_call, parameters)
 
         func = f"""
 def {name}({arguments}):
