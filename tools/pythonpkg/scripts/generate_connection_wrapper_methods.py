@@ -81,23 +81,44 @@ def generate():
         result = ', '.join(arguments)
         return '(' + result + ')'
 
-    def generate_function_call(name) -> str:
-        function_call = ''
+    def generate_duck_call(name) -> str:
+        duck_call = ''
         if name in SPECIAL_METHOD_NAMES:
-            function_call += 'from_df(df).'
+            duck_call += 'from_df(df).'
 
         REMAPPED_FUNCTIONS = {'alias': 'set_alias', 'query_df': 'query'}
         if name in REMAPPED_FUNCTIONS:
             function_name = REMAPPED_FUNCTIONS[name]
         else:
             function_name = name
-        function_call += function_name
-        return function_call
+        duck_call += function_name
+        return duck_call
+
+    def generate_function_call(method, duck_call, parameters) -> str:
+        lines = []
+        lines.append('previous_frame = inspect.currentframe().f_back')
+        lines.append('globals = previous_frame.f_globals')
+        lines.append('locals = previous_frame.f_locals.copy()')
+
+        arguments = []
+        if 'args' in method:
+            for arg in method['args']:
+                res = arg['name']
+                arguments.append(res.replace('*', ''))
+        arguments.append('conn')
+        arguments.append('kwargs')
+
+        for arg in arguments:
+            lines.append(f"locals['{arg}'] = {arg}")
+        lines.append(f"exec('result = conn.{duck_call}{parameters}', globals, locals)")
+        lines.append("return locals['result']")
+        return '\n'.join([f'    {x}' for x in lines])
 
     def create_definition(name, method) -> str:
         arguments = generate_arguments(name, method)
         parameters = generate_parameters(name, method)
-        function_call = generate_function_call(name)
+        duck_call = generate_duck_call(name)
+        function_call = generate_function_call(method, duck_call, parameters)
 
         func = f"""
 def {name}({arguments}):
@@ -105,7 +126,7 @@ def {name}({arguments}):
         conn = kwargs.pop('connection')
     else:
         conn = duckdb.connect(":default:")
-    return conn.{function_call}{parameters}
+{function_call}
 _exported_symbols.append('{name}')
 """
         return func
