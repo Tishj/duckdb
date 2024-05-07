@@ -3,6 +3,8 @@
 
 require skip_reload
 
+require block_size 262144
+
 # Create a persistent database
 load __TEST_DIR__/max_swap_space.db
 
