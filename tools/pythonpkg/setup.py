@@ -160,7 +160,6 @@ def open_utf8(fpath, flags):
     else:
         return open(fpath, flags, encoding="utf8")
 
-
 # make sure we are in the right directory
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
@@ -175,10 +174,7 @@ else:
 if 'DUCKDB_INSTALL_USER' in os.environ and 'install' in sys.argv:
     sys.argv.append('--user')
 
-existing_duckdb_dir = ''
 libraries = []
-if 'DUCKDB_BINARY_DIR' in os.environ:
-    existing_duckdb_dir = os.environ['DUCKDB_BINARY_DIR']
 if 'DUCKDB_COMPILE_FLAGS' in os.environ:
     toolchain_args = ['-std=c++11'] + os.environ['DUCKDB_COMPILE_FLAGS'].split()
 if 'DUCKDB_LIBS' in os.environ:
@@ -245,16 +241,21 @@ def exclude_extensions(f: TextIO):
     else:
         return [x for x in files if 'jemalloc' not in x]
 
+existing_duckdb_dir = ''
+if 'DUCKDB_BINARY_DIR' in os.environ:
+    existing_duckdb_dir = os.environ['DUCKDB_BINARY_DIR']
 
 if len(existing_duckdb_dir) == 0:
     # no existing library supplied: compile everything from source
     source_files = main_source_files
 
     # check if amalgamation exists
+    # FIXME: this is deprecated and broken??
     if os.path.isfile(os.path.join(script_path, '..', '..', 'scripts', 'amalgamation.py')):
         # amalgamation exists: compiling from source directory
         # copy all source files to the current directory
-        sys.path.append(os.path.join(script_path, '..', '..', 'scripts'))
+        root_scripts_dir = os.path.join(script_path, 'scripts')
+        sys.path.append(root_scripts_dir)
         import package_build
 
         (source_list, include_list, original_sources) = package_build.build_package(
@@ -309,7 +310,9 @@ if len(existing_duckdb_dir) == 0:
         define_macros=define_macros,
     )
 else:
-    sys.path.append(os.path.join(script_path, '..', '..', 'scripts'))
+    # Existing DuckDB Dir
+    root_scripts_dir = os.path.join(script_path, 'scripts')
+    sys.path.append(root_scripts_dir)
     import package_build
 
     include_directories += [os.path.join('..', '..', include) for include in package_build.third_party_includes()]
@@ -388,6 +391,7 @@ setup(
     description='DuckDB in-process database',
     keywords='DuckDB Database SQL OLAP',
     url="https://www.duckdb.org",
+    version="0.10.3",
     long_description='See here for an introduction: https://duckdb.org/docs/api/python/overview',
     license='MIT',
     data_files=data_files,

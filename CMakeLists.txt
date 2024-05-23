@@ -1253,6 +1253,22 @@ if(BUILD_PYTHON)
 
   get_target_property(duckdb_libs duckdb LINK_LIBRARIES)
 
+	# The 'package_build.py' has to be relative to the root
+	# since it has to be available during setup.py execution
+	# This runs in an isolated environment, only files relative to the root can be copied there
+	execute_process(
+		COMMAND ${CMAKE_COMMAND} -E copy
+				${PROJECT_SOURCE_DIR}/scripts/package_build.py
+				${PROJECT_SOURCE_DIR}/tools/pythonpkg/scripts/
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+	)
+	execute_process(
+		COMMAND ${CMAKE_COMMAND} -E copy
+				${PROJECT_SOURCE_DIR}/scripts/python_helpers.py
+				${PROJECT_SOURCE_DIR}/tools/pythonpkg/scripts/
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+	)
+
   set(PIP_COMMAND
       cmake
       -E
