@@ -454,6 +454,22 @@ Value EnableViewDependencies::GetSetting(const ClientContext &context) {
 }
 
 //===--------------------------------------------------------------------===//
+// Enable FK Dependencies
+//===--------------------------------------------------------------------===//
+void EnableFKDependencies::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.enable_fk_dependencies = input.GetValue<bool>();
+}
+
+void EnableFKDependencies::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.enable_fk_dependencies = DBConfig().options.enable_fk_dependencies;
+}
+
+Value EnableFKDependencies::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.enable_fk_dependencies);
+}
+
+//===--------------------------------------------------------------------===//
 // Enable FSST Vectors
 //===--------------------------------------------------------------------===//
 void EnableFSSTVectors::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {

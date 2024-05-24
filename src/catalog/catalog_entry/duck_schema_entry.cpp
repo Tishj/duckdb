@@ -151,9 +151,18 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::CreateTable(CatalogTransaction trans
 		auto &fk_info = *fk_arrays[i];
 		Alter(transaction, fk_info);
 
-		// make a dependency between this table and referenced table
-		auto &set = GetCatalogSet(CatalogType::TABLE_ENTRY);
-		info.dependencies.AddDependency(*set.GetEntry(transaction, fk_info.name));
+		bool add_dependency = false;
+		if (transaction.context) {
+			auto &config = DBConfig::GetConfig(*transaction.context);
+			if (config.options.enable_fk_dependencies) {
+				add_dependency = true;
+			}
+		}
+		if (add_dependency) {
+			// make a dependency between this table and referenced table
+			auto &set = GetCatalogSet(CatalogType::TABLE_ENTRY);
+			info.dependencies.AddDependency(*set.GetEntry(transaction, fk_info.name));
+		}
 	}
 
 	auto entry = AddEntryInternal(transaction, std::move(table), info.Base().on_conflict, info.dependencies);

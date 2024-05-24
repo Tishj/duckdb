@@ -61,8 +61,9 @@ OptionValueSet &GetValueForOption(const string &name) {
 	    {"allow_persistent_secrets", {Value(false)}},
 	    {"secret_directory", {"/tmp/some/path"}},
 	    {"enable_view_dependencies", {Value(true)}},
+	    {"enable_fk_dependencies", {Value(true)}},
 	    {"default_secret_storage", {"custom_storage"}},
-	    {"custom_extension_repository", {"duckdb.org/no-extensions-here", "duckdb.org/no-extensions-here"}},
+	    {"custom_extension_reposistory", {"duckdb.org/no-extensions-here", "duckdb.org/no-extensions-here"}},
 	    {"autoinstall_extension_repository", {"duckdb.org/no-extensions-here", "duckdb.org/no-extensions-here"}},
 #ifdef DUCKDB_EXTENSION_AUTOLOAD_DEFAULT
 	    {"autoload_known_extensions", {!DUCKDB_EXTENSION_AUTOLOAD_DEFAULT}},
@@ -141,6 +142,7 @@ bool OptionIsExcludedFromTest(const string &name) {
 	    "external_threads", // tested in test_threads.cpp
 	    "profiling_output", // just an alias
 	    "duckdb_api",
+	    "custom_extension_repository",
 	    "custom_user_agent"};
 	return excluded_options.count(name) == 1;
 }
