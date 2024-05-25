@@ -236,14 +236,17 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
                                          idx_t changed_idx, ExpressionExecutor &executor,
                                          CollectionScanState &scan_state, DataChunk &scan_chunk) {
 	Verify();
+	auto &cols = GetColumns();
+	vector<ColumnAppendState> append_states(cols.size());
+	vector<shared_ptr<ColumnData>> column_data(cols.size());
+	for (idx_t i = 0; i < cols.size(); i++) {
+		auto &col_type = i == changed_idx ? target_type : cols[i]->type;
+		// construct a new column data for this type
+		column_data[i] = ColumnData::CreateColumn(GetBlockManager(), GetTableInfo(), i, start, col_type);
+		column_data[i]->InitializeAppend(append_states[i]);
+	}
 
-	// construct a new column data for this type
-	auto column_data = ColumnData::CreateColumn(GetBlockManager(), GetTableInfo(), changed_idx, start, target_type);
-
-	ColumnAppendState append_state;
-	column_data->InitializeAppend(append_state);
-
-	// scan the original table, and fill the new column with the transformed value
+	// scan the original table
 	scan_state.Initialize(GetCollection().GetTypes());
 	InitializeScan(scan_state);
 
@@ -252,6 +255,7 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 	append_types.push_back(target_type);
 	append_chunk.Initialize(Allocator::DefaultAllocator(), append_types);
 	auto &append_vector = append_chunk.data[0];
+	idx_t count = 0;
 	while (true) {
 		// scan the table
 		scan_chunk.Reset();
@@ -259,27 +263,27 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 		if (scan_chunk.size() == 0) {
 			break;
 		}
-		// execute the expression
-		append_chunk.Reset();
-		executor.ExecuteExpression(scan_chunk, append_vector);
-		column_data->Append(append_state, append_vector, scan_chunk.size());
+		count += scan_chunk.size();
+
+		for (idx_t i = 0; i < cols.size(); i++) {
+			if (i == changed_idx) {
+				// fill the new column with the transformed value
+				// execute the expression
+				append_chunk.Reset();
+				executor.ExecuteExpression(scan_chunk, append_vector);
+				column_data[i]->Append(append_states[i], append_vector, scan_chunk.size());
+			} else {
+				// just fill the existing columns with the tuples that aren't deleted
+				column_data[i]->Append(append_states[i], scan_chunk.data[i], scan_chunk.size());
+			}
+		}
 	}
 
 	// set up the row_group based on this row_group
-	auto row_group = make_uniq<RowGroup>(new_collection, this->start, column_data->count);
+	auto row_group = make_uniq<RowGroup>(new_collection, this->start, count);
 	// We have gotten rid of deleted rows, just create a fresh version info
+	row_group->columns = column_data;
 	row_group->version_info = make_shared_ptr<RowVersionManager>(start);
-	auto &cols = GetColumns();
-	for (idx_t i = 0; i < cols.size(); i++) {
-		if (i == changed_idx) {
-			// this is the altered column: use the new column
-			row_group->columns.push_back(std::move(column_data));
-			column_data.reset();
-		} else {
-			// this column was not altered: use the data directly
-			row_group->columns.push_back(cols[i]);
-		}
-	}
 	row_group->Verify();
 	return row_group;
 }
