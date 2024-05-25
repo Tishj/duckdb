@@ -1114,13 +1114,15 @@ shared_ptr<RowGroupCollection> RowGroupCollection::AlterType(ClientContext &cont
 	// now alter the type of the column within all of the row_groups individually
 	auto lock = result->stats.GetLock();
 	auto &changed_stats = result->stats.GetStats(*lock, changed_idx);
+	idx_t count = 0;
 	for (auto &current_row_group : row_groups->Segments()) {
 		auto new_row_group = current_row_group.AlterType(*result, target_type, changed_idx, executor,
 		                                                 scan_state.table_state, scan_chunk);
+		count += new_row_group->count.load();
 		new_row_group->MergeIntoStatistics(changed_idx, changed_stats.Statistics());
 		result->row_groups->AppendSegment(std::move(new_row_group));
 	}
-
+	result->total_rows = count;
 	return result;
 }
 

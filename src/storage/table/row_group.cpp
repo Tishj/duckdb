@@ -255,7 +255,7 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 	while (true) {
 		// scan the table
 		scan_chunk.Reset();
-		ScanCommitted(scan_state, scan_chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
+		ScanCommitted(scan_state, scan_chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED);
 		if (scan_chunk.size() == 0) {
 			break;
 		}
@@ -266,8 +266,9 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 	}
 
 	// set up the row_group based on this row_group
-	auto row_group = make_uniq<RowGroup>(new_collection, this->start, this->count);
-	row_group->version_info = GetOrCreateVersionInfoPtr();
+	auto row_group = make_uniq<RowGroup>(new_collection, this->start, column_data->count);
+	// We have gotten rid of deleted rows, just create a fresh version info
+	row_group->version_info = make_shared_ptr<RowVersionManager>(start);
 	auto &cols = GetColumns();
 	for (idx_t i = 0; i < cols.size(); i++) {
 		if (i == changed_idx) {
