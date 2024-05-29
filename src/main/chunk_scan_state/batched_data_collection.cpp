@@ -15,7 +15,7 @@ BatchCollectionChunkScanState::BatchCollectionChunkScanState(BatchedDataCollecti
 BatchCollectionChunkScanState::~BatchCollectionChunkScanState() {
 }
 
-void BatchCollectionChunkScanState::InternalLoad(PreservedError &error) {
+void BatchCollectionChunkScanState::InternalLoad(ErrorData &error) {
 	if (state.range.begin == state.range.end) {
 		// Signal empty chunk to break out of the loop
 		current_chunk->SetCardinality(0);
@@ -31,7 +31,7 @@ bool BatchCollectionChunkScanState::HasError() const {
 	return false;
 }
 
-PreservedError &BatchCollectionChunkScanState::GetError() {
+ErrorData &BatchCollectionChunkScanState::GetError() {
 	throw NotImplementedException("BatchDataCollections don't have an internal error object");
 }
 
@@ -43,7 +43,7 @@ const vector<string> &BatchCollectionChunkScanState::Names() const {
 	throw NotImplementedException("BatchDataCollections don't have names");
 }
 
-bool BatchCollectionChunkScanState::LoadNextChunk(PreservedError &error) {
+bool BatchCollectionChunkScanState::LoadNextChunk(ErrorData &error) {
 	if (finished) {
 		return false;
 	}

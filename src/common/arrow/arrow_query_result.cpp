@@ -14,8 +14,7 @@ ArrowQueryResult::ArrowQueryResult(StatementType statement_type, StatementProper
       row_count(row_count), batch_size(batch_size) {
 }
 
-ArrowQueryResult::ArrowQueryResult(PreservedError error)
-    : QueryResult(QueryResultType::ARROW_RESULT, std::move(error)) {
+ArrowQueryResult::ArrowQueryResult(ErrorData error) : QueryResult(QueryResultType::ARROW_RESULT, std::move(error)) {
 }
 
 unique_ptr<DataChunk> ArrowQueryResult::Fetch() {

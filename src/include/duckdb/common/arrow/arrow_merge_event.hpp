@@ -23,7 +23,7 @@ public:
 	ArrowBatchTask(ArrowQueryResult &result, vector<idx_t> record_batch_indices, Executor &executor,
 	               shared_ptr<Event> event_p, BatchCollectionChunkScanState scan_state, vector<string> names,
 	               idx_t batch_size)
-	    : ExecutorTask(executor), result(result), record_batch_indices(std::move(record_batch_indices)),
+	    : ExecutorTask(executor, event_p), result(result), record_batch_indices(std::move(record_batch_indices)),
 	      event(std::move(event_p)), batch_size(batch_size), names(std::move(names)),
 	      scan_state(std::move(scan_state)) {
 	}
