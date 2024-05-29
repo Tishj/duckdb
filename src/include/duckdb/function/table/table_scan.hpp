@@ -32,7 +32,7 @@ struct TableScanBindData : public TableFunctionData {
 
 public:
 	bool Equals(const FunctionData &other_p) const override {
-		auto &other = (const TableScanBindData &)other_p;
+		auto &other = other_p.Cast<TableScanBindData>();
 		return &other.table == &table && result_ids == other.result_ids;
 	}
 };
@@ -42,8 +42,6 @@ struct TableScanFunction {
 	static void RegisterFunction(BuiltinFunctions &set);
 	static TableFunction GetFunction();
 	static TableFunction GetIndexScanFunction();
-	static optional_ptr<TableCatalogEntry> GetTableEntry(const TableFunction &function,
-	                                                     const optional_ptr<FunctionData> bind_data);
 };
 
 } // namespace duckdb

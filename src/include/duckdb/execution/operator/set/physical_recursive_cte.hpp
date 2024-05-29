@@ -29,7 +29,7 @@ public:
 	idx_t table_index;
 
 	bool union_all;
-	std::shared_ptr<ColumnDataCollection> working_table;
+	shared_ptr<ColumnDataCollection> working_table;
 	shared_ptr<MetaPipeline> recursive_meta_pipeline;
 
 public:
@@ -47,6 +47,10 @@ public:
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 
 	bool IsSink() const override {
+		return true;
+	}
+
+	bool ParallelSink() const override {
 		return true;
 	}
 

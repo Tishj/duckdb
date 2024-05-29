@@ -8,11 +8,12 @@
 
 #pragma once
 
-#include "duckdb/execution/physical_operator.hpp"
-#include "duckdb/parser/parsed_data/copy_info.hpp"
-#include "duckdb/function/copy_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/filename_pattern.hpp"
+#include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/function/copy_function.hpp"
+#include "duckdb/parser/parsed_data/copy_info.hpp"
+#include "duckdb/common/enums/copy_overwrite_mode.hpp"
 
 namespace duckdb {
 
@@ -30,9 +31,12 @@ public:
 	string file_path;
 	bool use_tmp_file;
 	FilenamePattern filename_pattern;
-	bool overwrite_or_ignore;
+	string file_extension;
+	CopyOverwriteMode overwrite_mode;
 	bool parallel;
 	bool per_thread_output;
+	optional_idx file_size_bytes;
+	bool rotate;
 
 	bool partition_output;
 	vector<idx_t> partition_columns;
@@ -69,5 +73,10 @@ public:
 	}
 
 	static void MoveTmpFile(ClientContext &context, const string &tmp_file_path);
+
+	string GetTrimmedPath(ClientContext &context) const;
+
+private:
+	unique_ptr<GlobalFunctionData> CreateFileState(ClientContext &context, GlobalSinkState &sink) const;
 };
 } // namespace duckdb

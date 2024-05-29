@@ -6,6 +6,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Generate serialization code')
 parser.add_argument('--source', type=str, help='Source directory')
 parser.add_argument('--target', type=str, help='Target directory')
+
 args = parser.parse_args()
 
 if args.source is None:
@@ -36,6 +37,58 @@ for target in targets:
             }
         )
 
+scripts_dir = os.path.dirname(os.path.abspath(__file__))
+version_map_path = scripts_dir + '/../src/storage/version_map.json'
+version_map_file = file = open(version_map_path)
+version_map = json.load(version_map_file)
+
+
+def verify_serialization_versions(version_map):
+    serialization = version_map['serialization']
+    if list(serialization.keys())[-1] != 'latest':
+        print(f"The version map ({version_map_path}) for serialization versions must end in 'latest'!")
+        exit(1)
+
+
+verify_serialization_versions(version_map)
+
+
+def lookup_serialization_version(version: str):
+    if version.lower() == "latest":
+        print(
+            f"'latest' is not an allowed 'version' to use in serialization JSON files, please provide a duckdb version"
+        )
+
+    versions = version_map['serialization']
+    if version not in versions:
+        from packaging.version import Version
+
+        current_version = Version(version)
+
+        # This version does not exist in the version map
+        # Which is allowed for unreleased versions, they will get mapped to 'latest' instead
+
+        last_registered_version = Version(list(versions.keys())[-2])
+        if current_version < last_registered_version:
+            # The version was lower than the last defined version, which is not allowed
+            print(
+                f"Specified version ({current_version}) could not be found in the version_map.json, and it is lower than the last defined version ({last_registered_version})!"
+            )
+            exit(1)
+
+        if hasattr(lookup_serialization_version, 'latest_version'):
+            # We have already mapped a version to 'latest', check that the versions match
+            latest_version = getattr(lookup_serialization_version, 'latest_version')
+            if current_version != latest_version:
+                print(
+                    f"Found more than one version that is not present in the version_map.json!: {current_version}, {latest_version}"
+                )
+                exit(1)
+        else:
+            setattr(lookup_serialization_version, 'latest_version', current_version)
+        return versions['latest']
+    return versions[version]
+
 
 include_base = '#include "${FILENAME}"\n'
 
@@ -51,6 +104,9 @@ namespace duckdb {
 footer = '''
 } // namespace duckdb
 '''
+
+templated_base = '''
+template <typename ${TEMPLATE_NAME}>'''
 
 serialize_base = '''
 void ${CLASS_NAME}::Serialize(Serializer &serializer) const {
@@ -100,6 +156,7 @@ move_list = [
     'LogicalType',
     'ColumnDefinition',
     'BaseStatistics',
+    'BoundLimitNode',
 ]
 
 reference_list = ['ClientContext', 'bound_parameter_map_t']
@@ -138,17 +195,29 @@ def replace_pointer(type):
     return re.sub('([a-zA-Z0-9]+)[*]', 'unique_ptr<\\1>', type)
 
 
+def get_default_argument(default_value):
+    return f'{default_value}'.lower() if type(default_value) == bool else f'{default_value}'
+
+
 def get_serialize_element(
-    property_name, property_id, property_key, property_type, has_default, default_value, is_deleted, pointer_type
+    property_name,
+    property_id,
+    property_key,
+    property_type,
+    has_default,
+    default_value,
+    is_deleted,
+    pointer_type,
+    version,
 ):
     assignment = '.' if pointer_type == 'none' else '->'
-    default_argument = '' if default_value is None else f', {default_value}'
+    default_argument = '' if default_value is None else f', {get_default_argument(default_value)}'
     template = serialize_element
     if is_deleted:
         template = "\t/* [Deleted] (${PROPERTY_TYPE}) \"${PROPERTY_NAME}\" */\n"
     elif has_default:
         template = template.replace('WriteProperty', 'WritePropertyWithDefault')
-    return (
+    serialization_code = (
         template.replace('${PROPERTY_NAME}', property_name)
         .replace('${PROPERTY_TYPE}', property_type)
         .replace('${PROPERTY_ID}', str(property_id))
@@ -156,6 +225,16 @@ def get_serialize_element(
         .replace('${PROPERTY_DEFAULT}', default_argument)
         .replace('${ASSIGNMENT}', assignment)
     )
+
+    storage_version = lookup_serialization_version(version)
+    if storage_version != 1:
+        code = []
+        code.append(f'\tif (serializer.ShouldSerialize({storage_version})) {{')
+        code.append('\t' + serialization_code)
+
+        result = '\n'.join(code) + '\t}\n'
+        return result
+    return serialization_code
 
 
 def get_deserialize_element_template(
@@ -171,7 +250,7 @@ def get_deserialize_element_template(
 ):
     # read_method = 'ReadProperty'
     assignment = '.' if pointer_type == 'none' else '->'
-    default_argument = '' if default_value is None else f', {default_value}'
+    default_argument = '' if default_value is None else f', {get_default_argument(default_value)}'
     if is_deleted:
         template = template.replace(', result${ASSIGNMENT}${PROPERTY_NAME}', '').replace(
             'ReadProperty', 'ReadDeletedProperty'
@@ -236,6 +315,8 @@ def generate_return(class_entry):
         return '\treturn std::move(result);'
 
 
+# FIXME: python has __slots__ for this, so it's enforced by Python itself
+# see: https://wiki.python.org/moin/UsingSlots
 supported_member_entries = [
     'id',
     'name',
@@ -246,6 +327,7 @@ supported_member_entries = [
     'base',
     'default',
     'deleted',
+    'version',
 ]
 
 
@@ -254,6 +336,8 @@ def has_default_by_default(type):
         return True
     if is_container(type):
         if 'IndexVector' in type:
+            return False
+        if 'CSVOption' in type:
             return False
         return True
     if type == 'string':
@@ -272,12 +356,15 @@ class MemberVariable:
         self.has_default = False
         self.default = None
         self.deleted = False
+        self.version: str = 'v0.10.2'
         if 'property' in entry:
             self.serialize_property = entry['property']
             self.deserialize_property = entry['property']
         else:
             self.serialize_property = self.name
             self.deserialize_property = self.name
+        if 'version' in entry:
+            self.version = entry['version']
         if 'serialize_property' in entry:
             self.serialize_property = entry['serialize_property']
         if 'deserialize_property' in entry:
@@ -396,6 +483,7 @@ def generate_base_class_code(base_class):
             default,
             entry.deleted,
             base_class.pointer_type,
+            entry.version,
         )
         base_class_deserialize += get_deserialize_element(
             entry.deserialize_property,
@@ -577,6 +665,7 @@ def generate_class_code(class_entry):
                 '${BASE_PROPERTY}', entry.base.replace('*', '')
             ).replace('${DERIVED_PROPERTY}', entry.type.replace('*', ''))
         type_name = replace_pointer(entry.type)
+
         class_serialize += get_serialize_element(
             write_property_name,
             property_id,
@@ -586,6 +675,7 @@ def generate_class_code(class_entry):
             default_value,
             entry.deleted,
             class_entry.pointer_type,
+            entry.version,
         )
         if entry_idx > last_constructor_index:
             class_deserialize += get_deserialize_element_template(
@@ -616,8 +706,19 @@ def generate_class_code(class_entry):
     deserialize_return = get_return_value(class_entry.pointer_type, class_entry.return_type)
 
     class_generation = ''
-    class_generation += serialize_base.replace('${CLASS_NAME}', class_entry.name).replace('${MEMBERS}', class_serialize)
-    class_generation += (
+    pattern = re.compile(r'<\w+>')
+    templated_type = ''
+
+    # Check if is a templated class
+    is_templated = pattern.search(class_entry.name)
+    if is_templated:
+        templated_type = templated_base.replace('${TEMPLATE_NAME}', is_templated.group()[1:-1])
+
+    class_generation += templated_type + serialize_base.replace('${CLASS_NAME}', class_entry.name).replace(
+        '${MEMBERS}', class_serialize
+    )
+
+    class_generation += templated_type + (
         deserialize_base.replace('${DESERIALIZE_RETURN}', deserialize_return)
         .replace('${CLASS_NAME}', class_entry.name)
         .replace('${MEMBERS}', class_deserialize)

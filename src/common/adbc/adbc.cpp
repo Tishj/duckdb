@@ -14,45 +14,46 @@
 #include "duckdb/main/connection.hpp"
 #endif
 
-#include "duckdb/common/adbc/single_batch_array_stream.hpp"
-
 #include "duckdb/common/adbc/options.h"
-#include <string.h>
+#include "duckdb/common/adbc/single_batch_array_stream.hpp"
+#include "duckdb/function/table/arrow.hpp"
+
 #include <stdlib.h>
+#include <string.h>
 
 // We must leak the symbols of the init function
-duckdb_adbc::AdbcStatusCode duckdb_adbc_init(size_t count, struct duckdb_adbc::AdbcDriver *driver,
-                                             struct duckdb_adbc::AdbcError *error) {
+AdbcStatusCode duckdb_adbc_init(int version, void *driver, struct AdbcError *error) {
 	if (!driver) {
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
+	auto adbc_driver = reinterpret_cast<AdbcDriver *>(driver);
 
-	driver->DatabaseNew = duckdb_adbc::DatabaseNew;
-	driver->DatabaseSetOption = duckdb_adbc::DatabaseSetOption;
-	driver->DatabaseInit = duckdb_adbc::DatabaseInit;
-	driver->DatabaseRelease = duckdb_adbc::DatabaseRelease;
-	driver->ConnectionNew = duckdb_adbc::ConnectionNew;
-	driver->ConnectionSetOption = duckdb_adbc::ConnectionSetOption;
-	driver->ConnectionInit = duckdb_adbc::ConnectionInit;
-	driver->ConnectionRelease = duckdb_adbc::ConnectionRelease;
-	driver->ConnectionGetTableTypes = duckdb_adbc::ConnectionGetTableTypes;
-	driver->StatementNew = duckdb_adbc::StatementNew;
-	driver->StatementRelease = duckdb_adbc::StatementRelease;
-	driver->StatementBind = duckdb_adbc::StatementBind;
-	driver->StatementBindStream = duckdb_adbc::StatementBindStream;
-	driver->StatementExecuteQuery = duckdb_adbc::StatementExecuteQuery;
-	driver->StatementPrepare = duckdb_adbc::StatementPrepare;
-	driver->StatementSetOption = duckdb_adbc::StatementSetOption;
-	driver->StatementSetSqlQuery = duckdb_adbc::StatementSetSqlQuery;
-	driver->ConnectionGetObjects = duckdb_adbc::ConnectionGetObjects;
-	driver->ConnectionCommit = duckdb_adbc::ConnectionCommit;
-	driver->ConnectionRollback = duckdb_adbc::ConnectionRollback;
-	driver->ConnectionReadPartition = duckdb_adbc::ConnectionReadPartition;
-	driver->StatementExecutePartitions = duckdb_adbc::StatementExecutePartitions;
-	driver->ConnectionGetInfo = duckdb_adbc::ConnectionGetInfo;
-	driver->StatementGetParameterSchema = duckdb_adbc::StatementGetParameterSchema;
-	driver->ConnectionGetTableSchema = duckdb_adbc::ConnectionGetTableSchema;
-	driver->StatementSetSubstraitPlan = duckdb_adbc::StatementSetSubstraitPlan;
+	adbc_driver->DatabaseNew = duckdb_adbc::DatabaseNew;
+	adbc_driver->DatabaseSetOption = duckdb_adbc::DatabaseSetOption;
+	adbc_driver->DatabaseInit = duckdb_adbc::DatabaseInit;
+	adbc_driver->DatabaseRelease = duckdb_adbc::DatabaseRelease;
+	adbc_driver->ConnectionNew = duckdb_adbc::ConnectionNew;
+	adbc_driver->ConnectionSetOption = duckdb_adbc::ConnectionSetOption;
+	adbc_driver->ConnectionInit = duckdb_adbc::ConnectionInit;
+	adbc_driver->ConnectionRelease = duckdb_adbc::ConnectionRelease;
+	adbc_driver->ConnectionGetTableTypes = duckdb_adbc::ConnectionGetTableTypes;
+	adbc_driver->StatementNew = duckdb_adbc::StatementNew;
+	adbc_driver->StatementRelease = duckdb_adbc::StatementRelease;
+	adbc_driver->StatementBind = duckdb_adbc::StatementBind;
+	adbc_driver->StatementBindStream = duckdb_adbc::StatementBindStream;
+	adbc_driver->StatementExecuteQuery = duckdb_adbc::StatementExecuteQuery;
+	adbc_driver->StatementPrepare = duckdb_adbc::StatementPrepare;
+	adbc_driver->StatementSetOption = duckdb_adbc::StatementSetOption;
+	adbc_driver->StatementSetSqlQuery = duckdb_adbc::StatementSetSqlQuery;
+	adbc_driver->ConnectionGetObjects = duckdb_adbc::ConnectionGetObjects;
+	adbc_driver->ConnectionCommit = duckdb_adbc::ConnectionCommit;
+	adbc_driver->ConnectionRollback = duckdb_adbc::ConnectionRollback;
+	adbc_driver->ConnectionReadPartition = duckdb_adbc::ConnectionReadPartition;
+	adbc_driver->StatementExecutePartitions = duckdb_adbc::StatementExecutePartitions;
+	adbc_driver->ConnectionGetInfo = duckdb_adbc::ConnectionGetInfo;
+	adbc_driver->StatementGetParameterSchema = duckdb_adbc::StatementGetParameterSchema;
+	adbc_driver->ConnectionGetTableSchema = duckdb_adbc::ConnectionGetTableSchema;
+	adbc_driver->StatementSetSubstraitPlan = duckdb_adbc::StatementSetSubstraitPlan;
 	return ADBC_STATUS_OK;
 }
 
@@ -66,6 +67,8 @@ struct DuckDBAdbcStatementWrapper {
 	char *ingestion_table_name;
 	ArrowArrayStream ingestion_stream;
 	IngestionMode ingestion_mode = IngestionMode::CREATE;
+	uint8_t *substrait_plan;
+	uint64_t plan_length;
 };
 
 static AdbcStatusCode QueryInternal(struct AdbcConnection *connection, struct ArrowArrayStream *out, const char *query,
@@ -74,28 +77,31 @@ static AdbcStatusCode QueryInternal(struct AdbcConnection *connection, struct Ar
 
 	auto status = StatementNew(connection, &statement, error);
 	if (status != ADBC_STATUS_OK) {
+		StatementRelease(&statement, error);
 		SetError(error, "unable to initialize statement");
 		return status;
 	}
 	status = StatementSetSqlQuery(&statement, query, error);
 	if (status != ADBC_STATUS_OK) {
+		StatementRelease(&statement, error);
 		SetError(error, "unable to initialize statement");
 		return status;
 	}
 	status = StatementExecuteQuery(&statement, out, nullptr, error);
 	if (status != ADBC_STATUS_OK) {
+		StatementRelease(&statement, error);
 		SetError(error, "unable to initialize statement");
 		return status;
 	}
-
+	StatementRelease(&statement, error);
 	return ADBC_STATUS_OK;
 }
 
 struct DuckDBAdbcDatabaseWrapper {
 	//! The DuckDB Database Configuration
-	::duckdb_config config;
+	::duckdb_config config = nullptr;
 	//! The DuckDB Database
-	::duckdb_database database;
+	::duckdb_database database = nullptr;
 	//! Path of Disk-Based Database or :memory: database
 	std::string path;
 };
@@ -124,7 +130,7 @@ AdbcStatusCode CheckResult(duckdb_state &res, AdbcError *error, const char *erro
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
 	if (res != DuckDBSuccess) {
-		duckdb_adbc::SetError(error, error_msg);
+		SetError(error, error_msg);
 		return ADBC_STATUS_INTERNAL;
 	}
 	return ADBC_STATUS_OK;
@@ -164,11 +170,10 @@ AdbcStatusCode StatementSetSubstraitPlan(struct AdbcStatement *statement, const 
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
 	auto wrapper = reinterpret_cast<DuckDBAdbcStatementWrapper *>(statement->private_data);
-	auto plan_str = std::string(reinterpret_cast<const char *>(plan), length);
-	auto query = "CALL from_substrait('" + plan_str + "'::BLOB)";
-	auto res = duckdb_prepare(wrapper->connection, query.c_str(), &wrapper->statement);
-	auto error_msg = duckdb_prepare_error(wrapper->statement);
-	return CheckResult(res, error, error_msg);
+	wrapper->substrait_plan = (uint8_t *)malloc(sizeof(uint8_t) * (length));
+	wrapper->plan_length = length;
+	memcpy(wrapper->substrait_plan, plan, length);
+	return ADBC_STATUS_OK;
 }
 
 AdbcStatusCode DatabaseSetOption(struct AdbcDatabase *database, const char *key, const char *value,
@@ -197,14 +202,18 @@ AdbcStatusCode DatabaseInit(struct AdbcDatabase *database, struct AdbcError *err
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
 	if (!database) {
-		duckdb_adbc::SetError(error, "ADBC Database has an invalid pointer");
+		SetError(error, "ADBC Database has an invalid pointer");
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
-	char *errormsg;
+	char *errormsg = nullptr;
 	// TODO can we set the database path via option, too? Does not look like it...
 	auto wrapper = (DuckDBAdbcDatabaseWrapper *)database->private_data;
 	auto res = duckdb_open_ext(wrapper->path.c_str(), &wrapper->database, wrapper->config, &errormsg);
-	return CheckResult(res, error, errormsg);
+	auto adbc_result = CheckResult(res, error, errormsg);
+	if (errormsg) {
+		free(errormsg);
+	}
+	return adbc_result;
 }
 
 AdbcStatusCode DatabaseRelease(struct AdbcDatabase *database, struct AdbcError *error) {
@@ -226,16 +235,11 @@ AdbcStatusCode ConnectionGetTableSchema(struct AdbcConnection *connection, const
 		SetError(error, "Connection is not set");
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	}
-	if (db_schema == nullptr) {
+	if (db_schema == nullptr || strlen(db_schema) == 0) {
 		// if schema is not set, we use the default schema
 		db_schema = "main";
 	}
-	if (catalog != nullptr && strlen(catalog) > 0) {
-		// In DuckDB this is the name of the database, not sure what's the expected functionality here, so for now,
-		// scream.
-		SetError(error, "Catalog Name is not used in DuckDB. It must be set to nullptr or an empty string");
-		return ADBC_STATUS_NOT_IMPLEMENTED;
-	} else if (table_name == nullptr) {
+	if (table_name == nullptr) {
 		SetError(error, "AdbcConnectionGetTableSchema: must provide table_name");
 		return ADBC_STATUS_INVALID_ARGUMENT;
 	} else if (strlen(table_name) == 0) {
@@ -245,9 +249,10 @@ AdbcStatusCode ConnectionGetTableSchema(struct AdbcConnection *connection, const
 	ArrowArrayStream arrow_stream;
 
 	std::string query = "SELECT * FROM ";
-	if (strlen(db_schema) > 0) {
-		query += std::string(db_schema) + ".";
+	if (catalog != nullptr && strlen(catalog) > 0) {
+		query += std::string(catalog) + ".";
 	}
+	query += std::string(db_schema) + ".";
 	query += std::string(table_name) + " LIMIT 0;";
 
 	auto success = QueryInternal(connection, &arrow_stream, query.c_str(), error);
@@ -429,7 +434,7 @@ AdbcStatusCode ConnectionGetInfo(struct AdbcConnection *connection, const uint32
 	duckdb::string results = "";
 
 	for (size_t i = 0; i < length; i++) {
-		uint32_t code = info_codes ? info_codes[i] : i;
+		auto code = duckdb::NumericCast<uint32_t>(info_codes ? info_codes[i] : i);
 		auto info_code = ConvertToInfoCode(code);
 		switch (info_code) {
 		case AdbcInfoCode::VENDOR_NAME: {
@@ -548,10 +553,8 @@ const char *get_last_error(struct ArrowArrayStream *stream) {
 // this is an evil hack, normally we would need a stream factory here, but its probably much easier if the adbc clients
 // just hand over a stream
 
-duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
-stream_produce(uintptr_t factory_ptr,
-               std::pair<std::unordered_map<idx_t, std::string>, std::vector<std::string>> &project_columns,
-               duckdb::TableFilterSet *filters) {
+duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper> stream_produce(uintptr_t factory_ptr,
+                                                                   duckdb::ArrowStreamParameters &parameters) {
 
 	// TODO this will ignore any projections or filters but since we don't expose the scan it should be sort of fine
 	auto res = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();
@@ -559,9 +562,8 @@ stream_produce(uintptr_t factory_ptr,
 	return res;
 }
 
-void stream_schema(uintptr_t factory_ptr, duckdb::ArrowSchemaWrapper &schema) {
-	auto stream = (ArrowArrayStream *)factory_ptr;
-	get_schema(stream, &schema.arrow_schema);
+void stream_schema(ArrowArrayStream *stream, ArrowSchema &schema) {
+	stream->get_schema(stream, &schema);
 }
 
 AdbcStatusCode Ingest(duckdb_connection connection, const char *table_name, struct ArrowArrayStream *input,
@@ -584,7 +586,7 @@ AdbcStatusCode Ingest(duckdb_connection connection, const char *table_name, stru
 
 	auto arrow_scan = cconn->TableFunction("arrow_scan", {duckdb::Value::POINTER((uintptr_t)input),
 	                                                      duckdb::Value::POINTER((uintptr_t)stream_produce),
-	                                                      duckdb::Value::POINTER((uintptr_t)input->get_schema)});
+	                                                      duckdb::Value::POINTER((uintptr_t)stream_schema)});
 	try {
 		if (ingestion_mode == IngestionMode::CREATE) {
 			// We create the table based on an Arrow Scanner
@@ -599,7 +601,8 @@ AdbcStatusCode Ingest(duckdb_connection connection, const char *table_name, stru
 		input->release = nullptr;
 	} catch (std::exception &ex) {
 		if (error) {
-			error->message = strdup(ex.what());
+			::duckdb::ErrorData parsed_error(ex);
+			error->message = strdup(parsed_error.RawMessage().c_str());
 		}
 		return ADBC_STATUS_INTERNAL;
 	} catch (...) {
@@ -637,6 +640,8 @@ AdbcStatusCode StatementNew(struct AdbcConnection *connection, struct AdbcStatem
 	statement_wrapper->result = nullptr;
 	statement_wrapper->ingestion_stream.release = nullptr;
 	statement_wrapper->ingestion_table_name = nullptr;
+	statement_wrapper->substrait_plan = nullptr;
+
 	statement_wrapper->ingestion_mode = IngestionMode::CREATE;
 	return ADBC_STATUS_OK;
 }
@@ -661,6 +666,10 @@ AdbcStatusCode StatementRelease(struct AdbcStatement *statement, struct AdbcErro
 	if (wrapper->ingestion_table_name) {
 		free(wrapper->ingestion_table_name);
 		wrapper->ingestion_table_name = nullptr;
+	}
+	if (wrapper->substrait_plan) {
+		free(wrapper->substrait_plan);
+		wrapper->substrait_plan = nullptr;
 	}
 	free(statement->private_data);
 	statement->private_data = nullptr;
@@ -699,14 +708,15 @@ AdbcStatusCode GetPreparedParameters(duckdb_connection connection, duckdb::uniqu
 	try {
 		auto arrow_scan = cconn->TableFunction("arrow_scan", {duckdb::Value::POINTER((uintptr_t)input),
 		                                                      duckdb::Value::POINTER((uintptr_t)stream_produce),
-		                                                      duckdb::Value::POINTER((uintptr_t)input->get_schema)});
+		                                                      duckdb::Value::POINTER((uintptr_t)stream_schema)});
 		result = arrow_scan->Execute();
 		// After creating a table, the arrow array stream is released. Hence we must set it as released to avoid
 		// double-releasing it
 		input->release = nullptr;
 	} catch (std::exception &ex) {
 		if (error) {
-			error->message = strdup(ex.what());
+			::duckdb::ErrorData parsed_error(ex);
+			error->message = strdup(parsed_error.RawMessage().c_str());
 		}
 		return ADBC_STATUS_INTERNAL;
 	} catch (...) {
@@ -751,8 +761,24 @@ AdbcStatusCode StatementExecuteQuery(struct AdbcStatement *statement, struct Arr
 	if (has_stream && to_table) {
 		return IngestToTableFromBoundStream(wrapper, error);
 	}
-
-	if (has_stream) {
+	if (wrapper->substrait_plan != nullptr) {
+		auto plan_str = std::string(reinterpret_cast<const char *>(wrapper->substrait_plan), wrapper->plan_length);
+		duckdb::vector<duckdb::Value> params;
+		params.emplace_back(duckdb::Value::BLOB_RAW(plan_str));
+		duckdb::unique_ptr<duckdb::QueryResult> query_result;
+		try {
+			query_result =
+			    ((duckdb::Connection *)wrapper->connection)->TableFunction("from_substrait", params)->Execute();
+		} catch (duckdb::Exception &e) {
+			std::string error_msg = "It was not possible to execute substrait query. " + std::string(e.what());
+			SetError(error, error_msg);
+			return ADBC_STATUS_INVALID_ARGUMENT;
+		}
+		auto arrow_wrapper = new duckdb::ArrowResultWrapper();
+		arrow_wrapper->result =
+		    duckdb::unique_ptr_cast<duckdb::QueryResult, duckdb::MaterializedQueryResult>(std::move(query_result));
+		wrapper->result = reinterpret_cast<duckdb_arrow>(arrow_wrapper);
+	} else if (has_stream) {
 		// A stream was bound to the statement, use that to bind parameters
 		duckdb::unique_ptr<duckdb::QueryResult> result;
 		ArrowArrayStream stream = wrapper->ingestion_stream;
@@ -953,57 +979,280 @@ AdbcStatusCode StatementSetOption(struct AdbcStatement *statement, const char *k
 AdbcStatusCode ConnectionGetObjects(struct AdbcConnection *connection, int depth, const char *catalog,
                                     const char *db_schema, const char *table_name, const char **table_type,
                                     const char *column_name, struct ArrowArrayStream *out, struct AdbcError *error) {
-	if (catalog != nullptr) {
-		if (strcmp(catalog, "duckdb") == 0) {
-			SetError(error, "catalog must be NULL or 'duckdb'");
-			return ADBC_STATUS_INVALID_ARGUMENT;
-		}
-	}
-
 	if (table_type != nullptr) {
 		SetError(error, "Table types parameter not yet supported");
 		return ADBC_STATUS_NOT_IMPLEMENTED;
 	}
+
+	std::string catalog_filter = catalog ? catalog : "%";
+	std::string db_schema_filter = db_schema ? db_schema : "%";
+	std::string table_name_filter = table_name ? table_name : "%";
+	std::string column_name_filter = column_name ? column_name : "%";
+
 	std::string query;
 	switch (depth) {
 	case ADBC_OBJECT_DEPTH_CATALOGS:
-		SetError(error, "ADBC_OBJECT_DEPTH_CATALOGS not yet supported");
-		return ADBC_STATUS_NOT_IMPLEMENTED;
+		// Return metadata on catalogs.
+		query = duckdb::StringUtil::Format(R"(
+				SELECT
+					catalog_name,
+					[]::STRUCT(
+						db_schema_name VARCHAR,
+						db_schema_tables STRUCT(
+							table_name VARCHAR,
+							table_type VARCHAR,
+							table_columns STRUCT(
+								column_name VARCHAR,
+								ordinal_position INTEGER,
+								remarks VARCHAR,
+								xdbc_data_type SMALLINT,
+								xdbc_type_name VARCHAR,
+								xdbc_column_size INTEGER,
+								xdbc_decimal_digits SMALLINT,
+								xdbc_num_prec_radix SMALLINT,
+								xdbc_nullable SMALLINT,
+								xdbc_column_def VARCHAR,
+								xdbc_sql_data_type SMALLINT,
+								xdbc_datetime_sub SMALLINT,
+								xdbc_char_octet_length INTEGER,
+								xdbc_is_nullable VARCHAR,
+								xdbc_scope_catalog VARCHAR,
+								xdbc_scope_schema VARCHAR,
+								xdbc_scope_table VARCHAR,
+								xdbc_is_autoincrement BOOLEAN,
+								xdbc_is_generatedcolumn BOOLEAN
+							)[],
+							table_constraints STRUCT(
+								constraint_name VARCHAR,
+								constraint_type VARCHAR,
+								constraint_column_names VARCHAR[],
+								constraint_column_usage STRUCT(fk_catalog VARCHAR, fk_db_schema VARCHAR, fk_table VARCHAR, fk_column_name VARCHAR)[]
+							)[]
+						)[]
+					)[] catalog_db_schemas
+				FROM
+					information_schema.schemata
+				WHERE catalog_name LIKE '%s'
+				GROUP BY catalog_name
+				)",
+		                                   catalog_filter);
+		break;
 	case ADBC_OBJECT_DEPTH_DB_SCHEMAS:
 		// Return metadata on catalogs and schemas.
 		query = duckdb::StringUtil::Format(R"(
-				SELECT table_schema db_schema_name
-				FROM information_schema.columns
-				WHERE table_schema LIKE '%s' AND table_name LIKE '%s' AND column_name LIKE '%s' ;
+				WITH db_schemas AS (
+					SELECT
+						catalog_name,
+						schema_name,
+					FROM information_schema.schemata
+					WHERE schema_name LIKE '%s'
+				)
+
+				SELECT
+					catalog_name,
+					LIST({
+						db_schema_name: schema_name,
+						db_schema_tables: []::STRUCT(
+							table_name VARCHAR,
+							table_type VARCHAR,
+							table_columns STRUCT(
+								column_name VARCHAR,
+								ordinal_position INTEGER,
+								remarks VARCHAR,
+								xdbc_data_type SMALLINT,
+								xdbc_type_name VARCHAR,
+								xdbc_column_size INTEGER,
+								xdbc_decimal_digits SMALLINT,
+								xdbc_num_prec_radix SMALLINT,
+								xdbc_nullable SMALLINT,
+								xdbc_column_def VARCHAR,
+								xdbc_sql_data_type SMALLINT,
+								xdbc_datetime_sub SMALLINT,
+								xdbc_char_octet_length INTEGER,
+								xdbc_is_nullable VARCHAR,
+								xdbc_scope_catalog VARCHAR,
+								xdbc_scope_schema VARCHAR,
+								xdbc_scope_table VARCHAR,
+								xdbc_is_autoincrement BOOLEAN,
+								xdbc_is_generatedcolumn BOOLEAN
+							)[],
+							table_constraints STRUCT(
+								constraint_name VARCHAR,
+								constraint_type VARCHAR,
+								constraint_column_names VARCHAR[],
+								constraint_column_usage STRUCT(fk_catalog VARCHAR, fk_db_schema VARCHAR, fk_table VARCHAR, fk_column_name VARCHAR)[]
+							)[]
+						)[],
+					}) FILTER (dbs.schema_name is not null) catalog_db_schemas
+				FROM
+					information_schema.schemata
+				LEFT JOIN db_schemas dbs
+				USING (catalog_name, schema_name)
+				WHERE catalog_name LIKE '%s'
+				GROUP BY catalog_name
 				)",
-		                                   db_schema ? db_schema : "%", table_name ? table_name : "%",
-		                                   column_name ? column_name : "%");
+		                                   db_schema_filter, catalog_filter);
 		break;
 	case ADBC_OBJECT_DEPTH_TABLES:
 		// Return metadata on catalogs, schemas, and tables.
 		query = duckdb::StringUtil::Format(R"(
-				SELECT table_schema db_schema_name, LIST(table_schema_list) db_schema_tables
-				FROM (
-					SELECT table_schema, { table_name : table_name} table_schema_list
-					FROM information_schema.columns
-					WHERE table_schema LIKE '%s' AND table_name LIKE '%s' AND column_name LIKE '%s'  GROUP BY table_schema, table_name
-					) GROUP BY table_schema;
+				WITH tables AS (
+					SELECT
+						table_catalog catalog_name,
+						table_schema schema_name,
+						LIST({
+							table_name: table_name,
+							table_type: table_type,
+							table_columns: []::STRUCT(
+								column_name VARCHAR,
+								ordinal_position INTEGER,
+								remarks VARCHAR,
+								xdbc_data_type SMALLINT,
+								xdbc_type_name VARCHAR,
+								xdbc_column_size INTEGER,
+								xdbc_decimal_digits SMALLINT,
+								xdbc_num_prec_radix SMALLINT,
+								xdbc_nullable SMALLINT,
+								xdbc_column_def VARCHAR,
+								xdbc_sql_data_type SMALLINT,
+								xdbc_datetime_sub SMALLINT,
+								xdbc_char_octet_length INTEGER,
+								xdbc_is_nullable VARCHAR,
+								xdbc_scope_catalog VARCHAR,
+								xdbc_scope_schema VARCHAR,
+								xdbc_scope_table VARCHAR,
+								xdbc_is_autoincrement BOOLEAN,
+								xdbc_is_generatedcolumn BOOLEAN
+							)[],
+							table_constraints: []::STRUCT(
+								constraint_name VARCHAR,
+								constraint_type VARCHAR,
+								constraint_column_names VARCHAR[],
+								constraint_column_usage STRUCT(fk_catalog VARCHAR, fk_db_schema VARCHAR, fk_table VARCHAR, fk_column_name VARCHAR)[]
+							)[],
+						}) db_schema_tables
+					FROM information_schema.tables
+					WHERE table_name LIKE '%s'
+					GROUP BY table_catalog, table_schema
+				),
+				db_schemas AS (
+					SELECT
+						catalog_name,
+						schema_name,
+						db_schema_tables,
+					FROM information_schema.schemata
+					LEFT JOIN tables
+					USING (catalog_name, schema_name)
+					WHERE schema_name LIKE '%s'
+				)
+
+				SELECT
+					catalog_name,
+					LIST({
+						db_schema_name: schema_name,
+						db_schema_tables: db_schema_tables,
+					}) FILTER (dbs.schema_name is not null) catalog_db_schemas
+				FROM
+					information_schema.schemata
+				LEFT JOIN db_schemas dbs
+				USING (catalog_name, schema_name)
+				WHERE catalog_name LIKE '%s'
+				GROUP BY catalog_name
 				)",
-		                                   db_schema ? db_schema : "%", table_name ? table_name : "%",
-		                                   column_name ? column_name : "%");
+		                                   table_name_filter, db_schema_filter, catalog_filter);
 		break;
 	case ADBC_OBJECT_DEPTH_COLUMNS:
 		// Return metadata on catalogs, schemas, tables, and columns.
 		query = duckdb::StringUtil::Format(R"(
-				SELECT table_schema db_schema_name, LIST(table_schema_list) db_schema_tables
-				FROM (
-					SELECT table_schema, { table_name : table_name, table_columns : LIST({column_name : column_name, ordinal_position : ordinal_position + 1, remarks : ''})} table_schema_list
+				WITH columns AS (
+					SELECT
+						table_catalog,
+						table_schema,
+						table_name,
+						LIST({
+							column_name: column_name,
+							ordinal_position: ordinal_position,
+							remarks : '',
+							xdbc_data_type: NULL::SMALLINT,
+							xdbc_type_name: NULL::VARCHAR,
+							xdbc_column_size: NULL::INTEGER,
+							xdbc_decimal_digits: NULL::SMALLINT,
+							xdbc_num_prec_radix: NULL::SMALLINT,
+							xdbc_nullable: NULL::SMALLINT,
+							xdbc_column_def: NULL::VARCHAR,
+							xdbc_sql_data_type: NULL::SMALLINT,
+							xdbc_datetime_sub: NULL::SMALLINT,
+							xdbc_char_octet_length: NULL::INTEGER,
+							xdbc_is_nullable: NULL::VARCHAR,
+							xdbc_scope_catalog: NULL::VARCHAR,
+							xdbc_scope_schema: NULL::VARCHAR,
+							xdbc_scope_table: NULL::VARCHAR,
+							xdbc_is_autoincrement: NULL::BOOLEAN,
+							xdbc_is_generatedcolumn: NULL::BOOLEAN,
+						}) table_columns
 					FROM information_schema.columns
-					WHERE table_schema LIKE '%s' AND table_name LIKE '%s' AND column_name LIKE '%s' GROUP BY table_schema, table_name
-					) GROUP BY table_schema;
+					WHERE column_name LIKE '%s'
+					GROUP BY table_catalog, table_schema, table_name
+				),
+				constraints AS (
+					SELECT
+						table_catalog,
+						table_schema,
+						table_name,
+						LIST(
+							{
+								constraint_name: constraint_name,
+								constraint_type: constraint_type,
+								constraint_column_names: []::VARCHAR[],
+								constraint_column_usage: []::STRUCT(fk_catalog VARCHAR, fk_db_schema VARCHAR, fk_table VARCHAR, fk_column_name VARCHAR)[],
+							}
+						) table_constraints
+					FROM information_schema.table_constraints
+					GROUP BY table_catalog, table_schema, table_name
+				),
+				tables AS (
+					SELECT
+						table_catalog catalog_name,
+						table_schema schema_name,
+						LIST({
+							table_name: table_name,
+							table_type: table_type,
+							table_columns: table_columns,
+							table_constraints: table_constraints,
+						}) db_schema_tables
+					FROM information_schema.tables
+					LEFT JOIN columns
+					USING (table_catalog, table_schema, table_name)
+					LEFT JOIN constraints
+					USING (table_catalog, table_schema, table_name)
+					WHERE table_name LIKE '%s'
+					GROUP BY table_catalog, table_schema
+				),
+				db_schemas AS (
+					SELECT
+						catalog_name,
+						schema_name,
+						db_schema_tables,
+					FROM information_schema.schemata
+					LEFT JOIN tables
+					USING (catalog_name, schema_name)
+					WHERE schema_name LIKE '%s'
+				)
+
+				SELECT
+					catalog_name,
+					LIST({
+						db_schema_name: schema_name,
+						db_schema_tables: db_schema_tables,
+					}) FILTER (dbs.schema_name is not null) catalog_db_schemas
+				FROM
+					information_schema.schemata
+				LEFT JOIN db_schemas dbs
+				USING (catalog_name, schema_name)
+				WHERE catalog_name LIKE '%s'
+				GROUP BY catalog_name
 				)",
-		                                   db_schema ? db_schema : "%", table_name ? table_name : "%",
-		                                   column_name ? column_name : "%");
+		                                   column_name_filter, table_name_filter, db_schema_filter, catalog_filter);
 		break;
 	default:
 		SetError(error, "Invalid value of Depth");

@@ -9,7 +9,7 @@ namespace duckdb {
 PartitionedTupleData::PartitionedTupleData(PartitionedTupleDataType type_p, BufferManager &buffer_manager_p,
                                            const TupleDataLayout &layout_p)
     : type(type_p), buffer_manager(buffer_manager_p), layout(layout_p.Copy()), count(0), data_size(0),
-      allocators(make_shared<PartitionTupleDataAllocators>()) {
+      allocators(make_shared_ptr<PartitionTupleDataAllocators>()) {
 }
 
 PartitionedTupleData::PartitionedTupleData(const PartitionedTupleData &other)
@@ -31,12 +31,6 @@ void PartitionedTupleData::InitializeAppendState(PartitionedTupleDataAppendState
                                                  TupleDataPinProperties properties) const {
 	state.partition_sel.Initialize();
 	state.reverse_partition_sel.Initialize();
-
-	vector<column_t> column_ids;
-	column_ids.reserve(layout.ColumnCount());
-	for (idx_t col_idx = 0; col_idx < layout.ColumnCount(); col_idx++) {
-		column_ids.emplace_back(col_idx);
-	}
 
 	InitializeAppendStateInternal(state, properties);
 }
@@ -223,7 +217,7 @@ void PartitionedTupleData::BuildPartitionSel(PartitionedTupleDataAppendState &st
 		// This needs to be initialized, even if we go the short path here
 		for (idx_t i = 0; i < append_count; i++) {
 			const auto index = append_sel.get_index(i);
-			state.reverse_partition_sel[index] = i;
+			state.reverse_partition_sel[index] = NumericCast<sel_t>(i);
 		}
 		return;
 	}
@@ -243,8 +237,8 @@ void PartitionedTupleData::BuildPartitionSel(PartitionedTupleDataAppendState &st
 		const auto index = append_sel.get_index(i);
 		const auto &partition_index = partition_indices[index];
 		auto &partition_offset = partition_entries[partition_index].offset;
-		reverse_partition_sel[index] = partition_offset;
-		partition_sel[partition_offset++] = index;
+		reverse_partition_sel[index] = UnsafeNumericCast<sel_t>(partition_offset);
+		partition_sel[partition_offset++] = UnsafeNumericCast<sel_t>(index);
 	}
 }
 
@@ -335,8 +329,8 @@ void PartitionedTupleData::Repartition(PartitionedTupleData &new_partitioned_dat
 	const int64_t update = reverse ? -1 : 1;
 	const int64_t adjustment = reverse ? -1 : 0;
 
-	for (idx_t partition_idx = start_idx; partition_idx != end_idx; partition_idx += update) {
-		auto actual_partition_idx = partition_idx + adjustment;
+	for (idx_t partition_idx = start_idx; partition_idx != end_idx; partition_idx += idx_t(update)) {
+		auto actual_partition_idx = partition_idx + idx_t(adjustment);
 		auto &partition = *partitions[actual_partition_idx];
 
 		if (partition.Count() > 0) {
@@ -364,7 +358,7 @@ void PartitionedTupleData::Unpin() {
 	}
 }
 
-vector<unique_ptr<TupleDataCollection>> &PartitionedTupleData::GetPartitions() {
+unsafe_vector<unique_ptr<TupleDataCollection>> &PartitionedTupleData::GetPartitions() {
 	return partitions;
 }
 
@@ -400,6 +394,16 @@ idx_t PartitionedTupleData::PartitionCount() const {
 	return partitions.size();
 }
 
+void PartitionedTupleData::GetSizesAndCounts(vector<idx_t> &partition_sizes, vector<idx_t> &partition_counts) const {
+	D_ASSERT(partition_sizes.size() == PartitionCount());
+	D_ASSERT(partition_sizes.size() == partition_counts.size());
+	for (idx_t i = 0; i < PartitionCount(); i++) {
+		auto &partition = *partitions[i];
+		partition_sizes[i] += partition.SizeInBytes();
+		partition_counts[i] += partition.Count();
+	}
+}
+
 void PartitionedTupleData::Verify() const {
 #ifdef DEBUG
 	idx_t total_count = 0;
@@ -430,7 +434,7 @@ void PartitionedTupleData::Print() {
 // LCOV_EXCL_STOP
 
 void PartitionedTupleData::CreateAllocator() {
-	allocators->allocators.emplace_back(make_shared<TupleDataAllocator>(buffer_manager, layout));
+	allocators->allocators.emplace_back(make_shared_ptr<TupleDataAllocator>(buffer_manager, layout));
 }
 
 } // namespace duckdb

@@ -6,7 +6,6 @@
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_subquery_expression.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
@@ -16,7 +15,6 @@
 #include "duckdb/planner/subquery/flatten_dependent_join.hpp"
 #include "duckdb/common/enums/logical_operator_type.hpp"
 #include "duckdb/planner/operator/logical_dependent_join.hpp"
-#include "duckdb/planner/expression_binder/lateral_binder.hpp"
 #include "duckdb/planner/subquery/recursive_dependent_join_planner.hpp"
 
 namespace duckdb {
@@ -29,7 +27,7 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 	case SubqueryType::EXISTS: {
 		// uncorrelated EXISTS
 		// we only care about existence, hence we push a LIMIT 1 operator
-		auto limit = make_uniq<LogicalLimit>(1, 0, nullptr, nullptr);
+		auto limit = make_uniq<LogicalLimit>(BoundLimitNode::ConstantValue(1), BoundLimitNode());
 		limit->AddChild(std::move(plan));
 		plan = std::move(limit);
 
@@ -79,7 +77,7 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 
 		// in the uncorrelated case we are only interested in the first result of the query
 		// hence we simply push a LIMIT 1 to get the first row of the subquery
-		auto limit = make_uniq<LogicalLimit>(1, 0, nullptr, nullptr);
+		auto limit = make_uniq<LogicalLimit>(BoundLimitNode::ConstantValue(1), BoundLimitNode());
 		limit->AddChild(std::move(plan));
 		plan = std::move(limit);
 
@@ -254,7 +252,7 @@ static unique_ptr<Expression> PlanCorrelatedSubquery(Binder &binder, BoundSubque
 		FlattenDependentJoins flatten(binder, correlated_columns, perform_delim);
 
 		// first we check which logical operators have correlated expressions in the first place
-		flatten.DetectCorrelatedExpressions(plan.get());
+		flatten.DetectCorrelatedExpressions(*plan);
 		// now we push the dependent join down
 		auto dependent_join = flatten.PushDownDependentJoin(std::move(plan));
 
@@ -279,7 +277,7 @@ static unique_ptr<Expression> PlanCorrelatedSubquery(Binder &binder, BoundSubque
 		delim_join->mark_index = mark_index;
 		// RHS
 		FlattenDependentJoins flatten(binder, correlated_columns, perform_delim, true);
-		flatten.DetectCorrelatedExpressions(plan.get());
+		flatten.DetectCorrelatedExpressions(*plan);
 		auto dependent_join = flatten.PushDownDependentJoin(std::move(plan));
 
 		// fetch the set of columns
@@ -307,7 +305,7 @@ static unique_ptr<Expression> PlanCorrelatedSubquery(Binder &binder, BoundSubque
 		delim_join->mark_index = mark_index;
 		// RHS
 		FlattenDependentJoins flatten(binder, correlated_columns, true, true);
-		flatten.DetectCorrelatedExpressions(plan.get());
+		flatten.DetectCorrelatedExpressions(*plan);
 		auto dependent_join = flatten.PushDownDependentJoin(std::move(plan));
 
 		// fetch the columns
@@ -333,6 +331,11 @@ static unique_ptr<Expression> PlanCorrelatedSubquery(Binder &binder, BoundSubque
 
 void RecursiveDependentJoinPlanner::VisitOperator(LogicalOperator &op) {
 	if (!op.children.empty()) {
+		// Collect all recursive CTEs during recursive descend
+		if (op.type == LogicalOperatorType::LOGICAL_RECURSIVE_CTE) {
+			auto &rec_cte = op.Cast<LogicalRecursiveCTE>();
+			binder.recursive_ctes[rec_cte.table_index] = &op;
+		}
 		root = std::move(op.children[0]);
 		D_ASSERT(root);
 		if (root->type == LogicalOperatorType::LOGICAL_DEPENDENT_JOIN) {
@@ -406,25 +409,25 @@ void Binder::PlanSubqueries(unique_ptr<Expression> &expr_ptr, unique_ptr<Logical
 }
 
 unique_ptr<LogicalOperator> Binder::PlanLateralJoin(unique_ptr<LogicalOperator> left, unique_ptr<LogicalOperator> right,
-                                                    vector<CorrelatedColumnInfo> &correlated_columns,
-                                                    JoinType join_type, unique_ptr<Expression> condition) {
+                                                    vector<CorrelatedColumnInfo> &correlated, JoinType join_type,
+                                                    unique_ptr<Expression> condition) {
 	// scan the right operator for correlated columns
 	// correlated LATERAL JOIN
 	vector<JoinCondition> conditions;
 	vector<unique_ptr<Expression>> arbitrary_expressions;
 	if (condition) {
 		// extract join conditions, if there are any
-		LogicalComparisonJoin::ExtractJoinConditions(context, join_type, left, right, std::move(condition), conditions,
-		                                             arbitrary_expressions);
+		LogicalComparisonJoin::ExtractJoinConditions(context, join_type, JoinRefType::REGULAR, left, right,
+		                                             std::move(condition), conditions, arbitrary_expressions);
 	}
 
-	auto perform_delim = PerformDuplicateElimination(*this, correlated_columns);
-	auto delim_join = CreateDuplicateEliminatedJoin(correlated_columns, join_type, std::move(left), perform_delim);
+	auto perform_delim = PerformDuplicateElimination(*this, correlated);
+	auto delim_join = CreateDuplicateEliminatedJoin(correlated, join_type, std::move(left), perform_delim);
 
-	FlattenDependentJoins flatten(*this, correlated_columns, perform_delim);
+	FlattenDependentJoins flatten(*this, correlated, perform_delim);
 
 	// first we check which logical operators have correlated expressions in the first place
-	flatten.DetectCorrelatedExpressions(right.get(), true);
+	flatten.DetectCorrelatedExpressions(*right, true);
 	// now we push the dependent join down
 	auto dependent_join = flatten.PushDownDependentJoin(std::move(right));
 
@@ -433,12 +436,17 @@ unique_ptr<LogicalOperator> Binder::PlanLateralJoin(unique_ptr<LogicalOperator> 
 	// fetch the set of columns
 	auto plan_columns = dependent_join->GetColumnBindings();
 
+	// in case of a materialized CTE, the output is defined by the second children operator
+	if (dependent_join->type == LogicalOperatorType::LOGICAL_MATERIALIZED_CTE) {
+		plan_columns = dependent_join->children[1]->GetColumnBindings();
+	}
+
 	// now create the join conditions
 	// start off with the conditions that were passed in (if any)
 	D_ASSERT(delim_join->conditions.empty());
 	delim_join->conditions = std::move(conditions);
 	// then add the delim join conditions
-	CreateDelimJoinConditions(*delim_join, correlated_columns, plan_columns, flatten.delim_offset, perform_delim);
+	CreateDelimJoinConditions(*delim_join, correlated, plan_columns, flatten.delim_offset, perform_delim);
 	delim_join->AddChild(std::move(dependent_join));
 
 	// check if there are any arbitrary expressions left

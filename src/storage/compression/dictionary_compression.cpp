@@ -1,13 +1,12 @@
 #include "duckdb/common/bitpacking.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/operator/comparison_operators.hpp"
 #include "duckdb/common/string_map_set.hpp"
 #include "duckdb/common/types/vector_buffer.hpp"
 #include "duckdb/function/compression/compression.hpp"
 #include "duckdb/function/compression_function.hpp"
-#include "duckdb/main/config.hpp"
 #include "duckdb/storage/segment/uncompressed.hpp"
 #include "duckdb/storage/string_uncompressed.hpp"
-#include "duckdb/storage/table/append_state.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 
 namespace duckdb {
@@ -87,7 +86,7 @@ typedef struct {
 } dictionary_compression_header_t;
 
 struct DictionaryCompressionStorage {
-	static constexpr float MINIMUM_COMPRESSION_RATIO = 1.2;
+	static constexpr float MINIMUM_COMPRESSION_RATIO = 1.2F;
 	static constexpr uint16_t DICTIONARY_HEADER_SIZE = sizeof(dictionary_compression_header_t);
 	static constexpr size_t COMPACTION_FLUSH_LIMIT = (size_t)Storage::BLOCK_SIZE / 5 * 4;
 
@@ -214,7 +213,7 @@ public:
 
 		// Update buffers and map
 		index_buffer.push_back(current_dictionary.size);
-		selection_buffer.push_back(index_buffer.size() - 1);
+		selection_buffer.push_back(UnsafeNumericCast<uint32_t>(index_buffer.size() - 1));
 		if (str.IsInlined()) {
 			current_string_map.insert({str, index_buffer.size() - 1});
 		} else {
@@ -287,8 +286,8 @@ public:
 		memcpy(base_ptr + index_buffer_offset, index_buffer.data(), index_buffer_size);
 
 		// Store sizes and offsets in segment header
-		Store<uint32_t>(index_buffer_offset, data_ptr_cast(&header_ptr->index_buffer_offset));
-		Store<uint32_t>(index_buffer.size(), data_ptr_cast(&header_ptr->index_buffer_count));
+		Store<uint32_t>(NumericCast<uint32_t>(index_buffer_offset), data_ptr_cast(&header_ptr->index_buffer_offset));
+		Store<uint32_t>(NumericCast<uint32_t>(index_buffer.size()), data_ptr_cast(&header_ptr->index_buffer_count));
 		Store<uint32_t>((uint32_t)current_width, data_ptr_cast(&header_ptr->bitpacking_width));
 
 		D_ASSERT(current_width == BitpackingPrimitives::MinimumBitWidth(index_buffer.size() - 1));
@@ -403,7 +402,7 @@ idx_t DictionaryCompressionStorage::StringFinalAnalyze(AnalyzeState &state_p) {
 	auto req_space =
 	    RequiredSpace(state.current_tuple_count, state.current_unique_count, state.current_dict_size, width);
 
-	return MINIMUM_COMPRESSION_RATIO * (state.segment_count * Storage::BLOCK_SIZE + req_space);
+	return NumericCast<idx_t>(MINIMUM_COMPRESSION_RATIO * (state.segment_count * Storage::BLOCK_SIZE + req_space));
 }
 
 //===--------------------------------------------------------------------===//
@@ -457,7 +456,8 @@ unique_ptr<SegmentScanState> DictionaryCompressionStorage::StringInitScan(Column
 	for (uint32_t i = 0; i < index_buffer_count; i++) {
 		// NOTE: the passing of dict_child_vector, will not be used, its for big strings
 		uint16_t str_len = GetStringLength(index_buffer_ptr, i);
-		dict_child_data[i] = FetchStringFromDict(segment, dict, baseptr, index_buffer_ptr[i], str_len);
+		dict_child_data[i] =
+		    FetchStringFromDict(segment, dict, baseptr, UnsafeNumericCast<int32_t>(index_buffer_ptr[i]), str_len);
 	}
 
 	return std::move(state);
@@ -509,8 +509,9 @@ void DictionaryCompressionStorage::StringScanPartial(ColumnSegment &segment, Col
 			// Lookup dict offset in index buffer
 			auto string_number = scan_state.sel_vec->get_index(i + start_offset);
 			auto dict_offset = index_buffer_ptr[string_number];
-			uint16_t str_len = GetStringLength(index_buffer_ptr, string_number);
-			result_data[result_offset + i] = FetchStringFromDict(segment, dict, baseptr, dict_offset, str_len);
+			auto str_len = GetStringLength(index_buffer_ptr, UnsafeNumericCast<sel_t>(string_number));
+			result_data[result_offset + i] =
+			    FetchStringFromDict(segment, dict, baseptr, UnsafeNumericCast<int32_t>(dict_offset), str_len);
 		}
 
 	} else {
@@ -560,11 +561,11 @@ void DictionaryCompressionStorage::StringFetchRow(ColumnSegment &segment, Column
 	auto result_data = FlatVector::GetData<string_t>(result);
 
 	// Handling non-bitpacking-group-aligned start values;
-	idx_t start_offset = row_id % BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE;
+	idx_t start_offset = NumericCast<idx_t>(row_id) % BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE;
 
 	// Decompress part of selection buffer we need for this value.
 	sel_t decompression_buffer[BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE];
-	data_ptr_t src = data_ptr_cast(&base_data[((row_id - start_offset) * width) / 8]);
+	data_ptr_t src = data_ptr_cast(&base_data[((NumericCast<idx_t>(row_id) - start_offset) * width) / 8]);
 	BitpackingPrimitives::UnPackBuffer<sel_t>(data_ptr_cast(decompression_buffer), src,
 	                                          BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE, width);
 
@@ -572,7 +573,7 @@ void DictionaryCompressionStorage::StringFetchRow(ColumnSegment &segment, Column
 	auto dict_offset = index_buffer_ptr[selection_value];
 	uint16_t str_len = GetStringLength(index_buffer_ptr, selection_value);
 
-	result_data[result_idx] = FetchStringFromDict(segment, dict, baseptr, dict_offset, str_len);
+	result_data[result_idx] = FetchStringFromDict(segment, dict, baseptr, NumericCast<int32_t>(dict_offset), str_len);
 }
 
 //===--------------------------------------------------------------------===//
@@ -612,7 +613,7 @@ void DictionaryCompressionStorage::SetDictionary(ColumnSegment &segment, BufferH
 string_t DictionaryCompressionStorage::FetchStringFromDict(ColumnSegment &segment, StringDictionaryContainer dict,
                                                            data_ptr_t baseptr, int32_t dict_offset,
                                                            uint16_t string_len) {
-	D_ASSERT(dict_offset >= 0 && dict_offset <= Storage::BLOCK_SIZE);
+	D_ASSERT(dict_offset >= 0 && dict_offset <= int32_t(Storage::BLOCK_SIZE));
 
 	if (dict_offset == 0) {
 		return string_t(nullptr, 0);
@@ -629,7 +630,7 @@ uint16_t DictionaryCompressionStorage::GetStringLength(uint32_t *index_buffer_pt
 	if (index == 0) {
 		return 0;
 	} else {
-		return index_buffer_ptr[index] - index_buffer_ptr[index - 1];
+		return UnsafeNumericCast<uint16_t>(index_buffer_ptr[index] - index_buffer_ptr[index - 1]);
 	}
 }
 

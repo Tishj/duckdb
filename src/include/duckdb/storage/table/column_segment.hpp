@@ -17,11 +17,11 @@
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/table/segment_base.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
+#include "duckdb/common/enums/scan_vector_type.hpp"
 
 namespace duckdb {
 class ColumnSegment;
 class BlockManager;
-class ColumnSegment;
 class ColumnData;
 class DatabaseInstance;
 class Transaction;
@@ -61,17 +61,16 @@ public:
 	                                                         unique_ptr<ColumnSegmentState> segment_state);
 	static unique_ptr<ColumnSegment> CreateTransientSegment(DatabaseInstance &db, const LogicalType &type, idx_t start,
 	                                                        idx_t segment_size = Storage::BLOCK_SIZE);
-	static unique_ptr<ColumnSegment> CreateSegment(ColumnSegment &other, idx_t start);
 
 public:
 	void InitializeScan(ColumnScanState &state);
 	//! Scan one vector from this segment
-	void Scan(ColumnScanState &state, idx_t scan_count, Vector &result, idx_t result_offset, bool entire_vector);
+	void Scan(ColumnScanState &state, idx_t scan_count, Vector &result, idx_t result_offset, ScanVectorType scan_type);
 	//! Fetch a value of the specific row id and append it to the result
 	void FetchRow(ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx);
 
-	static idx_t FilterSelection(SelectionVector &sel, Vector &result, const TableFilter &filter,
-	                             idx_t &approved_tuple_count, ValidityMask &mask);
+	static idx_t FilterSelection(SelectionVector &sel, Vector &vector, UnifiedVectorFormat &vdata,
+	                             const TableFilter &filter, idx_t scan_count, idx_t &approved_tuple_count);
 
 	//! Skip a scan forward to the row_index specified in the scan state
 	void Skip(ColumnScanState &state);
@@ -126,11 +125,14 @@ public:
 	void CommitDropSegment();
 
 public:
-	ColumnSegment(DatabaseInstance &db, shared_ptr<BlockHandle> block, LogicalType type, ColumnSegmentType segment_type,
-	              idx_t start, idx_t count, CompressionFunction &function, BaseStatistics statistics,
-	              block_id_t block_id, idx_t offset, idx_t segment_size,
-	              unique_ptr<ColumnSegmentState> segment_state = nullptr);
-	ColumnSegment(ColumnSegment &other, idx_t start);
+	//! Construct a column segment.
+	ColumnSegment(DatabaseInstance &db, shared_ptr<BlockHandle> block, const LogicalType &type,
+	              const ColumnSegmentType segment_type, const idx_t start, const idx_t count,
+	              CompressionFunction &function_p, BaseStatistics statistics, const block_id_t block_id_p,
+	              const idx_t offset, idx_t segment_size_p, unique_ptr<ColumnSegmentState> segment_state_p = nullptr);
+	//! Construct a column segment from another column segment.
+	//! The other column segment becomes invalid (std::move).
+	ColumnSegment(ColumnSegment &other, const idx_t start);
 
 private:
 	void Scan(ColumnScanState &state, idx_t scan_count, Vector &result);
@@ -141,7 +143,7 @@ private:
 	block_id_t block_id;
 	//! The offset into the block (persistent segment only)
 	idx_t offset;
-	//! The allocated segment size
+	//! The allocated segment size, which is bounded by Storage::BLOCK_SIZE
 	idx_t segment_size;
 	//! Storage associated with the compressed segment
 	unique_ptr<CompressedSegmentState> segment_state;

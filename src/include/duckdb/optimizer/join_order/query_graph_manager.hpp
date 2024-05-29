@@ -11,9 +11,11 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/pair.hpp"
+#include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/common/vector.hpp"
+
 #include "duckdb/optimizer/join_order/join_node.hpp"
 #include "duckdb/optimizer/join_order/join_relation.hpp"
 #include "duckdb/optimizer/join_order/query_graph.hpp"
@@ -55,7 +57,7 @@ struct FilterInfo {
 //! When the plan enumerator finishes, the Query Graph Manger can then recreate the logical plan.
 class QueryGraphManager {
 public:
-	QueryGraphManager(ClientContext &context) : relation_manager(context), context(context) {
+	explicit QueryGraphManager(ClientContext &context) : relation_manager(context), context(context) {
 	}
 
 	//! manage relations and the logical operators they represent
@@ -70,7 +72,7 @@ public:
 	bool Build(LogicalOperator &op);
 
 	//! Reconstruct the logical plan using the plan found by the plan enumerator
-	unique_ptr<LogicalOperator> Reconstruct(unique_ptr<LogicalOperator> plan, JoinNode &node);
+	unique_ptr<LogicalOperator> Reconstruct(unique_ptr<LogicalOperator> plan);
 
 	//! Get a reference to the QueryGraphEdges structure that stores edges between
 	//! nodes and hypernodes.
@@ -84,10 +86,8 @@ public:
 	//! products to create edges.
 	void CreateQueryGraphCrossProduct(JoinRelationSet &left, JoinRelationSet &right);
 
-	//! after join order optimization, we perform build side probe side optimizations.
-	//! (Basically we put lower expected cardinality columns on the build side, and larger
-	//! tables on the probe side)
-	unique_ptr<LogicalOperator> LeftRightOptimizations(unique_ptr<LogicalOperator> op);
+	//! A map to store the optimal join plan found for a specific JoinRelationSet*
+	optional_ptr<const reference_map_t<JoinRelationSet, unique_ptr<DPJoinNode>>> plans;
 
 private:
 	vector<reference<LogicalOperator>> filter_operators;
@@ -100,14 +100,9 @@ private:
 
 	void GetColumnBinding(Expression &expression, ColumnBinding &binding);
 
-	bool ExtractBindings(Expression &expression, unordered_set<idx_t> &bindings);
-	bool LeftCardLessThanRight(LogicalOperator &op);
-
 	void CreateHyperGraphEdges();
 
-	GenerateJoinRelation GenerateJoins(vector<unique_ptr<LogicalOperator>> &extracted_relations, JoinNode &node);
-
-	unique_ptr<LogicalOperator> RewritePlan(unique_ptr<LogicalOperator> plan, JoinNode &node);
+	GenerateJoinRelation GenerateJoins(vector<unique_ptr<LogicalOperator>> &extracted_relations, JoinRelationSet &set);
 };
 
 } // namespace duckdb

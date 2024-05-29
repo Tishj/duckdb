@@ -26,6 +26,13 @@ unique_ptr<CatalogEntry> CatalogEntry::AlterEntry(ClientContext &context, AlterI
 	throw InternalException("Unsupported alter type for catalog entry!");
 }
 
+unique_ptr<CatalogEntry> CatalogEntry::AlterEntry(CatalogTransaction transaction, AlterInfo &info) {
+	if (!transaction.context) {
+		throw InternalException("Cannot AlterEntry without client context");
+	}
+	return AlterEntry(*transaction.context, info);
+}
+
 void CatalogEntry::UndoAlter(ClientContext &context, AlterInfo &info) {
 }
 
@@ -41,11 +48,48 @@ string CatalogEntry::ToSQL() const {
 	throw InternalException("Unsupported catalog type for ToSQL()");
 }
 
+void CatalogEntry::SetChild(unique_ptr<CatalogEntry> child_p) {
+	child = std::move(child_p);
+	if (child) {
+		child->parent = this;
+	}
+}
+
+unique_ptr<CatalogEntry> CatalogEntry::TakeChild() {
+	if (child) {
+		child->parent = nullptr;
+	}
+	return std::move(child);
+}
+
+bool CatalogEntry::HasChild() const {
+	return child != nullptr;
+}
+bool CatalogEntry::HasParent() const {
+	return parent != nullptr;
+}
+
+CatalogEntry &CatalogEntry::Child() {
+	return *child;
+}
+
+CatalogEntry &CatalogEntry::Parent() {
+	return *parent;
+}
+
 Catalog &CatalogEntry::ParentCatalog() {
 	throw InternalException("CatalogEntry::ParentCatalog called on catalog entry without catalog");
 }
 
+const Catalog &CatalogEntry::ParentCatalog() const {
+	throw InternalException("CatalogEntry::ParentCatalog called on catalog entry without catalog");
+}
+
 SchemaCatalogEntry &CatalogEntry::ParentSchema() {
+	throw InternalException("CatalogEntry::ParentSchema called on catalog entry without schema");
+}
+
+const SchemaCatalogEntry &CatalogEntry::ParentSchema() const {
 	throw InternalException("CatalogEntry::ParentSchema called on catalog entry without schema");
 }
 // LCOV_EXCL_STOP

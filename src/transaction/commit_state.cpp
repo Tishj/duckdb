@@ -2,23 +2,23 @@
 
 #include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
+#include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/type_catalog_entry.hpp"
+#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_set.hpp"
 #include "duckdb/catalog/duck_catalog.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+#include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/chunk_info.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/row_group.hpp"
+#include "duckdb/storage/table/row_version_manager.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/write_ahead_log.hpp"
 #include "duckdb/transaction/append_info.hpp"
 #include "duckdb/transaction/delete_info.hpp"
 #include "duckdb/transaction/update_info.hpp"
-#include "duckdb/catalog/catalog_entry/scalar_macro_catalog_entry.hpp"
-#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
-#include "duckdb/storage/table/row_version_manager.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
-#include "duckdb/common/serializer/memory_stream.hpp"
 
 namespace duckdb {
 
@@ -29,25 +29,30 @@ CommitState::CommitState(transaction_t commit_id, optional_ptr<WriteAheadLog> lo
 void CommitState::SwitchTable(DataTableInfo *table_info, UndoFlags new_op) {
 	if (current_table_info != table_info) {
 		// write the current table to the log
-		log->WriteSetTable(table_info->schema, table_info->table);
+		log->WriteSetTable(table_info->GetSchemaName(), table_info->GetTableName());
 		current_table_info = table_info;
 	}
 }
 
 void CommitState::WriteCatalogEntry(CatalogEntry &entry, data_ptr_t dataptr) {
-	if (entry.temporary || entry.parent->temporary) {
+	if (entry.temporary || entry.Parent().temporary) {
 		return;
 	}
 	D_ASSERT(log);
-	// look at the type of the parent entry
-	auto parent = entry.parent;
-	switch (parent->type) {
-	case CatalogType::TABLE_ENTRY:
-		if (entry.type == CatalogType::TABLE_ENTRY) {
-			auto &table_entry = entry.Cast<DuckTableEntry>();
-			D_ASSERT(table_entry.IsDuckTable());
-			// ALTER TABLE statement, read the extra data after the entry
 
+	// look at the type of the parent entry
+	auto &parent = entry.Parent();
+
+	switch (parent.type) {
+	case CatalogType::TABLE_ENTRY:
+	case CatalogType::VIEW_ENTRY:
+	case CatalogType::INDEX_ENTRY:
+	case CatalogType::SEQUENCE_ENTRY:
+	case CatalogType::TYPE_ENTRY:
+	case CatalogType::MACRO_ENTRY:
+	case CatalogType::TABLE_MACRO_ENTRY:
+		if (entry.type == CatalogType::RENAMED_ENTRY || entry.type == parent.type) {
+			// ALTER statement, read the extra data after the entry
 			auto extra_data_size = Load<idx_t>(dataptr);
 			auto extra_data = data_ptr_cast(dataptr + sizeof(idx_t));
 
@@ -58,66 +63,80 @@ void CommitState::WriteCatalogEntry(CatalogEntry &entry, data_ptr_t dataptr) {
 			auto parse_info = deserializer.ReadProperty<unique_ptr<ParseInfo>>(101, "alter_info");
 			deserializer.End();
 
-			if (!column_name.empty()) {
-				// write the alter table in the log
-				table_entry.CommitAlter(column_name);
+			switch (parent.type) {
+			case CatalogType::TABLE_ENTRY:
+				if (!column_name.empty()) {
+					D_ASSERT(entry.type != CatalogType::RENAMED_ENTRY);
+					auto &table_entry = entry.Cast<DuckTableEntry>();
+					D_ASSERT(table_entry.IsDuckTable());
+					// write the alter table in the log
+					table_entry.CommitAlter(column_name);
+				}
+				break;
+			case CatalogType::VIEW_ENTRY:
+			case CatalogType::INDEX_ENTRY:
+			case CatalogType::SEQUENCE_ENTRY:
+			case CatalogType::TYPE_ENTRY:
+			case CatalogType::MACRO_ENTRY:
+			case CatalogType::TABLE_MACRO_ENTRY:
+				(void)column_name;
+				break;
+			default:
+				throw InternalException("Don't know how to alter this type!");
 			}
+
 			auto &alter_info = parse_info->Cast<AlterInfo>();
 			log->WriteAlter(alter_info);
 		} else {
-			// CREATE TABLE statement
-			log->WriteCreateTable(parent->Cast<TableCatalogEntry>());
+			switch (parent.type) {
+			case CatalogType::TABLE_ENTRY:
+				// CREATE TABLE statement
+				log->WriteCreateTable(parent.Cast<TableCatalogEntry>());
+				break;
+			case CatalogType::VIEW_ENTRY:
+				// CREATE VIEW statement
+				log->WriteCreateView(parent.Cast<ViewCatalogEntry>());
+				break;
+			case CatalogType::INDEX_ENTRY:
+				// CREATE INDEX statement
+				log->WriteCreateIndex(parent.Cast<IndexCatalogEntry>());
+				break;
+			case CatalogType::SEQUENCE_ENTRY:
+				// CREATE SEQUENCE statement
+				log->WriteCreateSequence(parent.Cast<SequenceCatalogEntry>());
+				break;
+			case CatalogType::TYPE_ENTRY:
+				// CREATE TYPE statement
+				log->WriteCreateType(parent.Cast<TypeCatalogEntry>());
+				break;
+			case CatalogType::MACRO_ENTRY:
+				log->WriteCreateMacro(parent.Cast<ScalarMacroCatalogEntry>());
+				break;
+			case CatalogType::TABLE_MACRO_ENTRY:
+				log->WriteCreateTableMacro(parent.Cast<TableMacroCatalogEntry>());
+				break;
+			default:
+				throw InternalException("Don't know how to create this type!");
+			}
 		}
 		break;
 	case CatalogType::SCHEMA_ENTRY:
-		if (entry.type == CatalogType::SCHEMA_ENTRY) {
+		if (entry.type == CatalogType::RENAMED_ENTRY || entry.type == CatalogType::SCHEMA_ENTRY) {
 			// ALTER TABLE statement, skip it
 			return;
 		}
-		log->WriteCreateSchema(parent->Cast<SchemaCatalogEntry>());
+		log->WriteCreateSchema(parent.Cast<SchemaCatalogEntry>());
 		break;
-	case CatalogType::VIEW_ENTRY:
-		if (entry.type == CatalogType::VIEW_ENTRY) {
-			// ALTER TABLE statement, read the extra data after the entry
-			auto extra_data_size = Load<idx_t>(dataptr);
-			auto extra_data = data_ptr_cast(dataptr + sizeof(idx_t));
-			// deserialize it
-			MemoryStream source(extra_data, extra_data_size);
-			BinaryDeserializer deserializer(source);
-			deserializer.Begin();
-			auto column_name = deserializer.ReadProperty<string>(100, "column_name");
-			auto parse_info = deserializer.ReadProperty<unique_ptr<ParseInfo>>(101, "alter_info");
-			deserializer.End();
-
-			(void)column_name;
-
-			// write the alter table in the log
-			auto &alter_info = parse_info->Cast<AlterInfo>();
-			log->WriteAlter(alter_info);
-		} else {
-			log->WriteCreateView(parent->Cast<ViewCatalogEntry>());
-		}
-		break;
-	case CatalogType::SEQUENCE_ENTRY:
-		log->WriteCreateSequence(parent->Cast<SequenceCatalogEntry>());
-		break;
-	case CatalogType::MACRO_ENTRY:
-		log->WriteCreateMacro(parent->Cast<ScalarMacroCatalogEntry>());
-		break;
-	case CatalogType::TABLE_MACRO_ENTRY:
-		log->WriteCreateTableMacro(parent->Cast<TableMacroCatalogEntry>());
-		break;
-	case CatalogType::INDEX_ENTRY:
-		log->WriteCreateIndex(parent->Cast<IndexCatalogEntry>());
-		break;
-	case CatalogType::TYPE_ENTRY:
-		log->WriteCreateType(parent->Cast<TypeCatalogEntry>());
+	case CatalogType::RENAMED_ENTRY:
+		// This is a rename, nothing needs to be done for this
 		break;
 	case CatalogType::DELETED_ENTRY:
 		switch (entry.type) {
 		case CatalogType::TABLE_ENTRY: {
 			auto &table_entry = entry.Cast<DuckTableEntry>();
 			D_ASSERT(table_entry.IsDuckTable());
+
+			// If the table was renamed, we do not need to drop the DataTable.
 			table_entry.CommitDrop();
 			log->WriteDropTable(table_entry);
 			break;
@@ -146,9 +165,11 @@ void CommitState::WriteCatalogEntry(CatalogEntry &entry, data_ptr_t dataptr) {
 			log->WriteDropIndex(entry.Cast<IndexCatalogEntry>());
 			break;
 		}
+		case CatalogType::RENAMED_ENTRY:
 		case CatalogType::PREPARED_STATEMENT:
 		case CatalogType::SCALAR_FUNCTION_ENTRY:
-			// do nothing, indexes/prepared statements/functions aren't persisted to disk
+		case CatalogType::DEPENDENCY_ENTRY:
+			// do nothing, prepared statements and scalar functions aren't persisted to disk
 			break;
 		default:
 			throw InternalException("Don't know how to drop this type!");
@@ -161,6 +182,10 @@ void CommitState::WriteCatalogEntry(CatalogEntry &entry, data_ptr_t dataptr) {
 	case CatalogType::COPY_FUNCTION_ENTRY:
 	case CatalogType::PRAGMA_FUNCTION_ENTRY:
 	case CatalogType::COLLATION_ENTRY:
+	case CatalogType::DEPENDENCY_ENTRY:
+	case CatalogType::SECRET_ENTRY:
+	case CatalogType::SECRET_TYPE_ENTRY:
+	case CatalogType::SECRET_FUNCTION_ENTRY:
 		// do nothing, these entries are not persisted to disk
 		break;
 	default:
@@ -171,7 +196,7 @@ void CommitState::WriteCatalogEntry(CatalogEntry &entry, data_ptr_t dataptr) {
 void CommitState::WriteDelete(DeleteInfo &info) {
 	D_ASSERT(log);
 	// switch to the current table, if necessary
-	SwitchTable(info.table->info.get(), UndoFlags::DELETE_TUPLE);
+	SwitchTable(info.table->GetDataTableInfo().get(), UndoFlags::DELETE_TUPLE);
 
 	if (!delete_chunk) {
 		delete_chunk = make_uniq<DataChunk>();
@@ -179,8 +204,15 @@ void CommitState::WriteDelete(DeleteInfo &info) {
 		delete_chunk->Initialize(Allocator::DefaultAllocator(), delete_types);
 	}
 	auto rows = FlatVector::GetData<row_t>(delete_chunk->data[0]);
-	for (idx_t i = 0; i < info.count; i++) {
-		rows[i] = info.base_row + info.rows[i];
+	if (info.is_consecutive) {
+		for (idx_t i = 0; i < info.count; i++) {
+			rows[i] = UnsafeNumericCast<int64_t>(info.base_row + i);
+		}
+	} else {
+		auto delete_rows = info.GetRows();
+		for (idx_t i = 0; i < info.count; i++) {
+			rows[i] = UnsafeNumericCast<int64_t>(info.base_row) + delete_rows[i];
+		}
 	}
 	delete_chunk->SetCardinality(info.count);
 	log->WriteDelete(*delete_chunk);
@@ -213,7 +245,7 @@ void CommitState::WriteUpdate(UpdateInfo &info) {
 	auto row_ids = FlatVector::GetData<row_t>(update_chunk->data[1]);
 	idx_t start = column_data.start + info.vector_index * STANDARD_VECTOR_SIZE;
 	for (idx_t i = 0; i < info.N; i++) {
-		row_ids[info.tuples[i]] = start + info.tuples[i];
+		row_ids[info.tuples[i]] = UnsafeNumericCast<int64_t>(start + info.tuples[i]);
 	}
 	if (column_data.type.id() == LogicalTypeId::VALIDITY) {
 		// zero-initialize the booleans
@@ -246,7 +278,7 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::CATALOG_ENTRY: {
 		// set the commit timestamp of the catalog entry to the given id
 		auto catalog_entry = Load<CatalogEntry *>(data);
-		D_ASSERT(catalog_entry->parent);
+		D_ASSERT(catalog_entry->HasParent());
 
 		auto &catalog = catalog_entry->ParentCatalog();
 		D_ASSERT(catalog.IsDuckCatalog());
@@ -254,10 +286,14 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 		// Grab a write lock on the catalog
 		auto &duck_catalog = catalog.Cast<DuckCatalog>();
 		lock_guard<mutex> write_lock(duck_catalog.GetWriteLock());
-		catalog_entry->set->UpdateTimestamp(*catalog_entry->parent, commit_id);
-		if (catalog_entry->name != catalog_entry->parent->name) {
+		lock_guard<mutex> read_lock(catalog_entry->set->GetCatalogLock());
+		catalog_entry->set->UpdateTimestamp(catalog_entry->Parent(), commit_id);
+		if (!StringUtil::CIEquals(catalog_entry->name, catalog_entry->Parent().name)) {
 			catalog_entry->set->UpdateTimestamp(*catalog_entry, commit_id);
 		}
+		// modify catalog on commit
+		duck_catalog.ModifyCatalog();
+
 		if (HAS_LOG) {
 			// push the catalog update to the WAL
 			WriteCatalogEntry(*catalog_entry, data + sizeof(CatalogEntry *));
@@ -267,7 +303,7 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::INSERT_TUPLE: {
 		// append:
 		auto info = reinterpret_cast<AppendInfo *>(data);
-		if (HAS_LOG && !info->table->info->IsTemporary()) {
+		if (HAS_LOG && !info->table->IsTemporary()) {
 			info->table->WriteToLog(*log, info->start_row, info->count);
 		}
 		// mark the tuples as committed
@@ -277,11 +313,11 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::DELETE_TUPLE: {
 		// deletion:
 		auto info = reinterpret_cast<DeleteInfo *>(data);
-		if (HAS_LOG && !info->table->info->IsTemporary()) {
+		if (HAS_LOG && !info->table->IsTemporary()) {
 			WriteDelete(*info);
 		}
 		// mark the tuples as committed
-		info->version_info->CommitDelete(info->vector_idx, commit_id, info->rows, info->count);
+		info->version_info->CommitDelete(info->vector_idx, commit_id, *info);
 		break;
 	}
 	case UndoFlags::UPDATE_TUPLE: {
@@ -291,6 +327,13 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data) {
 			WriteUpdate(*info);
 		}
 		info->version_number = commit_id;
+		break;
+	}
+	case UndoFlags::SEQUENCE_VALUE: {
+		auto info = reinterpret_cast<SequenceValue *>(data);
+		if (HAS_LOG) {
+			log->WriteSequenceValue(*info);
+		}
 		break;
 	}
 	default:
@@ -304,9 +347,9 @@ void CommitState::RevertCommit(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::CATALOG_ENTRY: {
 		// set the commit timestamp of the catalog entry to the given id
 		auto catalog_entry = Load<CatalogEntry *>(data);
-		D_ASSERT(catalog_entry->parent);
-		catalog_entry->set->UpdateTimestamp(*catalog_entry->parent, transaction_id);
-		if (catalog_entry->name != catalog_entry->parent->name) {
+		D_ASSERT(catalog_entry->HasParent());
+		catalog_entry->set->UpdateTimestamp(catalog_entry->Parent(), transaction_id);
+		if (catalog_entry->name != catalog_entry->Parent().name) {
 			catalog_entry->set->UpdateTimestamp(*catalog_entry, transaction_id);
 		}
 		break;
@@ -320,15 +363,17 @@ void CommitState::RevertCommit(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::DELETE_TUPLE: {
 		// deletion:
 		auto info = reinterpret_cast<DeleteInfo *>(data);
-		info->table->info->cardinality += info->count;
 		// revert the commit by writing the (uncommitted) transaction_id back into the version info
-		info->version_info->CommitDelete(info->vector_idx, transaction_id, info->rows, info->count);
+		info->version_info->CommitDelete(info->vector_idx, transaction_id, *info);
 		break;
 	}
 	case UndoFlags::UPDATE_TUPLE: {
 		// update:
 		auto info = reinterpret_cast<UpdateInfo *>(data);
 		info->version_number = transaction_id;
+		break;
+	}
+	case UndoFlags::SEQUENCE_VALUE: {
 		break;
 	}
 	default:

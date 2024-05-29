@@ -31,6 +31,8 @@ public:
 	vector<LogicalType> mark_types;
 	//! The set of columns that will be duplicate eliminated from the LHS and pushed into the RHS
 	vector<unique_ptr<Expression>> duplicate_eliminated_columns;
+	//! If this is a DelimJoin, whether it has been flipped to de-duplicating the RHS instead
+	bool delim_flipped = false;
 
 public:
 	string ParamsToString() const override;
@@ -49,16 +51,16 @@ public:
 	                                              vector<JoinCondition> conditions,
 	                                              vector<unique_ptr<Expression>> arbitrary_expressions);
 
-	static void ExtractJoinConditions(ClientContext &context, JoinType type, unique_ptr<LogicalOperator> &left_child,
-	                                  unique_ptr<LogicalOperator> &right_child, unique_ptr<Expression> condition,
-	                                  vector<JoinCondition> &conditions,
+	static void ExtractJoinConditions(ClientContext &context, JoinType type, JoinRefType ref_type,
+	                                  unique_ptr<LogicalOperator> &left_child, unique_ptr<LogicalOperator> &right_child,
+	                                  unique_ptr<Expression> condition, vector<JoinCondition> &conditions,
 	                                  vector<unique_ptr<Expression>> &arbitrary_expressions);
-	static void ExtractJoinConditions(ClientContext &context, JoinType type, unique_ptr<LogicalOperator> &left_child,
-	                                  unique_ptr<LogicalOperator> &right_child,
+	static void ExtractJoinConditions(ClientContext &context, JoinType type, JoinRefType ref_type,
+	                                  unique_ptr<LogicalOperator> &left_child, unique_ptr<LogicalOperator> &right_child,
 	                                  vector<unique_ptr<Expression>> &expressions, vector<JoinCondition> &conditions,
 	                                  vector<unique_ptr<Expression>> &arbitrary_expressions);
-	static void ExtractJoinConditions(ClientContext &context, JoinType type, unique_ptr<LogicalOperator> &left_child,
-	                                  unique_ptr<LogicalOperator> &right_child,
+	static void ExtractJoinConditions(ClientContext &context, JoinType type, JoinRefType ref_type,
+	                                  unique_ptr<LogicalOperator> &left_child, unique_ptr<LogicalOperator> &right_child,
 	                                  const unordered_set<idx_t> &left_bindings,
 	                                  const unordered_set<idx_t> &right_bindings,
 	                                  vector<unique_ptr<Expression>> &expressions, vector<JoinCondition> &conditions,

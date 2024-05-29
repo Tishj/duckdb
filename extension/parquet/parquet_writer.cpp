@@ -1,17 +1,22 @@
 #include "parquet_writer.hpp"
 
 #include "duckdb.hpp"
+#include "mbedtls_wrapper.hpp"
+#include "parquet_crypto.hpp"
 #include "parquet_timestamp.hpp"
+
 #ifndef DUCKDB_AMALGAMATION
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/serializer/buffered_file_writer.hpp"
+#include "duckdb/common/serializer/write_stream.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/connection.hpp"
-#include "duckdb/common/serializer/write_stream.hpp"
 #include "duckdb/parser/parsed_data/create_copy_function_info.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 #endif
 
 namespace duckdb {
@@ -24,14 +29,14 @@ using duckdb_parquet::format::CompressionCodec;
 using duckdb_parquet::format::ConvertedType;
 using duckdb_parquet::format::Encoding;
 using duckdb_parquet::format::FieldRepetitionType;
+using duckdb_parquet::format::FileCryptoMetaData;
 using duckdb_parquet::format::FileMetaData;
 using duckdb_parquet::format::PageHeader;
 using duckdb_parquet::format::PageType;
 using ParquetRowGroup = duckdb_parquet::format::RowGroup;
 using duckdb_parquet::format::Type;
 
-ChildFieldIDs::ChildFieldIDs() {
-	ids = make_uniq<case_insensitive_map_t<FieldID>>();
+ChildFieldIDs::ChildFieldIDs() : ids(make_uniq<case_insensitive_map_t<FieldID>>()) {
 }
 
 ChildFieldIDs ChildFieldIDs::Copy() const {
@@ -98,6 +103,7 @@ CopyTypeSupport ParquetWriter::DuckDBTypeToParquetTypeInternal(const LogicalType
 	case LogicalTypeId::DOUBLE:
 		parquet_type = Type::DOUBLE;
 		break;
+	case LogicalTypeId::UHUGEINT:
 	case LogicalTypeId::HUGEINT:
 		parquet_type = Type::DOUBLE;
 		return CopyTypeSupport::LOSSY;
@@ -164,6 +170,10 @@ CopyTypeSupport ParquetWriter::TypeIsSupported(const LogicalType &type) {
 	auto id = type.id();
 	if (id == LogicalTypeId::LIST) {
 		auto &child_type = ListType::GetChildType(type);
+		return TypeIsSupported(child_type);
+	}
+	if (id == LogicalTypeId::ARRAY) {
+		auto &child_type = ArrayType::GetChildType(type);
 		return TypeIsSupported(child_type);
 	}
 	if (id == LogicalTypeId::UNION) {
@@ -309,6 +319,23 @@ void ParquetWriter::SetSchemaProperties(const LogicalType &duckdb_type,
 	}
 }
 
+uint32_t ParquetWriter::Write(const duckdb_apache::thrift::TBase &object) {
+	if (encryption_config) {
+		return ParquetCrypto::Write(object, *protocol, encryption_config->GetFooterKey());
+	} else {
+		return object.write(protocol.get());
+	}
+}
+
+uint32_t ParquetWriter::WriteData(const const_data_ptr_t buffer, const uint32_t buffer_size) {
+	if (encryption_config) {
+		return ParquetCrypto::WriteData(*protocol, buffer, buffer_size, encryption_config->GetFooterKey());
+	} else {
+		protocol->getTransport()->write(buffer, buffer_size);
+		return buffer_size;
+	}
+}
+
 void VerifyUniqueNames(const vector<string> &names) {
 #ifdef DEBUG
 	unordered_set<string> name_set;
@@ -324,16 +351,26 @@ void VerifyUniqueNames(const vector<string> &names) {
 
 ParquetWriter::ParquetWriter(FileSystem &fs, string file_name_p, vector<LogicalType> types_p, vector<string> names_p,
                              CompressionCodec::type codec, ChildFieldIDs field_ids_p,
-                             const vector<pair<string, string>> &kv_metadata)
+                             const vector<pair<string, string>> &kv_metadata,
+                             shared_ptr<ParquetEncryptionConfig> encryption_config_p,
+                             double dictionary_compression_ratio_threshold_p, optional_idx compression_level_p)
     : file_name(std::move(file_name_p)), sql_types(std::move(types_p)), column_names(std::move(names_p)), codec(codec),
-      field_ids(std::move(field_ids_p)) {
+      field_ids(std::move(field_ids_p)), encryption_config(std::move(encryption_config_p)),
+      dictionary_compression_ratio_threshold(dictionary_compression_ratio_threshold_p) {
 	// initialize the file writer
 	writer = make_uniq<BufferedFileWriter>(fs, file_name.c_str(),
 	                                       FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW);
-	// parquet files start with the string "PAR1"
-	writer->WriteData(const_data_ptr_cast("PAR1"), 4);
+	if (encryption_config) {
+		// encrypted parquet files start with the string "PARE"
+		writer->WriteData(const_data_ptr_cast("PARE"), 4);
+		// we only support this one for now, not "AES_GCM_CTR_V1"
+		file_meta_data.encryption_algorithm.__isset.AES_GCM_V1 = true;
+	} else {
+		// parquet files start with the string "PAR1"
+		writer->WriteData(const_data_ptr_cast("PAR1"), 4);
+	}
 	TCompactProtocolFactoryT<MyTransport> tproto_factory;
-	protocol = tproto_factory.getProtocol(make_shared<MyTransport>(*writer));
+	protocol = tproto_factory.getProtocol(std::make_shared<MyTransport>(*writer));
 
 	file_meta_data.num_rows = 0;
 	file_meta_data.version = 1;
@@ -349,6 +386,19 @@ ParquetWriter::ParquetWriter(FileSystem &fs, string file_name_p, vector<LogicalT
 		kv.__set_value(kv_pair.second);
 		file_meta_data.key_value_metadata.push_back(kv);
 		file_meta_data.__isset.key_value_metadata = true;
+	}
+	if (compression_level_p.IsValid()) {
+		idx_t level = compression_level_p.GetIndex();
+		switch (codec) {
+		case CompressionCodec::ZSTD:
+			if (level < 1 || level > 22) {
+				throw BinderException("Compression level for ZSTD must be between 1 and 22");
+			}
+			break;
+		default:
+			throw NotImplementedException("Compression level is only supported for the ZSTD compression codec");
+		}
+		compression_level = level;
 	}
 
 	// populate root schema object
@@ -433,6 +483,42 @@ void ParquetWriter::PrepareRowGroup(ColumnDataCollection &buffer, PreparedRowGro
 	result.heaps = buffer.GetHeapReferences();
 }
 
+// Validation code adapted from Impala
+static void ValidateOffsetInFile(const string &filename, idx_t col_idx, idx_t file_length, idx_t offset,
+                                 const string &offset_name) {
+	if (offset < 0 || offset >= file_length) {
+		throw IOException("File '%s': metadata is corrupt. Column %d has invalid "
+		                  "%s (offset=%llu file_size=%llu).",
+		                  filename, col_idx, offset_name, offset, file_length);
+	}
+}
+
+static void ValidateColumnOffsets(const string &filename, idx_t file_length, const ParquetRowGroup &row_group) {
+	for (idx_t i = 0; i < row_group.columns.size(); ++i) {
+		const auto &col_chunk = row_group.columns[i];
+		ValidateOffsetInFile(filename, i, file_length, col_chunk.meta_data.data_page_offset, "data page offset");
+		auto col_start = NumericCast<idx_t>(col_chunk.meta_data.data_page_offset);
+		// The file format requires that if a dictionary page exists, it be before data pages.
+		if (col_chunk.meta_data.__isset.dictionary_page_offset) {
+			ValidateOffsetInFile(filename, i, file_length, col_chunk.meta_data.dictionary_page_offset,
+			                     "dictionary page offset");
+			if (NumericCast<idx_t>(col_chunk.meta_data.dictionary_page_offset) >= col_start) {
+				throw IOException("Parquet file '%s': metadata is corrupt. Dictionary "
+				                  "page (offset=%llu) must come before any data pages (offset=%llu).",
+				                  filename, col_chunk.meta_data.dictionary_page_offset, col_start);
+			}
+			col_start = col_chunk.meta_data.dictionary_page_offset;
+		}
+		auto col_len = NumericCast<idx_t>(col_chunk.meta_data.total_compressed_size);
+		auto col_end = col_start + col_len;
+		if (col_end <= 0 || col_end > file_length) {
+			throw IOException("Parquet file '%s': metadata is corrupt. Column %llu has "
+			                  "invalid column offsets (offset=%llu, size=%llu, file_size=%llu).",
+			                  filename, i, col_start, col_len, file_length);
+		}
+	}
+}
+
 void ParquetWriter::FlushRowGroup(PreparedRowGroup &prepared) {
 	lock_guard<mutex> glock(lock);
 	auto &row_group = prepared.row_group;
@@ -446,6 +532,8 @@ void ParquetWriter::FlushRowGroup(PreparedRowGroup &prepared) {
 		auto write_state = std::move(states[col_idx]);
 		col_writer->FinalizeWrite(*write_state);
 	}
+	// let's make sure all offsets are ay-okay
+	ValidateColumnOffsets(file_name, writer->GetTotalWritten(), row_group);
 
 	// append the row group to the file meta data
 	file_meta_data.row_groups.push_back(row_group);
@@ -468,12 +556,26 @@ void ParquetWriter::Flush(ColumnDataCollection &buffer) {
 
 void ParquetWriter::Finalize() {
 	auto start_offset = writer->GetTotalWritten();
-	file_meta_data.write(protocol.get());
+	if (encryption_config) {
+		// Crypto metadata is written unencrypted
+		FileCryptoMetaData crypto_metadata;
+		duckdb_parquet::format::AesGcmV1 aes_gcm_v1;
+		duckdb_parquet::format::EncryptionAlgorithm alg;
+		alg.__set_AES_GCM_V1(aes_gcm_v1);
+		crypto_metadata.__set_encryption_algorithm(alg);
+		crypto_metadata.write(protocol.get());
+	}
+	Write(file_meta_data);
 
 	writer->Write<uint32_t>(writer->GetTotalWritten() - start_offset);
 
-	// parquet files also end with the string "PAR1"
-	writer->WriteData(const_data_ptr_cast("PAR1"), 4);
+	if (encryption_config) {
+		// encrypted parquet files also end with the string "PARE"
+		writer->WriteData(const_data_ptr_cast("PARE"), 4);
+	} else {
+		// parquet files also end with the string "PAR1"
+		writer->WriteData(const_data_ptr_cast("PAR1"), 4);
+	}
 
 	// flush to disk
 	writer->Sync();

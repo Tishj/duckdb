@@ -1,6 +1,5 @@
 /usr*
 */cl.hpp
-*/tools/jdbc/*
 */tools/odbc/*
 */tools/shell/*
 */tools/sqlite3_api_wrapper/*
@@ -14,7 +13,6 @@
 */extension/jemalloc/*
 */extension/tpcds/*
 */extension/tpch/*
-*/extension/visualizer/*
 */extension/json/yyjson/*
 */extension_helper.cpp
 */generated_extension_loader.hpp

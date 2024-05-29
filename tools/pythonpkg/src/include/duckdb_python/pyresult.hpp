@@ -19,6 +19,7 @@ namespace duckdb {
 struct DuckDBPyResult {
 public:
 	explicit DuckDBPyResult(unique_ptr<QueryResult> result);
+	~DuckDBPyResult();
 
 public:
 	Optional<py::tuple> Fetchone();
@@ -34,9 +35,9 @@ public:
 
 	PandasDataFrame FetchDF(bool date_as_object);
 
-	duckdb::pyarrow::Table FetchArrowTable(idx_t rows_per_batch);
+	duckdb::pyarrow::Table FetchArrowTable(idx_t rows_per_batch, bool to_polars);
 
-	PandasDataFrame FetchDFChunk(idx_t vectors_per_chunk, bool date_as_object);
+	PandasDataFrame FetchDFChunk(const idx_t vectors_per_chunk = 1, bool date_as_object = false);
 
 	py::dict FetchPyTorch();
 
@@ -56,11 +57,11 @@ public:
 	const vector<LogicalType> &GetTypes();
 
 private:
-	py::list FetchAllArrowChunks(idx_t rows_per_batch);
+	py::list FetchAllArrowChunks(idx_t rows_per_batch, bool to_polars);
 
 	void FillNumpy(py::dict &res, idx_t col_idx, NumpyResultConversion &conversion, const char *name);
 
-	bool FetchArrowChunk(ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch);
+	bool FetchArrowChunk(ChunkScanState &scan_state, py::list &batches, idx_t rows_per_batch, bool to_polars);
 
 	PandasDataFrame FrameFromNumpy(bool date_as_object, const py::handle &o);
 

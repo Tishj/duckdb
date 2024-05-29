@@ -20,6 +20,7 @@ set(TEST_API_OBJECTS
     test_query_profiler.cpp
     test_dbdir.cpp
     test_progress_bar.cpp
+    test_uuid.cpp
     test_threads.cpp
     test_windows_header_compatibility.cpp
     test_windows_unicode_path.cpp
@@ -31,11 +32,13 @@ endif()
 
 if(DUCKDB_EXTENSION_TPCH_SHOULD_LINK)
   include_directories(../../extension/tpch/include)
-  set(TEST_API_OBJECTS ${TEST_API_OBJECTS} test_tpch_with_relations.cpp
-                       serialized_plans/test_plan_serialization_bwc.cpp)
+  set(TEST_API_OBJECTS
+      ${TEST_API_OBJECTS} test_tpch_with_relations.cpp
+      test_tpch_with_streaming.cpp
+      serialized_plans/test_plan_serialization_bwc.cpp)
 endif()
 
-add_library_unity(test_api OBJECT ${TEST_API_OBJECTS})
+add_library(test_api OBJECT ${TEST_API_OBJECTS})
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:test_api>
     PARENT_SCOPE)

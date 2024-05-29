@@ -25,6 +25,10 @@
 namespace duckdb {
 class FileSystem;
 class FileOpener;
+class ParquetEncryptionConfig;
+
+class Serializer;
+class Deserializer;
 
 struct PreparedRowGroup {
 	duckdb_parquet::format::RowGroup row_group;
@@ -37,6 +41,9 @@ struct ChildFieldIDs {
 	ChildFieldIDs();
 	ChildFieldIDs Copy() const;
 	unique_ptr<case_insensitive_map_t<FieldID>> ids;
+
+	void Serialize(Serializer &serializer) const;
+	static ChildFieldIDs Deserialize(Deserializer &source);
 };
 
 struct FieldID {
@@ -47,13 +54,18 @@ struct FieldID {
 	bool set;
 	int32_t field_id;
 	ChildFieldIDs child_field_ids;
+
+	void Serialize(Serializer &serializer) const;
+	static FieldID Deserialize(Deserializer &source);
 };
 
 class ParquetWriter {
 public:
 	ParquetWriter(FileSystem &fs, string file_name, vector<LogicalType> types, vector<string> names,
 	              duckdb_parquet::format::CompressionCodec::type codec, ChildFieldIDs field_ids,
-	              const vector<pair<string, string>> &kv_metadata);
+	              const vector<pair<string, string>> &kv_metadata,
+	              shared_ptr<ParquetEncryptionConfig> encryption_config, double dictionary_compression_ratio_threshold,
+	              optional_idx compression_level);
 
 public:
 	void PrepareRowGroup(ColumnDataCollection &buffer, PreparedRowGroup &result);
@@ -76,8 +88,25 @@ public:
 	BufferedFileWriter &GetWriter() {
 		return *writer;
 	}
+	idx_t FileSize() {
+		lock_guard<mutex> glock(lock);
+		return writer->total_written;
+	}
+	double DictionaryCompressionRatioThreshold() const {
+		return dictionary_compression_ratio_threshold;
+	}
+	optional_idx CompressionLevel() const {
+		return compression_level;
+	}
+	idx_t NumberOfRowGroups() {
+		lock_guard<mutex> glock(lock);
+		return file_meta_data.row_groups.size();
+	}
 
 	static CopyTypeSupport TypeIsSupported(const LogicalType &type);
+
+	uint32_t Write(const duckdb_apache::thrift::TBase &object);
+	uint32_t WriteData(const const_data_ptr_t buffer, const uint32_t buffer_size);
 
 private:
 	static CopyTypeSupport DuckDBTypeToParquetTypeInternal(const LogicalType &duckdb_type,
@@ -87,9 +116,12 @@ private:
 	vector<string> column_names;
 	duckdb_parquet::format::CompressionCodec::type codec;
 	ChildFieldIDs field_ids;
+	shared_ptr<ParquetEncryptionConfig> encryption_config;
+	double dictionary_compression_ratio_threshold;
+	optional_idx compression_level;
 
 	unique_ptr<BufferedFileWriter> writer;
-	shared_ptr<duckdb_apache::thrift::protocol::TProtocol> protocol;
+	std::shared_ptr<duckdb_apache::thrift::protocol::TProtocol> protocol;
 	duckdb_parquet::format::FileMetaData file_meta_data;
 	std::mutex lock;
 

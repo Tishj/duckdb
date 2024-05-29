@@ -64,12 +64,14 @@ idx_t DistinctStatistics::GetCount() const {
 	double u1 = pow(u / s, 2) * u;
 
 	// Estimate total uniques using Good Turing Estimation
-	idx_t estimate = u + u1 / s * (n - s);
+	idx_t estimate = NumericCast<idx_t>(u + u1 / s * (n - s));
 	return MinValue<idx_t>(estimate, total_count);
 }
 
 bool DistinctStatistics::TypeIsSupported(const LogicalType &type) {
-	return type.InternalType() != PhysicalType::LIST && type.InternalType() != PhysicalType::STRUCT;
+	auto physical_type = type.InternalType();
+	return physical_type != PhysicalType::LIST && physical_type != PhysicalType::STRUCT &&
+	       physical_type != PhysicalType::ARRAY;
 }
 
 } // namespace duckdb

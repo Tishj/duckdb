@@ -1,15 +1,16 @@
 #include "duckdb/transaction/undo_buffer.hpp"
 
 #include "duckdb/catalog/catalog_entry.hpp"
+#include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
 #include "duckdb/catalog/catalog_entry/list.hpp"
-#include "duckdb/catalog/catalog_set.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/pair.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/write_ahead_log.hpp"
 #include "duckdb/transaction/cleanup_state.hpp"
 #include "duckdb/transaction/commit_state.hpp"
 #include "duckdb/transaction/rollback_state.hpp"
-#include "duckdb/common/pair.hpp"
+#include "duckdb/execution/index/bound_index.hpp"
 
 namespace duckdb {
 constexpr uint32_t UNDO_ENTRY_HEADER_SIZE = sizeof(UndoFlags) + sizeof(uint32_t);
@@ -24,7 +25,7 @@ data_ptr_t UndoBuffer::CreateEntry(UndoFlags type, idx_t len) {
 	auto data = allocator.Allocate(needed_space);
 	Store<UndoFlags>(type, data);
 	data += sizeof(UndoFlags);
-	Store<uint32_t>(len, data);
+	Store<uint32_t>(UnsafeNumericCast<uint32_t>(len), data);
 	data += sizeof(uint32_t);
 	return data;
 }
@@ -99,17 +100,55 @@ void UndoBuffer::ReverseIterateEntries(T &&callback) {
 }
 
 bool UndoBuffer::ChangesMade() {
+	// we need to search for any index creation entries
 	return !allocator.IsEmpty();
 }
 
-idx_t UndoBuffer::EstimatedSize() {
-	idx_t estimated_size = 0;
+UndoBufferProperties UndoBuffer::GetProperties() {
+	UndoBufferProperties properties;
+	if (!ChangesMade()) {
+		return properties;
+	}
 	auto node = allocator.GetHead();
 	while (node) {
-		estimated_size += node->current_position;
+		properties.estimated_size += node->current_position;
 		node = node->next.get();
 	}
-	return estimated_size;
+
+	// we need to search for any index creation entries
+	IteratorState iterator_state;
+	IterateEntries(iterator_state, [&](UndoFlags entry_type, data_ptr_t data) {
+		switch (entry_type) {
+		case UndoFlags::UPDATE_TUPLE:
+			properties.has_updates = true;
+			break;
+		case UndoFlags::DELETE_TUPLE:
+			properties.has_deletes = true;
+			break;
+		case UndoFlags::CATALOG_ENTRY: {
+			properties.has_catalog_changes = true;
+
+			auto catalog_entry = Load<CatalogEntry *>(data);
+			auto &parent = catalog_entry->Parent();
+			switch (parent.type) {
+			case CatalogType::DELETED_ENTRY:
+				properties.has_dropped_entries = true;
+				break;
+			case CatalogType::INDEX_ENTRY: {
+				auto &index = parent.Cast<DuckIndexEntry>();
+				properties.estimated_size += index.initial_index_size;
+				break;
+			}
+			default:
+				break;
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	});
+	return properties;
 }
 
 void UndoBuffer::Cleanup() {
@@ -126,11 +165,8 @@ void UndoBuffer::Cleanup() {
 	IterateEntries(iterator_state, [&](UndoFlags type, data_ptr_t data) { state.CleanupEntry(type, data); });
 
 	// possibly vacuum indexes
-	for (const auto &table : state.indexed_tables) {
-		table.second->info->indexes.Scan([&](Index &index) {
-			index.Vacuum();
-			return false;
-		});
+	for (auto &table : state.indexed_tables) {
+		table.second->VacuumIndexes();
 	}
 }
 

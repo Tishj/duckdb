@@ -12,7 +12,7 @@ def execute_system_command(cmd):
     retcode = os.system(cmd)
     print(retcode)
     if retcode != 0:
-        raise Exception
+        raise Exception(f"Failed to run command {cmd} - exit code {retcode}")
 
 
 def replace_in_file(fname, regex, replace):
@@ -27,9 +27,9 @@ for vector_size in vector_sizes:
     print("TESTING STANDARD_VECTOR_SIZE=%d" % (vector_size,))
     replace_in_file(
         'src/include/duckdb/common/vector_size.hpp',
-        r'#define STANDARD_VECTOR_SIZE \d+',
+        r'#define STANDARD_VECTOR_SIZE \w+',
         '#define STANDARD_VECTOR_SIZE %d' % (vector_size,),
     )
     execute_system_command('rm -rf build')
     execute_system_command('make relassert')
-    execute_system_command('python3 scripts/run_tests_one_by_one.py build/relassert/test/unittest')
+    execute_system_command('python3 scripts/run_tests_one_by_one.py build/relassert/test/unittest --no-exit')

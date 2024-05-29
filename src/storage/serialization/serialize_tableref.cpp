@@ -13,18 +13,23 @@ void TableRef::Serialize(Serializer &serializer) const {
 	serializer.WriteProperty<TableReferenceType>(100, "type", type);
 	serializer.WritePropertyWithDefault<string>(101, "alias", alias);
 	serializer.WritePropertyWithDefault<unique_ptr<SampleOptions>>(102, "sample", sample);
+	serializer.WritePropertyWithDefault<optional_idx>(103, "query_location", query_location, optional_idx());
 }
 
 unique_ptr<TableRef> TableRef::Deserialize(Deserializer &deserializer) {
 	auto type = deserializer.ReadProperty<TableReferenceType>(100, "type");
 	auto alias = deserializer.ReadPropertyWithDefault<string>(101, "alias");
 	auto sample = deserializer.ReadPropertyWithDefault<unique_ptr<SampleOptions>>(102, "sample");
+	auto query_location = deserializer.ReadPropertyWithDefault<optional_idx>(103, "query_location", optional_idx());
 	unique_ptr<TableRef> result;
 	switch (type) {
 	case TableReferenceType::BASE_TABLE:
 		result = BaseTableRef::Deserialize(deserializer);
 		break;
-	case TableReferenceType::EMPTY:
+	case TableReferenceType::COLUMN_DATA:
+		result = ColumnDataRef::Deserialize(deserializer);
+		break;
+	case TableReferenceType::EMPTY_FROM:
 		result = EmptyTableRef::Deserialize(deserializer);
 		break;
 	case TableReferenceType::EXPRESSION_LIST:
@@ -35,6 +40,9 @@ unique_ptr<TableRef> TableRef::Deserialize(Deserializer &deserializer) {
 		break;
 	case TableReferenceType::PIVOT:
 		result = PivotRef::Deserialize(deserializer);
+		break;
+	case TableReferenceType::SHOW_REF:
+		result = ShowRef::Deserialize(deserializer);
 		break;
 	case TableReferenceType::SUBQUERY:
 		result = SubqueryRef::Deserialize(deserializer);
@@ -47,6 +55,7 @@ unique_ptr<TableRef> TableRef::Deserialize(Deserializer &deserializer) {
 	}
 	result->alias = std::move(alias);
 	result->sample = std::move(sample);
+	result->query_location = query_location;
 	return result;
 }
 
@@ -64,6 +73,19 @@ unique_ptr<TableRef> BaseTableRef::Deserialize(Deserializer &deserializer) {
 	deserializer.ReadPropertyWithDefault<string>(201, "table_name", result->table_name);
 	deserializer.ReadPropertyWithDefault<vector<string>>(202, "column_name_alias", result->column_name_alias);
 	deserializer.ReadPropertyWithDefault<string>(203, "catalog_name", result->catalog_name);
+	return std::move(result);
+}
+
+void ColumnDataRef::Serialize(Serializer &serializer) const {
+	TableRef::Serialize(serializer);
+	serializer.WritePropertyWithDefault<vector<string>>(200, "expected_names", expected_names);
+	serializer.WritePropertyWithDefault<optionally_owned_ptr<ColumnDataCollection>>(202, "collection", collection);
+}
+
+unique_ptr<TableRef> ColumnDataRef::Deserialize(Deserializer &deserializer) {
+	auto expected_names = deserializer.ReadPropertyWithDefault<vector<string>>(200, "expected_names");
+	auto collection = deserializer.ReadPropertyWithDefault<optionally_owned_ptr<ColumnDataCollection>>(202, "collection");
+	auto result = duckdb::unique_ptr<ColumnDataRef>(new ColumnDataRef(std::move(expected_names), std::move(collection)));
 	return std::move(result);
 }
 
@@ -132,6 +154,21 @@ unique_ptr<TableRef> PivotRef::Deserialize(Deserializer &deserializer) {
 	deserializer.ReadPropertyWithDefault<vector<string>>(204, "groups", result->groups);
 	deserializer.ReadPropertyWithDefault<vector<string>>(205, "column_name_alias", result->column_name_alias);
 	deserializer.ReadPropertyWithDefault<bool>(206, "include_nulls", result->include_nulls);
+	return std::move(result);
+}
+
+void ShowRef::Serialize(Serializer &serializer) const {
+	TableRef::Serialize(serializer);
+	serializer.WritePropertyWithDefault<string>(200, "table_name", table_name);
+	serializer.WritePropertyWithDefault<unique_ptr<QueryNode>>(201, "query", query);
+	serializer.WriteProperty<ShowType>(202, "show_type", show_type);
+}
+
+unique_ptr<TableRef> ShowRef::Deserialize(Deserializer &deserializer) {
+	auto result = duckdb::unique_ptr<ShowRef>(new ShowRef());
+	deserializer.ReadPropertyWithDefault<string>(200, "table_name", result->table_name);
+	deserializer.ReadPropertyWithDefault<unique_ptr<QueryNode>>(201, "query", result->query);
+	deserializer.ReadProperty<ShowType>(202, "show_type", result->show_type);
 	return std::move(result);
 }
 

@@ -2,6 +2,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
+#include "duckdb/common/exception/transaction_exception.hpp"
 
 namespace duckdb {
 
@@ -23,20 +24,63 @@ Transaction &Transaction::Get(ClientContext &context, AttachedDatabase &db) {
 	return meta_transaction.GetTransaction(db);
 }
 
-Transaction &MetaTransaction::GetTransaction(AttachedDatabase &db) {
-	auto entry = transactions.find(&db);
-	if (entry == transactions.end()) {
-		auto new_transaction = db.GetTransactionManager().StartTransaction(context);
-		if (!new_transaction) {
-			throw InternalException("StartTransaction did not return a valid transaction");
+optional_ptr<Transaction> Transaction::TryGet(ClientContext &context, AttachedDatabase &db) {
+	auto &meta_transaction = MetaTransaction::Get(context);
+	return meta_transaction.TryGetTransaction(db);
+}
+
+#ifdef DEBUG
+static void VerifyAllTransactionsUnique(AttachedDatabase &db, vector<reference<AttachedDatabase>> &all_transactions) {
+	for (auto &tx : all_transactions) {
+		if (RefersToSameObject(db, tx.get())) {
+			throw InternalException("Database is already present in all_transactions");
 		}
-		new_transaction->active_query = active_query;
-		all_transactions.push_back(&db);
-		transactions[&db] = new_transaction;
-		return *new_transaction;
+	}
+}
+#endif
+
+optional_ptr<Transaction> MetaTransaction::TryGetTransaction(AttachedDatabase &db) {
+	lock_guard<mutex> guard(lock);
+	auto entry = transactions.find(db);
+	if (entry == transactions.end()) {
+		return nullptr;
 	} else {
-		D_ASSERT(entry->second->active_query == active_query);
-		return *entry->second;
+		return &entry->second.get();
+	}
+}
+
+Transaction &MetaTransaction::GetTransaction(AttachedDatabase &db) {
+	lock_guard<mutex> guard(lock);
+	auto entry = transactions.find(db);
+	if (entry == transactions.end()) {
+		auto &new_transaction = db.GetTransactionManager().StartTransaction(context);
+		new_transaction.active_query = active_query;
+#ifdef DEBUG
+		VerifyAllTransactionsUnique(db, all_transactions);
+#endif
+		all_transactions.push_back(db);
+		transactions.insert(make_pair(reference<AttachedDatabase>(db), reference<Transaction>(new_transaction)));
+
+		return new_transaction;
+	} else {
+		D_ASSERT(entry->second.get().active_query == active_query);
+		return entry->second;
+	}
+}
+
+void MetaTransaction::RemoveTransaction(AttachedDatabase &db) {
+	auto entry = transactions.find(db);
+	if (entry == transactions.end()) {
+		throw InternalException("MetaTransaction::RemoveTransaction called but meta transaction did not have a "
+		                        "transaction for this database");
+	}
+	transactions.erase(entry);
+	for (idx_t i = 0; i < all_transactions.size(); i++) {
+		auto &db_entry = all_transactions[i];
+		if (RefersToSameObject(db_entry.get(), db)) {
+			all_transactions.erase_at(i);
+			break;
+		}
 	}
 }
 
@@ -44,18 +88,27 @@ Transaction &Transaction::Get(ClientContext &context, Catalog &catalog) {
 	return Transaction::Get(context, catalog.GetAttached());
 }
 
-string MetaTransaction::Commit() {
-	string error;
+ErrorData MetaTransaction::Commit() {
+	ErrorData error;
+#ifdef DEBUG
+	reference_set_t<AttachedDatabase> committed_tx;
+#endif
 	// commit transactions in reverse order
 	for (idx_t i = all_transactions.size(); i > 0; i--) {
-		auto db = all_transactions[i - 1];
-		auto entry = transactions.find(db.get());
+		auto &db = all_transactions[i - 1].get();
+		auto entry = transactions.find(db);
 		if (entry == transactions.end()) {
 			throw InternalException("Could not find transaction corresponding to database in MetaTransaction");
 		}
-		auto &transaction_manager = db->GetTransactionManager();
-		auto transaction = entry->second;
-		if (error.empty()) {
+#ifdef DEBUG
+		auto already_committed = committed_tx.insert(db).second == false;
+		if (already_committed) {
+			throw InternalException("All databases inside all_transactions should be unique, invariant broken!");
+		}
+#endif
+		auto &transaction_manager = db.GetTransactionManager();
+		auto &transaction = entry->second.get();
+		if (!error.HasError()) {
 			// commit
 			error = transaction_manager.CommitTransaction(context, transaction);
 		} else {
@@ -69,11 +122,11 @@ string MetaTransaction::Commit() {
 void MetaTransaction::Rollback() {
 	// rollback transactions in reverse order
 	for (idx_t i = all_transactions.size(); i > 0; i--) {
-		auto db = all_transactions[i - 1];
-		auto &transaction_manager = db->GetTransactionManager();
-		auto entry = transactions.find(db.get());
+		auto &db = all_transactions[i - 1].get();
+		auto &transaction_manager = db.GetTransactionManager();
+		auto entry = transactions.find(db);
 		D_ASSERT(entry != transactions.end());
-		auto transaction = entry->second;
+		auto &transaction = entry->second.get();
 		transaction_manager.RollbackTransaction(transaction);
 	}
 }
@@ -85,7 +138,7 @@ idx_t MetaTransaction::GetActiveQuery() {
 void MetaTransaction::SetActiveQuery(transaction_t query_number) {
 	active_query = query_number;
 	for (auto &entry : transactions) {
-		entry.second->active_query = query_number;
+		entry.second.get().active_query = query_number;
 	}
 }
 
@@ -96,6 +149,9 @@ void MetaTransaction::ModifyDatabase(AttachedDatabase &db) {
 	}
 	if (!modified_database) {
 		modified_database = &db;
+
+		auto &transaction = GetTransaction(db);
+		transaction.SetReadWrite();
 		return;
 	}
 	if (&db != modified_database.get()) {

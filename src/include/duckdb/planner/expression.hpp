@@ -32,7 +32,8 @@ public:
 	bool HasSubquery() const override;
 	bool IsScalar() const override;
 	bool HasParameter() const override;
-	virtual bool HasSideEffects() const;
+	virtual bool IsVolatile() const;
+	virtual bool IsConsistent() const;
 	virtual bool PropagatesNullValues() const;
 	virtual bool IsFoldable() const;
 
@@ -42,7 +43,7 @@ public:
 		if (!BaseExpression::Equals(other)) {
 			return false;
 		}
-		return return_type == ((Expression &)other).return_type;
+		return return_type == reinterpret_cast<const Expression &>(other).return_type;
 	}
 	static bool Equals(const Expression &left, const Expression &right) {
 		return left.Equals(right);
@@ -63,6 +64,7 @@ protected:
 		expression_class = other.expression_class;
 		alias = other.alias;
 		return_type = other.return_type;
+		query_location = other.query_location;
 	}
 };
 

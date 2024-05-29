@@ -69,7 +69,7 @@ public:
 public:
 	template <class TARGET>
 	TARGET &Cast() {
-		D_ASSERT(dynamic_cast<TARGET *>(this));
+		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<TARGET &>(*this);
 	}
 };
@@ -85,7 +85,7 @@ struct PartialBlockAllocation {
 	unique_ptr<PartialBlock> partial_block;
 };
 
-enum class CheckpointType { FULL_CHECKPOINT, APPEND_TO_TABLE };
+enum class PartialBlockType { FULL_CHECKPOINT, APPEND_TO_TABLE };
 
 //! Enables sharing blocks across some scope. Scope is whatever we want to share
 //! blocks across. It may be an entire checkpoint or just a single row group.
@@ -101,22 +101,16 @@ public:
 	static constexpr const idx_t MAX_BLOCK_MAP_SIZE = 1u << 31;
 
 public:
-	PartialBlockManager(BlockManager &block_manager, CheckpointType checkpoint_type,
+	PartialBlockManager(BlockManager &block_manager, PartialBlockType partial_block_type,
 	                    uint32_t max_partial_block_size = DEFAULT_MAX_PARTIAL_BLOCK_SIZE,
 	                    uint32_t max_use_count = DEFAULT_MAX_USE_COUNT);
 	virtual ~PartialBlockManager();
 
 public:
-	//! Flush any remaining partial blocks to disk
-	void FlushPartialBlocks();
-
 	PartialBlockAllocation GetBlockAllocation(uint32_t segment_size);
 
-	virtual void AllocateBlock(PartialBlockState &state, uint32_t segment_size);
-
-	void Merge(PartialBlockManager &other);
 	//! Register a partially filled block that is filled with "segment_size" entries
-	void RegisterPartialBlock(PartialBlockAllocation &&allocation);
+	void RegisterPartialBlock(PartialBlockAllocation allocation);
 
 	//! Clear remaining blocks without writing them to disk
 	void ClearBlocks();
@@ -124,9 +118,20 @@ public:
 	//! Rollback all data written by this partial block manager
 	void Rollback();
 
+	//! Merge this block manager into another one
+	void Merge(PartialBlockManager &other);
+
+	//! Flush any remaining partial blocks to disk
+	void FlushPartialBlocks();
+
+	unique_lock<mutex> GetLock() {
+		return unique_lock<mutex>(partial_block_lock);
+	}
+
 protected:
 	BlockManager &block_manager;
-	CheckpointType checkpoint_type;
+	PartialBlockType partial_block_type;
+	mutex partial_block_lock;
 	//! A map of (available space -> PartialBlock) for partially filled blocks
 	//! This is a multimap because there might be outstanding partial blocks with
 	//! the same amount of left-over space
@@ -139,6 +144,7 @@ protected:
 	uint32_t max_use_count;
 
 protected:
+	virtual void AllocateBlock(PartialBlockState &state, uint32_t segment_size);
 	//! Try to obtain a partially filled block that can fit "segment_size" bytes
 	//! If successful, returns true and returns the block_id and offset_in_block to write to
 	//! Otherwise, returns false

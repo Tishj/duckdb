@@ -85,7 +85,7 @@ select '{"my_field": {"my_nested_field": ["goose", "duckduckduckduck"]}}'::JSON-
 duckduckduckduck
 
 query T
-select json_extract('[1, 2, 42]', 2)
+select json_extract('[1, 2, 42]', '2')
 ----
 42
 
@@ -229,21 +229,27 @@ SELECT j::JSON->'$.b[#-000001]' a, a = (j::JSON->'$.b[-000001]') FROM t1;
 
 statement error
 SELECT json_extract(j, '$.b[#-]') FROM t1;
+----
 
 statement error
 SELECT json_extract(j, '$.b[-]') FROM t1;
+----
 
 statement error
 SELECT json_extract(j, '$.b[#9]') FROM t1;
+----
 
 statement error
 SELECT json_extract(j, '$.b[#+2]') FROM t1;
+----
 
 statement error
 SELECT json_extract(j, '$.b[#-1') FROM t1;
+----
 
 statement error
 SELECT json_extract(j, '$.b[#-1x]') FROM t1;
+----
 
 statement ok
 CREATE TABLE obj(x varchar);
@@ -308,3 +314,41 @@ query T
 execute q1('a')
 ----
 1
+
+# test issue 11997
+query I
+select json_extract_string(json('{"j[so]n_\"key": 67}'), '$."j[so]n_\"key"');
+----
+67
+
+query I
+select '{"\"duck\"": 42}'->'$."\"duck\""';
+----
+42
+
+query I
+select '{"\"du\\ck\"": 42}'->'$."\"du\\ck\""';
+----
+42
+
+query I
+select '{"\"du\\ck\"": 42}'->'$."\"du\ck\""';
+----
+42
+
+query I
+select '{"du\\ck": 42}'->'$.du\ck';
+----
+42
+
+# characters other than \\ or \" get ignored (for now)
+query I
+select '{"\"du\nck\"": 42}'->'$."\"du\nck\""';
+----
+NULL
+
+# need to use chr(10) for \n
+query I
+select '{"\"du\nck\"": 42}'->('$."\"du' || chr(10) || 'ck\""');
+----
+42

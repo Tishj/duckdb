@@ -35,6 +35,28 @@ struct ChangeOwnershipInfo : public AlterInfo {
 public:
 	CatalogType GetCatalogType() const override;
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
+};
+
+//===--------------------------------------------------------------------===//
+// Set Comment
+//===--------------------------------------------------------------------===//
+struct SetCommentInfo : public AlterInfo {
+	SetCommentInfo(CatalogType entry_catalog_type, string entry_catalog, string entry_schema, string entry_name,
+	               Value new_comment_value_p, OnEntryNotFound if_not_found);
+
+	CatalogType entry_catalog_type;
+	Value comment_value;
+
+public:
+	CatalogType GetCatalogType() const override;
+	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<AlterInfo> Deserialize(Deserializer &deserializer);
+
+	explicit SetCommentInfo();
 };
 
 //===--------------------------------------------------------------------===//
@@ -50,7 +72,8 @@ enum class AlterTableType : uint8_t {
 	SET_DEFAULT = 6,
 	FOREIGN_KEY_CONSTRAINT = 7,
 	SET_NOT_NULL = 8,
-	DROP_NOT_NULL = 9
+	DROP_NOT_NULL = 9,
+	SET_COLUMN_COMMENT = 10
 };
 
 struct AlterTableInfo : public AlterInfo {
@@ -66,7 +89,7 @@ public:
 	static unique_ptr<AlterInfo> Deserialize(Deserializer &deserializer);
 
 protected:
-	AlterTableInfo(AlterTableType type);
+	explicit AlterTableInfo(AlterTableType type);
 };
 
 //===--------------------------------------------------------------------===//
@@ -83,6 +106,7 @@ struct RenameColumnInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
@@ -103,6 +127,7 @@ struct RenameTableInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
@@ -125,6 +150,7 @@ struct AddColumnInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
@@ -149,6 +175,7 @@ struct RemoveColumnInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
 	string GetColumnName() const override {
@@ -176,6 +203,7 @@ struct ChangeColumnTypeInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
 	string GetColumnName() const override {
@@ -200,6 +228,7 @@ struct SetDefaultInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
 
@@ -224,6 +253,7 @@ struct AlterForeignKeyInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
 
@@ -243,6 +273,7 @@ struct SetNotNullInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
 
@@ -262,6 +293,7 @@ struct DropNotNullInfo : public AlterTableInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterTableInfo> Deserialize(Deserializer &deserializer);
 
@@ -286,7 +318,7 @@ public:
 	static unique_ptr<AlterInfo> Deserialize(Deserializer &deserializer);
 
 protected:
-	AlterViewInfo(AlterViewType type);
+	explicit AlterViewInfo(AlterViewType type);
 };
 
 //===--------------------------------------------------------------------===//
@@ -301,6 +333,7 @@ struct RenameViewInfo : public AlterViewInfo {
 
 public:
 	unique_ptr<AlterInfo> Copy() const override;
+	string ToString() const override;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AlterViewInfo> Deserialize(Deserializer &deserializer);
 

@@ -16,7 +16,7 @@ namespace duckdb {
 
 class PhysicalBatchCollector : public PhysicalResultCollector {
 public:
-	PhysicalBatchCollector(PreparedStatementData &data);
+	explicit PhysicalBatchCollector(PreparedStatementData &data);
 
 public:
 	unique_ptr<QueryResult> GetResult(GlobalSinkState &state) override;
@@ -32,10 +32,6 @@ public:
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 
 	bool RequiresBatchIndex() const override {
-		return true;
-	}
-
-	bool IsSink() const override {
 		return true;
 	}
 

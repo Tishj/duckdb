@@ -8,9 +8,10 @@
 #include "duckdb/common/radix_partitioning.hpp"
 #include "duckdb/common/row_operations/row_operations.hpp"
 #include "duckdb/common/sort/partition_state.hpp"
-#include "duckdb/common/types/chunk_collection.hpp"
+
 #include "duckdb/common/types/column/column_data_consumer.hpp"
 #include "duckdb/common/types/row/row_data_collection_scanner.hpp"
+#include "duckdb/common/uhugeint.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/common/windows_undefs.hpp"
 #include "duckdb/execution/expression_executor.hpp"
@@ -34,8 +35,8 @@ public:
 	WindowGlobalSinkState(const PhysicalWindow &op, ClientContext &context)
 	    : op(op), mode(DBConfig::GetConfig(context).options.window_mode) {
 
-		D_ASSERT(op.select_list[0]->GetExpressionClass() == ExpressionClass::BOUND_WINDOW);
-		auto &wexpr = op.select_list[0]->Cast<BoundWindowExpression>();
+		D_ASSERT(op.select_list[op.order_idx]->GetExpressionClass() == ExpressionClass::BOUND_WINDOW);
+		auto &wexpr = op.select_list[op.order_idx]->Cast<BoundWindowExpression>();
 
 		global_partition =
 		    make_uniq<PartitionGlobalSinkState>(context, wexpr.partitions, wexpr.orders, op.children[0]->types,
@@ -68,13 +69,21 @@ public:
 // this implements a sorted window functions variant
 PhysicalWindow::PhysicalWindow(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list_p,
                                idx_t estimated_cardinality, PhysicalOperatorType type)
-    : PhysicalOperator(type, std::move(types), estimated_cardinality), select_list(std::move(select_list_p)) {
-	is_order_dependent = false;
-	for (auto &expr : select_list) {
+    : PhysicalOperator(type, std::move(types), estimated_cardinality), select_list(std::move(select_list_p)),
+      order_idx(0), is_order_dependent(false) {
+
+	idx_t max_orders = 0;
+	for (idx_t i = 0; i < select_list.size(); ++i) {
+		auto &expr = select_list[i];
 		D_ASSERT(expr->expression_class == ExpressionClass::BOUND_WINDOW);
 		auto &bound_window = expr->Cast<BoundWindowExpression>();
 		if (bound_window.partitions.empty() && bound_window.orders.empty()) {
 			is_order_dependent = true;
+		}
+
+		if (bound_window.orders.size() > max_orders) {
+			order_idx = i;
+			max_orders = bound_window.orders.size();
 		}
 	}
 }
@@ -162,7 +171,7 @@ SinkFinalizeType PhysicalWindow::Finalize(Pipeline &pipeline, Event &event, Clie
 	}
 
 	// Schedule all the sorts for maximum thread utilisation
-	auto new_event = make_shared<PartitionMergeEvent>(*state.global_partition, pipeline);
+	auto new_event = make_shared_ptr<PartitionMergeEvent>(*state.global_partition, pipeline);
 	event.InsertEvent(std::move(new_event));
 
 	return SinkFinalizeType::READY;
@@ -196,6 +205,8 @@ public:
 	mutable mutex built_lock;
 	//! The number of unfinished tasks
 	atomic<idx_t> tasks_remaining;
+	//! The number of rows returned
+	atomic<idx_t> returned;
 
 public:
 	idx_t MaxThreads() override {
@@ -208,7 +219,7 @@ private:
 };
 
 WindowGlobalSourceState::WindowGlobalSourceState(ClientContext &context_p, WindowGlobalSinkState &gsink_p)
-    : context(context_p), gsink(gsink_p), next_build(0), tasks_remaining(0) {
+    : context(context_p), gsink(gsink_p), next_build(0), tasks_remaining(0), returned(0) {
 	auto &hash_groups = gsink.global_partition->hash_groups;
 
 	auto &gpart = gsink.global_partition;
@@ -247,6 +258,7 @@ public:
 	using HashGroupPtr = unique_ptr<PartitionGlobalHashGroup>;
 	using ExecutorPtr = unique_ptr<WindowExecutor>;
 	using Executors = vector<ExecutorPtr>;
+	using OrderMasks = PartitionGlobalHashGroup::OrderMasks;
 
 	WindowPartitionSourceState(ClientContext &context, WindowGlobalSourceState &gsource)
 	    : context(context), op(gsource.gsink.op), gsource(gsource), read_block_idx(0), unscanned(0) {
@@ -267,11 +279,9 @@ public:
 	unique_ptr<RowDataCollection> heap;
 	RowLayout layout;
 	//! The partition boundary mask
-	vector<validity_t> partition_bits;
 	ValidityMask partition_mask;
 	//! The order boundary mask
-	vector<validity_t> order_bits;
-	ValidityMask order_mask;
+	OrderMasks order_masks;
 	//! External paging
 	bool external;
 	//! The current execution functions
@@ -319,7 +329,7 @@ void WindowPartitionSourceState::MaterializeSortedData() {
 		heap->blocks = std::move(sd.heap_blocks);
 		hash_group.reset();
 	} else {
-		heap = make_uniq<RowDataCollection>(buffer_manager, (idx_t)Storage::BLOCK_SIZE, 1, true);
+		heap = make_uniq<RowDataCollection>(buffer_manager, (idx_t)Storage::BLOCK_SIZE, 1U, true);
 	}
 	heap->count = std::accumulate(heap->blocks.begin(), heap->blocks.end(), idx_t(0),
 	                              [&](idx_t c, const unique_ptr<RowDataBlock> &b) { return c + b->count; });
@@ -360,21 +370,28 @@ void WindowPartitionSourceState::BuildPartition(WindowGlobalSinkState &gstate, c
 	}
 
 	//	Initialise masks to false
-	const auto bit_count = ValidityMask::ValidityMaskSize(count);
-	partition_bits.clear();
-	partition_bits.resize(bit_count, 0);
-	partition_mask.Initialize(partition_bits.data());
+	partition_mask.Initialize(count);
+	partition_mask.SetAllInvalid(count);
 
-	order_bits.clear();
-	order_bits.resize(bit_count, 0);
-	order_mask.Initialize(order_bits.data());
+	for (idx_t expr_idx = 0; expr_idx < op.select_list.size(); ++expr_idx) {
+		D_ASSERT(op.select_list[expr_idx]->GetExpressionClass() == ExpressionClass::BOUND_WINDOW);
+		auto &wexpr = op.select_list[expr_idx]->Cast<BoundWindowExpression>();
+		auto &order_mask = order_masks[wexpr.partitions.size() + wexpr.orders.size()];
+		if (order_mask.IsMaskSet()) {
+			continue;
+		}
+		order_mask.Initialize(count);
+		order_mask.SetAllInvalid(count);
+	}
 
 	// Scan the sorted data into new Collections
 	external = gpart.external;
 	if (gpart.rows && !hash_bin) {
 		// Simple mask
 		partition_mask.SetValidUnsafe(0);
-		order_mask.SetValidUnsafe(0);
+		for (auto &order_mask : order_masks) {
+			order_mask.second.SetValidUnsafe(0);
+		}
 		//	No partition - align the heap blocks with the row blocks
 		rows = gpart.rows->CloneEmpty(gpart.rows->keep_pinned);
 		heap = gpart.strings->CloneEmpty(gpart.strings->keep_pinned);
@@ -384,7 +401,7 @@ void WindowPartitionSourceState::BuildPartition(WindowGlobalSinkState &gstate, c
 		// Overwrite the collections with the sorted data
 		D_ASSERT(gpart.hash_groups[hash_bin].get());
 		hash_group = std::move(gpart.hash_groups[hash_bin]);
-		hash_group->ComputeMasks(partition_mask, order_mask);
+		hash_group->ComputeMasks(partition_mask, order_masks);
 		external = hash_group->global_sort->external;
 		MaterializeSortedData();
 	} else {
@@ -396,6 +413,7 @@ void WindowPartitionSourceState::BuildPartition(WindowGlobalSinkState &gstate, c
 	for (idx_t expr_idx = 0; expr_idx < op.select_list.size(); ++expr_idx) {
 		D_ASSERT(op.select_list[expr_idx]->GetExpressionClass() == ExpressionClass::BOUND_WINDOW);
 		auto &wexpr = op.select_list[expr_idx]->Cast<BoundWindowExpression>();
+		auto &order_mask = order_masks[wexpr.partitions.size() + wexpr.orders.size()];
 		auto wexec = WindowExecutorFactory(wexpr, context, partition_mask, order_mask, count, gstate.mode);
 		executors.emplace_back(std::move(wexec));
 	}
@@ -657,12 +675,21 @@ unique_ptr<GlobalSourceState> PhysicalWindow::GetGlobalSourceState(ClientContext
 bool PhysicalWindow::SupportsBatchIndex() const {
 	//	We can only preserve order for single partitioning
 	//	or work stealing causes out of order batch numbers
-	auto &wexpr = select_list[0]->Cast<BoundWindowExpression>();
+	auto &wexpr = select_list[order_idx]->Cast<BoundWindowExpression>();
 	return wexpr.partitions.empty() && !wexpr.orders.empty();
 }
 
 OrderPreservationType PhysicalWindow::SourceOrder() const {
 	return SupportsBatchIndex() ? OrderPreservationType::FIXED_ORDER : OrderPreservationType::NO_ORDER;
+}
+
+double PhysicalWindow::GetProgress(ClientContext &context, GlobalSourceState &gsource_p) const {
+	auto &gsource = gsource_p.Cast<WindowGlobalSourceState>();
+	const auto returned = gsource.returned.load();
+
+	auto &gsink = gsource.gsink;
+	const auto count = gsink.global_partition->count.load();
+	return count ? (returned / double(count)) : -1;
 }
 
 idx_t PhysicalWindow::GetBatchIndex(ExecutionContext &context, DataChunk &chunk, GlobalSourceState &gstate_p,
@@ -673,6 +700,7 @@ idx_t PhysicalWindow::GetBatchIndex(ExecutionContext &context, DataChunk &chunk,
 
 SourceResultType PhysicalWindow::GetData(ExecutionContext &context, DataChunk &chunk,
                                          OperatorSourceInput &input) const {
+	auto &gsource = input.global_state.Cast<WindowGlobalSourceState>();
 	auto &lsource = input.local_state.Cast<WindowLocalSourceState>();
 	while (chunk.size() == 0) {
 		//	Move to the next bin if we are done.
@@ -683,6 +711,7 @@ SourceResultType PhysicalWindow::GetData(ExecutionContext &context, DataChunk &c
 		}
 
 		lsource.Scan(chunk);
+		gsource.returned += chunk.size();
 	}
 
 	return chunk.size() == 0 ? SourceResultType::FINISHED : SourceResultType::HAVE_MORE_OUTPUT;
