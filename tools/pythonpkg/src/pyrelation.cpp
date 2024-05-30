@@ -4,6 +4,7 @@
 #include "duckdb_python/pytype.hpp"
 #include "duckdb_python/pyresult.hpp"
 #include "duckdb/parser/qualified_name.hpp"
+#include "duckdb/common/arrow/physical_arrow_collector.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb_python/numpy/numpy_type.hpp"
 #include "duckdb/main/relation/query_relation.hpp"
@@ -909,6 +910,15 @@ duckdb::pyarrow::Table DuckDBPyRelation::ToArrowTableInternal(idx_t batch_size, 
 		if (!rel) {
 			return py::none();
 		}
+		auto &context = *rel->context.GetContext();
+		ScopedConfigSetting setting(
+		    context.config,
+		    [&batch_size](ClientConfig &config) {
+			    config.result_collector = [&batch_size](ClientContext &context, PreparedStatementData &data) {
+				    return PhysicalArrowCollector::Create(context, data, batch_size);
+			    };
+		    },
+		    [](ClientConfig &config) { config.result_collector = nullptr; });
 		ExecuteOrThrow();
 	}
 	AssertResultOpen();

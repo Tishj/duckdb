@@ -64,6 +64,7 @@ SinkCombineResultType PhysicalArrowCollector::Combine(ExecutionContext &context,
 	auto &lstate = input.local_state.Cast<ArrowCollectorLocalState>();
 	auto &last_appender = lstate.appender;
 	auto &arrays = lstate.finished_arrays;
+	Printer::Print("PHYSICAL ARROW COLLECTOR");
 	if (arrays.size() == 0 && !last_appender) {
 		// Nothing to do
 		return SinkCombineResultType::FINISHED;
