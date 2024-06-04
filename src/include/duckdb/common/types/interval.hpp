@@ -135,6 +135,12 @@ public:
 	//! Get Interval in Nanoseconds
 	static int64_t GetNanoseconds(const interval_t &val);
 
+	//! Get epoch of Interval in microseconds
+	static int64_t GetEpochMicros(const interval_t &val, bool adjust_for_leap_days = false);
+
+	//! Get epoch of Interval in nanoseconds
+	static int64_t GetEpochNanos(const interval_t &val, bool adjust_for_leap_days = false);
+
 	//! Returns the age between two timestamps (including 30 day months)
 	static interval_t GetAge(timestamp_t timestamp_1, timestamp_t timestamp_2);
 

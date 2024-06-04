@@ -342,6 +342,26 @@ int64_t Interval::GetNanoseconds(const interval_t &val) {
 	return nano;
 }
 
+int64_t Interval::GetEpochMicros(const interval_t &val, bool adjust_for_leap_days) {
+	int64_t interval_years = val.months / Interval::MONTHS_PER_YEAR;
+	int64_t interval_days;
+	interval_days = Interval::DAYS_PER_YEAR * interval_years;
+	interval_days += Interval::DAYS_PER_MONTH * (val.months % Interval::MONTHS_PER_YEAR);
+	interval_days += val.days;
+	int64_t interval_epoch;
+	interval_epoch = interval_days * Interval::SECS_PER_DAY;
+	if (adjust_for_leap_days) {
+		// we add 0.25 days per year to sort of account for leap days
+		interval_epoch += interval_years * (Interval::SECS_PER_DAY / 4);
+	}
+	return (interval_epoch)*Interval::MICROS_PER_SEC + val.micros;
+}
+
+int64_t Interval::GetEpochNanos(const interval_t &val, bool adjust_for_leap_days) {
+	auto micros = GetEpochMicros(val, adjust_for_leap_days);
+	return micros * Interval::NANOS_PER_MICRO;
+}
+
 interval_t Interval::GetAge(timestamp_t timestamp_1, timestamp_t timestamp_2) {
 	D_ASSERT(Timestamp::IsFinite(timestamp_1) && Timestamp::IsFinite(timestamp_2));
 	date_t date1, date2;

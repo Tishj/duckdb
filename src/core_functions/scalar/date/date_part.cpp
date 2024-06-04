@@ -1194,16 +1194,7 @@ double DatePart::EpochOperator::Operation(timestamp_t input) {
 
 template <>
 double DatePart::EpochOperator::Operation(interval_t input) {
-	int64_t interval_years = input.months / Interval::MONTHS_PER_YEAR;
-	int64_t interval_days;
-	interval_days = Interval::DAYS_PER_YEAR * interval_years;
-	interval_days += Interval::DAYS_PER_MONTH * (input.months % Interval::MONTHS_PER_YEAR);
-	interval_days += input.days;
-	int64_t interval_epoch;
-	interval_epoch = interval_days * Interval::SECS_PER_DAY;
-	// we add 0.25 days per year to sort of account for leap days
-	interval_epoch += interval_years * (Interval::SECS_PER_DAY / 4);
-	return interval_epoch + input.micros / double(Interval::MICROS_PER_SEC);
+	return Interval::GetEpochMicros(input, true) / double(Interval::MICROS_PER_SEC);
 }
 
 //	TODO: We can't propagate interval statistics because we can't easily compare interval_t for order.
