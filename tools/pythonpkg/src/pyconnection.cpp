@@ -21,6 +21,7 @@
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
+#include "duckdb/parser/statement/insert_statement.hpp"
 #include "duckdb/parser/tableref/subqueryref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb_python/arrow/arrow_array_stream.hpp"
@@ -1065,6 +1066,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &quer
 	if (alias.empty()) {
 		alias = "unnamed_relation_" + StringUtil::GenerateRandomName(16);
 	}
+	auto context = connection->context;
 
 	auto statements = GetStatements(query);
 	if (statements.empty()) {
@@ -1086,11 +1088,25 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &quer
 		case StatementType::SELECT_STATEMENT: {
 			auto select_statement = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(last_statement));
 			relation = connection->RelationFromQuery(std::move(select_statement), alias);
+			D_ASSERT(relation->properties.return_type == StatementReturnType::QUERY_RESULT);
+			break;
+		}
+		case StatementType::INSERT_STATEMENT: {
+			auto insert_statement = unique_ptr_cast<SQLStatement, InsertStatement>(std::move(last_statement));
+			relation = connection->RelationFromQuery(std::move(insert_statement));
 			break;
 		}
 		default:
 			break;
 		}
+	}
+
+	if (relation && relation->properties.return_type != StatementReturnType::QUERY_RESULT) {
+		// Created relation does not produce a query result, execute it directly
+		auto pending_query = context->PendingQuery(relation, false);
+		auto empty_result = DuckDBPyConnection::CompletePendingQuery(*pending_query);
+		auto py_result = make_uniq<DuckDBPyResult>(std::move(empty_result));
+		return make_uniq<DuckDBPyRelation>(std::move(py_result));
 	}
 
 	if (!relation) {
@@ -1108,8 +1124,8 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &quer
 			res = stream_result.Materialize();
 		}
 		auto &materialized_result = res->Cast<MaterializedQueryResult>();
-		relation = make_shared_ptr<MaterializedRelation>(connection->context, materialized_result.TakeCollection(),
-		                                                 res->names, alias);
+		relation =
+		    make_shared_ptr<MaterializedRelation>(context, materialized_result.TakeCollection(), res->names, alias);
 	}
 	return make_uniq<DuckDBPyRelation>(std::move(relation));
 }

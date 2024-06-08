@@ -25,6 +25,7 @@ MaterializedRelation::MaterializedRelation(const shared_ptr<ClientContext> &cont
 		auto column_definition = ColumnDefinition(name, type);
 		columns.push_back(std::move(column_definition));
 	}
+	properties.return_type = StatementReturnType::QUERY_RESULT;
 }
 
 unique_ptr<QueryNode> MaterializedRelation::GetQueryNode() {

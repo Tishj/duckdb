@@ -25,6 +25,7 @@
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/common/enums/statement_type.hpp"
 
 namespace duckdb {
 struct BoundStatement;
@@ -45,6 +46,7 @@ public:
 
 	ClientContextWrapper context;
 	RelationType type;
+	StatementProperties properties;
 	vector<shared_ptr<ExternalDependency>> external_dependencies;
 
 public:

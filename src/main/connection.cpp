@@ -13,6 +13,7 @@
 #include "duckdb/main/relation/table_relation.hpp"
 #include "duckdb/main/relation/value_relation.hpp"
 #include "duckdb/main/relation/view_relation.hpp"
+#include "duckdb/main/relation/insert_relation.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 
@@ -279,6 +280,10 @@ shared_ptr<Relation> Connection::RelationFromQuery(const string &query, const st
 
 shared_ptr<Relation> Connection::RelationFromQuery(unique_ptr<SelectStatement> select_stmt, const string &alias) {
 	return make_shared_ptr<QueryRelation>(context, std::move(select_stmt), alias);
+}
+
+shared_ptr<Relation> Connection::RelationFromQuery(unique_ptr<InsertStatement> insert_stmt) {
+	return make_shared_ptr<InsertRelation>(context, std::move(insert_stmt));
 }
 
 void Connection::BeginTransaction() {

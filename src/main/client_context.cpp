@@ -1135,6 +1135,7 @@ void ClientContext::TryBindRelation(Relation &relation, vector<ColumnDefinition>
 		// bind the expressions
 		auto binder = Binder::CreateBinder(*this);
 		auto result = relation.Bind(*binder);
+		relation.properties = binder->GetStatementProperties();
 		D_ASSERT(result.names.size() == result.types.size());
 
 		result_columns.reserve(result_columns.size() + result.names.size());
