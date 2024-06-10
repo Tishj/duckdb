@@ -1091,23 +1091,12 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &quer
 			D_ASSERT(relation->properties.return_type == StatementReturnType::QUERY_RESULT);
 			break;
 		}
-		case StatementType::INSERT_STATEMENT: {
-			auto insert_statement = unique_ptr_cast<SQLStatement, InsertStatement>(std::move(last_statement));
-			relation = connection->RelationFromQuery(std::move(insert_statement));
-			break;
-		}
 		default:
 			break;
 		}
 	}
 
-	if (relation && relation->properties.return_type != StatementReturnType::QUERY_RESULT) {
-		// Created relation does not produce a query result, execute it directly
-		auto pending_query = context->PendingQuery(relation, false);
-		auto empty_result = DuckDBPyConnection::CompletePendingQuery(*pending_query);
-		auto py_result = make_uniq<DuckDBPyResult>(std::move(empty_result));
-		return make_uniq<DuckDBPyRelation>(std::move(py_result));
-	}
+	D_ASSERT(!relation || relation->properties.return_type == StatementReturnType::QUERY_RESULT);
 
 	if (!relation) {
 		// Could not create a relation, resort to direct execution
