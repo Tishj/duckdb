@@ -1404,6 +1404,9 @@ string DuckDBPyRelation::ToStringInternal(const BoxRendererConfig &config, bool 
 string DuckDBPyRelation::ToString() {
 	BoxRendererConfig config;
 	config.limit = 10000;
+	if (DuckDBPyConnection::IsJupyter()) {
+		config.max_width = 10000;
+	}
 	return ToStringInternal(config);
 }
 
@@ -1417,6 +1420,9 @@ void DuckDBPyRelation::Print(const Optional<py::int_> &max_width, const Optional
                              const py::object &render_mode) {
 	BoxRendererConfig config;
 	config.limit = 10000;
+	if (DuckDBPyConnection::IsJupyter()) {
+		config.max_width = 10000;
+	}
 
 	bool invalidate_cache = false;
 	if (!py::none().is(max_width)) {
