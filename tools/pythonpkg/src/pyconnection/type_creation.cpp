@@ -1,4 +1,6 @@
 #include "duckdb_python/pyconnection/pyconnection.hpp"
+#include "duckdb/main/connection.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
