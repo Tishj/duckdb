@@ -1,4 +1,4 @@
-#include "json_deserializer.hpp"
+#include "duckdb/common/json/serializer/json_deserializer.hpp"
 #include "duckdb/common/types/blob.hpp"
 
 namespace duckdb {
@@ -159,7 +159,7 @@ int8_t JsonDeserializer::ReadSignedInt8() {
 	if (!yyjson_is_int(val)) {
 		ThrowTypeError(val, "int8_t");
 	}
-	return yyjson_get_sint(val);
+	return UnsafeNumericCast<int8_t>(yyjson_get_sint(val));
 }
 
 uint8_t JsonDeserializer::ReadUnsignedInt8() {
@@ -167,7 +167,7 @@ uint8_t JsonDeserializer::ReadUnsignedInt8() {
 	if (!yyjson_is_uint(val)) {
 		ThrowTypeError(val, "uint8_t");
 	}
-	return yyjson_get_uint(val);
+	return UnsafeNumericCast<uint8_t>(yyjson_get_uint(val));
 }
 
 int16_t JsonDeserializer::ReadSignedInt16() {
@@ -175,7 +175,7 @@ int16_t JsonDeserializer::ReadSignedInt16() {
 	if (!yyjson_is_int(val)) {
 		ThrowTypeError(val, "int16_t");
 	}
-	return yyjson_get_sint(val);
+	return UnsafeNumericCast<int16_t>(yyjson_get_sint(val));
 }
 
 uint16_t JsonDeserializer::ReadUnsignedInt16() {
@@ -183,7 +183,7 @@ uint16_t JsonDeserializer::ReadUnsignedInt16() {
 	if (!yyjson_is_uint(val)) {
 		ThrowTypeError(val, "uint16_t");
 	}
-	return yyjson_get_uint(val);
+	return UnsafeNumericCast<uint16_t>(yyjson_get_uint(val));
 }
 
 int32_t JsonDeserializer::ReadSignedInt32() {
@@ -191,7 +191,7 @@ int32_t JsonDeserializer::ReadSignedInt32() {
 	if (!yyjson_is_int(val)) {
 		ThrowTypeError(val, "int32_t");
 	}
-	return yyjson_get_sint(val);
+	return UnsafeNumericCast<int32_t>(yyjson_get_sint(val));
 }
 
 uint32_t JsonDeserializer::ReadUnsignedInt32() {
@@ -199,7 +199,7 @@ uint32_t JsonDeserializer::ReadUnsignedInt32() {
 	if (!yyjson_is_uint(val)) {
 		ThrowTypeError(val, "uint32_t");
 	}
-	return yyjson_get_uint(val);
+	return UnsafeNumericCast<uint32_t>(yyjson_get_uint(val));
 }
 
 int64_t JsonDeserializer::ReadSignedInt64() {
@@ -223,7 +223,7 @@ float JsonDeserializer::ReadFloat() {
 	if (!yyjson_is_real(val)) {
 		ThrowTypeError(val, "float");
 	}
-	return yyjson_get_real(val);
+	return UnsafeNumericCast<float>(yyjson_get_real(val));
 }
 
 double JsonDeserializer::ReadDouble() {
@@ -276,7 +276,7 @@ void JsonDeserializer::ReadDataPtr(data_ptr_t &ptr, idx_t count) {
 	auto str = yyjson_get_str(val);
 	auto len = yyjson_get_len(val);
 	D_ASSERT(len == count);
-	auto blob = string_t(str, len);
+	auto blob = string_t(str, UnsafeNumericCast<uint32_t>(len));
 	Blob::ToString(blob, char_ptr_cast(ptr));
 }
 

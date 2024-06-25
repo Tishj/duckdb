@@ -6,10 +6,10 @@
 #include "duckdb/parser/parsed_data/create_pragma_function_info.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/planner.hpp"
+#include "duckdb/common/json/serializer/json_deserializer.hpp"
+#include "duckdb/common/json/serializer/json_serializer.hpp"
 #include "json_common.hpp"
-#include "json_deserializer.hpp"
 #include "json_functions.hpp"
-#include "json_serializer.hpp"
 
 namespace duckdb {
 

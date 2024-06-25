@@ -4,6 +4,7 @@ endif()
 
 add_subdirectory(arrow)
 add_subdirectory(crypto)
+add_subdirectory(json)
 add_subdirectory(enums)
 add_subdirectory(exception)
 add_subdirectory(operator)

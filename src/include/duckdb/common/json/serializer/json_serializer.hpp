@@ -1,7 +1,9 @@
 #pragma once
 
-#include "json_common.hpp"
+#include "yyjson.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
+
+using namespace duckdb_yyjson; // NOLINT
 
 namespace duckdb {
 

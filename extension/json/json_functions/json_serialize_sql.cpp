@@ -3,9 +3,9 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/parser/parsed_data/create_pragma_function_info.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "json_deserializer.hpp"
+#include "duckdb/common/json/serializer/json_deserializer.hpp"
+#include "duckdb/common/json/serializer/json_serializer.hpp"
 #include "json_functions.hpp"
-#include "json_serializer.hpp"
 
 namespace duckdb {
 
