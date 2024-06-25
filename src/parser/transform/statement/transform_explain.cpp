@@ -25,6 +25,17 @@ ExplainFormat ParseFormat(const Value &val) {
 	                            allowed_options);
 }
 
+static unique_ptr<ExplainRenderer> CreateRenderer(ExplainFormat format) {
+	switch (format) {
+	case ExplainFormat::TEXT:
+		return make_uniq<TextExplainRenderer>();
+	case ExplainFormat::JSON:
+		return make_uniq<JSONExplainRenderer>();
+	default:
+		throw NotImplementedException("No renderer could be created for ExplainFormat %s", EnumUtil::ToString(format));
+	}
+};
+
 unique_ptr<ExplainStatement> Transformer::TransformExplain(duckdb_libpgquery::PGExplainStmt &stmt) {
 	auto explain_type = ExplainType::EXPLAIN_STANDARD;
 	auto explain_format = ExplainFormat::TEXT;
@@ -50,7 +61,8 @@ unique_ptr<ExplainStatement> Transformer::TransformExplain(duckdb_libpgquery::PG
 			}
 		}
 	}
-	return make_uniq<ExplainStatement>(TransformStatement(*stmt.query), explain_type);
+
+	return make_uniq<ExplainStatement>(TransformStatement(*stmt.query), CreateRenderer(explain_format), explain_type);
 }
 
 } // namespace duckdb

@@ -21,11 +21,13 @@ public:
 	static constexpr const LogicalOperatorType TYPE = LogicalOperatorType::LOGICAL_EXPLAIN;
 
 public:
-	LogicalExplain(unique_ptr<LogicalOperator> plan, ExplainType explain_type)
-	    : LogicalOperator(LogicalOperatorType::LOGICAL_EXPLAIN), explain_type(explain_type) {
+	LogicalExplain(unique_ptr<LogicalOperator> plan, unique_ptr<ExplainRenderer> renderer, ExplainType explain_type)
+	    : LogicalOperator(LogicalOperatorType::LOGICAL_EXPLAIN), renderer(std::move(renderer)),
+	      explain_type(explain_type) {
 		children.push_back(std::move(plan));
 	}
 
+	unique_ptr<ExplainRenderer> renderer;
 	ExplainType explain_type;
 	string physical_plan;
 	string logical_plan_unopt;
@@ -34,6 +36,9 @@ public:
 public:
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<LogicalOperator> Deserialize(Deserializer &deserializer);
+	ExplainRenderer &GetRenderer() {
+		return *renderer;
+	}
 
 	idx_t EstimateCardinality(ClientContext &context) override {
 		return 3;

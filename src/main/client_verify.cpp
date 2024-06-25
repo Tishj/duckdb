@@ -128,7 +128,8 @@ ErrorData ClientContext::VerifyQuery(ClientContextLock &lock, const string &quer
 	// Check explain, only if q does not already contain EXPLAIN
 	if (original->materialized_result->success) {
 		auto explain_q = "EXPLAIN " + query;
-		auto explain_stmt = make_uniq<ExplainStatement>(std::move(statement_copy_for_explain));
+		auto explain_stmt =
+		    make_uniq<ExplainStatement>(std::move(statement_copy_for_explain), make_uniq<TextExplainRenderer>());
 		try {
 			RunStatementInternal(lock, explain_q, std::move(explain_stmt), false, false);
 		} catch (std::exception &ex) { // LCOV_EXCL_START

@@ -10,8 +10,9 @@ BoundStatement Binder::Bind(ExplainStatement &stmt) {
 	// bind the underlying statement
 	auto plan = Bind(*stmt.stmt);
 	// get the unoptimized logical plan, and create the explain statement
-	auto logical_plan_unopt = plan.plan->ToString();
-	auto explain = make_uniq<LogicalExplain>(std::move(plan.plan), stmt.explain_type);
+	auto &renderer = stmt.GetRenderer();
+	auto logical_plan_unopt = renderer.RenderUnoptimizedPlan(*plan.plan);
+	auto explain = make_uniq<LogicalExplain>(std::move(plan.plan), std::move(stmt.renderer), stmt.explain_type);
 	explain->logical_plan_unopt = logical_plan_unopt;
 
 	result.plan = std::move(explain);

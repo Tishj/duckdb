@@ -10,29 +10,31 @@ namespace duckdb {
 
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalExplain &op) {
 	D_ASSERT(op.children.size() == 1);
-	auto logical_plan_opt = op.children[0]->ToString();
+
+	auto &renderer = op.GetRenderer();
+	auto logical_plan_opt = renderer.RenderLogicalPlan(*op.children[0]);
 	auto plan = CreatePlan(*op.children[0]);
 	if (op.explain_type == ExplainType::EXPLAIN_ANALYZE) {
 		auto result = make_uniq<PhysicalExplainAnalyze>(op.types);
 		result->children.push_back(std::move(plan));
 		return std::move(result);
 	}
-
-	op.physical_plan = plan->ToString();
-	// the output of the explain
 	vector<string> keys, values;
-	switch (ClientConfig::GetConfig(context).explain_output_type) {
-	case ExplainOutputType::OPTIMIZED_ONLY:
-		keys = {"logical_opt"};
-		values = {logical_plan_opt};
-		break;
-	case ExplainOutputType::PHYSICAL_ONLY:
-		keys = {"physical_plan"};
-		values = {op.physical_plan};
-		break;
-	default:
-		keys = {"logical_plan", "logical_opt", "physical_plan"};
-		values = {op.logical_plan_unopt, logical_plan_opt, op.physical_plan};
+	auto explain_output_type = ClientConfig::GetConfig(context).explain_output_type;
+	if (explain_output_type == ExplainOutputType::ALL) {
+		// Unoptimized logical plan
+		keys.push_back("logical_plan");
+		values.push_back(op.logical_plan_unopt);
+	}
+	if (explain_output_type == ExplainOutputType::ALL || explain_output_type == ExplainOutputType::OPTIMIZED_ONLY) {
+		// Optimized logical plan
+		keys.push_back("logical_opt");
+		values.push_back(logical_plan_opt);
+	}
+	if (explain_output_type == ExplainOutputType::ALL || explain_output_type == ExplainOutputType::PHYSICAL_ONLY) {
+		// Physical plan
+		keys.push_back("physical_plan");
+		values.push_back(renderer.RenderPhysicalPlan(*plan));
 	}
 
 	// create a ColumnDataCollection from the output
