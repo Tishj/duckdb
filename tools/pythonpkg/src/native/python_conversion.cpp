@@ -488,6 +488,10 @@ PythonObjectType GetPythonObjectType(py::handle &ele) {
 	} else if (py::isinstance(ele, import_cache.duckdb.Value())) {
 		return PythonObjectType::Value;
 	} else {
+		auto base_geometry = py::module_::import("shapely.geometry.base").attr("BaseGeometry");
+		if (py::isinstance(ele, base_geometry)) {
+			return PythonObjectType::ShapelyGeometry;
+		}
 		return PythonObjectType::Other;
 	}
 }
@@ -634,6 +638,8 @@ Value TransformPythonValue(py::handle ele, const LogicalType &target_type, bool 
 		}
 		return TransformPythonValue(object, internal_type->Type());
 	}
+	case PythonObjectType::ShapelyGeometry:
+		return TransformPythonValue(ele.attr("wkb"), target_type);
 	case PythonObjectType::Other:
 		throw NotImplementedException("Unable to transform python value of type '%s' to DuckDB LogicalType",
 		                              py::str(ele.get_type()).cast<string>());

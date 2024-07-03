@@ -93,6 +93,9 @@ static NumpyNullableType ConvertNumpyTypeInternal(const string &col_type_str) {
 	if (col_type_str == "category") {
 		return NumpyNullableType::CATEGORY;
 	}
+	if (col_type_str == "geometry") {
+		return NumpyNullableType::OBJECT;
+	}
 	throw NotImplementedException("Data type '%s' not recognized", col_type_str);
 }
 

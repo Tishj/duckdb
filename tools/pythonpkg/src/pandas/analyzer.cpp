@@ -443,6 +443,8 @@ LogicalType PandasAnalyzer::GetItemType(py::object ele, bool &can_convert) {
 		// Fall back to string for unknown types
 		can_convert = false;
 		return LogicalType::VARCHAR;
+	case PythonObjectType::ShapelyGeometry:
+		return LogicalType::BLOB;
 	default:
 		throw InternalException("Unsupported PythonObjectType");
 	}

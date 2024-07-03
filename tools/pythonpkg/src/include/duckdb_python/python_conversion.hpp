@@ -40,7 +40,8 @@ enum class PythonObjectType {
 	Dict,
 	NdArray,
 	NdDatetime,
-	Value
+	Value,
+	ShapelyGeometry
 };
 
 PythonObjectType GetPythonObjectType(py::handle &ele);
