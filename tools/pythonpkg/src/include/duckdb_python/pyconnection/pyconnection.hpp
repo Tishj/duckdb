@@ -38,7 +38,7 @@ struct ConnectionClosedFailureHandler {
 };
 
 template <class T>
-using connection_ptr = unique_ptr<T, std::default_delete<T>, true, ConnectionClosedFailureHandler>;
+using unique_connection_ptr = unique_ptr<T, std::default_delete<T>, true, ConnectionClosedFailureHandler>;
 
 enum class PythonEnvironmentType { NORMAL, INTERACTIVE, JUPYTER };
 
@@ -53,8 +53,8 @@ public:
 struct DuckDBPyConnection : public enable_shared_from_this<DuckDBPyConnection> {
 public:
 	shared_ptr<DuckDB> database;
-	connection_ptr<Connection> connection;
-	connection_ptr<DuckDBPyRelation> result;
+	unique_connection_ptr<Connection> connection;
+	unique_connection_ptr<DuckDBPyRelation> result;
 	vector<weak_ptr<DuckDBPyConnection>> cursors;
 	unordered_map<string, shared_ptr<Relation>> temporary_views;
 	std::mutex py_connection_lock;

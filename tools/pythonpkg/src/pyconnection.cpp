@@ -69,8 +69,8 @@ shared_ptr<PythonImportCache> DuckDBPyConnection::import_cache = nullptr;       
 PythonEnvironmentType DuckDBPyConnection::environment = PythonEnvironmentType::NORMAL; // NOLINT: allow global
 
 template <class UNIQUE_PTR, class DATA_TYPE = UNIQUE_PTR::element_type>
-static connection_ptr<DATA_TYPE> CastToCloseGuardedPointer(UNIQUE_PTR &&src) {
-	return connection_ptr<DATA_TYPE>(src.release());
+static unique_connection_ptr<DATA_TYPE> CastToCloseGuardedUniquePointer(UNIQUE_PTR &&src) {
+	return unique_connection_ptr<DATA_TYPE>(src.release());
 }
 
 DuckDBPyConnection::~DuckDBPyConnection() {
@@ -461,7 +461,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::ExecuteMany(const py::object 
 	// Set the internal 'result' object
 	if (query_result) {
 		auto py_result = make_uniq<DuckDBPyResult>(std::move(query_result));
-		result = CastToCloseGuardedPointer(make_uniq<DuckDBPyRelation>(std::move(py_result)));
+		result = CastToCloseGuardedUniquePointer(make_uniq<DuckDBPyRelation>(std::move(py_result)));
 	}
 
 	return shared_from_this();
@@ -618,7 +618,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Execute(const py::object &que
 	// Set the internal 'result' object
 	if (res) {
 		auto py_result = make_uniq<DuckDBPyResult>(std::move(res));
-		result = CastToCloseGuardedPointer(make_uniq<DuckDBPyRelation>(std::move(py_result)));
+		result = CastToCloseGuardedUniquePointer(make_uniq<DuckDBPyRelation>(std::move(py_result)));
 	}
 	return shared_from_this();
 }
@@ -1490,7 +1490,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Cursor() {
 	}
 	auto res = make_shared_ptr<DuckDBPyConnection>();
 	res->database = database;
-	res->connection = CastToCloseGuardedPointer(make_uniq<Connection>(*res->database));
+	res->connection = CastToCloseGuardedUniquePointer(make_uniq<Connection>(*res->database));
 	cursors.push_back(res);
 	return res;
 }
@@ -1586,7 +1586,7 @@ void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig
 	bool cache_instance = database != ":memory:" && !database.empty();
 	config.replacement_scans.emplace_back(PythonReplacementScan::Replace);
 	res.database = instance_cache.CreateInstance(database, config, cache_instance);
-	res.connection = CastToCloseGuardedPointer(make_uniq<Connection>(*res.database));
+	res.connection = CastToCloseGuardedUniquePointer(make_uniq<Connection>(*res.database));
 	auto &context = *res.connection->context;
 	PandasScanFunction scan_fun;
 	CreateTableFunctionInfo scan_info(scan_fun);
@@ -1640,7 +1640,7 @@ static shared_ptr<DuckDBPyConnection> FetchOrCreateInstance(const string &databa
 		CreateNewInstance(*res, database, config);
 		return res;
 	}
-	res->connection = CastToCloseGuardedPointer(make_uniq<Connection>(*res->database));
+	res->connection = CastToCloseGuardedUniquePointer(make_uniq<Connection>(*res->database));
 	return res;
 }
 

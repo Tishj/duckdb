@@ -7,33 +7,14 @@
 #include <memory>
 #include <type_traits>
 
+struct UniquePtrNullError {
+	static constexpr const char *MESSAGE = "Attempted to dereference unique_ptr that is NULL!";
+};
+
 namespace duckdb {
 
-template <bool SAFE>
-struct DefaultHandler {};
-
-template <>
-struct DefaultHandler<true> {
-	// Safety is enabled, do a nullptr check
-	static void OP(const bool null) {
-#if defined(DUCKDB_DEBUG_NO_SAFETY) || defined(DUCKDB_CLANG_TIDY)
-		return;
-#else
-		if (DUCKDB_UNLIKELY(null)) {
-			throw duckdb::InternalException("Attempted to dereference unique_ptr that is NULL!");
-		}
-#endif
-	}
-};
-
-template <>
-struct DefaultHandler<false> {
-	static void OP(const bool null) {
-	}
-};
-
 template <class DATA_TYPE, class DELETER = std::default_delete<DATA_TYPE>, bool SAFE = true,
-          class AccessFailureHandler = DefaultHandler<MemorySafety<SAFE>::ENABLED>>
+          class AccessFailureHandler = MemorySafetyHandler<MemorySafety<SAFE>::ENABLED, UniquePtrNullError>>
 class unique_ptr : public std::unique_ptr<DATA_TYPE, DELETER> { // NOLINT: naming
 public:
 	using original = std::unique_ptr<DATA_TYPE, DELETER>;
