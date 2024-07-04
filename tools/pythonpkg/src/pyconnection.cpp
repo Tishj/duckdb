@@ -68,6 +68,11 @@ DBInstanceCache instance_cache;                                                 
 shared_ptr<PythonImportCache> DuckDBPyConnection::import_cache = nullptr;              // NOLINT: allow global
 PythonEnvironmentType DuckDBPyConnection::environment = PythonEnvironmentType::NORMAL; // NOLINT: allow global
 
+template <class UNIQUE_PTR, class DATA_TYPE = UNIQUE_PTR::element_type>
+static connection_ptr<DATA_TYPE> CastToCloseGuardedPointer(UNIQUE_PTR &&src) {
+	return connection_ptr<DATA_TYPE>(src.release());
+}
+
 DuckDBPyConnection::~DuckDBPyConnection() {
 	try {
 		py::gil_scoped_release gil;
@@ -335,9 +340,6 @@ py::list DuckDBPyConnection::ListFilesystems() {
 }
 
 py::list DuckDBPyConnection::ExtractStatements(const string &query) {
-	if (!connection) {
-		throw ConnectionException("Connection already closed!");
-	}
 	py::list result;
 	auto statements = connection->ExtractStatements(query);
 	for (auto &statement : statements) {
@@ -352,9 +354,6 @@ bool DuckDBPyConnection::FileSystemIsRegistered(const string &name) {
 }
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::UnregisterUDF(const string &name) {
-	if (!connection) {
-		throw ConnectionException("Connection already closed!");
-	}
 	auto entry = registered_functions.find(name);
 	if (entry == registered_functions.end()) {
 		// Not registered or already unregistered
@@ -385,9 +384,6 @@ DuckDBPyConnection::RegisterScalarUDF(const string &name, const py::function &ud
                                       const shared_ptr<DuckDBPyType> &return_type_p, PythonUDFType type,
                                       FunctionNullHandling null_handling, PythonExceptionHandling exception_handling,
                                       bool side_effects) {
-	if (!connection) {
-		throw ConnectionException("Connection already closed!");
-	}
 	auto &context = *connection->context;
 
 	if (context.transaction.HasActiveTransaction()) {
@@ -465,7 +461,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::ExecuteMany(const py::object 
 	// Set the internal 'result' object
 	if (query_result) {
 		auto py_result = make_uniq<DuckDBPyResult>(std::move(query_result));
-		result = make_uniq<DuckDBPyRelation>(std::move(py_result));
+		result = CastToCloseGuardedPointer(make_uniq<DuckDBPyRelation>(std::move(py_result)));
 	}
 
 	return shared_from_this();
@@ -561,9 +557,6 @@ unique_ptr<PreparedStatement> DuckDBPyConnection::PrepareQuery(unique_ptr<SQLSta
 }
 
 unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(PreparedStatement &prep, py::object params) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	if (params.is_none()) {
 		params = py::list();
 	}
@@ -587,9 +580,6 @@ unique_ptr<QueryResult> DuckDBPyConnection::ExecuteInternal(PreparedStatement &p
 
 vector<unique_ptr<SQLStatement>> DuckDBPyConnection::GetStatements(const py::object &query) {
 	vector<unique_ptr<SQLStatement>> result;
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 
 	shared_ptr<DuckDBPyStatement> statement_obj;
 	if (py::try_cast(query, statement_obj)) {
@@ -628,7 +618,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Execute(const py::object &que
 	// Set the internal 'result' object
 	if (res) {
 		auto py_result = make_uniq<DuckDBPyResult>(std::move(res));
-		result = make_uniq<DuckDBPyRelation>(std::move(py_result));
+		result = CastToCloseGuardedPointer(make_uniq<DuckDBPyRelation>(std::move(py_result)));
 	}
 	return shared_from_this();
 }
@@ -683,10 +673,6 @@ void DuckDBPyConnection::RegisterArrowObject(const py::object &arrow_object, con
 
 shared_ptr<DuckDBPyConnection> DuckDBPyConnection::RegisterPythonObject(const string &name,
                                                                         const py::object &python_object) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
-
 	if (DuckDBPyConnection::IsPandasDataframe(python_object)) {
 		if (PandasDataFrame::IsPyArrowBacked(python_object)) {
 			auto arrow_table = PandasDataFrame::ToArrowTable(python_object);
@@ -790,9 +776,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadJSON(
     const Optional<py::object> &maximum_sample_files, const Optional<py::object> &filename,
     const Optional<py::object> &hive_partitioning, const Optional<py::object> &union_by_name,
     const Optional<py::object> &hive_types, const Optional<py::object> &hive_types_autocast) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 
 	named_parameter_map_t options;
 
@@ -971,9 +954,7 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::ReadCSV(
     const py::object &date_format, const py::object &timestamp_format, const py::object &sample_size,
     const py::object &all_varchar, const py::object &normalize_names, const py::object &filename,
     const py::object &null_padding, const py::object &names_p) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
+
 	CSVReaderOptions options;
 	auto path_like = GetPathLike(name_p);
 	auto &name = path_like.files;
@@ -1199,9 +1180,6 @@ void DuckDBPyConnection::ExecuteImmediately(vector<unique_ptr<SQLStatement>> sta
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &query, string alias, py::object params) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	if (alias.empty()) {
 		alias = "unnamed_relation_" + StringUtil::GenerateRandomName(16);
 	}
@@ -1255,9 +1233,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &quer
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	auto qualified_name = QualifiedName::Parse(tname);
 	if (qualified_name.schema.empty()) {
 		qualified_name.schema = DEFAULT_SCHEMA;
@@ -1273,9 +1248,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Table(const string &tname) {
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Values(py::object params) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	if (params.is_none()) {
 		params = py::list();
 	}
@@ -1287,9 +1259,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::Values(py::object params) {
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::View(const string &vname) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	// First check our temporary view
 	if (temporary_views.find(vname) != temporary_views.end()) {
 		return make_uniq<DuckDBPyRelation>(temporary_views[vname]);
@@ -1304,18 +1273,12 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::TableFunction(const string &fna
 	if (!py::is_list_like(params)) {
 		throw InvalidInputException("'params' has to be a list of parameters");
 	}
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 
 	return make_uniq<DuckDBPyRelation>(
 	    connection->TableFunction(fname, DuckDBPyConnection::TransformPythonParamList(params)));
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromDF(const PandasDataFrame &value) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	string name = "df_" + StringUtil::GenerateRandomName();
 	if (PandasDataFrame::IsPyArrowBacked(value)) {
 		auto table = PandasDataFrame::ToArrowTable(value);
@@ -1336,9 +1299,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromParquet(const string &file_
                                                              bool file_row_number, bool filename,
                                                              bool hive_partitioning, bool union_by_name,
                                                              const py::object &compression) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	string name = "parquet_" + StringUtil::GenerateRandomName();
 	vector<Value> params;
 	params.emplace_back(file_glob);
@@ -1362,9 +1322,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromParquets(const vector<strin
                                                               bool file_row_number, bool filename,
                                                               bool hive_partitioning, bool union_by_name,
                                                               const py::object &compression) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	string name = "parquet_" + StringUtil::GenerateRandomName();
 	vector<Value> params;
 	auto file_globs_as_value = vector<Value>();
@@ -1419,9 +1376,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromArrow(py::object &arrow_obj
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromSubstrait(py::bytes &proto) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	string name = "substrait_" + StringUtil::GenerateRandomName();
 	vector<Value> params;
 	params.emplace_back(Value::BLOB_RAW(proto));
@@ -1429,9 +1383,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromSubstrait(py::bytes &proto)
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::GetSubstrait(const string &query, bool enable_optimizer) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	vector<Value> params;
 	params.emplace_back(query);
 	named_parameter_map_t named_parameters({{"enable_optimizer", Value::BOOLEAN(enable_optimizer)}});
@@ -1440,9 +1391,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::GetSubstrait(const string &quer
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::GetSubstraitJSON(const string &query, bool enable_optimizer) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	vector<Value> params;
 	params.emplace_back(query);
 	named_parameter_map_t named_parameters({{"enable_optimizer", Value::BOOLEAN(enable_optimizer)}});
@@ -1451,9 +1399,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::GetSubstraitJSON(const string &
 }
 
 unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromSubstraitJSON(const string &json) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	string name = "from_substrait_" + StringUtil::GenerateRandomName();
 	vector<Value> params;
 	params.emplace_back(json);
@@ -1461,9 +1406,6 @@ unique_ptr<DuckDBPyRelation> DuckDBPyConnection::FromSubstraitJSON(const string 
 }
 
 unordered_set<string> DuckDBPyConnection::GetTableNames(const string &query) {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	return connection->GetTableNames(query);
 }
 
@@ -1530,9 +1472,6 @@ void DuckDBPyConnection::Close() {
 }
 
 void DuckDBPyConnection::Interrupt() {
-	if (!connection) {
-		throw ConnectionException("Connection has already been closed");
-	}
 	connection->Interrupt();
 }
 
@@ -1551,7 +1490,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Cursor() {
 	}
 	auto res = make_shared_ptr<DuckDBPyConnection>();
 	res->database = database;
-	res->connection = make_uniq<Connection>(*res->database);
+	res->connection = CastToCloseGuardedPointer(make_uniq<Connection>(*res->database));
 	cursors.push_back(res);
 	return res;
 }
@@ -1647,7 +1586,7 @@ void CreateNewInstance(DuckDBPyConnection &res, const string &database, DBConfig
 	bool cache_instance = database != ":memory:" && !database.empty();
 	config.replacement_scans.emplace_back(PythonReplacementScan::Replace);
 	res.database = instance_cache.CreateInstance(database, config, cache_instance);
-	res.connection = make_uniq<Connection>(*res.database);
+	res.connection = CastToCloseGuardedPointer(make_uniq<Connection>(*res.database));
 	auto &context = *res.connection->context;
 	PandasScanFunction scan_fun;
 	CreateTableFunctionInfo scan_info(scan_fun);
@@ -1701,7 +1640,7 @@ static shared_ptr<DuckDBPyConnection> FetchOrCreateInstance(const string &databa
 		CreateNewInstance(*res, database, config);
 		return res;
 	}
-	res->connection = make_uniq<Connection>(*res->database);
+	res->connection = CastToCloseGuardedPointer(make_uniq<Connection>(*res->database));
 	return res;
 }
 

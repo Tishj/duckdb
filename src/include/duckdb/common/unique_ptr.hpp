@@ -9,15 +9,13 @@
 
 namespace duckdb {
 
-template <class DATA_TYPE, class DELETER = std::default_delete<DATA_TYPE>, bool SAFE = true>
-class unique_ptr : public std::unique_ptr<DATA_TYPE, DELETER> { // NOLINT: naming
-public:
-	using original = std::unique_ptr<DATA_TYPE, DELETER>;
-	using original::original; // NOLINT
-	using pointer = typename original::pointer;
+template <bool SAFE>
+struct DefaultHandler {};
 
-private:
-	static inline void AssertNotNull(const bool null) {
+template <>
+struct DefaultHandler<true> {
+	// Safety is enabled, do a nullptr check
+	static void OP(const bool null) {
 #if defined(DUCKDB_DEBUG_NO_SAFETY) || defined(DUCKDB_CLANG_TIDY)
 		return;
 #else
@@ -26,12 +24,28 @@ private:
 		}
 #endif
 	}
+};
+
+template <>
+struct DefaultHandler<false> {
+	static void OP(const bool null) {
+	}
+};
+
+template <class DATA_TYPE, class DELETER = std::default_delete<DATA_TYPE>, bool SAFE = true,
+          class AccessFailureHandler = DefaultHandler<MemorySafety<SAFE>::ENABLED>>
+class unique_ptr : public std::unique_ptr<DATA_TYPE, DELETER> { // NOLINT: naming
+public:
+	using original = std::unique_ptr<DATA_TYPE, DELETER>;
+	using original::original; // NOLINT
+	using pointer = typename original::pointer;
+	using element_type = typename original::element_type;
 
 public:
 	typename std::add_lvalue_reference<DATA_TYPE>::type operator*() const { // NOLINT: hiding on purpose
 		const auto ptr = original::get();
 		if (MemorySafety<SAFE>::ENABLED) {
-			AssertNotNull(!ptr);
+			AccessFailureHandler::OP(!ptr);
 		}
 		return *ptr;
 	}
@@ -39,7 +53,7 @@ public:
 	typename original::pointer operator->() const { // NOLINT: hiding on purpose
 		const auto ptr = original::get();
 		if (MemorySafety<SAFE>::ENABLED) {
-			AssertNotNull(!ptr);
+			AccessFailureHandler::OP(!ptr);
 		}
 		return ptr;
 	}
@@ -55,28 +69,18 @@ public:
 };
 
 // FIXME: DELETER is defined, but we use std::default_delete???
-template <class DATA_TYPE, class DELETER, bool SAFE>
-class unique_ptr<DATA_TYPE[], DELETER, SAFE> : public std::unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>> {
+template <class DATA_TYPE, class DELETER, bool SAFE, class AccessFailureHandler>
+class unique_ptr<DATA_TYPE[], DELETER, SAFE, AccessFailureHandler>
+    : public std::unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>> {
 public:
 	using original = std::unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>>;
 	using original::original;
-
-private:
-	static inline void AssertNotNull(const bool null) {
-#if defined(DUCKDB_DEBUG_NO_SAFETY) || defined(DUCKDB_CLANG_TIDY)
-		return;
-#else
-		if (DUCKDB_UNLIKELY(null)) {
-			throw duckdb::InternalException("Attempted to dereference unique_ptr that is NULL!");
-		}
-#endif
-	}
 
 public:
 	typename std::add_lvalue_reference<DATA_TYPE>::type operator[](size_t __i) const { // NOLINT: hiding on purpose
 		const auto ptr = original::get();
 		if (MemorySafety<SAFE>::ENABLED) {
-			AssertNotNull(!ptr);
+			AccessFailureHandler::OP(!ptr);
 		}
 		return ptr[__i];
 	}
