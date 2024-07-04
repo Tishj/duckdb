@@ -28,6 +28,9 @@ class type_caster<shared_ptr<DuckDBPyConnection>>
 			return false;
 		}
 		value = std::move(holder);
+		if (!value->connection) {
+			throw duckdb::ConnectionException("Connection has already been closed");
+		}
 		return true;
 	}
 
