@@ -8,6 +8,7 @@ add_subdirectory(enums)
 add_subdirectory(exception)
 add_subdirectory(operator)
 add_subdirectory(progress_bar)
+add_subdirectory(tree_renderer)
 add_subdirectory(row_operations)
 add_subdirectory(serializer)
 add_subdirectory(sort)
@@ -43,7 +44,6 @@ add_library_unity(
   fsst.cpp
   gzip_file_system.cpp
   hive_partitioning.cpp
-  http_state.cpp
   pipe_file_system.cpp
   local_file_system.cpp
   multi_file_list.cpp

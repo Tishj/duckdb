@@ -1,13 +1,12 @@
 #include "duckdb/main/query_profiler.hpp"
 
 #include "duckdb/common/fstream.hpp"
-#include "duckdb/common/http_state.hpp"
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/printer.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/to_string.hpp"
-#include "duckdb/common/tree_renderer.hpp"
+#include "duckdb/common/tree_renderer/text_tree_renderer.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/execution/operator/helper/physical_execute.hpp"
 #include "duckdb/execution/operator/join/physical_left_delim_join.hpp"
@@ -34,8 +33,20 @@ bool QueryProfiler::IsDetailedEnabled() const {
 	return is_explain_analyze ? false : ClientConfig::GetConfig(context).enable_detailed_profiling;
 }
 
-ProfilerPrintFormat QueryProfiler::GetPrintFormat() const {
-	return ClientConfig::GetConfig(context).profiler_print_format;
+ProfilerPrintFormat QueryProfiler::GetPrintFormat(ExplainFormat format) const {
+	auto print_format = ClientConfig::GetConfig(context).profiler_print_format;
+	if (format == ExplainFormat::DEFAULT) {
+		return print_format;
+	}
+	switch (format) {
+	case ExplainFormat::TEXT:
+		return ProfilerPrintFormat::QUERY_TREE;
+	case ExplainFormat::JSON:
+		return ProfilerPrintFormat::JSON;
+	default:
+		throw NotImplementedException("No mapping from ExplainFormat::%s to ProfilerPrintFormat",
+		                              EnumUtil::ToString(format));
+	}
 }
 
 bool QueryProfiler::PrintOptimizerOutput() const {
@@ -184,8 +195,8 @@ void QueryProfiler::EndQuery() {
 	this->is_explain_analyze = false;
 }
 
-string QueryProfiler::ToString() const {
-	const auto format = GetPrintFormat();
+string QueryProfiler::ToString(ExplainFormat explain_format) const {
+	const auto format = GetPrintFormat(explain_format);
 	switch (format) {
 	case ProfilerPrintFormat::QUERY_TREE:
 	case ProfilerPrintFormat::QUERY_TREE_OPTIMIZER:
@@ -334,7 +345,7 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 	profiler.timings.clear();
 }
 
-static string DrawPadded(const string &str, idx_t width) {
+string QueryProfiler::DrawPadded(const string &str, idx_t width) {
 	if (str.size() > width) {
 		return str.substr(0, width);
 	} else {
@@ -396,28 +407,8 @@ void QueryProfiler::QueryTreeToStream(std::ostream &ss) const {
 		return;
 	}
 
-	auto http_state = HTTPState::TryGetState(context, false);
-	if (http_state && !http_state->IsEmpty()) {
-		string read = "in: " + StringUtil::BytesToHumanReadableString(http_state->total_bytes_received);
-		string written = "out: " + StringUtil::BytesToHumanReadableString(http_state->total_bytes_sent);
-		string head = "#HEAD: " + to_string(http_state->head_count);
-		string get = "#GET: " + to_string(http_state->get_count);
-		string put = "#PUT: " + to_string(http_state->put_count);
-		string post = "#POST: " + to_string(http_state->post_count);
-
-		constexpr idx_t TOTAL_BOX_WIDTH = 39;
-		ss << "┌─────────────────────────────────────┐\n";
-		ss << "│┌───────────────────────────────────┐│\n";
-		ss << "││            HTTP Stats:            ││\n";
-		ss << "││                                   ││\n";
-		ss << "││" + DrawPadded(read, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(written, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(head, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(get, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(put, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(post, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "│└───────────────────────────────────┘│\n";
-		ss << "└─────────────────────────────────────┘\n";
+	for (auto &it : context.registered_state) {
+		it.second->WriteProfilingInformation(ss);
 	}
 
 	constexpr idx_t TOTAL_BOX_WIDTH = 39;
@@ -622,7 +613,7 @@ void QueryProfiler::Initialize(const PhysicalOperator &root_op) {
 }
 
 void QueryProfiler::Render(const ProfilingNode &node, std::ostream &ss) const {
-	TreeRenderer renderer;
+	TextTreeRenderer renderer;
 	if (IsDetailedEnabled()) {
 		renderer.EnableDetailed();
 	} else {

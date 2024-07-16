@@ -22,6 +22,7 @@
 #include "duckdb/common/enums/cte_materialize.hpp"
 #include "duckdb/common/enums/date_part_specifier.hpp"
 #include "duckdb/common/enums/debug_initialize.hpp"
+#include "duckdb/common/enums/explain_format.hpp"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/common/enums/file_compression_type.hpp"
 #include "duckdb/common/enums/file_glob_options.hpp"
@@ -2037,6 +2038,34 @@ ExceptionType EnumUtil::FromString<ExceptionType>(const char *value) {
 	}
 	if (StringUtil::Equals(value, "SEQUENCE")) {
 		return ExceptionType::SEQUENCE;
+	}
+	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented", value));
+}
+
+template<>
+const char* EnumUtil::ToChars<ExplainFormat>(ExplainFormat value) {
+	switch(value) {
+	case ExplainFormat::DEFAULT:
+		return "DEFAULT";
+	case ExplainFormat::TEXT:
+		return "TEXT";
+	case ExplainFormat::JSON:
+		return "JSON";
+	default:
+		throw NotImplementedException(StringUtil::Format("Enum value: '%d' not implemented", value));
+	}
+}
+
+template<>
+ExplainFormat EnumUtil::FromString<ExplainFormat>(const char *value) {
+	if (StringUtil::Equals(value, "DEFAULT")) {
+		return ExplainFormat::DEFAULT;
+	}
+	if (StringUtil::Equals(value, "TEXT")) {
+		return ExplainFormat::TEXT;
+	}
+	if (StringUtil::Equals(value, "JSON")) {
+		return ExplainFormat::JSON;
 	}
 	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented", value));
 }
@@ -4468,6 +4497,8 @@ const char* EnumUtil::ToChars<OptimizerType>(OptimizerType value) {
 		return "FILTER_PULLUP";
 	case OptimizerType::FILTER_PUSHDOWN:
 		return "FILTER_PUSHDOWN";
+	case OptimizerType::CTE_FILTER_PUSHER:
+		return "CTE_FILTER_PUSHER";
 	case OptimizerType::REGEX_RANGE:
 		return "REGEX_RANGE";
 	case OptimizerType::IN_CLAUSE:
@@ -4522,6 +4553,9 @@ OptimizerType EnumUtil::FromString<OptimizerType>(const char *value) {
 	}
 	if (StringUtil::Equals(value, "FILTER_PUSHDOWN")) {
 		return OptimizerType::FILTER_PUSHDOWN;
+	}
+	if (StringUtil::Equals(value, "CTE_FILTER_PUSHER")) {
+		return OptimizerType::CTE_FILTER_PUSHER;
 	}
 	if (StringUtil::Equals(value, "REGEX_RANGE")) {
 		return OptimizerType::REGEX_RANGE;
