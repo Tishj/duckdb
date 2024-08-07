@@ -45,6 +45,9 @@ public:
 	virtual string ToString() const = 0;
 	//! Create a copy of this SelectStatement
 	DUCKDB_API virtual unique_ptr<SQLStatement> Copy() const = 0;
+	virtual const case_insensitive_map_t<idx_t> &GetParameterMap() const {
+		return named_param_map;
+	}
 
 public:
 public:

@@ -35,6 +35,9 @@ public:
 	unique_ptr<SQLStatement> Copy() const override;
 	string OptionsToString() const;
 	string ToString() const override;
+	const case_insensitive_map_t<idx_t> &GetParameterMap() const override {
+		return stmt->named_param_map;
+	}
 };
 
 } // namespace duckdb

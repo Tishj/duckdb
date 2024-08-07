@@ -1277,7 +1277,7 @@ void DuckDBPyConnection::ExecuteImmediately(vector<unique_ptr<SQLStatement>> sta
 		return;
 	}
 	for (auto &stmt : statements) {
-		if (!stmt->named_param_map.empty()) {
+		if (!stmt->GetParameterMap().empty()) {
 			throw NotImplementedException(
 			    "Prepared parameters are only supported for the last statement, please split your query up into "
 			    "separate 'execute' calls if you want to use prepared parameters");

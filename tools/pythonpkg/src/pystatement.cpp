@@ -35,7 +35,7 @@ string DuckDBPyStatement::Query() const {
 
 py::set DuckDBPyStatement::NamedParameters() const {
 	py::set result;
-	auto &named_parameters = statement->named_param_map;
+	auto &named_parameters = statement->GetParameterMap();
 	for (auto &param : named_parameters) {
 		result.add(param.first);
 	}

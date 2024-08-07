@@ -12,7 +12,7 @@
 namespace duckdb {
 
 BoundStatement Binder::Bind(ExecuteStatement &stmt) {
-	auto parameter_count = stmt.named_param_map.size();
+	auto parameter_count = stmt.GetParameterMap().size();
 
 	// bind the prepared statement
 	auto &client_data = ClientData::Get(context);
@@ -25,7 +25,7 @@ BoundStatement Binder::Bind(ExecuteStatement &stmt) {
 	// check if we need to rebind the prepared statement
 	// this happens if the catalog changes, since in this case e.g. tables we relied on may have been deleted
 	auto prepared = entry->second;
-	auto &named_param_map = prepared->unbound_statement->named_param_map;
+	auto &named_param_map = prepared->unbound_statement->GetParameterMap();
 
 	PreparedStatement::VerifyParameters(stmt.named_values, named_param_map);
 
