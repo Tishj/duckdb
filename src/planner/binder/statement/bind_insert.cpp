@@ -192,6 +192,9 @@ void Binder::BindDoUpdateSetExpressions(const string &table_alias, LogicalInsert
 	// Figure out which columns are indexed on
 	unordered_set<column_t> indexed_columns;
 	for (auto &index : storage_info.index_info) {
+		if (!index.is_unique && !index.is_primary) {
+			continue;
+		}
 		for (auto &column_id : index.column_set) {
 			indexed_columns.insert(column_id);
 		}
