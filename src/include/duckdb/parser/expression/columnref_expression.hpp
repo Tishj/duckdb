@@ -13,6 +13,8 @@
 
 namespace duckdb {
 
+class DatabaseInstance;
+
 //! Represents a reference to a column from either the FROM clause or from an
 //! alias
 class ColumnRefExpression : public ParsedExpression {
@@ -38,7 +40,7 @@ public:
 		return false;
 	}
 
-	string GetName() const override;
+	string GetName(DatabaseInstance &db) const override;
 	string ToString() const override;
 
 	static bool Equal(const ColumnRefExpression &a, const ColumnRefExpression &b);

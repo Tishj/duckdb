@@ -15,6 +15,8 @@
 
 namespace duckdb {
 
+class DatabaseInstance;
+
 //!  The BaseExpression class is a base class that can represent any expression
 //!  part of a SQL statement.
 class BaseExpression {
@@ -64,7 +66,7 @@ public:
 	virtual bool HasParameter() const = 0;
 
 	//! Get the name of the expression
-	virtual string GetName() const;
+	virtual string GetName(DatabaseInstance &db) const;
 	//! Convert the Expression to a String
 	virtual string ToString() const = 0;
 	//! Print the expression to stdout

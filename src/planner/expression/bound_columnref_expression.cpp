@@ -34,7 +34,7 @@ bool BoundColumnRefExpression::Equals(const BaseExpression &other_p) const {
 	return other.binding == binding && other.depth == depth;
 }
 
-string BoundColumnRefExpression::GetName() const {
+string BoundColumnRefExpression::GetName(DatabaseInstance &db) const {
 #ifdef DEBUG
 	if (DBConfigOptions::debug_print_bindings) {
 		return binding.ToString();

@@ -62,6 +62,23 @@ Value AccessModeSetting::GetSetting(const ClientContext &context) {
 }
 
 //===--------------------------------------------------------------------===//
+// Postgres Mode
+//===--------------------------------------------------------------------===//
+void PostgresModeSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto value = input.DefaultCastAs(LogicalType::BOOLEAN);
+	config.options.postgres_mode = value.GetValue<bool>();
+}
+
+void PostgresModeSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.postgres_mode = DBConfig().options.postgres_mode;
+}
+
+Value PostgresModeSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return config.options.postgres_mode;
+}
+
+//===--------------------------------------------------------------------===//
 // Allow Persistent Secrets
 //===--------------------------------------------------------------------===//
 void AllowPersistentSecrets::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {

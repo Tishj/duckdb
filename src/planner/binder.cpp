@@ -726,7 +726,7 @@ BoundStatement Binder::BindReturning(vector<unique_ptr<ParsedExpression>> return
 	for (auto &returning_expr : new_returning_list) {
 		VerifyNotExcluded(*returning_expr);
 		auto expr = returning_binder.Bind(returning_expr, &result_type);
-		result.names.push_back(expr->GetName());
+		result.names.push_back(expr->GetName(DatabaseInstance::GetDatabase(context)));
 		result.types.push_back(result_type);
 		projection_expressions.push_back(std::move(expr));
 	}
