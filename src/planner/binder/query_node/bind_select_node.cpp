@@ -426,10 +426,16 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 	}
 	statement.select_list = std::move(new_select_list);
 
+	auto &dbconfig = DBConfig::GetConfig(context);
+
 	auto &bind_state = result->bind_state;
 	for (idx_t i = 0; i < statement.select_list.size(); i++) {
 		auto &expr = statement.select_list[i];
-		result->names.push_back(expr->GetName());
+		auto column_name = expr->GetName();
+		if (dbconfig.options.postgres_mode && expr->alias.empty()) {
+			column_name = "?column?";
+		}
+		result->names.push_back(column_name);
 		ExpressionBinder::QualifyColumnNames(*this, expr);
 		if (!expr->alias.empty()) {
 			bind_state.alias_map[expr->alias] = i;
