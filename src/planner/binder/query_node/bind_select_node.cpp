@@ -29,6 +29,7 @@
 #include "duckdb/planner/expression_binder/select_binder.hpp"
 #include "duckdb/planner/expression_binder/where_binder.hpp"
 #include "duckdb/planner/query_node/bound_select_node.hpp"
+#include "duckdb/common/postgres/postgres_alias.hpp"
 
 namespace duckdb {
 
@@ -433,7 +434,7 @@ unique_ptr<BoundQueryNode> Binder::BindSelectNode(SelectNode &statement, unique_
 		auto &expr = statement.select_list[i];
 		auto column_name = expr->GetName();
 		if (dbconfig.options.postgres_mode && expr->alias.empty()) {
-			column_name = "?column?";
+			column_name = PostgresMode::GetAlias(*expr);
 		}
 		result->names.push_back(column_name);
 		ExpressionBinder::QualifyColumnNames(*this, expr);

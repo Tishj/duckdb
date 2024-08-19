@@ -2,6 +2,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/common/postgres/postgres_alias.hpp"
 
 namespace duckdb {
 
@@ -13,7 +14,7 @@ static void AliasFunction(DataChunk &args, ExpressionState &state, Vector &resul
 	if (executor.HasContext()) {
 		auto &dbconfig = DBConfig::GetConfig(executor.GetContext());
 		if (dbconfig.options.postgres_mode && state.expr.alias.empty()) {
-			name = "?column?";
+			name = PostgresMode::GetAlias(*func_expr.children[0]);
 		}
 	}
 
