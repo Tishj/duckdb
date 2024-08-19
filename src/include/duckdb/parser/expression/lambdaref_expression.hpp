@@ -32,7 +32,7 @@ public:
 
 public:
 	bool IsScalar() const override;
-	string GetName(DatabaseInstance &db) const override;
+	string GetName() const override;
 	string ToString() const override;
 	hash_t Hash() const override;
 	unique_ptr<ParsedExpression> Copy() const override;

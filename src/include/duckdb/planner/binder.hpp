@@ -70,8 +70,8 @@ struct CorrelatedColumnInfo {
 	CorrelatedColumnInfo(ColumnBinding binding, LogicalType type_p, string name_p, idx_t depth)
 	    : binding(binding), type(std::move(type_p)), name(std::move(name_p)), depth(depth) {
 	}
-	explicit CorrelatedColumnInfo(BoundColumnRefExpression &expr, DatabaseInstance &db)
-	    : CorrelatedColumnInfo(expr.binding, expr.return_type, expr.GetName(db), expr.depth) {
+	explicit CorrelatedColumnInfo(BoundColumnRefExpression &expr)
+	    : CorrelatedColumnInfo(expr.binding, expr.return_type, expr.GetName(), expr.depth) {
 	}
 
 	bool operator==(const CorrelatedColumnInfo &rhs) const {

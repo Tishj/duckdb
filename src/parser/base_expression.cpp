@@ -9,7 +9,7 @@ void BaseExpression::Print() const {
 	Printer::Print(ToString());
 }
 
-string BaseExpression::GetName(DatabaseInstance &db) const {
+string BaseExpression::GetName() const {
 #ifdef DEBUG
 	if (DBConfigOptions::debug_print_bindings) {
 		return ToString();
