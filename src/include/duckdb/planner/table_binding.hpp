@@ -32,8 +32,8 @@ enum class BindingType { BASE, TABLE, DUMMY, CATALOG_ENTRY };
 
 //! A Binding represents a binding to a table, table-producing function or subquery with a specified table index.
 struct Binding {
-	Binding(BindingType binding_type, const string &alias, vector<LogicalType> types, vector<string> names, idx_t index,
-	        bool case_insensitive = true);
+	Binding(ClientContext &context, BindingType binding_type, const string &alias, vector<LogicalType> types,
+	        vector<string> names, idx_t index);
 	Binding(Binding &&other) = default;
 	virtual ~Binding() = default;
 
@@ -75,6 +75,7 @@ public:
 
 protected:
 	NameMap<column_t> &GetNameMap();
+	const NameMap<column_t> &GetNameMap() const;
 
 private:
 	//! Name -> index for the names
@@ -86,8 +87,8 @@ public:
 	static constexpr const BindingType TYPE = BindingType::CATALOG_ENTRY;
 
 public:
-	EntryBinding(const string &alias, vector<LogicalType> types, vector<string> names, idx_t index,
-	             StandardEntry &entry);
+	EntryBinding(ClientContext &context, const string &alias, vector<LogicalType> types, vector<string> names,
+	             idx_t index, StandardEntry &entry);
 	EntryBinding(EntryBinding &&other) = default;
 	StandardEntry &entry;
 
@@ -102,7 +103,7 @@ public:
 	static constexpr const BindingType TYPE = BindingType::TABLE;
 
 public:
-	TableBinding(const string &alias, vector<LogicalType> types, vector<string> names,
+	TableBinding(ClientContext &context, const string &alias, vector<LogicalType> types, vector<string> names,
 	             vector<column_t> &bound_column_ids, optional_ptr<StandardEntry> entry, idx_t index,
 	             bool add_row_id = false);
 	TableBinding(TableBinding &&other) = default;
@@ -133,7 +134,7 @@ public:
 	static constexpr const char *DUMMY_NAME = "0_macro_parameters";
 
 public:
-	DummyBinding(vector<LogicalType> types, vector<string> names, string dummy_name);
+	DummyBinding(ClientContext &context, vector<LogicalType> types, vector<string> names, string dummy_name);
 	DummyBinding(DummyBinding &&other) = default;
 
 	//! Arguments (for macros)

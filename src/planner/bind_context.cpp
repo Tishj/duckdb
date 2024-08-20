@@ -113,8 +113,6 @@ optional_ptr<UsingColumnSet> BindContext::GetUsingBinding(const string &column_n
 		return nullptr;
 	}
 
-	auto &bindings = Bindings();
-
 	auto &using_bindings = entry->second;
 	for (auto &using_set_ref : using_bindings) {
 		auto &using_set = using_set_ref.get();
@@ -472,16 +470,18 @@ NameMap<unique_ptr<Binding>> &BindContext::Bindings() {
 void BindContext::AddBaseTable(idx_t index, const string &alias, const vector<string> &names,
                                const vector<LogicalType> &types, vector<column_t> &bound_column_ids,
                                StandardEntry *entry, bool add_row_id) {
-	AddBinding(alias, make_uniq<TableBinding>(alias, types, names, bound_column_ids, entry, index, add_row_id));
+	AddBinding(alias, make_uniq<TableBinding>(binder.context, alias, types, names, bound_column_ids, entry, index,
+	                                          add_row_id));
 }
 
 void BindContext::AddTableFunction(idx_t index, const string &alias, const vector<string> &names,
                                    const vector<LogicalType> &types, vector<column_t> &bound_column_ids,
                                    StandardEntry *entry) {
-	AddBinding(alias, make_uniq<TableBinding>(alias, types, names, bound_column_ids, entry, index));
+	AddBinding(alias, make_uniq<TableBinding>(binder.context, alias, types, names, bound_column_ids, entry, index));
 }
 
-static string AddColumnNameToBinding(const string &base_name, case_insensitive_set_t &current_names) {
+template <class NAME_SET>
+static string AddColumnNameToBinding(const string &base_name, NAME_SET &current_names) {
 	idx_t index = 1;
 	string name = base_name;
 	while (current_names.find(name) != current_names.end()) {
@@ -498,15 +498,30 @@ vector<string> BindContext::AliasColumnNames(const string &table_name, const vec
 		throw BinderException("table \"%s\" has %lld columns available but %lld columns specified", table_name,
 		                      names.size(), column_aliases.size());
 	}
-	case_insensitive_set_t current_names;
-	// use any provided column aliases first
-	for (idx_t i = 0; i < column_aliases.size(); i++) {
-		result.push_back(AddColumnNameToBinding(column_aliases[i], current_names));
+
+	auto &config = DBConfig::GetConfig(binder.context);
+	// Use the column aliases, pad with the base names if necessary
+	if (config.options.postgres_mode) {
+		// case sensitive set
+		unordered_set<string> current_names;
+		for (idx_t i = 0; i < column_aliases.size(); i++) {
+			result.push_back(AddColumnNameToBinding(column_aliases[i], current_names));
+		}
+		for (idx_t i = column_aliases.size(); i < names.size(); i++) {
+			result.push_back(AddColumnNameToBinding(names[i], current_names));
+		}
+	} else {
+		// case insensitive set
+		case_insensitive_set_t current_names;
+		for (idx_t i = 0; i < column_aliases.size(); i++) {
+			result.push_back(AddColumnNameToBinding(column_aliases[i], current_names));
+		}
+
+		for (idx_t i = column_aliases.size(); i < names.size(); i++) {
+			result.push_back(AddColumnNameToBinding(names[i], current_names));
+		}
 	}
-	// if not enough aliases were provided, use the default names for remaining columns
-	for (idx_t i = column_aliases.size(); i < names.size(); i++) {
-		result.push_back(AddColumnNameToBinding(names[i], current_names));
-	}
+
 	return result;
 }
 
@@ -517,7 +532,7 @@ void BindContext::AddSubquery(idx_t index, const string &alias, SubqueryRef &ref
 
 void BindContext::AddEntryBinding(idx_t index, const string &alias, const vector<string> &names,
                                   const vector<LogicalType> &types, StandardEntry &entry) {
-	AddBinding(alias, make_uniq<EntryBinding>(alias, types, names, index, entry));
+	AddBinding(alias, make_uniq<EntryBinding>(binder.context, alias, types, names, index, entry));
 }
 
 void BindContext::AddView(idx_t index, const string &alias, SubqueryRef &ref, BoundQueryNode &subquery,
@@ -533,12 +548,12 @@ void BindContext::AddSubquery(idx_t index, const string &alias, TableFunctionRef
 
 void BindContext::AddGenericBinding(idx_t index, const string &alias, const vector<string> &names,
                                     const vector<LogicalType> &types) {
-	AddBinding(alias, make_uniq<Binding>(BindingType::BASE, alias, types, names, index));
+	AddBinding(alias, make_uniq<Binding>(binder.context, BindingType::BASE, alias, types, names, index));
 }
 
 void BindContext::AddCTEBinding(idx_t index, const string &alias, const vector<string> &names,
                                 const vector<LogicalType> &types) {
-	auto binding = make_shared_ptr<Binding>(BindingType::BASE, alias, types, names, index);
+	auto binding = make_shared_ptr<Binding>(binder.context, BindingType::BASE, alias, types, names, index);
 
 	if (cte_bindings.find(alias) != cte_bindings.end()) {
 		throw BinderException("Duplicate alias \"%s\" in query!", alias);

@@ -99,7 +99,7 @@ BindResult ExpressionBinder::BindExpression(LambdaExpression &expr, idx_t depth,
 	if (!lambda_bindings) {
 		lambda_bindings = &local_bindings;
 	}
-	DummyBinding new_lambda_binding(column_types, column_names, table_alias);
+	DummyBinding new_lambda_binding(binder.context, column_types, column_names, table_alias);
 	lambda_bindings->push_back(std::move(new_lambda_binding));
 
 	auto result = BindExpression(expr.expr, depth, false);
