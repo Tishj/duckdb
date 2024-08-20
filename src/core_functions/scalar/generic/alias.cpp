@@ -13,7 +13,7 @@ static void AliasFunction(DataChunk &args, ExpressionState &state, Vector &resul
 	auto &executor = *state.root.executor;
 	if (executor.HasContext()) {
 		auto &dbconfig = DBConfig::GetConfig(executor.GetContext());
-		if (dbconfig.options.postgres_mode && state.expr.alias.empty()) {
+		if (dbconfig.options.postgres_mode && state.expr.alias.empty() && func_expr.children[0]->alias.empty()) {
 			name = PostgresMode::GetAlias(*func_expr.children[0]);
 		}
 	}

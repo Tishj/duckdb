@@ -1,4 +1,5 @@
 #include "duckdb/function/aggregate/distributive_functions.hpp"
+#include "duckdb/common/postgres/postgres_alias.hpp"
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -105,7 +106,16 @@ static unique_ptr<Expression> PlanUncorrelatedSubquery(Binder &binder, BoundSubq
 
 		// we replace the original subquery with a BoundColumnRefExpression referring to the first result of the
 		// aggregation
-		return make_uniq<BoundColumnRefExpression>(expr.GetName(), expr.return_type, ColumnBinding(aggr_index, 0));
+		auto alias = expr.alias;
+		if (alias.empty()) {
+			auto &config = DBConfig::GetConfig(binder.context);
+			if (config.options.postgres_mode) {
+				alias = PostgresMode::GetAlias(expr);
+			} else {
+				alias = expr.GetName();
+			}
+		}
+		return make_uniq<BoundColumnRefExpression>(alias, expr.return_type, ColumnBinding(aggr_index, 0));
 	}
 	default: {
 		D_ASSERT(expr.subquery_type == SubqueryType::ANY);

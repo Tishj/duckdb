@@ -1,5 +1,6 @@
 #include "duckdb/catalog/catalog_entry/aggregate_function_catalog_entry.hpp"
 #include "duckdb/common/pair.hpp"
+#include "duckdb/common/postgres/postgres_alias.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -298,9 +299,17 @@ BindResult BaseSelectBinder::BindAggregate(FunctionExpression &aggr, AggregateFu
 	}
 
 	// now create a column reference referring to the aggregate
-	auto colref = make_uniq<BoundColumnRefExpression>(
-	    aggr.alias.empty() ? node.aggregates[aggr_index]->ToString() : aggr.alias,
-	    node.aggregates[aggr_index]->return_type, ColumnBinding(node.aggregate_index, aggr_index), depth);
+	auto alias = aggr.alias;
+	if (alias.empty()) {
+		auto &config = DBConfig::GetConfig(binder.context);
+		if (config.options.postgres_mode) {
+			alias = PostgresMode::GetAlias(*node.aggregates[aggr_index]);
+		} else {
+			alias = node.aggregates[aggr_index]->ToString();
+		}
+	}
+	auto colref = make_uniq<BoundColumnRefExpression>(alias, node.aggregates[aggr_index]->return_type,
+	                                                  ColumnBinding(node.aggregate_index, aggr_index), depth);
 	// move the aggregate expression into the set of bound aggregates
 	return BindResult(std::move(colref));
 }
