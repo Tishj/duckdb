@@ -1,6 +1,7 @@
 #include "duckdb/planner/bind_context.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_column_type.hpp"
+#include "duckdb/main/config.hpp"
 #include "duckdb/catalog/standard_entry.hpp"
 #include "duckdb/common/pair.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -22,10 +23,17 @@
 namespace duckdb {
 
 BindContext::BindContext(Binder &binder) : binder(binder) {
+	auto &config = DBConfig::GetConfig(binder.context);
+	if (config.options.postgres_mode) {
+		bindings = make_uniq<CaseSensitiveNameMap<unique_ptr<Binding>>>();
+	} else {
+		bindings = make_uniq<CaseInsensitiveNameMap<unique_ptr<Binding>>>();
+	}
 }
 
 string BindContext::GetMatchingBinding(const string &column_name) {
 	string result;
+	auto &bindings = Bindings();
 	for (auto &kv : bindings) {
 		auto binding = kv.second.get();
 		auto is_using_binding = GetUsingBinding(column_name, kv.first);
@@ -46,6 +54,7 @@ string BindContext::GetMatchingBinding(const string &column_name) {
 
 vector<string> BindContext::GetSimilarBindings(const string &column_name) {
 	vector<pair<string, double>> scores;
+	auto &bindings = Bindings();
 	for (auto &kv : bindings) {
 		auto binding = kv.second.get();
 		for (auto &name : binding->names) {
@@ -103,6 +112,9 @@ optional_ptr<UsingColumnSet> BindContext::GetUsingBinding(const string &column_n
 	if (entry == using_columns.end()) {
 		return nullptr;
 	}
+
+	auto &bindings = Bindings();
+
 	auto &using_bindings = entry->second;
 	for (auto &using_set_ref : using_bindings) {
 		auto &using_set = using_set_ref.get();
@@ -152,6 +164,7 @@ string BindContext::GetActualColumnName(const string &binding_name, const string
 
 unordered_set<string> BindContext::GetMatchingBindings(const string &column_name) {
 	unordered_set<string> result;
+	auto &bindings = Bindings();
 	for (auto &kv : bindings) {
 		auto binding = kv.second.get();
 		if (binding->HasMatchingBinding(column_name)) {
@@ -238,6 +251,8 @@ optional_ptr<Binding> BindContext::GetCTEBinding(const string &ctename) {
 }
 
 optional_ptr<Binding> BindContext::GetBinding(const string &name, ErrorData &out_error) {
+	auto &bindings = Bindings();
+
 	auto match = bindings.find(name);
 	if (match == bindings.end()) {
 		// alias not found in this BindContext
@@ -324,6 +339,9 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 	if (bindings_list.empty()) {
 		throw BinderException("* expression without FROM clause!");
 	}
+
+	auto &bindings = Bindings();
+
 	case_insensitive_set_t excluded_columns;
 	if (expr.relation_name.empty()) {
 		// SELECT * case
@@ -438,11 +456,17 @@ void BindContext::GetTypesAndNames(vector<string> &result_names, vector<LogicalT
 }
 
 void BindContext::AddBinding(const string &alias, unique_ptr<Binding> binding) {
+	auto &bindings = Bindings();
+
 	if (bindings.find(alias) != bindings.end()) {
 		throw BinderException("Duplicate alias \"%s\" in query!", alias);
 	}
 	bindings_list.push_back(*binding);
 	bindings[alias] = std::move(binding);
+}
+
+NameMap<unique_ptr<Binding>> &BindContext::Bindings() {
+	return *bindings;
 }
 
 void BindContext::AddBaseTable(idx_t index, const string &alias, const vector<string> &names,
@@ -524,7 +548,9 @@ void BindContext::AddCTEBinding(idx_t index, const string &alias, const vector<s
 }
 
 void BindContext::AddContext(BindContext other) {
-	for (auto &binding : other.bindings) {
+	auto &bindings = Bindings();
+
+	for (auto &binding : other.Bindings()) {
 		if (bindings.find(binding.first) != bindings.end()) {
 			throw BinderException("Duplicate alias \"%s\" in query!", binding.first);
 		}
@@ -548,6 +574,8 @@ void BindContext::AddContext(BindContext other) {
 }
 
 void BindContext::RemoveContext(vector<reference<Binding>> &other_bindings_list) {
+	auto &bindings = Bindings();
+
 	for (auto &other_binding : other_bindings_list) {
 		auto it = std::remove_if(bindings_list.begin(), bindings_list.end(), [other_binding](reference<Binding> x) {
 			return x.get().alias == other_binding.get().alias;
