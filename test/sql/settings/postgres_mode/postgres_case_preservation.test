@@ -1,0 +1,15 @@
+# name: test/sql/settings/postgres_mode/postgres_case_preservation.test
+# group: [postgres_mode]
+
+statement ok
+pragma postgres_mode=true;
+
+query II
+select alias(columns(*)) from (select 42 a, 21 "A");
+----
+a	A
+
+query IIII
+select alias(columns(*)) from (values(21,42)) t(a, b), (values(42,21)) "T"(A, B);
+----
+a	b	A	B
