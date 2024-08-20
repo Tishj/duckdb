@@ -10,6 +10,7 @@
 
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/name_map.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/planner/expression_binder.hpp"
@@ -31,8 +32,9 @@ enum class BindingType { BASE, TABLE, DUMMY, CATALOG_ENTRY };
 
 //! A Binding represents a binding to a table, table-producing function or subquery with a specified table index.
 struct Binding {
-	Binding(BindingType binding_type, const string &alias, vector<LogicalType> types, vector<string> names,
-	        idx_t index);
+	Binding(BindingType binding_type, const string &alias, vector<LogicalType> types, vector<string> names, idx_t index,
+	        bool case_insensitive = true);
+	Binding(Binding &&other) = default;
 	virtual ~Binding() = default;
 
 	//! The type of Binding
@@ -45,8 +47,6 @@ struct Binding {
 	vector<LogicalType> types;
 	//! Column names of the subquery
 	vector<string> names;
-	//! Name -> index for the names
-	case_insensitive_map_t<column_t> name_map;
 
 public:
 	bool TryGetBindingIndex(const string &column_name, column_t &column_index);
@@ -72,6 +72,13 @@ public:
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+
+protected:
+	NameMap<column_t> &GetNameMap();
+
+private:
+	//! Name -> index for the names
+	unique_ptr<NameMap<column_t>> name_map;
 };
 
 struct EntryBinding : public Binding {
@@ -81,6 +88,7 @@ public:
 public:
 	EntryBinding(const string &alias, vector<LogicalType> types, vector<string> names, idx_t index,
 	             StandardEntry &entry);
+	EntryBinding(EntryBinding &&other) = default;
 	StandardEntry &entry;
 
 public:
@@ -97,6 +105,7 @@ public:
 	TableBinding(const string &alias, vector<LogicalType> types, vector<string> names,
 	             vector<column_t> &bound_column_ids, optional_ptr<StandardEntry> entry, idx_t index,
 	             bool add_row_id = false);
+	TableBinding(TableBinding &&other) = default;
 
 	//! A reference to the set of bound column ids
 	vector<column_t> &bound_column_ids;
@@ -125,6 +134,7 @@ public:
 
 public:
 	DummyBinding(vector<LogicalType> types, vector<string> names, string dummy_name);
+	DummyBinding(DummyBinding &&other) = default;
 
 	//! Arguments (for macros)
 	vector<unique_ptr<ParsedExpression>> *arguments;
