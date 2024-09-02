@@ -10,6 +10,7 @@
 
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/name_map.hpp"
 #include "duckdb/common/reference_map.hpp"
 #include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
@@ -138,8 +139,8 @@ public:
 
 	//! Alias a set of column names for the specified table, using the original names if there are not enough aliases
 	//! specified.
-	static vector<string> AliasColumnNames(const string &table_name, const vector<string> &names,
-	                                       const vector<string> &column_aliases);
+	vector<string> AliasColumnNames(const string &table_name, const vector<string> &names,
+	                                const vector<string> &column_aliases);
 
 	//! Add all the bindings from a BindContext to this BindContext. The other BindContext is destroyed in the process.
 	void AddContext(BindContext other);
@@ -152,11 +153,12 @@ public:
 
 private:
 	void AddBinding(const string &alias, unique_ptr<Binding> binding);
+	NameMap<unique_ptr<Binding>> &Bindings();
 
 private:
 	Binder &binder;
 	//! The set of bindings
-	case_insensitive_map_t<unique_ptr<Binding>> bindings;
+	unique_ptr<NameMap<unique_ptr<Binding>>> bindings;
 	//! The list of bindings in insertion order
 	vector<reference<Binding>> bindings_list;
 	//! The set of columns used in USING join conditions

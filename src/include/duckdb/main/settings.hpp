@@ -52,6 +52,15 @@ private:
 	SettingScope scope = SettingScope::INVALID;
 };
 
+struct PostgresModeSetting {
+	static constexpr const char *Name = "postgres_mode";
+	static constexpr const char *Description = "Change certain behavior of the system to match Postgres's behavior";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BOOLEAN;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct AccessModeSetting {
 	static constexpr const char *Name = "access_mode";
 	static constexpr const char *Description = "Access mode of the database (AUTOMATIC, READ_ONLY or READ_WRITE)";

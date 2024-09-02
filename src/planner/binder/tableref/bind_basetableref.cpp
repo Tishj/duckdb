@@ -111,7 +111,7 @@ unique_ptr<BoundTableRef> Binder::Bind(BaseTableRef &ref) {
 				}
 				auto result = make_uniq<BoundCTERef>(index, ctebinding->index, materialized);
 				auto alias = ref.alias.empty() ? ref.table_name : ref.alias;
-				auto names = BindContext::AliasColumnNames(alias, ctebinding->names, ref.column_name_alias);
+				auto names = bind_context.AliasColumnNames(alias, ctebinding->names, ref.column_name_alias);
 
 				bind_context.AddGenericBinding(index, alias, names, ctebinding->types);
 				// Update references to CTE
@@ -234,7 +234,7 @@ unique_ptr<BoundTableRef> Binder::Bind(BaseTableRef &ref) {
 			return_types.push_back(col.Type());
 			return_names.push_back(col.Name());
 		}
-		table_names = BindContext::AliasColumnNames(alias, table_names, ref.column_name_alias);
+		table_names = bind_context.AliasColumnNames(alias, table_names, ref.column_name_alias);
 
 		auto logical_get = make_uniq<LogicalGet>(table_index, scan_function, std::move(bind_data),
 		                                         std::move(return_types), std::move(return_names));
@@ -258,7 +258,7 @@ unique_ptr<BoundTableRef> Binder::Bind(BaseTableRef &ref) {
 		for (idx_t n = view_names.size(); n < view_catalog_entry.names.size(); n++) {
 			view_names.push_back(view_catalog_entry.names[n]);
 		}
-		subquery.column_name_alias = BindContext::AliasColumnNames(subquery.alias, view_names, ref.column_name_alias);
+		subquery.column_name_alias = bind_context.AliasColumnNames(subquery.alias, view_names, ref.column_name_alias);
 		// bind the child subquery
 		view_binder->AddBoundView(view_catalog_entry);
 		auto bound_child = view_binder->Bind(subquery);

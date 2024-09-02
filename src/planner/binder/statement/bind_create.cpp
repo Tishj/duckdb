@@ -208,7 +208,8 @@ SchemaCatalogEntry &Binder::BindCreateFunctionInfo(CreateInfo &info) {
 			dummy_types.push_back(val.value.type());
 			dummy_names.push_back(entry.first);
 		}
-		auto this_macro_binding = make_uniq<DummyBinding>(dummy_types, dummy_names, base.name);
+
+		auto this_macro_binding = make_uniq<DummyBinding>(context, dummy_types, dummy_names, base.name);
 		macro_binding = this_macro_binding.get();
 
 		// create a copy of the expression because we do not want to alter the original

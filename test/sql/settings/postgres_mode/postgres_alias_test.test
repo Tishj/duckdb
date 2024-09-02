@@ -1,0 +1,98 @@
+# name: test/sql/settings/postgres_mode/postgres_alias_test.test
+# group: [postgres_mode]
+
+statement ok
+pragma postgres_mode=true;
+
+# OperatorExpression
+query I
+select alias(42+21);
+----
+?column?
+
+# ConstantExpression
+query I
+select alias(42);
+----
+?column?
+
+statement ok
+create table tbl as from (values
+	(21, 5, 42)
+) t(a, b, c)
+
+# ColumnReferenceExpression
+query I
+select alias(a) from tbl;
+----
+a
+
+# BetweenExpression
+query I
+select alias(a BETWEEN b AND c) from tbl;
+----
+?column?
+
+# CaseExpression
+query I
+select alias(CASE WHEN(a > 3) THEN b ELSE c END) from tbl;
+----
+case
+
+# CollateExpression
+query I
+SELECT alias(a COLLATE NOCASE) FROM (values('tHis Is a sTrINg')) t(a);
+----
+a
+
+# FunctionExpression
+query I
+select alias(sum(a)) from tbl;
+----
+sum
+
+# CastExpression
+query I
+select alias(a::VARCHAR) from tbl;
+----
+a
+
+# ConjunctionExpression
+query I
+select alias(a > b AND b > c) from tbl;
+----
+?column?
+
+# ComparisonExpression
+query I
+select alias(a = b) from tbl;
+----
+?column?
+
+# ParameterExpression
+statement ok
+prepare v1 as select alias(?) from tbl;
+
+query I
+execute v1('test')
+----
+?column?
+
+# PositionalReferenceExpression
+query I
+select alias(#2) from tbl;
+----
+b
+
+# StarExpression
+query III
+select alias(COLUMNS(*)) from tbl;
+----
+a	b	c
+
+# SubqueryExpression
+# FIXME this should become 'col'
+query I
+select alias((select col from (values ('test')) t(col)));
+----
+?column?

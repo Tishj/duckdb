@@ -15,10 +15,19 @@
 
 namespace duckdb {
 
-Binding::Binding(BindingType binding_type, const string &alias, vector<LogicalType> coltypes, vector<string> colnames,
-                 idx_t index)
+Binding::Binding(ClientContext &context, BindingType binding_type, const string &alias, vector<LogicalType> coltypes,
+                 vector<string> colnames, idx_t index)
     : binding_type(binding_type), alias(alias), index(index), types(std::move(coltypes)), names(std::move(colnames)) {
 	D_ASSERT(types.size() == names.size());
+
+	auto &config = DBConfig::GetConfig(context);
+	if (config.options.postgres_mode) {
+		name_map = make_uniq<CaseSensitiveNameMap<column_t>>();
+	} else {
+		name_map = make_uniq<CaseInsensitiveNameMap<column_t>>();
+	}
+
+	auto &name_map = GetNameMap();
 	for (idx_t i = 0; i < names.size(); i++) {
 		auto &name = names[i];
 		D_ASSERT(!name.empty());
@@ -29,7 +38,16 @@ Binding::Binding(BindingType binding_type, const string &alias, vector<LogicalTy
 	}
 }
 
+NameMap<column_t> &Binding::GetNameMap() {
+	return *name_map;
+}
+const NameMap<column_t> &Binding::GetNameMap() const {
+	return *name_map;
+}
+
 bool Binding::TryGetBindingIndex(const string &column_name, column_t &result) {
+	auto &name_map = GetNameMap();
+
 	auto entry = name_map.find(column_name);
 	if (entry == name_map.end()) {
 		return false;
@@ -78,20 +96,21 @@ optional_ptr<StandardEntry> Binding::GetStandardEntry() {
 	return nullptr;
 }
 
-EntryBinding::EntryBinding(const string &alias, vector<LogicalType> types_p, vector<string> names_p, idx_t index,
-                           StandardEntry &entry)
-    : Binding(BindingType::CATALOG_ENTRY, alias, std::move(types_p), std::move(names_p), index), entry(entry) {
+EntryBinding::EntryBinding(ClientContext &context, const string &alias, vector<LogicalType> types_p,
+                           vector<string> names_p, idx_t index, StandardEntry &entry)
+    : Binding(context, BindingType::CATALOG_ENTRY, alias, std::move(types_p), std::move(names_p), index), entry(entry) {
 }
 
 optional_ptr<StandardEntry> EntryBinding::GetStandardEntry() {
 	return &entry;
 }
 
-TableBinding::TableBinding(const string &alias, vector<LogicalType> types_p, vector<string> names_p,
-                           vector<column_t> &bound_column_ids, optional_ptr<StandardEntry> entry, idx_t index,
-                           bool add_row_id)
-    : Binding(BindingType::TABLE, alias, std::move(types_p), std::move(names_p), index),
+TableBinding::TableBinding(ClientContext &context, const string &alias, vector<LogicalType> types_p,
+                           vector<string> names_p, vector<column_t> &bound_column_ids,
+                           optional_ptr<StandardEntry> entry, idx_t index, bool add_row_id)
+    : Binding(context, BindingType::TABLE, alias, std::move(types_p), std::move(names_p), index),
       bound_column_ids(bound_column_ids), entry(entry) {
+	auto &name_map = GetNameMap();
 	if (add_row_id) {
 		if (name_map.find("rowid") == name_map.end()) {
 			name_map["rowid"] = COLUMN_IDENTIFIER_ROW_ID;
@@ -136,11 +155,14 @@ unique_ptr<ParsedExpression> TableBinding::ExpandGeneratedColumn(const string &c
 	auto column_index = GetBindingIndex(column_name);
 	D_ASSERT(table_entry.GetColumn(LogicalIndex(column_index)).Generated());
 	// Get a copy of the generated column
-	auto expression = table_entry.GetColumn(LogicalIndex(column_index)).GeneratedExpression().Copy();
+
+	auto &name_map = GetNameMap();
 	unordered_map<idx_t, string> alias_map;
 	for (auto &entry : name_map) {
 		alias_map[entry.second] = entry.first;
 	}
+
+	auto expression = table_entry.GetColumn(LogicalIndex(column_index)).GeneratedExpression().Copy();
 	ReplaceAliases(*expression, table_entry.GetColumns(), alias_map);
 	BakeTableName(*expression, alias);
 	return (expression);
@@ -148,6 +170,8 @@ unique_ptr<ParsedExpression> TableBinding::ExpandGeneratedColumn(const string &c
 
 const vector<column_t> &TableBinding::GetBoundColumnIds() const {
 #ifdef DEBUG
+	auto &name_map = GetNameMap();
+
 	unordered_set<column_t> column_ids;
 	for (auto &id : bound_column_ids) {
 		auto result = column_ids.insert(id);
@@ -224,8 +248,8 @@ ErrorData TableBinding::ColumnNotFoundError(const string &column_name) const {
 	                 StringUtil::Format("Table \"%s\" does not have a column named \"%s\"", alias, column_name));
 }
 
-DummyBinding::DummyBinding(vector<LogicalType> types, vector<string> names, string dummy_name)
-    : Binding(BindingType::DUMMY, DummyBinding::DUMMY_NAME + dummy_name, std::move(types), std::move(names),
+DummyBinding::DummyBinding(ClientContext &context, vector<LogicalType> types, vector<string> names, string dummy_name)
+    : Binding(context, BindingType::DUMMY, DummyBinding::DUMMY_NAME + dummy_name, std::move(types), std::move(names),
               DConstants::INVALID_INDEX),
       dummy_name(std::move(dummy_name)) {
 }
