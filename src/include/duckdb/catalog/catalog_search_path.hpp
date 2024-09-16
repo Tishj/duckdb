@@ -74,7 +74,7 @@ private:
 	//! Only the paths that were explicitly set (minus the always included paths)
 	vector<CatalogSearchEntry> set_paths;
 	//! (Optional) callback to use to dynamically retrieve search paths
-	get_search_paths_t search_path_callback;
+	get_search_paths_t search_path_callback = nullptr;
 };
 
 } // namespace duckdb
