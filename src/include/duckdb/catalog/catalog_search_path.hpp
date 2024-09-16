@@ -53,7 +53,7 @@ public:
 	const vector<CatalogSearchEntry> &GetSetPaths() {
 		return set_paths;
 	}
-	DUCKDB_API const CatalogSearchEntry &GetDefault();
+	DUCKDB_API CatalogSearchEntry GetDefault();
 	DUCKDB_API string GetDefaultSchema(const string &catalog);
 	DUCKDB_API string GetDefaultCatalog(const string &schema);
 

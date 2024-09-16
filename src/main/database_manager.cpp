@@ -174,9 +174,9 @@ void DatabaseManager::GetDatabaseType(ClientContext &context, AttachInfo &info, 
 	}
 }
 
-const string &DatabaseManager::GetDefaultDatabase(ClientContext &context) {
+string DatabaseManager::GetDefaultDatabase(ClientContext &context) {
 	auto &config = ClientData::Get(context);
-	auto &default_entry = config.catalog_search_path->GetDefault();
+	auto default_entry = config.catalog_search_path->GetDefault();
 	if (IsInvalidCatalog(default_entry.catalog)) {
 		auto &result = DatabaseManager::Get(context).default_database;
 		if (result.empty()) {

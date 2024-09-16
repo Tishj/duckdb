@@ -240,8 +240,8 @@ vector<string> CatalogSearchPath::GetSchemasForCatalog(const string &catalog) {
 	return schemas;
 }
 
-const CatalogSearchEntry &CatalogSearchPath::GetDefault() {
-	const auto &paths = Get();
+CatalogSearchEntry CatalogSearchPath::GetDefault() {
+	const auto paths = Get();
 	D_ASSERT(paths.size() >= 2);
 	return paths[1];
 }

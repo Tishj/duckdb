@@ -95,7 +95,7 @@ SchemaCatalogEntry &Binder::BindSchema(CreateInfo &info) {
 	}
 	auto &search_path = ClientData::Get(context).catalog_search_path;
 	if (IsInvalidCatalog(info.catalog) && IsInvalidSchema(info.schema)) {
-		auto &default_entry = search_path->GetDefault();
+		auto default_entry = search_path->GetDefault();
 		info.catalog = default_entry.catalog;
 		info.schema = default_entry.schema;
 	} else if (IsInvalidSchema(info.schema)) {

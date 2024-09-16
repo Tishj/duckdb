@@ -52,7 +52,7 @@ public:
 	//! Returns a reference to the system catalog
 	Catalog &GetSystemCatalog();
 
-	static const string &GetDefaultDatabase(ClientContext &context);
+	static string GetDefaultDatabase(ClientContext &context);
 	void SetDefaultDatabase(ClientContext &context, const string &new_value);
 
 	//! Inserts a path to name mapping to the database paths map
