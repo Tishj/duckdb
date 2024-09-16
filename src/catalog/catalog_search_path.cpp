@@ -143,6 +143,10 @@ string CatalogSearchPath::GetSetName(CatalogSetPathType set_type) {
 	}
 }
 
+void CatalogSearchPath::SetDynamicSearchPathCallback(get_search_paths_t callback) {
+	search_path_callback = callback;
+}
+
 void CatalogSearchPath::Set(vector<CatalogSearchEntry> new_paths, CatalogSetPathType set_type) {
 	if (set_type != CatalogSetPathType::SET_SCHEMAS && new_paths.size() != 1) {
 		throw CatalogException("%s can set only 1 schema. This has %d", GetSetName(set_type), new_paths.size());
@@ -185,7 +189,10 @@ void CatalogSearchPath::Set(CatalogSearchEntry new_value, CatalogSetPathType set
 	Set(std::move(new_paths), set_type);
 }
 
-const vector<CatalogSearchEntry> &CatalogSearchPath::Get() {
+vector<CatalogSearchEntry> CatalogSearchPath::Get() {
+	if (search_path_callback) {
+		return search_path_callback();
+	}
 	return paths;
 }
 
