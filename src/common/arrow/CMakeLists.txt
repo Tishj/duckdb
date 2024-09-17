@@ -5,6 +5,7 @@ add_library_unity(
   arrow_converter.cpp
   arrow_merge_event.cpp
   arrow_query_result.cpp
+  arrow_schema_constructor.cpp
   arrow_wrapper.cpp
   physical_arrow_collector.cpp
   physical_arrow_batch_collector.cpp

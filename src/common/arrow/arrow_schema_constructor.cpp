@@ -89,11 +89,9 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 	case LogicalTypeId::HUGEINT: {
 		if (options.arrow_lossless_conversion) {
 			child.format = "w:16";
-			if (add_metadata) {
-				auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.hugeint");
-				root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
-				child.metadata = root_holder.metadata_info.back().get();
-			}
+			auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.hugeint");
+			root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
+			child.metadata = root_holder.metadata_info.back().get();
 		} else {
 			child.format = "d:38,0";
 		}
@@ -101,11 +99,9 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 	}
 	case LogicalTypeId::UHUGEINT: {
 		child.format = "w:16";
-		if (add_metadata) {
-			auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.uhugeint");
-			root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
-			child.metadata = root_holder.metadata_info.back().get();
-		}
+		auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.uhugeint");
+		root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
+		child.metadata = root_holder.metadata_info.back().get();
 		break;
 	}
 	case LogicalTypeId::DOUBLE:
@@ -115,11 +111,9 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 		if (options.arrow_lossless_conversion) {
 			// This is a canonical extension, hence needs the "arrow." prefix
 			child.format = "w:16";
-			if (add_metadata) {
-				auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("arrow.uuid");
-				root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
-				child.metadata = root_holder.metadata_info.back().get();
-			}
+			auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("arrow.uuid");
+			root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
+			child.metadata = root_holder.metadata_info.back().get();
 		} else {
 			if (options.produce_arrow_string_view) {
 				child.format = "vu";
@@ -134,7 +128,7 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 		break;
 	}
 	case LogicalTypeId::VARCHAR:
-		if (type.IsJSONType() && add_metadata) {
+		if (type.IsJSONType()) {
 			auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("arrow.json");
 			root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
 			child.metadata = root_holder.metadata_info.back().get();
@@ -155,11 +149,9 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 	case LogicalTypeId::TIME_TZ: {
 		if (options.arrow_lossless_conversion) {
 			child.format = "w:8";
-			if (add_metadata) {
-				auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.time_tz");
-				root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
-				child.metadata = root_holder.metadata_info.back().get();
-			}
+			auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.time_tz");
+			root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
+			child.metadata = root_holder.metadata_info.back().get();
 		} else {
 			child.format = "ttu";
 		}
@@ -214,7 +206,7 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 		} else {
 			child.format = "z";
 		}
-		if (options.arrow_lossless_conversion && add_metadata) {
+		if (options.arrow_lossless_conversion) {
 			auto schema_metadata = ArrowSchemaMetadata::MetadataFromName("duckdb.bit");
 			root_holder.metadata_info.emplace_back(schema_metadata.SerializeMetadata());
 			child.metadata = root_holder.metadata_info.back().get();
@@ -351,8 +343,7 @@ void ArrowSchemaConstructor::SetArrowFormat(DuckDBArrowSchemaHolder &root_holder
 	}
 }
 
-ArrowSchemaConstructor::ArrowSchemaConstructor(const ClientProperties &options, bool add_metadata)
-    : options(options), add_metadata(add_metadata) {
+ArrowSchemaConstructor::ArrowSchemaConstructor(const ClientProperties &options) : options(options) {
 }
 
 void ArrowSchemaConstructor::Construct(ArrowSchema &out_schema, const vector<LogicalType> &types,

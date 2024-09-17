@@ -349,7 +349,7 @@ bool DuckDBPyResult::FetchArrowChunk(ChunkScanState &scan_state, py::list &batch
 	if (to_polars) {
 		QueryResult::DeduplicateColumns(names);
 	}
-	ArrowConverter::ToArrowSchema(&arrow_schema, query_result.types, names, query_result.client_properties);
+	ArrowConverter::ToArrowSchema(arrow_schema, query_result.types, names, query_result.client_properties);
 	TransformDuckToArrowChunk(arrow_schema, data, batches);
 	return true;
 }

@@ -38,7 +38,7 @@ private:
 	};
 
 public:
-	ArrowSchemaConstructor(const ClientProperties &options, bool add_metadata = true);
+	ArrowSchemaConstructor(const ClientProperties &options);
 
 public:
 	void Construct(ArrowSchema &out, const vector<LogicalType> &types, const vector<string> &names);
@@ -51,8 +51,6 @@ private:
 
 private:
 	const ClientProperties &options;
-	//! Whether the produced ArrowSchema should have arrow extension type metadata
-	bool add_metadata;
 };
 
 } // namespace duckdb
