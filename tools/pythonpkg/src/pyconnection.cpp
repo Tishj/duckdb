@@ -28,6 +28,7 @@
 #include "duckdb_python/map.hpp"
 #include "duckdb_python/pandas/pandas_scan.hpp"
 #include "duckdb_python/pyrelation.hpp"
+#include "duckdb_python/python_context_state.hpp"
 #include "duckdb_python/pystatement.hpp"
 #include "duckdb_python/pyresult.hpp"
 #include "duckdb_python/python_conversion.hpp"
@@ -229,15 +230,18 @@ static void InitializeConnectionMethods(py::class_<DuckDBPyConnection, shared_pt
 	m.def("sql", &DuckDBPyConnection::RunQuery,
 	      "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, otherwise "
 	      "run the query as-is.",
-	      py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none());
+	      py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none(),
+	      py::arg("context") = py::none());
 	m.def("query", &DuckDBPyConnection::RunQuery,
 	      "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, otherwise "
 	      "run the query as-is.",
-	      py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none());
+	      py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none(),
+	      py::arg("context") = py::none());
 	m.def("from_query", &DuckDBPyConnection::RunQuery,
 	      "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, otherwise "
 	      "run the query as-is.",
-	      py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none());
+	      py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none(),
+	      py::arg("context") = py::none());
 	m.def("read_csv", &DuckDBPyConnection::ReadCSV, "Create a relation object from the CSV file in 'name'",
 	      py::arg("path_or_buffer"), py::kw_only());
 	m.def("from_csv_auto", &DuckDBPyConnection::ReadCSV, "Create a relation object from the CSV file in 'name'",
@@ -1421,7 +1425,8 @@ void DuckDBPyConnection::ExecuteImmediately(vector<unique_ptr<SQLStatement>> sta
 	}
 }
 
-unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &query, string alias, py::object params) {
+unique_ptr<DuckDBPyRelation> DuckDBPyConnection::RunQuery(const py::object &query, string alias, py::object params,
+                                                          py::object context) {
 	auto &connection = con.GetConnection();
 	if (alias.empty()) {
 		alias = "unnamed_relation_" + StringUtil::GenerateRandomName(16);
@@ -1771,6 +1776,8 @@ void DuckDBPyConnection::Cursors::AddCursor(shared_ptr<DuckDBPyConnection> conn)
 		cursors = std::move(compacted_cursors);
 	}
 
+	auto &client_context = *conn->con.GetConnection().context;
+	client_context.registered_state->Insert("python_context_state", make_shared_ptr<PythonContextState>());
 	cursors.push_back(conn);
 }
 
@@ -1999,6 +2006,7 @@ shared_ptr<DuckDBPyConnection> DuckDBPyConnection::Connect(const py::object &dat
 
 	auto res = FetchOrCreateInstance(database, config);
 	auto &client_context = *res->con.GetConnection().context;
+	client_context.registered_state->Insert("python_context_state", make_shared_ptr<PythonContextState>());
 	SetDefaultConfigArguments(client_context);
 	return res;
 }

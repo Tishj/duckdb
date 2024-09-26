@@ -677,6 +677,11 @@
 				"name": "params",
 				"default": "None",
 				"type": "object"
+			},
+			{
+				"name": "context",
+				"default": "None",
+				"type": "Optional[Dict[str, Any]]"
 			}
 		],
 		"return": "DuckDBPyRelation"

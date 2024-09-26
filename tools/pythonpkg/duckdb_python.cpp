@@ -612,43 +612,43 @@ static void InitializeConnectionMethods(py::module_ &m) {
 	    py::arg("connection") = py::none());
 	m.def(
 	    "sql",
-	    [](const py::object &query, string alias = "", py::object params = py::list(),
+	    [](const py::object &query, string alias = "", py::object params = py::list(), py::object context = py::none(),
 	       shared_ptr<DuckDBPyConnection> conn = nullptr) {
 		    if (!conn) {
 			    conn = DuckDBPyConnection::DefaultConnection();
 		    }
-		    return conn->RunQuery(query, alias, params);
+		    return conn->RunQuery(query, alias, params, context);
 	    },
 	    "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, otherwise "
 	    "run the query as-is.",
 	    py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none(),
-	    py::arg("connection") = py::none());
+	    py::arg("context") = py::none(), py::arg("connection") = py::none());
 	m.def(
 	    "query",
-	    [](const py::object &query, string alias = "", py::object params = py::list(),
+	    [](const py::object &query, string alias = "", py::object params = py::list(), py::object context = py::none(),
 	       shared_ptr<DuckDBPyConnection> conn = nullptr) {
 		    if (!conn) {
 			    conn = DuckDBPyConnection::DefaultConnection();
 		    }
-		    return conn->RunQuery(query, alias, params);
+		    return conn->RunQuery(query, alias, params, context);
 	    },
 	    "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, otherwise "
 	    "run the query as-is.",
 	    py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none(),
-	    py::arg("connection") = py::none());
+	    py::arg("context") = py::none(), py::arg("connection") = py::none());
 	m.def(
 	    "from_query",
-	    [](const py::object &query, string alias = "", py::object params = py::list(),
+	    [](const py::object &query, string alias = "", py::object params = py::list(), py::object context = py::none(),
 	       shared_ptr<DuckDBPyConnection> conn = nullptr) {
 		    if (!conn) {
 			    conn = DuckDBPyConnection::DefaultConnection();
 		    }
-		    return conn->RunQuery(query, alias, params);
+		    return conn->RunQuery(query, alias, params, context);
 	    },
 	    "Run a SQL query. If it is a SELECT statement, create a relation object from the given SQL query, otherwise "
 	    "run the query as-is.",
 	    py::arg("query"), py::kw_only(), py::arg("alias") = "", py::arg("params") = py::none(),
-	    py::arg("connection") = py::none());
+	    py::arg("context") = py::none(), py::arg("connection") = py::none());
 	m.def(
 	    "read_csv",
 	    [](const py::object &name, py::kwargs &kwargs) {
