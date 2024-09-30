@@ -379,3 +379,22 @@ class TestDataFrameJoin(object):
         res = df.join(df2, col1 == col2)
         res = res.collect()
         assert str(res) == "[Row(age=5, name='Bob', height=85, name='Bob')]"
+
+    def test_cross_join(self, spark):
+        data1 = [(1, "Carol"), (2, "Alice"), (3, "Dave")]
+        data2 = [(4, "A"), (5, "B")]
+        df1 = spark.createDataFrame(data1, ["age", "name"])
+        df2 = spark.createDataFrame(data2, ["id", "rank"])
+
+        df = df1.crossJoin(df2)
+
+        res = df.orderBy("rank", "age").collect()
+
+        assert res == [
+            Row(age=1, name="Carol", id=4, rank="A"),
+            Row(age=2, name="Alice", id=4, rank="A"),
+            Row(age=3, name="Dave", id=4, rank="A"),
+            Row(age=1, name="Carol", id=5, rank="B"),
+            Row(age=2, name="Alice", id=5, rank="B"),
+            Row(age=3, name="Dave", id=5, rank="B"),
+        ]

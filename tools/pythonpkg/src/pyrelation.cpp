@@ -1120,6 +1120,10 @@ unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Join(DuckDBPyRelation *other, con
 	return make_uniq<DuckDBPyRelation>(rel->Join(other->rel, std::move(conditions), join_type));
 }
 
+unique_ptr<DuckDBPyRelation> DuckDBPyRelation::Cross(DuckDBPyRelation *other) {
+	return make_uniq<DuckDBPyRelation>(rel->CrossProduct(other->rel));
+}
+
 static Value NestedDictToStruct(const py::object &dictionary) {
 	if (!py::isinstance<py::dict>(dictionary)) {
 		throw InvalidInputException("NestedDictToStruct only accepts a dictionary as input");
