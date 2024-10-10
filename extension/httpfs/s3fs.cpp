@@ -192,7 +192,12 @@ S3AuthParams S3AuthParams::ReadFrom(optional_ptr<FileOpener> opener, FileOpenerI
 
 unique_ptr<KeyValueSecret> CreateSecret(vector<string> &prefix_paths_p, string &type, string &provider, string &name,
                                         S3AuthParams &params) {
-	auto return_value = make_uniq<KeyValueSecret>(prefix_paths_p, type, provider, name);
+	named_parameter_type_map_t options = {
+	    {"region", LogicalType::VARCHAR},   {"key_id", LogicalType::VARCHAR},
+	    {"secret", LogicalType::VARCHAR},   {"session_token", LogicalType::VARCHAR},
+	    {"endpoint", LogicalType::VARCHAR}, {"url_style", LogicalType::VARCHAR},
+	    {"use_ssl", LogicalType::VARCHAR},  {"s3_url_compatibility_mode", LogicalType::VARCHAR}};
+	auto return_value = make_uniq<KeyValueSecret>(prefix_paths_p, type, provider, name, std::move(options));
 
 	//! Set key value map
 	return_value->secret_map["region"] = params.region;

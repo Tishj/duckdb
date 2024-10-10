@@ -108,7 +108,15 @@ unique_ptr<BaseSecret> SecretManager::DeserializeSecret(Deserializer &deserializ
 		    "Attempted to deserialize secret type '%s' which does not have a deserialization method", type);
 	}
 
-	return deserialized_type.deserializer(deserializer, {scope, type, provider, name});
+	auto function_entry = LookupFunctionInternal(type, provider);
+	if (!function_entry) {
+		throw InternalException(
+		    "Attempted to deserialize secret (type: '%s', provider: '%s') which does not have any functions registered",
+		    type, provider);
+	}
+
+	return deserialized_type.deserializer(deserializer,
+	                                      {scope, type, provider, name, function_entry->named_parameters});
 }
 
 void SecretManager::RegisterSecretType(SecretType &type) {
@@ -216,18 +224,21 @@ unique_ptr<SecretEntry> SecretManager::CreateSecret(ClientContext &context, cons
 	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
 	InitializeSecrets(transaction);
 
-	// Make a copy to set the provider to default if necessary
-	CreateSecretInput function_input {info.type, info.provider, info.storage_type, info.name, info.scope, info.options};
-	if (function_input.provider.empty()) {
-		auto secret_type = LookupTypeInternal(function_input.type);
-		function_input.provider = secret_type.default_provider;
+	auto provider = info.provider;
+	if (provider.empty()) {
+		auto secret_type = LookupTypeInternal(info.type);
+		provider = secret_type.default_provider;
 	}
 
 	// Lookup function
-	auto function_lookup = LookupFunctionInternal(function_input.type, function_input.provider);
+	auto function_lookup = LookupFunctionInternal(info.type, provider);
 	if (!function_lookup) {
-		ThrowProviderNotFoundError(info.type, info.provider);
+		ThrowProviderNotFoundError(info.type, provider);
 	}
+
+	// Make a copy to set the provider to default if necessary
+	CreateSecretInput function_input {info.type,  provider,     info.storage_type, info.name,
+	                                  info.scope, info.options, *function_lookup};
 
 	// Call the function
 	auto secret = function_lookup->function(context, function_input);

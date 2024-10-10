@@ -30,7 +30,8 @@ unique_ptr<BaseSecret> CreateS3SecretFunctions::CreateSecretFunctionInternal(Cli
 		}
 	}
 
-	auto secret = make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name);
+	auto &options = input.entry.named_parameters;
+	auto secret = make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name, options);
 	secret->redact_keys = {"secret", "session_token"};
 
 	// for r2 we can set the endpoint using the account id
@@ -142,7 +143,8 @@ unique_ptr<BaseSecret> CreateBearerTokenFunctions::CreateSecretFunctionInternal(
 			throw InternalException("Unknown secret type found in httpfs extension: '%s'", input.type);
 		}
 	}
-	auto return_value = make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name);
+	auto &options = input.entry.named_parameters;
+	auto return_value = make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name, options);
 
 	//! Set key value map
 	return_value->secret_map["token"] = token;

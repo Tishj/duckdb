@@ -21,6 +21,8 @@ struct FileOpenerInfo;
 //! Whether a secret is persistent or temporary
 enum class SecretPersistType : uint8_t { DEFAULT, TEMPORARY, PERSISTENT };
 
+class CreateSecretFunction;
+
 //! Input passed to a CreateSecretFunction
 struct CreateSecretInput {
 	//! type
@@ -35,6 +37,8 @@ struct CreateSecretInput {
 	vector<string> scope;
 	//! (optional) named parameter map, each create secret function has defined it's own set of these
 	case_insensitive_map_t<Value> options;
+	//! The registered entry this is creating a secret for
+	const CreateSecretFunction &entry;
 };
 
 typedef unique_ptr<BaseSecret> (*secret_deserializer_t)(Deserializer &deserializer, BaseSecret base_secret);
@@ -85,14 +89,15 @@ class BaseSecret {
 	friend class SecretManager;
 
 public:
-	BaseSecret(vector<string> prefix_paths_p, string type_p, string provider_p, string name_p)
+	BaseSecret(vector<string> prefix_paths_p, string type_p, string provider_p, string name_p,
+	           named_parameter_type_map_t options)
 	    : prefix_paths(std::move(prefix_paths_p)), type(std::move(type_p)), provider(std::move(provider_p)),
-	      name(std::move(name_p)), serializable(false) {
+	      name(std::move(name_p)), options(std::move(options)), serializable(false) {
 		D_ASSERT(!type.empty());
 	}
 	BaseSecret(const BaseSecret &other)
 	    : prefix_paths(other.prefix_paths), type(other.type), provider(other.provider), name(other.name),
-	      serializable(other.serializable) {
+	      options(other.options), serializable(other.serializable) {
 		D_ASSERT(!type.empty());
 	}
 	virtual ~BaseSecret() = default;
@@ -123,6 +128,9 @@ public:
 	const string &GetName() const {
 		return name;
 	}
+	named_parameter_type_map_t GetOptions() const {
+		return options;
+	}
 	bool IsSerializable() const {
 		return serializable;
 	}
@@ -140,6 +148,8 @@ protected:
 	string provider;
 	//! Name of the secret
 	string name;
+	//! The options that can reside in this secret
+	named_parameter_type_map_t options;
 	//! Whether the secret can be serialized/deserialized
 	bool serializable;
 };
@@ -148,24 +158,25 @@ protected:
 //! for most use-cases of secrets as secrets generally tend to fit in a key value map.
 class KeyValueSecret : public BaseSecret {
 public:
-	KeyValueSecret(const vector<string> &prefix_paths, const string &type, const string &provider, const string &name)
-	    : BaseSecret(prefix_paths, type, provider, name) {
+	KeyValueSecret(const vector<string> &prefix_paths, const string &type, const string &provider, const string &name,
+	               named_parameter_type_map_t options)
+	    : BaseSecret(prefix_paths, type, provider, name, options) {
 		D_ASSERT(!type.empty());
 		serializable = true;
 	}
 	explicit KeyValueSecret(const BaseSecret &secret)
-	    : BaseSecret(secret.GetScope(), secret.GetType(), secret.GetProvider(), secret.GetName()) {
+	    : BaseSecret(secret.GetScope(), secret.GetType(), secret.GetProvider(), secret.GetName(), secret.GetOptions()) {
 		serializable = true;
 	};
 	KeyValueSecret(const KeyValueSecret &secret)
-	    : BaseSecret(secret.GetScope(), secret.GetType(), secret.GetProvider(), secret.GetName()) {
+	    : BaseSecret(secret.GetScope(), secret.GetType(), secret.GetProvider(), secret.GetName(), secret.GetOptions()) {
 		secret_map = secret.secret_map;
 		redact_keys = secret.redact_keys;
 		serializable = true;
 	};
 	KeyValueSecret(KeyValueSecret &&secret) noexcept
 	    : BaseSecret(std::move(secret.prefix_paths), std::move(secret.type), std::move(secret.provider),
-	                 std::move(secret.name)) {
+	                 std::move(secret.name), std::move(secret.options)) {
 		secret_map = std::move(secret.secret_map);
 		redact_keys = std::move(secret.redact_keys);
 		serializable = true;
@@ -185,9 +196,24 @@ public:
 		Value secret_map_value;
 		deserializer.ReadProperty(201, "secret_map", secret_map_value);
 
+		auto options = base_secret.GetOptions();
 		for (const auto &entry : ListValue::GetChildren(secret_map_value)) {
 			auto kv_struct = StructValue::GetChildren(entry);
-			result->secret_map[kv_struct[0].ToString()] = kv_struct[1].ToString();
+			auto key = kv_struct[0].ToString();
+			auto raw_value = kv_struct[1].ToString();
+
+			auto it = options.find(key);
+			if (it == options.end()) {
+				throw InternalException("Found an unexpected secret key: '%s'", key);
+			}
+			auto &logical_type = it->second;
+			Value value;
+			if (logical_type.id() == LogicalTypeId::VARCHAR) {
+				value = Value(raw_value);
+			} else {
+				value = Value(raw_value).DefaultCastAs(logical_type);
+			}
+			result->secret_map[key] = value;
 		}
 
 		Value redact_set_value;

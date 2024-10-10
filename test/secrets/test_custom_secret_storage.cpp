@@ -23,7 +23,8 @@ struct DemoSecretType {
 		if (scope.empty()) {
 			scope = {""};
 		}
-		auto return_value = make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name);
+		auto &options = input.entry.named_parameters;
+		auto return_value = make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name, options);
 		return std::move(return_value);
 	}
 
