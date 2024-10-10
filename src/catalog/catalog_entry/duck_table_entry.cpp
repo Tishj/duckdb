@@ -53,6 +53,10 @@ void AddDataTableIndex(DataTable &storage, const ColumnList &columns, const vect
 	storage.AddIndex(std::move(art));
 }
 
+CatalogSet &DuckTableEntry::GetColumnSet() {
+	return column_set;
+}
+
 void AddDataTableIndex(DataTable &storage, const ColumnList &columns, vector<LogicalIndex> &keys,
                        IndexConstraintType constraint_type, const IndexStorageInfo &info) {
 	vector<PhysicalIndex> new_keys;
@@ -90,7 +94,7 @@ vector<PhysicalIndex> GetUniqueConstraintKeys(const ColumnList &columns, const U
 
 DuckTableEntry::DuckTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, BoundCreateTableInfo &info,
                                shared_ptr<DataTable> inherited_storage)
-    : TableCatalogEntry(catalog, schema, info.Base()), storage(std::move(inherited_storage)),
+    : TableCatalogEntry(catalog, schema, info.Base()), column_set(catalog), storage(std::move(inherited_storage)),
       column_dependency_manager(std::move(info.column_dependency_manager)) {
 
 	if (storage) {

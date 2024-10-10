@@ -46,6 +46,20 @@ class LogicalGet;
 class LogicalProjection;
 class LogicalUpdate;
 
+//! A column catalog entry
+class ColumnCatalogEntry : public StandardEntry {
+public:
+	static constexpr const CatalogType Type = CatalogType::COLUMN_ENTRY;
+	static constexpr const char *Name = "column";
+
+public:
+	//! Create a ColumnCatalogEntry
+	DUCKDB_API ColumnCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, ColumnDefinition definition);
+
+protected:
+	ColumnDefinition definition;
+};
+
 //! A table catalog entry
 class TableCatalogEntry : public StandardEntry {
 public:
@@ -113,4 +127,5 @@ protected:
 	//! A list of constraints that are part of this table
 	vector<unique_ptr<Constraint>> constraints;
 };
+
 } // namespace duckdb

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/catalog/catalog_set.hpp"
 
 namespace duckdb {
 
@@ -35,6 +36,8 @@ public:
 
 	void CommitAlter(string &column_name);
 	void CommitDrop();
+
+	CatalogSet &GetColumnSet();
 
 	TableFunction GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data) override;
 
@@ -63,6 +66,8 @@ private:
 	                                   const vector<unique_ptr<BoundConstraint>> &bound_constraints, bool is_generated);
 
 private:
+	//! Contains the columns of the table
+	CatalogSet column_set;
 	//! A reference to the underlying storage unit used for this table
 	shared_ptr<DataTable> storage;
 	//! Manages dependencies of the individual columns of the table

@@ -174,6 +174,18 @@ optional_ptr<CatalogEntry> DuckSchemaEntry::CreateTable(CatalogTransaction trans
 		return nullptr;
 	}
 
+	auto &table_entry = entry->Cast<DuckTableEntry>();
+	auto &column_set = table_entry.GetColumnSet();
+	auto columns = table_entry.GetColumns().Logical();
+	for (auto &column : columns) {
+		auto name = column.GetName();
+
+		LogicalDependencyList empty_dependencies;
+		auto column_entry = make_uniq<ColumnCatalogEntry>(catalog, *this, column.Copy());
+		auto result = column_set.CreateEntry(transaction, name, std::move(column_entry), empty_dependencies);
+		(void)result;
+		D_ASSERT(result);
+	}
 	return entry;
 }
 

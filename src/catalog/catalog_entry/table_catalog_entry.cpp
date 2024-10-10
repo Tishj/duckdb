@@ -19,9 +19,15 @@
 
 namespace duckdb {
 
+ColumnCatalogEntry::ColumnCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, ColumnDefinition definition_p)
+    : StandardEntry(CatalogType::COLUMN_ENTRY, schema, catalog, definition_p.GetName()),
+      definition(std::move(definition_p)) {
+}
+
 TableCatalogEntry::TableCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTableInfo &info)
     : StandardEntry(CatalogType::TABLE_ENTRY, schema, catalog, info.table), columns(std::move(info.columns)),
       constraints(std::move(info.constraints)) {
+
 	this->temporary = info.temporary;
 	this->dependencies = info.dependencies;
 	this->comment = info.comment;
