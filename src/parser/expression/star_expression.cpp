@@ -52,6 +52,20 @@ string StarExpression::ToString() const {
 		}
 		result += ")";
 	}
+	if (!rename_list.empty()) {
+		result += " RENAME (";
+		bool first_entry = true;
+		for (auto &entry : rename_list) {
+			if (!first_entry) {
+				result += ", ";
+			}
+			result += KeywordHelper::WriteOptionallyQuoted(entry.first);
+			result += " AS ";
+			result += KeywordHelper::WriteOptionallyQuoted(entry.second);
+			first_entry = false;
+		}
+		result += ")";
+	}
 	if (columns) {
 		result += ")";
 	}
@@ -77,6 +91,18 @@ bool StarExpression::Equal(const StarExpression &a, const StarExpression &b) {
 			return false;
 		}
 		if (!entry.second->Equals(*other_entry->second)) {
+			return false;
+		}
+	}
+	if (a.rename_list.size() != b.rename_list.size()) {
+		return false;
+	}
+	for (auto &entry : a.rename_list) {
+		auto other_entry = b.rename_list.find(entry.first);
+		if (other_entry == b.rename_list.end()) {
+			return false;
+		}
+		if (!StringUtil::CIEquals(entry.second, other_entry->second)) {
 			return false;
 		}
 	}

@@ -501,8 +501,13 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 					handled_using_columns.insert(using_binding);
 					continue;
 				}
-				new_select_list.push_back(
-				    CreateColumnReference(binding.alias, column_name, ColumnBindType::DO_NOT_EXPAND_GENERATED_COLUMNS));
+				auto column_ref =
+				    CreateColumnReference(binding.alias, column_name, ColumnBindType::DO_NOT_EXPAND_GENERATED_COLUMNS);
+				auto entry = expr.rename_list.find(column_name);
+				if (entry != expr.rename_list.end()) {
+					column_ref->alias = entry->second;
+				}
+				new_select_list.push_back(std::move(column_ref));
 			}
 		}
 	} else {

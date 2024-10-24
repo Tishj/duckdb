@@ -1,0 +1,20 @@
+# name: test/sql/parser/test_star_rename.test
+# group: [parser]
+
+statement ok
+create table tbl (
+	prefix_some_col123 INTEGER,
+	comment_usd VARCHAR,
+	sold_today BOOL
+);
+
+statement ok
+insert into tbl values(1, 'test', true)
+
+query II
+SELECT alias(COLUMNS(*)) FROM (
+	SELECT * EXCLUDE(comment_usd) RENAME (sold_today as sold)
+	FROM tbl
+)
+----
+prefix_some_col123	sold

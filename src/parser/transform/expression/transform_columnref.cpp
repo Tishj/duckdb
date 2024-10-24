@@ -64,6 +64,31 @@ unique_ptr<ParsedExpression> Transformer::TransformStarExpression(duckdb_libpgqu
 			result->replace_list.insert(make_pair(std::move(exclude_entry), std::move(replace_expression)));
 		}
 	}
+	if (star.rename_list) {
+		for (auto head = star.rename_list->head; head; head = head->next) {
+			auto list = PGPointerCast<duckdb_libpgquery::PGList>(head->data.ptr_value);
+			D_ASSERT(list->length == 2);
+
+			auto new_name_p = PGPointerCast<duckdb_libpgquery::PGValue>(list->tail->data.ptr_value);
+			D_ASSERT(new_name_p->type == duckdb_libpgquery::T_PGString);
+			string new_name = new_name_p->val.str;
+
+			auto old_name_p = PGPointerCast<duckdb_libpgquery::PGValue>(list->head->data.ptr_value);
+			D_ASSERT(old_name_p->type == duckdb_libpgquery::T_PGString);
+			string old_name = old_name_p->val.str;
+
+			if (result->rename_list.find(old_name) != result->rename_list.end()) {
+				throw ParserException("Duplicate entry \"%s\" in RENAME list", old_name);
+			}
+
+			// FIXME: do we want to prevent collisions of renaming (old -> new), (new -> new2) ??
+
+			if (result->exclude_list.find(QualifiedColumnName(old_name)) != result->exclude_list.end()) {
+				throw ParserException("Column \"%s\" cannot occur in both EXCEPT and RENAME list", old_name);
+			}
+			result->rename_list.insert(make_pair(std::move(old_name), std::move(new_name)));
+		}
+	}
 	if (star.expr) {
 		D_ASSERT(star.columns);
 		D_ASSERT(result->relation_name.empty());
@@ -75,6 +100,7 @@ unique_ptr<ParsedExpression> Transformer::TransformStarExpression(duckdb_libpgqu
 			result->relation_name = child_star.relation_name;
 			result->exclude_list = std::move(child_star.exclude_list);
 			result->replace_list = std::move(child_star.replace_list);
+			result->rename_list = std::move(child_star.rename_list);
 			result->expr.reset();
 		} else if (result->expr->type == ExpressionType::LAMBDA) {
 			vector<unique_ptr<ParsedExpression>> children;

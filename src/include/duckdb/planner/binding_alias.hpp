@@ -23,6 +23,7 @@ struct BindingAlias {
 
 	bool IsSet() const;
 	const string &GetAlias() const;
+	void SetAlias(const string &new_alias);
 
 	const string &GetCatalog() const {
 		return catalog;

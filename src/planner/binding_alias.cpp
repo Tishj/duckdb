@@ -25,6 +25,10 @@ bool BindingAlias::IsSet() const {
 	return !alias.empty();
 }
 
+void BindingAlias::SetAlias(const string &new_alias) {
+	alias = new_alias;
+}
+
 const string &BindingAlias::GetAlias() const {
 	if (!IsSet()) {
 		throw InternalException("Calling BindingAlias::GetAlias on a non-set alias");
