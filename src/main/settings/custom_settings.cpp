@@ -438,19 +438,33 @@ Value DefaultCollationSetting::GetSetting(const ClientContext &context) {
 void DefaultNullOrderSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
 	auto parameter = StringUtil::Lower(input.ToString());
 
-	if (parameter == "nulls_first" || parameter == "nulls first" || parameter == "null first" || parameter == "first") {
-		config.options.default_null_order = DefaultOrderByNullType::NULLS_FIRST;
-	} else if (parameter == "nulls_last" || parameter == "nulls last" || parameter == "null last" ||
-	           parameter == "last") {
-		config.options.default_null_order = DefaultOrderByNullType::NULLS_LAST;
-	} else if (parameter == "nulls_first_on_asc_last_on_desc" || parameter == "sqlite" || parameter == "mysql") {
-		config.options.default_null_order = DefaultOrderByNullType::NULLS_FIRST_ON_ASC_LAST_ON_DESC;
-	} else if (parameter == "nulls_last_on_asc_first_on_desc" || parameter == "postgres") {
-		config.options.default_null_order = DefaultOrderByNullType::NULLS_LAST_ON_ASC_FIRST_ON_DESC;
-	} else {
-		throw ParserException("Unrecognized parameter for option NULL_ORDER \"%s\", expected either NULLS FIRST, NULLS "
-		                      "LAST, SQLite, MySQL or Postgres",
-		                      parameter);
+	map<DefaultOrderByNullType, vector<string>> option_map = {
+	    {DefaultOrderByNullType::NULLS_FIRST, {"first", "nulls_first", "nulls first", "null first"}},
+	    {DefaultOrderByNullType::NULLS_LAST, {"last", "nulls_last", "nulls last", "null last"}},
+	    {DefaultOrderByNullType::NULLS_FIRST_ON_ASC_LAST_ON_DESC,
+	     {"sqlite", "mysql", "nulls_first_on_asc_last_on_desc"}},
+	    {DefaultOrderByNullType::NULLS_LAST_ON_ASC_FIRST_ON_DESC, {"postgres", "nulls_last_on_asc_first_on_desc"}}};
+
+	bool matched = false;
+
+	for (auto &pair : option_map) {
+		auto &options = pair.second;
+		if (find(options.begin(), options.end(), parameter) != options.end()) {
+			config.options.default_null_order = pair.first;
+			matched = true;
+			break;
+		}
+	}
+
+	if (!matched) {
+		vector<string> first_options;
+		for (auto &pair : option_map) {
+			first_options.push_back(pair.second.front());
+		}
+
+		string joined_options = StringUtil::Join(first_options, ", ");
+		throw ParserException("Unrecognized parameter for option NULL_ORDER \"%s\", expected one of the following: %s",
+		                      parameter, joined_options);
 	}
 }
 
