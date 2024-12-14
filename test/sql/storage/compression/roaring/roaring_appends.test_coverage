@@ -1,0 +1,87 @@
+# name: test/sql/storage/compression/roaring/roaring_appends.test_coverage
+# group: [roaring]
+
+require block_size 262144
+
+require vector_size 2048
+
+load __TEST_DIR__/test_roaring_appends_coverage.db
+
+statement ok
+PRAGMA force_compression='roaring';
+
+statement ok
+set checkpoint_threshold = '100mb';
+
+statement ok
+CREATE TABLE test (a BIGINT);
+
+statement ok
+create type test_result as UNION(
+    ok BOOL,
+    err STRUCT(
+        actual BIGINT,
+        expected BIGINT,
+        base BIGINT,
+        i BIGINT,
+        gap BIGINT
+    )
+);
+
+# Append increasingly bigger vectors that cross the STANDARD_VECTOR_SIZE boundary of the container
+
+loop i 1 128
+
+loop gap 1 63
+
+statement ok
+delete from test;
+
+statement ok
+set variable base_count = 1 + list_reduce(list_filter(range(0,2048 - ${gap}), x -> (x % 25 = 0)), (x,y) -> x + 1);
+
+statement ok
+set variable final_count = 1 + list_reduce(list_filter(range(0,2048 + ${i}), x -> (x % 25 = 0)), (x,y) -> x + 1)
+
+statement ok
+INSERT INTO test SELECT case when i%25=0 then null else 1337 end FROM range(2048 - ${gap}) tbl(i);
+
+# Verification for the test correctness
+query I
+select (select count(*) from test where a is null) = getvariable('base_count');
+----
+true
+
+# Any append with cardinality > 'gap' causes us to append to the new container
+# starting at an offset
+statement ok
+INSERT INTO test SELECT case when i%25=0 then null else 1337 end FROM range(2048 - ${gap}, (2048 - ${gap}) + ${i} + ${gap}) tbl(i);
+
+statement ok
+checkpoint;
+
+query I
+WITH res as (
+	select count(*) as actual from test where a is null
+)
+select CASE
+	WHEN (res.actual = getvariable('final_count'))
+		THEN True::test_result
+	ELSE
+		{
+			'actual': res.actual,
+			'expected': getvariable('final_count'),
+			'base': getvariable('base_count'),
+			'i': ${i},
+			'gap': ${gap}
+		}::test_result
+	END
+	FROM res
+----
+true
+
+#gap
+endloop
+
+#i
+endloop
