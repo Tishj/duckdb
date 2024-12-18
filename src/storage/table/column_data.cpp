@@ -27,8 +27,6 @@ ColumnData::ColumnData(BlockManager &block_manager, DataTableInfo &info, idx_t c
       type(std::move(type_p)), allocation_size(0), parent(parent) {
 	if (!parent) {
 		stats = make_uniq<SegmentStatistics>(type);
-	} else if (type.id() == LogicalTypeId::VALIDITY) {
-		parent->validity = this;
 	}
 }
 
@@ -74,8 +72,8 @@ idx_t ColumnData::GetMaxEntry() {
 	return count;
 }
 
-void ColumnData::InitializeScan(ColumnScanState &state) {
-	state.current = data.GetRootSegment();
+void ColumnData::InitializeScan(ColumnScanState &state, SegmentLock &lock) {
+	state.current = data.GetRootSegment(lock);
 	state.segment_tree = &data;
 	state.row_index = state.current ? state.current->start : 0;
 	state.internal_index = state.row_index;
@@ -84,14 +82,24 @@ void ColumnData::InitializeScan(ColumnScanState &state) {
 	state.last_offset = 0;
 }
 
-void ColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx) {
-	state.current = data.GetSegment(row_idx);
+void ColumnData::InitializeScan(ColumnScanState &state) {
+	auto lock = data.Lock();
+	InitializeScan(state, lock);
+}
+
+void ColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx, SegmentLock &lock) {
+	state.current = data.GetSegment(lock, row_idx);
 	state.segment_tree = &data;
 	state.row_index = row_idx;
 	state.internal_index = state.current->start;
 	state.initialized = false;
 	state.scan_state.reset();
 	state.last_offset = 0;
+}
+
+void ColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx) {
+	auto lock = data.Lock();
+	InitializeScanWithOffset(state, row_idx, lock);
 }
 
 ScanVectorType ColumnData::GetVectorScanType(ColumnScanState &state, idx_t scan_count, Vector &result) {
@@ -311,17 +319,10 @@ idx_t ColumnData::GetVectorCount(idx_t vector_index) const {
 	return MinValue<idx_t>(STANDARD_VECTOR_SIZE, count - current_row);
 }
 
-SegmentLock ColumnData::GetSegmentLock() {
-	return data.Lock();
-}
-
-vector<SegmentNode<ColumnSegment>> ColumnData::MoveSegments(const SegmentLock &lock) {
-	return data.MoveSegments();
-}
-
-void ColumnData::ScanCommittedRange(idx_t row_group_start, idx_t offset_in_row_group, idx_t s_count, Vector &result) {
+void ColumnData::ScanCommittedRange(idx_t row_group_start, idx_t offset_in_row_group, idx_t s_count, Vector &result,
+                                    SegmentLock &lock) {
 	ColumnScanState child_state;
-	InitializeScanWithOffset(child_state, row_group_start + offset_in_row_group);
+	InitializeScanWithOffset(child_state, row_group_start + offset_in_row_group, lock);
 	bool has_updates = HasUpdates();
 	auto scan_count = ScanVector(child_state, result, s_count, ScanVectorType::SCAN_FLAT_VECTOR);
 	if (has_updates) {
@@ -448,7 +449,7 @@ void ColumnData::InitializeAppend(ColumnAppendState &state) {
 		AppendTransientSegment(l, start);
 	}
 	auto segment = data.GetLastSegment(l);
-	if (segment->segment_type == ColumnSegmentType::PERSISTENT || !segment->function.get().init_append) {
+	if (segment->segment_type == ColumnSegmentType::PERSISTENT || !segment->GetCompressionFunction().init_append) {
 		// we cannot append to this segment - append a new segment
 		auto total_rows = segment->start + segment->count;
 		AppendTransientSegment(l, total_rows);
@@ -459,7 +460,7 @@ void ColumnData::InitializeAppend(ColumnAppendState &state) {
 
 	D_ASSERT(state.current->segment_type == ColumnSegmentType::TRANSIENT);
 	state.current->InitializeAppend(state);
-	D_ASSERT(state.current->function.get().append);
+	D_ASSERT(state.current->GetCompressionFunction().append);
 }
 
 void ColumnData::AppendData(BaseStatistics &append_stats, ColumnAppendState &state, UnifiedVectorFormat &vdata,
@@ -575,7 +576,7 @@ void ColumnData::AppendTransientSegment(SegmentLock &l, idx_t start_row) {
 	AppendSegment(l, std::move(new_segment));
 }
 
-void ColumnData::UpdateCompressionFunction(SegmentLock &l, CompressionFunction &function) {
+void ColumnData::UpdateCompressionFunction(SegmentLock &l, const CompressionFunction &function) {
 	if (!compression) {
 		// compression is empty...
 		// if we have no segments - we have not set it yet, so assign it
@@ -591,7 +592,7 @@ void ColumnData::UpdateCompressionFunction(SegmentLock &l, CompressionFunction &
 }
 
 void ColumnData::AppendSegment(SegmentLock &l, unique_ptr<ColumnSegment> segment) {
-	UpdateCompressionFunction(l, segment->function);
+	UpdateCompressionFunction(l, segment->GetCompressionFunction());
 	data.AppendSegment(l, std::move(segment));
 }
 
@@ -602,13 +603,13 @@ void ColumnData::CommitDropColumn() {
 	}
 }
 
-unique_ptr<ColumnCheckpointState> ColumnData::CreateCheckpointState(RowGroup &row_group,
-                                                                    PartialBlockManager &partial_block_manager) {
-	return make_uniq<ColumnCheckpointState>(row_group, *this, partial_block_manager);
+unique_ptr<ColumnCheckpointState>
+ColumnData::CreateCheckpointState(RowGroup &row_group, PartialBlockManager &partial_block_manager, SegmentLock &&lock) {
+	return make_uniq<ColumnCheckpointState>(row_group, *this, partial_block_manager, std::move(lock));
 }
 
-void ColumnData::CheckpointScan(ColumnSegment &segment, ColumnScanState &state, idx_t row_group_start, idx_t count,
-                                Vector &scan_vector) {
+void ColumnData::CheckpointScan(ColumnSegment &segment, ColumnCheckpointState &checkpoint_state, ColumnScanState &state,
+                                idx_t row_group_start, idx_t count, Vector &scan_vector) {
 	if (state.scan_options && state.scan_options->force_fetch_row) {
 		for (idx_t i = 0; i < count; i++) {
 			ColumnFetchState fetch_state;
@@ -624,22 +625,24 @@ void ColumnData::CheckpointScan(ColumnSegment &segment, ColumnScanState &state, 
 	}
 }
 
-unique_ptr<ColumnCheckpointState> ColumnData::Checkpoint(RowGroup &row_group, ColumnCheckpointInfo &checkpoint_info,
-                                                         ColumnCheckpointData &checkpoint_data) {
+unique_ptr<ColumnCheckpointState> ColumnData::Checkpoint(RowGroup &row_group, ColumnCheckpointInfo &checkpoint_info) {
 	// scan the segments of the column data
 	// set up the checkpoint state
-	auto checkpoint_state = CreateCheckpointState(row_group, checkpoint_info.info.manager);
+
+	auto lock = data.Lock();
+	auto checkpoint_state = CreateCheckpointState(row_group, checkpoint_info.info.manager, std::move(lock));
+	auto &l = checkpoint_state->lock;
 	checkpoint_state->global_stats = BaseStatistics::CreateEmpty(type).ToUnique();
 
-	auto &nodes = type.id() == LogicalTypeId::VALIDITY ? checkpoint_data.validity_data : checkpoint_data.base_data;
-	auto &lock = type.id() == LogicalTypeId::VALIDITY ? checkpoint_data.validity_lock : checkpoint_data.base_lock;
+	auto &nodes = data.ReferenceSegments(l);
 	if (nodes.empty()) {
 		// empty table: flush the empty list
 		return checkpoint_state;
 	}
 
 	ColumnDataCheckpointer checkpointer(*this, row_group, *checkpoint_state, checkpoint_info);
-	checkpointer.Checkpoint(std::move(nodes));
+	checkpointer.Checkpoint(nodes);
+	checkpointer.FinalizeCheckpoint(data.MoveSegments(l));
 
 	// reset the compression function
 	compression = nullptr;
@@ -885,7 +888,7 @@ void ColumnData::GetColumnSegmentInfo(idx_t row_group_index, vector<idx_t> col_p
 		column_info.segment_type = type.ToString();
 		column_info.segment_start = segment->start;
 		column_info.segment_count = segment->count;
-		column_info.compression_type = CompressionTypeToString(segment->function.get().type);
+		column_info.compression_type = CompressionTypeToString(segment->GetCompressionFunction().type);
 		{
 			lock_guard<mutex> l(stats_lock);
 			column_info.segment_stats = segment->stats.statistics.ToString();

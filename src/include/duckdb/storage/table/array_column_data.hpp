@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/storage/table/list_column_data.hpp
+// duckdb/storage/table/array_column_data.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -21,7 +21,7 @@ public:
 
 	//! The child-column of the list
 	unique_ptr<ColumnData> child_column;
-	//! The validity column data of the struct
+	//! The validity column data of the array
 	ValidityColumnData validity;
 
 public:
@@ -54,8 +54,8 @@ public:
 
 	void CommitDropColumn() override;
 
-	unique_ptr<ColumnCheckpointState> CreateCheckpointState(RowGroup &row_group,
-	                                                        PartialBlockManager &partial_block_manager) override;
+	unique_ptr<ColumnCheckpointState>
+	CreateCheckpointState(RowGroup &row_group, PartialBlockManager &partial_block_manager, SegmentLock &&lock) override;
 	unique_ptr<ColumnCheckpointState> Checkpoint(RowGroup &row_group, ColumnCheckpointInfo &info) override;
 
 	bool IsPersistent() override;
