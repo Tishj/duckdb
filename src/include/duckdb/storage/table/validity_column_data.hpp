@@ -17,13 +17,13 @@ class ValidityColumnData : public ColumnData {
 	friend class StandardColumnData;
 
 public:
-	ValidityColumnData(BlockManager &block_manager, DataTableInfo &info, idx_t column_index, idx_t start_row,
+	ValidityColumnData(BlockManager &block_manager, const DataTableInfo &info, idx_t column_index, idx_t start_row,
 	                   ColumnData &parent);
 
 public:
 	unique_ptr<ColumnCheckpointState>
 	CreateCheckpointState(RowGroup &row_group, PartialBlockManager &partial_block_manager, SegmentLock &&lock) override;
-	FilterPropagateResult CheckZonemap(ColumnScanState &state, TableFilter &filter) override;
+	FilterPropagateResult CheckZonemap(ColumnScanState &state, TableFilter &filter) const override;
 	void AppendData(BaseStatistics &stats, ColumnAppendState &state, UnifiedVectorFormat &vdata, idx_t count) override;
 	void CheckpointScan(ColumnSegment &segment, ColumnCheckpointState &checkpoint_state, ColumnScanState &state,
 	                    idx_t row_group_start, idx_t count, Vector &scan_vector) override;

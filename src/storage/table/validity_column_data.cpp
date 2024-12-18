@@ -6,12 +6,12 @@
 
 namespace duckdb {
 
-ValidityColumnData::ValidityColumnData(BlockManager &block_manager, DataTableInfo &info, idx_t column_index,
+ValidityColumnData::ValidityColumnData(BlockManager &block_manager, const DataTableInfo &info, idx_t column_index,
                                        idx_t start_row, ColumnData &parent)
     : ColumnData(block_manager, info, column_index, start_row, LogicalType(LogicalTypeId::VALIDITY), &parent) {
 }
 
-FilterPropagateResult ValidityColumnData::CheckZonemap(ColumnScanState &state, TableFilter &filter) {
+FilterPropagateResult ValidityColumnData::CheckZonemap(ColumnScanState &state, TableFilter &filter) const {
 	return FilterPropagateResult::NO_PRUNING_POSSIBLE;
 }
 
@@ -38,15 +38,23 @@ void ValidityColumnData::CheckpointScan(ColumnSegment &segment, ColumnCheckpoint
                                         Vector &scan_vector) {
 	auto &validity_state = checkpoint_state_p.Cast<ValidityColumnCheckpointState>();
 	idx_t offset_in_row_group = state.row_index - row_group_start;
+	bool scan_parent = false;
 #ifdef ALTERNATIVE_VERIFY
 	if (validity_state.parent_state) {
+		scan_parent = true;
+	}
+#endif
+	if (segment.GetCompressionFunction().type == CompressionType::COMPRESSION_EMPTY) {
+		scan_parent = true;
+	}
+	if (scan_parent) {
+		D_ASSERT(validity_state.parent_state);
 		D_ASSERT(HasParent());
 		auto &parent = Parent();
 		auto &parent_state = *validity_state.parent_state;
 
 		parent.ScanCommittedRange(row_group_start, offset_in_row_group, count, scan_vector, parent_state.lock);
 	}
-#endif
 	ScanCommittedRange(row_group_start, offset_in_row_group, count, scan_vector, validity_state.lock);
 }
 
