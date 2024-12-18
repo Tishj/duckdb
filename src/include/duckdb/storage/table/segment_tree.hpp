@@ -187,7 +187,7 @@ public:
 		auto l = Lock();
 		return HasSegment(l, segment);
 	}
-	bool HasSegment(SegmentLock &, const T *segment) {
+	bool HasSegment(SegmentLock &, const T *segment) const {
 		return segment->index < nodes.size() && nodes[segment->index].node.get() == segment;
 	}
 
