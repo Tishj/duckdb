@@ -98,8 +98,7 @@ void ColumnData::InitializeScan(ColumnScanState &state, SegmentLock &lock) const
 }
 
 void ColumnData::InitializeScan(ColumnScanState &state) const {
-	auto lock = data.Lock();
-	InitializeScan(state, lock);
+	InitializeScan(state, state.lock);
 }
 
 void ColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx, SegmentLock &lock) const {
@@ -113,8 +112,7 @@ void ColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx,
 }
 
 void ColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx) const {
-	auto lock = data.Lock();
-	InitializeScanWithOffset(state, row_idx, lock);
+	InitializeScanWithOffset(state, row_idx, state.lock);
 }
 
 ScanVectorType ColumnData::GetVectorScanType(ColumnScanState &state, idx_t scan_count, Vector &result) const {
@@ -532,7 +530,7 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	// perform the fetch within the segment
 	state.row_index =
 	    start + ((UnsafeNumericCast<idx_t>(row_id) - start) / STANDARD_VECTOR_SIZE * STANDARD_VECTOR_SIZE);
-	state.current = data.GetSegment(state.row_index);
+	state.current = data.GetSegment(state.lock, state.row_index);
 	state.internal_index = state.current->start;
 	return ScanVector(state, result, STANDARD_VECTOR_SIZE, ScanVectorType::SCAN_FLAT_VECTOR);
 }
