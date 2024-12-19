@@ -141,7 +141,7 @@ void StandardColumnData::RevertAppend(row_t start_row) {
 idx_t StandardColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	// fetch validity mask
 	if (state.child_states.empty()) {
-		ColumnScanState child_state;
+		ColumnScanState child_state(validity.data.Lock()); // FIXME: SEGMENT LOCK
 		child_state.scan_options = state.scan_options;
 		state.child_states.push_back(std::move(child_state));
 	}

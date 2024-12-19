@@ -43,7 +43,7 @@ void ColumnDataCheckpointer::ScanSegments(const column_segment_vector_t &nodes,
 	Vector scan_vector(intermediate.GetType(), nullptr);
 	for (auto &node : nodes) {
 		auto &segment = *node.node;
-		ColumnScanState scan_state;
+		ColumnScanState scan_state(state.lock);
 		scan_state.current = &segment;
 		segment.InitializeScan(scan_state);
 

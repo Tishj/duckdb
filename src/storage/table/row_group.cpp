@@ -221,7 +221,7 @@ void ColumnScanState::Initialize(const LogicalType &type, optional_ptr<TableScan
 
 void CollectionScanState::Initialize(const vector<LogicalType> &types) {
 	auto &column_ids = GetColumnIds();
-	column_scans = make_unsafe_uniq_array<ColumnScanState>(column_ids.size());
+	column_scans = make_unsafe_uniq_array<ColumnScanState>(column_ids.size()); // FIXME: SEGMENT LOCK
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		if (column_ids[i].IsRowIdColumn()) {
 			continue;

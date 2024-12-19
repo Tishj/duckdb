@@ -169,7 +169,7 @@ void ColumnData::BeginScanVectorInternal(ColumnScanState &state) const {
 		state.internal_index = state.current->start;
 		state.initialized = true;
 	}
-	D_ASSERT(data.HasSegment(state.current.get()));
+	D_ASSERT(data.HasSegment(state.lock, state.current.get()));
 	D_ASSERT(state.internal_index <= state.row_index);
 	if (state.internal_index < state.row_index) {
 		state.current->Skip(state);
@@ -336,7 +336,7 @@ idx_t ColumnData::GetVectorCount(idx_t vector_index) const {
 
 void ColumnData::ScanCommittedRange(idx_t row_group_start, idx_t offset_in_row_group, idx_t s_count, Vector &result,
                                     SegmentLock &lock) const {
-	ColumnScanState child_state;
+	ColumnScanState child_state(lock);
 	InitializeScanWithOffset(child_state, row_group_start + offset_in_row_group, lock);
 	bool has_updates = HasUpdates();
 	auto scan_count = ScanVector(child_state, result, s_count, ScanVectorType::SCAN_FLAT_VECTOR);
@@ -551,7 +551,7 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 void ColumnData::Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,
                         idx_t update_count) {
 	Vector base_vector(type);
-	ColumnScanState state;
+	ColumnScanState state(data.Lock()); // FIXME: SEGMENT LOCK
 	auto fetch_count = Fetch(state, row_ids[0], base_vector);
 
 	base_vector.Flatten(fetch_count);

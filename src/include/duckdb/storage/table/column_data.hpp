@@ -67,6 +67,9 @@ public:
 
 class ColumnData {
 	friend class ColumnDataCheckpointer;
+	friend class StructColumnData;
+	friend class ListColumnData;
+	friend class ArrayColumnData;
 
 public:
 	ColumnData(BlockManager &block_manager, const DataTableInfo &info, idx_t column_index, idx_t start_row,

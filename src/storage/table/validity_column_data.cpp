@@ -60,11 +60,18 @@ static void AnalyzeParentCompression(ValidityColumnCheckpointState &state) {
 LogicalType ValidityColumnData::GetTypeForScan(ColumnCheckpointState &state_p) {
 	auto &state = state_p.Cast<ValidityColumnCheckpointState>();
 	if (state.parent_state) {
-		auto &parent = Parent();
-		// Check what the type of the old segments are, as that is what we'll be scanning
-		if (parent.HasCompressionFunction() &&
-		    parent.GetCompressionFunction().validity == CompressionValidity::NO_VALIDITY_REQUIRED) {
-			return parent.type;
+		bool contains_empty_segment = false;
+		auto &segments = data.ReferenceSegments(state.lock);
+		for (auto &segment : segments) {
+			if (segment.node->GetCompressionFunction().type == CompressionType::COMPRESSION_EMPTY) {
+				contains_empty_segment = true;
+				break;
+			}
+		}
+		if (contains_empty_segment) {
+			// The intermediate vector has to have the type of the parent, because we'll need to scan the parent segment
+			// to get the validity, it's not stored separately
+			return Parent().type;
 		}
 	}
 	return LogicalType::BOOLEAN;
@@ -97,6 +104,7 @@ void ValidityColumnData::CheckpointScan(ColumnSegment &segment, ColumnCheckpoint
 	}
 #endif
 	if (segment.GetCompressionFunction().type == CompressionType::COMPRESSION_EMPTY) {
+		D_ASSERT(scan_vector.GetType() == Parent().type);
 		scan_parent = true;
 	}
 	if (scan_parent) {

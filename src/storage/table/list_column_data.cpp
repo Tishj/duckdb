@@ -304,7 +304,7 @@ void ListColumnData::FetchRow(TransactionData transaction, ColumnFetchState &sta
 	// now we need to read from the child all the elements between [offset...length]
 	auto child_scan_count = list_entry.length;
 	if (child_scan_count > 0) {
-		auto child_state = make_uniq<ColumnScanState>();
+		auto child_state = make_uniq<ColumnScanState>(child_column->data.Lock()); // FIXME: SEGMENT LOCK
 		auto &child_type = ListType::GetChildType(result.GetType());
 		Vector child_scan(child_type, child_scan_count);
 		// seek the scan towards the specified position and read [length] entries

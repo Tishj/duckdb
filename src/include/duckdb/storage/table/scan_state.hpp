@@ -76,6 +76,26 @@ struct IndexScanState {
 typedef unordered_map<block_id_t, BufferHandle> buffer_handle_set_t;
 
 struct ColumnScanState {
+public:
+	ColumnScanState() : owned_lock(), lock(owned_lock) {
+	}
+	explicit ColumnScanState(SegmentLock &&lock) : owned_lock(std::move(lock)), lock(owned_lock) {
+	}
+	explicit ColumnScanState(SegmentLock &lock) : owned_lock(), lock(lock) {
+	}
+
+public:
+	void Initialize(const LogicalType &type, const vector<StorageIndex> &children,
+	                optional_ptr<TableScanOptions> options);
+	void Initialize(const LogicalType &type, optional_ptr<TableScanOptions> options);
+	//! Move the scan state forward by "count" rows (including all child states)
+	void Next(idx_t count);
+	//! Move ONLY this state forward by "count" rows (i.e. not the child states)
+	void NextInternal(idx_t count);
+
+public:
+	SegmentLock owned_lock;
+	SegmentLock &lock;
 	//! The column segment that is currently being scanned
 	optional_ptr<const ColumnSegment> current;
 	//! Column segment tree
@@ -101,15 +121,6 @@ struct ColumnScanState {
 	vector<bool> scan_child_column;
 	//! Contains TableScan level config for scanning
 	optional_ptr<TableScanOptions> scan_options;
-
-public:
-	void Initialize(const LogicalType &type, const vector<StorageIndex> &children,
-	                optional_ptr<TableScanOptions> options);
-	void Initialize(const LogicalType &type, optional_ptr<TableScanOptions> options);
-	//! Move the scan state forward by "count" rows (including all child states)
-	void Next(idx_t count);
-	//! Move ONLY this state forward by "count" rows (i.e. not the child states)
-	void NextInternal(idx_t count);
 };
 
 struct ColumnFetchState {

@@ -176,7 +176,7 @@ void ArrayColumnData::FetchRow(TransactionData transaction, ColumnFetchState &st
 	auto array_size = ArrayType::GetSize(type);
 
 	// We need to fetch between [row_id * array_size, (row_id + 1) * array_size)
-	auto child_state = make_uniq<ColumnScanState>();
+	auto child_state = make_uniq<ColumnScanState>(child_column->data.Lock()); // FIXME: SEGMENT LOCK
 	child_state->Initialize(child_type, nullptr);
 
 	const auto child_offset = start + (UnsafeNumericCast<idx_t>(row_id) - start) * array_size;
