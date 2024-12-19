@@ -67,7 +67,7 @@ public:
 		if (state.non_nulls != state.count) {
 			compressed_segment->stats.statistics.SetHasNullFast();
 		}
-		if (state.non_nulls == 0) {
+		if (state.non_nulls != 0) {
 			compressed_segment->stats.statistics.SetHasNoNullFast();
 		}
 

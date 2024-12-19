@@ -115,20 +115,19 @@ public:
 		return *parent;
 	}
 
-	bool DoesNotRequireValidity() const {
-		if (type.id() != LogicalTypeId::VALIDITY) {
-			return false;
+	virtual vector<optional_ptr<CompressionFunction>> GetCompressionFunctions(DBConfig &config,
+	                                                                          ColumnCheckpointState &state) {
+		(void)state;
+		auto functions = config.GetCompressionFunctions(type.InternalType());
+		vector<optional_ptr<CompressionFunction>> compression_functions;
+		for (auto &func : functions) {
+			compression_functions.push_back(&func.get());
 		}
-		if (!parent->compression) {
-			return false;
-		}
-		if (parent->compression->validity != CompressionValidity::NO_VALIDITY_REQUIRED) {
-			return false;
-		}
-		return true;
+		return compression_functions;
 	}
 
 	virtual void SetStart(idx_t new_start);
+	virtual LogicalType GetTypeForScan(ColumnCheckpointState &state);
 	//! The root type of the column
 	const LogicalType &RootType() const;
 	//! Whether or not the column has any updates

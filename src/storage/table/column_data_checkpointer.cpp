@@ -11,24 +11,11 @@ namespace duckdb {
 ColumnDataCheckpointer::ColumnDataCheckpointer(ColumnData &col_data_p, RowGroup &row_group_p,
                                                ColumnCheckpointState &state_p, ColumnCheckpointInfo &checkpoint_info_p)
     : col_data(col_data_p), row_group(row_group_p), state(state_p),
-      is_validity(GetType().id() == LogicalTypeId::VALIDITY),
-      intermediate(is_validity ? LogicalType::BOOLEAN : GetType(), true, is_validity),
+      is_validity(GetType().id() == LogicalTypeId::VALIDITY), intermediate(col_data.GetTypeForScan(state), true, true),
       checkpoint_info(checkpoint_info_p) {
 
 	auto &config = DBConfig::GetConfig(GetDatabase());
-	if (is_validity && col_data_p.DoesNotRequireValidity()) {
-		// The latest checkpointed base data, that this validity belongs to, was checkpointed with a compression
-		// function that also encodes the validity mask. Therefore the validity mask does not have to be separately
-		// compressed.
-		auto empty_validity =
-		    config.GetCompressionFunction(CompressionType::COMPRESSION_EMPTY, GetType().InternalType());
-		compression_functions.push_back(empty_validity);
-	} else {
-		auto functions = config.GetCompressionFunctions(GetType().InternalType());
-		for (auto &func : functions) {
-			compression_functions.push_back(&func.get());
-		}
-	}
+	compression_functions = col_data_p.GetCompressionFunctions(config, state);
 }
 
 DatabaseInstance &ColumnDataCheckpointer::GetDatabase() {
@@ -268,7 +255,7 @@ void ColumnDataCheckpointer::FinalizeCheckpoint(column_segment_vector_t &&nodes)
 
 CompressionFunction &ColumnDataCheckpointer::GetCompressionFunction(CompressionType compression_type) {
 	auto &db = GetDatabase();
-	auto &column_type = GetType();
+	auto &column_type = col_data.type;
 	auto &config = DBConfig::GetConfig(db);
 	return *config.GetCompressionFunction(compression_type, column_type.InternalType());
 }

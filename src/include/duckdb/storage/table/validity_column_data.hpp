@@ -27,6 +27,9 @@ public:
 	void AppendData(BaseStatistics &stats, ColumnAppendState &state, UnifiedVectorFormat &vdata, idx_t count) override;
 	void CheckpointScan(ColumnSegment &segment, ColumnCheckpointState &checkpoint_state, ColumnScanState &state,
 	                    idx_t row_group_start, idx_t count, Vector &scan_vector) override;
+	vector<optional_ptr<CompressionFunction>> GetCompressionFunctions(DBConfig &config,
+	                                                                  ColumnCheckpointState &state) override;
+	LogicalType GetTypeForScan(ColumnCheckpointState &state) override;
 };
 
 } // namespace duckdb

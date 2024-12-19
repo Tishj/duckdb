@@ -58,6 +58,21 @@ const LogicalType &ColumnData::RootType() const {
 	return type;
 }
 
+LogicalType ColumnData::GetTypeForScan(ColumnCheckpointState &state) {
+	(void)state;
+	return type;
+}
+
+bool ColumnData::HasUpdates(idx_t start_row_idx, idx_t end_row_idx) {
+	if (!updates) {
+		return false;
+	}
+	if (!updates->HasUpdates(start_row_idx, end_row_idx)) {
+		return false;
+	}
+	return true;
+}
+
 bool ColumnData::HasUpdates() const {
 	lock_guard<mutex> update_guard(update_lock);
 	return updates.get();
@@ -682,16 +697,6 @@ void ColumnData::InitializeColumn(PersistentColumnData &column_data, BaseStatist
 		auto l = data.Lock();
 		AppendSegment(l, std::move(segment));
 	}
-}
-
-bool ColumnData::HasUpdates(idx_t start, idx_t end) {
-	if (!updates) {
-		return false;
-	}
-	if (!updates->HasUpdates(start, end)) {
-		return false;
-	}
-	return true;
 }
 
 bool ColumnData::IsPersistent() {

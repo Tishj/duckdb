@@ -33,6 +33,58 @@ void ValidityColumnData::AppendData(BaseStatistics &stats, ColumnAppendState &st
 	ColumnData::AppendData(stats, state, vdata, count);
 }
 
+static void AnalyzeParentCompression(ValidityColumnCheckpointState &state) {
+	D_ASSERT(state.parent_state);
+	if (state.analyzed_compression) {
+		return;
+	}
+	state.analyzed_compression = true;
+	auto &parent_state = *state.parent_state;
+	auto segments = parent_state.new_tree.Segments();
+	optional_ptr<CompressionFunction> function;
+	bool initialized = false;
+	for (auto &segment : segments) {
+		if (!initialized) {
+			function = (CompressionFunction &)segment.GetCompressionFunction(); // NOLINT fixme, should be const
+		} else if (function) {
+			if (function->type != segment.GetCompressionFunction().type) {
+				function = nullptr;
+			}
+		}
+	}
+	if (function && function->validity == CompressionValidity::NO_VALIDITY_REQUIRED) {
+		state.no_validity_required = true;
+	}
+}
+
+LogicalType ValidityColumnData::GetTypeForScan(ColumnCheckpointState &state_p) {
+	auto &state = state_p.Cast<ValidityColumnCheckpointState>();
+	if (state.parent_state) {
+		auto &parent = Parent();
+		// Check what the type of the old segments are, as that is what we'll be scanning
+		if (parent.HasCompressionFunction() &&
+		    parent.GetCompressionFunction().validity == CompressionValidity::NO_VALIDITY_REQUIRED) {
+			return parent.type;
+		}
+	}
+	return LogicalType::BOOLEAN;
+}
+
+vector<optional_ptr<CompressionFunction>> ValidityColumnData::GetCompressionFunctions(DBConfig &config,
+                                                                                      ColumnCheckpointState &state_p) {
+	auto &state = state_p.Cast<ValidityColumnCheckpointState>();
+	if (state.parent_state) {
+		// Check what the type of the new segments are, as that will (possibly) contain the validity data
+		AnalyzeParentCompression(state);
+		if (state.no_validity_required) {
+			// All segments are compressed with the same function, and that function does not require a separate
+			// validity segment
+			return {config.GetCompressionFunction(CompressionType::COMPRESSION_EMPTY, type.InternalType())};
+		}
+	}
+	return ColumnData::GetCompressionFunctions(config, state_p);
+}
+
 void ValidityColumnData::CheckpointScan(ColumnSegment &segment, ColumnCheckpointState &checkpoint_state_p,
                                         ColumnScanState &state, idx_t row_group_start, idx_t count,
                                         Vector &scan_vector) {

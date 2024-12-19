@@ -220,10 +220,12 @@ bool StandardColumnData::HasUpdates(idx_t start_row_idx, idx_t end_row_idx) {
 	if (base_has_changes) {
 		return true;
 	}
-
-	if (compression && compression->validity == CompressionValidity::NO_VALIDITY_REQUIRED) {
-		// We are also responsible for encoding the validity, check if there are changes there
-		return validity.HasUpdates(start_row_idx, end_row_idx);
+	if (!validity.HasCompressionFunction()) {
+		return false;
+	}
+	if (validity.GetCompressionFunction().type == CompressionType::COMPRESSION_EMPTY &&
+	    validity.HasUpdates(start_row_idx, end_row_idx)) {
+		return true;
 	}
 	return false;
 }
@@ -261,9 +263,9 @@ unique_ptr<ColumnCheckpointState> StandardColumnData::Checkpoint(RowGroup &row_g
 	D_ASSERT(!validity_nodes.empty());
 
 	ColumnDataCheckpointer base_checkpointer(*this, row_group, checkpoint_state, checkpoint_info);
-	ColumnDataCheckpointer validity_checkpointer(validity, row_group, validity_state, checkpoint_info);
-
 	base_checkpointer.Checkpoint(base_nodes);
+
+	ColumnDataCheckpointer validity_checkpointer(validity, row_group, validity_state, checkpoint_info);
 	validity_checkpointer.Checkpoint(validity_nodes);
 
 	base_checkpointer.FinalizeCheckpoint(data.MoveSegments(base_lock));

@@ -18,6 +18,8 @@ struct ValidityColumnCheckpointState : public ColumnCheckpointState {
 
 	//! The checkpoint state of the parent ColumnData, if any (struct for example doesn't have this)
 	optional_ptr<ColumnCheckpointState> parent_state;
+	bool analyzed_compression = false;
+	bool no_validity_required = false;
 };
 
 } // namespace duckdb
