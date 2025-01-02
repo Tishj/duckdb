@@ -141,7 +141,7 @@ void StandardColumnData::RevertAppend(row_t start_row) {
 idx_t StandardColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	// fetch validity mask
 	if (state.child_states.empty()) {
-		ColumnScanState child_state(validity.data.Lock()); // FIXME: SEGMENT LOCK
+		ColumnScanState child_state;
 		child_state.scan_options = state.scan_options;
 		state.child_states.push_back(std::move(child_state));
 	}
@@ -263,10 +263,10 @@ unique_ptr<ColumnCheckpointState> StandardColumnData::Checkpoint(RowGroup &row_g
 	D_ASSERT(!validity_nodes.empty());
 
 	ColumnDataCheckpointer base_checkpointer(*this, row_group, checkpoint_state, checkpoint_info);
-	base_checkpointer.Checkpoint(base_nodes);
+	base_checkpointer.Checkpoint(data);
 
 	ColumnDataCheckpointer validity_checkpointer(validity, row_group, validity_state, checkpoint_info);
-	validity_checkpointer.Checkpoint(validity_nodes);
+	validity_checkpointer.Checkpoint(validity.data);
 
 	base_checkpointer.FinalizeCheckpoint(data.MoveSegments(base_lock));
 	validity_checkpointer.FinalizeCheckpoint(validity.data.MoveSegments(validity_lock));

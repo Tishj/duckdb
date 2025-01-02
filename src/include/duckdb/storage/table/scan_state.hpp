@@ -93,13 +93,17 @@ public:
 	//! Move ONLY this state forward by "count" rows (i.e. not the child states)
 	void NextInternal(idx_t count);
 
+	void InitializeSegmentTree(const ColumnSegmentTree &tree, SegmentLock &lock);
+	void InitializeSegmentTree(const ColumnSegmentTree &tree);
+	void InitializeSegment(const ColumnSegment &segment);
+	void ResetSegment();
+	bool HasSegment() const;
+	const ColumnSegment &GetSegment() const;
+	idx_t RemainingInSegment() const;
+
 public:
 	SegmentLock owned_lock;
-	SegmentLock &lock;
-	//! The column segment that is currently being scanned
-	optional_ptr<const ColumnSegment> current;
-	//! Column segment tree
-	optional_ptr<const ColumnSegmentTree> segment_tree;
+	reference<SegmentLock> lock;
 	//! The current row index of the scan
 	idx_t row_index = 0;
 	//! The internal row index (i.e. the position of the SegmentScanState)
@@ -121,6 +125,12 @@ public:
 	vector<bool> scan_child_column;
 	//! Contains TableScan level config for scanning
 	optional_ptr<TableScanOptions> scan_options;
+
+private:
+	//! The column segment that is currently being scanned
+	optional_ptr<const ColumnSegment> current;
+	//! Column segment tree
+	optional_ptr<const ColumnSegmentTree> segment_tree;
 };
 
 struct ColumnFetchState {

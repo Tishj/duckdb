@@ -80,11 +80,11 @@ public:
 		return MoveSegments(l);
 	}
 
-	const vector<SegmentNode<T>> &ReferenceSegments(SegmentLock &l) {
+	const vector<SegmentNode<T>> &ReferenceSegments(SegmentLock &l) const {
 		LoadAllSegments(l);
 		return nodes;
 	}
-	const vector<SegmentNode<T>> &ReferenceSegments() {
+	const vector<SegmentNode<T>> &ReferenceSegments() const {
 		auto l = Lock();
 		return ReferenceSegments(l);
 	}

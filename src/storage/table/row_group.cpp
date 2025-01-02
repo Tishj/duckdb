@@ -165,6 +165,38 @@ void RowGroup::InitializeEmpty(const vector<LogicalType> &types) {
 	}
 }
 
+void ColumnScanState::InitializeSegmentTree(const ColumnSegmentTree &tree, SegmentLock &segment_lock) {
+	segment_tree = &tree;
+	lock = segment_lock;
+}
+
+void ColumnScanState::InitializeSegmentTree(const ColumnSegmentTree &tree) {
+	owned_lock = tree.Lock();
+	InitializeSegmentTree(tree, owned_lock);
+}
+
+idx_t ColumnScanState::RemainingInSegment() const {
+	return current->start + current->count - row_index;
+}
+
+bool ColumnScanState::HasSegment() const {
+	return current != nullptr;
+}
+
+const ColumnSegment &ColumnScanState::GetSegment() const {
+	D_ASSERT(HasSegment());
+	return *current;
+}
+
+void ColumnScanState::ResetSegment() {
+	current = nullptr;
+}
+
+void ColumnScanState::InitializeSegment(const ColumnSegment &segment) {
+	D_ASSERT(segment_tree && segment_tree->HasSegment(lock.get(), &segment));
+	current = &segment;
+}
+
 void ColumnScanState::Initialize(const LogicalType &type, const vector<StorageIndex> &children,
                                  optional_ptr<TableScanOptions> options) {
 	// Register the options in the state
@@ -255,7 +287,7 @@ bool RowGroup::InitializeScanWithOffset(CollectionScanState &state, idx_t vector
 			column_data.InitializeScanWithOffset(state.column_scans[i], row_number);
 			state.column_scans[i].scan_options = &state.GetOptions();
 		} else {
-			state.column_scans[i].current = nullptr;
+			state.column_scans[i].ResetSegment();
 		}
 	}
 	return true;
@@ -282,7 +314,7 @@ bool RowGroup::InitializeScan(CollectionScanState &state) const {
 			column_data.InitializeScan(state.column_scans[i]);
 			state.column_scans[i].scan_options = &state.GetOptions();
 		} else {
-			state.column_scans[i].current = nullptr;
+			state.column_scans[i].ResetSegment();
 		}
 	}
 	return true;
@@ -479,12 +511,12 @@ bool RowGroup::CheckZonemapSegments(CollectionScanState &state) const {
 
 		// check zone map segment.
 		auto &column_scan_state = state.column_scans[column_idx];
-		auto current_segment = column_scan_state.current;
-		if (!current_segment) {
+		if (!column_scan_state.HasSegment()) {
 			// no segment to skip
 			continue;
 		}
-		idx_t target_row = current_segment->start + current_segment->count;
+		auto &current_segment = column_scan_state.GetSegment();
+		idx_t target_row = current_segment.start + current_segment.count;
 		if (target_row >= state.max_row) {
 			target_row = state.max_row;
 		}

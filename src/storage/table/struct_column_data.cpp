@@ -54,7 +54,7 @@ void StructColumnData::InitializePrefetch(PrefetchState &prefetch_state, ColumnS
 void StructColumnData::InitializeScan(ColumnScanState &state) const {
 	D_ASSERT(state.child_states.size() == sub_columns.size() + 1);
 	state.row_index = 0;
-	state.current = nullptr;
+	state.ResetSegment();
 
 	// initialize the validity segment
 	validity.InitializeScan(state.child_states[0]);
@@ -71,7 +71,7 @@ void StructColumnData::InitializeScan(ColumnScanState &state) const {
 void StructColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx) const {
 	D_ASSERT(state.child_states.size() == sub_columns.size() + 1);
 	state.row_index = row_idx;
-	state.current = nullptr;
+	state.ResetSegment();
 
 	// initialize the validity segment
 	validity.InitializeScanWithOffset(state.child_states[0], row_idx);

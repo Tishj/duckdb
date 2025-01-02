@@ -38,13 +38,15 @@ ColumnCheckpointState &ColumnDataCheckpointer::GetCheckpointState() {
 	return state;
 }
 
-void ColumnDataCheckpointer::ScanSegments(const column_segment_vector_t &nodes,
+void ColumnDataCheckpointer::ScanSegments(const ColumnSegmentTree &tree,
                                           const std::function<void(Vector &, idx_t)> &callback) {
 	Vector scan_vector(intermediate.GetType(), nullptr);
+	auto &nodes = tree.ReferenceSegments(state.lock);
 	for (auto &node : nodes) {
 		auto &segment = *node.node;
-		ColumnScanState scan_state(state.lock);
-		scan_state.current = &segment;
+		ColumnScanState scan_state;
+		scan_state.InitializeSegmentTree(tree, state.lock);
+		scan_state.InitializeSegment(segment);
 		segment.InitializeScan(scan_state);
 
 		for (idx_t base_row_index = 0; base_row_index < segment.count; base_row_index += STANDARD_VECTOR_SIZE) {
@@ -94,7 +96,7 @@ CompressionType ForceCompression(vector<optional_ptr<CompressionFunction>> &comp
 	return found ? compression_type : CompressionType::COMPRESSION_AUTO;
 }
 
-unique_ptr<AnalyzeState> ColumnDataCheckpointer::DetectBestCompressionMethod(const column_segment_vector_t &nodes,
+unique_ptr<AnalyzeState> ColumnDataCheckpointer::DetectBestCompressionMethod(const ColumnSegmentTree &tree,
                                                                              idx_t &compression_idx) {
 	D_ASSERT(!compression_functions.empty());
 	auto &config = DBConfig::GetConfig(GetDatabase());
@@ -120,7 +122,7 @@ unique_ptr<AnalyzeState> ColumnDataCheckpointer::DetectBestCompressionMethod(con
 	}
 
 	// scan over all the segments and run the analyze step
-	ScanSegments(nodes, [&](Vector &scan_vector, idx_t count) {
+	ScanSegments(tree, [&](Vector &scan_vector, idx_t count) {
 		for (idx_t i = 0; i < compression_functions.size(); i++) {
 			if (!compression_functions[i]) {
 				continue;
@@ -172,13 +174,14 @@ unique_ptr<AnalyzeState> ColumnDataCheckpointer::DetectBestCompressionMethod(con
 	return state;
 }
 
-void ColumnDataCheckpointer::WriteToDisk(const column_segment_vector_t &nodes) {
+void ColumnDataCheckpointer::WriteToDisk(const ColumnSegmentTree &tree) {
 	// there were changes or transient segments
 	// we need to rewrite the column segments to disk
 
 	// first we check the current segments
 	// if there are any persistent segments, we will mark their old block ids as modified
 	// since the segments will be rewritten their old on disk data is no longer required
+	auto &nodes = tree.ReferenceSegments(state.lock);
 	for (idx_t segment_idx = 0; segment_idx < nodes.size(); segment_idx++) {
 		auto segment = nodes[segment_idx].node.get();
 		segment->CommitDropSegment();
@@ -187,7 +190,7 @@ void ColumnDataCheckpointer::WriteToDisk(const column_segment_vector_t &nodes) {
 	// now we need to write our segment
 	// we will first run an analyze step that determines which compression function to use
 	idx_t compression_idx;
-	auto analyze_state = DetectBestCompressionMethod(nodes, compression_idx);
+	auto analyze_state = DetectBestCompressionMethod(tree, compression_idx);
 
 	if (!analyze_state) {
 		throw FatalException("No suitable compression/storage method found to store column");
@@ -198,7 +201,7 @@ void ColumnDataCheckpointer::WriteToDisk(const column_segment_vector_t &nodes) {
 	auto compress_state = best_function->init_compression(*this, std::move(analyze_state));
 
 	ScanSegments(
-	    nodes, [&](Vector &scan_vector, idx_t count) { best_function->compress(*compress_state, scan_vector, count); });
+	    tree, [&](Vector &scan_vector, idx_t count) { best_function->compress(*compress_state, scan_vector, count); });
 	best_function->compress_finalize(*compress_state);
 }
 
@@ -236,12 +239,13 @@ void ColumnDataCheckpointer::WritePersistentSegments(column_segment_vector_t nod
 	}
 }
 
-void ColumnDataCheckpointer::Checkpoint(const column_segment_vector_t &nodes) {
+void ColumnDataCheckpointer::Checkpoint(const ColumnSegmentTree &tree) {
+	auto &nodes = tree.ReferenceSegments(state.lock);
 	D_ASSERT(!nodes.empty());
 	has_changes = HasChanges(nodes);
 	// first check if any of the segments have changes
 	if (has_changes) {
-		WriteToDisk(nodes);
+		WriteToDisk(tree);
 	}
 }
 

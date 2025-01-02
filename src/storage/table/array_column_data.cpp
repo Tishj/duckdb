@@ -42,7 +42,7 @@ void ArrayColumnData::InitializeScan(ColumnScanState &state) const {
 	D_ASSERT(state.child_states.size() == 2);
 
 	state.row_index = 0;
-	state.current = nullptr;
+	state.ResetSegment();
 
 	validity.InitializeScan(state.child_states[0]);
 
@@ -60,7 +60,7 @@ void ArrayColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t row
 	}
 
 	state.row_index = row_idx;
-	state.current = nullptr;
+	state.ResetSegment();
 
 	// initialize the validity segment
 	validity.InitializeScanWithOffset(state.child_states[0], row_idx);

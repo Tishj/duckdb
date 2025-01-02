@@ -27,14 +27,14 @@ public:
 	RowGroup &GetRowGroup();
 	ColumnCheckpointState &GetCheckpointState();
 
-	void Checkpoint(const column_segment_vector_t &nodes);
+	void Checkpoint(const ColumnSegmentTree &tree);
 	void FinalizeCheckpoint(column_segment_vector_t &&nodes);
 	CompressionFunction &GetCompressionFunction(CompressionType type);
 
 private:
-	void ScanSegments(const column_segment_vector_t &nodes, const std::function<void(Vector &, idx_t)> &callback);
-	unique_ptr<AnalyzeState> DetectBestCompressionMethod(const column_segment_vector_t &nodes, idx_t &compression_idx);
-	void WriteToDisk(const column_segment_vector_t &nodes);
+	void ScanSegments(const ColumnSegmentTree &tree, const std::function<void(Vector &, idx_t)> &callback);
+	unique_ptr<AnalyzeState> DetectBestCompressionMethod(const ColumnSegmentTree &tree, idx_t &compression_idx);
+	void WriteToDisk(const ColumnSegmentTree &tree);
 	bool HasChanges(const column_segment_vector_t &nodes);
 	void WritePersistentSegments(column_segment_vector_t nodes);
 
