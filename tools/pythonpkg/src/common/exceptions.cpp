@@ -27,15 +27,21 @@ class Warning : public std::exception {};
 //===--------------------------------------------------------------------===//
 // Base Error
 //===--------------------------------------------------------------------===//
-class PyError : public std::runtime_error {
+class PyError : public std::exception {
 public:
-	explicit PyError(const string &err) : std::runtime_error(err) {
+	explicit PyError(ErrorData &&error) : std::exception(), error(std::move(error)) {
 	}
+	const char *what() const noexcept override {
+		return error.Message().c_str();
+	}
+
+private:
+	ErrorData error;
 };
 
 class DatabaseError : public PyError {
 public:
-	explicit DatabaseError(const string &err) : PyError(err) {
+	explicit DatabaseError(ErrorData &&err) : PyError(std::move(err)) {
 	}
 };
 
@@ -44,31 +50,31 @@ public:
 //===--------------------------------------------------------------------===//
 class PyFatalException : public DatabaseError {
 public:
-	explicit PyFatalException(const string &err) : DatabaseError(err) {
+	explicit PyFatalException(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyInterruptException : public DatabaseError {
 public:
-	explicit PyInterruptException(const string &err) : DatabaseError(err) {
+	explicit PyInterruptException(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyPermissionException : public DatabaseError {
 public:
-	explicit PyPermissionException(const string &err) : DatabaseError(err) {
+	explicit PyPermissionException(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PySequenceException : public DatabaseError {
 public:
-	explicit PySequenceException(const string &err) : DatabaseError(err) {
+	explicit PySequenceException(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyDependencyException : public DatabaseError {
 public:
-	explicit PyDependencyException(const string &err) : DatabaseError(err) {
+	explicit PyDependencyException(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
@@ -77,25 +83,25 @@ public:
 //===--------------------------------------------------------------------===//
 class DataError : public DatabaseError {
 public:
-	explicit DataError(const string &err) : DatabaseError(err) {
+	explicit DataError(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyOutOfRangeException : public DataError {
 public:
-	explicit PyOutOfRangeException(const string &err) : DataError(err) {
+	explicit PyOutOfRangeException(ErrorData &&err) : DataError(std::move(err)) {
 	}
 };
 
 class PyConversionException : public DataError {
 public:
-	explicit PyConversionException(const string &err) : DataError(err) {
+	explicit PyConversionException(ErrorData &&err) : DataError(std::move(err)) {
 	}
 };
 
 class PyTypeMismatchException : public DataError {
 public:
-	explicit PyTypeMismatchException(const string &err) : DataError(err) {
+	explicit PyTypeMismatchException(ErrorData &&err) : DataError(std::move(err)) {
 	}
 };
 
@@ -104,43 +110,43 @@ public:
 //===--------------------------------------------------------------------===//
 class OperationalError : public DatabaseError {
 public:
-	explicit OperationalError(const string &err) : DatabaseError(err) {
+	explicit OperationalError(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyTransactionException : public OperationalError {
 public:
-	explicit PyTransactionException(const string &err) : OperationalError(err) {
+	explicit PyTransactionException(ErrorData &&err) : OperationalError(std::move(err)) {
 	}
 };
 
 class PyOutOfMemoryException : public OperationalError {
 public:
-	explicit PyOutOfMemoryException(const string &err) : OperationalError(err) {
+	explicit PyOutOfMemoryException(ErrorData &&err) : OperationalError(std::move(err)) {
 	}
 };
 
 class PyConnectionException : public OperationalError {
 public:
-	explicit PyConnectionException(const string &err) : OperationalError(err) {
+	explicit PyConnectionException(ErrorData &&err) : OperationalError(std::move(err)) {
 	}
 };
 
 class PySerializationException : public OperationalError {
 public:
-	explicit PySerializationException(const string &err) : OperationalError(err) {
+	explicit PySerializationException(ErrorData &&err) : OperationalError(std::move(err)) {
 	}
 };
 
 class PyIOException : public OperationalError {
 public:
-	explicit PyIOException(const string &err) : OperationalError(err) {
+	explicit PyIOException(ErrorData &&err) : OperationalError(std::move(err)) {
 	}
 };
 
 class PyHTTPException : public PyIOException {
 public:
-	explicit PyHTTPException(const string &err) : PyIOException(err) {
+	explicit PyHTTPException(ErrorData &&err) : PyIOException(std::move(err)) {
 	}
 };
 
@@ -149,13 +155,13 @@ public:
 //===--------------------------------------------------------------------===//
 class IntegrityError : public DatabaseError {
 public:
-	explicit IntegrityError(const string &err) : DatabaseError(err) {
+	explicit IntegrityError(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyConstraintException : public IntegrityError {
 public:
-	explicit PyConstraintException(const string &err) : IntegrityError(err) {
+	explicit PyConstraintException(ErrorData &&err) : IntegrityError(std::move(err)) {
 	}
 };
 
@@ -164,13 +170,13 @@ public:
 //===--------------------------------------------------------------------===//
 class InternalError : public DatabaseError {
 public:
-	explicit InternalError(const string &err) : DatabaseError(err) {
+	explicit InternalError(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyInternalException : public InternalError {
 public:
-	explicit PyInternalException(const string &err) : InternalError(err) {
+	explicit PyInternalException(ErrorData &&err) : InternalError(std::move(err)) {
 	}
 };
 
@@ -179,43 +185,43 @@ public:
 //===--------------------------------------------------------------------===//
 class ProgrammingError : public DatabaseError {
 public:
-	explicit ProgrammingError(const string &err) : DatabaseError(err) {
+	explicit ProgrammingError(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyParserException : public ProgrammingError {
 public:
-	explicit PyParserException(const string &err) : ProgrammingError(err) {
+	explicit PyParserException(ErrorData &&err) : ProgrammingError(std::move(err)) {
 	}
 };
 
 class PySyntaxException : public ProgrammingError {
 public:
-	explicit PySyntaxException(const string &err) : ProgrammingError(err) {
+	explicit PySyntaxException(ErrorData &&err) : ProgrammingError(std::move(err)) {
 	}
 };
 
 class PyBinderException : public ProgrammingError {
 public:
-	explicit PyBinderException(const string &err) : ProgrammingError(err) {
+	explicit PyBinderException(ErrorData &&err) : ProgrammingError(std::move(err)) {
 	}
 };
 
 class PyInvalidInputException : public ProgrammingError {
 public:
-	explicit PyInvalidInputException(const string &err) : ProgrammingError(err) {
+	explicit PyInvalidInputException(ErrorData &&err) : ProgrammingError(std::move(err)) {
 	}
 };
 
 class PyInvalidTypeException : public ProgrammingError {
 public:
-	explicit PyInvalidTypeException(const string &err) : ProgrammingError(err) {
+	explicit PyInvalidTypeException(ErrorData &&err) : ProgrammingError(std::move(err)) {
 	}
 };
 
 class PyCatalogException : public ProgrammingError {
 public:
-	explicit PyCatalogException(const string &err) : ProgrammingError(err) {
+	explicit PyCatalogException(ErrorData &&err) : ProgrammingError(std::move(err)) {
 	}
 };
 
@@ -224,89 +230,95 @@ public:
 //===--------------------------------------------------------------------===//
 class NotSupportedError : public DatabaseError {
 public:
-	explicit NotSupportedError(const string &err) : DatabaseError(err) {
+	explicit NotSupportedError(ErrorData &&err) : DatabaseError(std::move(err)) {
 	}
 };
 
 class PyNotImplementedException : public NotSupportedError {
 public:
-	explicit PyNotImplementedException(const string &err) : NotSupportedError(err) {
+	explicit PyNotImplementedException(ErrorData &&err) : NotSupportedError(std::move(err)) {
 	}
 };
 
 //===--------------------------------------------------------------------===//
 // PyThrowException
 //===--------------------------------------------------------------------===//
-void PyThrowException(ErrorData &error, PyObject *http_exception) {
+void PyThrowException(ErrorData &&error, PyObject *http_exception_type) {
 	switch (error.Type()) {
 	case ExceptionType::HTTP: {
 		// construct exception object
-		auto e = py::handle(http_exception)(py::str(error.Message()));
+		//! FIXME: this can't be constructed with the 'std::move(error)' because this can not go through Python.
+		auto py_http_exception = py::handle(http_exception_type)();
 
 		auto headers = py::dict();
 		for (auto &entry : error.ExtraInfo()) {
 			if (entry.first == "status_code") {
-				e.attr("status_code") = std::stoi(entry.second);
+				py_http_exception.attr("status_code") = std::stoi(entry.second);
 			} else if (entry.first == "response_body") {
-				e.attr("body") = entry.second;
+				py_http_exception.attr("body") = entry.second;
 			} else if (entry.first == "reason") {
-				e.attr("reason") = entry.second;
+				py_http_exception.attr("reason") = entry.second;
 			} else if (StringUtil::StartsWith(entry.first, "header_")) {
 				headers[py::str(entry.first.substr(7))] = entry.second;
 			}
 		}
-		e.attr("headers") = std::move(headers);
-
-		// "throw" exception object
-		PyErr_SetObject(http_exception, e.ptr());
-		break;
+		py_http_exception.attr("headers") = std::move(headers);
+		const auto string_type = py::type::of(py::str());
+		const auto dict_type = py::module_::import("typing").attr("Dict");
+		py_http_exception.attr("__annotations__") = py::dict(
+		    py::arg("status_code") = py::type::of(py::int_()), py::arg("body") = string_type,
+		    py::arg("reason") = string_type, py::arg("headers") = dict_type[py::make_tuple(string_type, string_type)]);
+		py_http_exception.doc() =
+		    "Thrown when an error occurs in the httpfs extension, or whilst downloading an extension.";
+		PyErr_SetObject(py_http_exception.get_type().ptr(), py_http_exception.ptr());
+		throw py::error_already_set();
 	}
 	case ExceptionType::CATALOG:
-		throw PyCatalogException(error.Message());
+		throw PyCatalogException(std::move(error));
 	case ExceptionType::FATAL:
-		throw PyFatalException(error.Message());
+		throw PyFatalException(std::move(error));
 	case ExceptionType::INTERRUPT:
-		throw PyInterruptException(error.Message());
+		throw PyInterruptException(std::move(error));
 	case ExceptionType::PERMISSION:
-		throw PyPermissionException(error.Message());
+		throw PyPermissionException(std::move(error));
 	case ExceptionType::SEQUENCE:
-		throw PySequenceException(error.Message());
+		throw PySequenceException(std::move(error));
 	case ExceptionType::DEPENDENCY:
-		throw PyDependencyException(error.Message());
+		throw PyDependencyException(std::move(error));
 	case ExceptionType::OUT_OF_RANGE:
-		throw PyOutOfRangeException(error.Message());
+		throw PyOutOfRangeException(std::move(error));
 	case ExceptionType::CONVERSION:
-		throw PyConversionException(error.Message());
+		throw PyConversionException(std::move(error));
 	case ExceptionType::MISMATCH_TYPE:
-		throw PyTypeMismatchException(error.Message());
+		throw PyTypeMismatchException(std::move(error));
 	case ExceptionType::TRANSACTION:
-		throw PyTransactionException(error.Message());
+		throw PyTransactionException(std::move(error));
 	case ExceptionType::OUT_OF_MEMORY:
-		throw PyOutOfMemoryException(error.Message());
+		throw PyOutOfMemoryException(std::move(error));
 	case ExceptionType::CONNECTION:
-		throw PyConnectionException(error.Message());
+		throw PyConnectionException(std::move(error));
 	case ExceptionType::SERIALIZATION:
-		throw PySerializationException(error.Message());
+		throw PySerializationException(std::move(error));
 	case ExceptionType::CONSTRAINT:
-		throw PyConstraintException(error.Message());
+		throw PyConstraintException(std::move(error));
 	case ExceptionType::INTERNAL:
-		throw PyInternalException(error.Message());
+		throw PyInternalException(std::move(error));
 	case ExceptionType::PARSER:
-		throw PyParserException(error.Message());
+		throw PyParserException(std::move(error));
 	case ExceptionType::SYNTAX:
-		throw PySyntaxException(error.Message());
+		throw PySyntaxException(std::move(error));
 	case ExceptionType::IO:
-		throw PyIOException(error.Message());
+		throw PyIOException(std::move(error));
 	case ExceptionType::BINDER:
-		throw PyBinderException(error.Message());
+		throw PyBinderException(std::move(error));
 	case ExceptionType::INVALID_INPUT:
-		throw PyInvalidInputException(error.Message());
+		throw PyInvalidInputException(std::move(error));
 	case ExceptionType::INVALID_TYPE:
-		throw PyInvalidTypeException(error.Message());
+		throw PyInvalidTypeException(std::move(error));
 	case ExceptionType::NOT_IMPLEMENTED:
-		throw PyNotImplementedException(error.Message());
+		throw PyNotImplementedException(std::move(error));
 	default:
-		throw PyError(error.RawMessage());
+		throw PyError(std::move(error));
 	}
 }
 
@@ -344,13 +356,18 @@ void RegisterExceptions(const py::module &m) {
 	auto io_exception = py::register_exception<PyIOException>(m, "IOException", operational_error).ptr();
 	py::register_exception<PySerializationException>(m, "SerializationException", operational_error);
 
-	static py::exception<PyHTTPException> HTTP_EXCEPTION(m, "HTTPException", io_exception);
+	PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> http_exception_type_storage;
+	http_exception_type_storage.call_once_and_store_result(
+	    [&]() { return py::exception<PyHTTPException>(m, "HTTPException", io_exception); });
+
+	static auto &http_exception_type = http_exception_type_storage.get_stored();
 	const auto string_type = py::type::of(py::str());
 	const auto Dict = py::module_::import("typing").attr("Dict");
-	HTTP_EXCEPTION.attr("__annotations__") =
+	http_exception_type.attr("__annotations__") =
 	    py::dict(py::arg("status_code") = py::type::of(py::int_()), py::arg("body") = string_type,
 	             py::arg("reason") = string_type, py::arg("headers") = Dict[py::make_tuple(string_type, string_type)]);
-	HTTP_EXCEPTION.doc() = "Thrown when an error occurs in the httpfs extension, or whilst downloading an extension.";
+	http_exception_type.doc() =
+	    "Thrown when an error occurs in the httpfs extension, or whilst downloading an extension.";
 
 	// IntegrityError
 	auto integrity_error = py::register_exception<IntegrityError>(m, "IntegrityError", db_error).ptr();
@@ -381,7 +398,7 @@ void RegisterExceptions(const py::module &m) {
 			}
 		} catch (const duckdb::Exception &ex) {
 			duckdb::ErrorData error(ex);
-			PyThrowException(error, HTTP_EXCEPTION.ptr());
+			PyThrowException(std::move(error), http_exception_type.ptr());
 		} catch (const py::builtin_exception &ex) {
 			// These represent Python exceptions, we don't want to catch these
 			throw;
@@ -391,7 +408,7 @@ void RegisterExceptions(const py::module &m) {
 				// we need to pass non-DuckDB exceptions through as-is
 				throw;
 			}
-			PyThrowException(error, HTTP_EXCEPTION.ptr());
+			PyThrowException(std::move(error), http_exception_type.ptr());
 		}
 	});
 }

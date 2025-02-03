@@ -25,17 +25,22 @@ def test_install_non_existent_extension():
     conn = duckdb.connect()
     conn.execute("set custom_extension_repository = 'http://example.com'")
 
+    print('test')
     with raises(duckdb.IOException) as exc:
         conn.install_extension('non-existent')
 
+        print(exc.__class__)
         if not isinstance(exc, duckdb.HTTPException):
             pytest.skip(reason='This test does not throw an HTTPException, only an IOException')
         value = exc.value
 
+        print(value)
         assert value.status_code == 404
         assert value.reason == 'Not Found'
         assert 'Example Domain' in value.body
         assert 'Content-Length' in value.headers
+
+        print(str(exc))
 
 
 def test_install_misuse_errors(duckdb_cursor):
