@@ -296,10 +296,6 @@ duckdb_state duckdb_arrow_scan(duckdb_connection connection, const char *table_n
 duckdb_state duckdb_arrow_array_scan(duckdb_connection connection, const char *table_name,
                                      duckdb_arrow_schema arrow_schema, duckdb_arrow_array arrow_array,
                                      duckdb_arrow_stream *out_stream) {
-	auto private_data = new arrow_array_stream_wrapper::PrivateData;
-	private_data->schema = reinterpret_cast<ArrowSchema *>(arrow_schema);
-	private_data->array = reinterpret_cast<ArrowArray *>(arrow_array);
-	private_data->done = false;
 
 	if (!out_stream) {
 		return DuckDBError;
@@ -314,6 +310,11 @@ duckdb_state duckdb_arrow_array_scan(duckdb_connection connection, const char *t
 		*out_stream = nullptr;
 		return DuckDBError;
 	}
+
+	auto private_data = new arrow_array_stream_wrapper::PrivateData;
+	private_data->schema = reinterpret_cast<ArrowSchema *>(arrow_schema);
+	private_data->array = reinterpret_cast<ArrowArray *>(arrow_array);
+	private_data->done = false;
 
 	ArrowArrayStream *stream = new ArrowArrayStream;
 	*out_stream = reinterpret_cast<duckdb_arrow_stream>(stream);
