@@ -152,9 +152,11 @@ public:
 	MergeSorter(GlobalSortState &state, BufferManager &buffer_manager);
 
 	//! Finds and merges partitions until the current cascaded merge round is finished
-	void PerformInMergeRound();
+	bool PerformInMergeRound();
 
 private:
+	static constexpr idx_t BATCH_SIZE = 100;
+
 	//! The global sorting state
 	GlobalSortState &state;
 	//! The sorting and payload layouts

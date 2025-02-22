@@ -122,7 +122,9 @@ public:
 		// Initialize merge sorted and iterate until done
 		auto &global_sort_state = state.global_sort_state;
 		MergeSorter merge_sorter(global_sort_state, BufferManager::GetBufferManager(context));
-		merge_sorter.PerformInMergeRound();
+		if (!merge_sorter.PerformInMergeRound()) {
+			return TaskExecutionResult::TASK_YIELDED;
+		}
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;
 	}

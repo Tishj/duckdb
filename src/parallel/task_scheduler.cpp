@@ -199,6 +199,11 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker) {
 				task->Deschedule();
 				task.reset();
 				break;
+			case TaskExecutionResult::TASK_YIELDED:
+				task->Deschedule();
+				task->Reschedule();
+				task.reset();
+				break;
 			}
 		}
 	}
@@ -235,6 +240,11 @@ idx_t TaskScheduler::ExecuteTasks(atomic<bool> *marker, idx_t max_tasks) {
 			task->Deschedule();
 			task.reset();
 			break;
+		case TaskExecutionResult::TASK_YIELDED:
+			task->Deschedule();
+			task->Reschedule();
+			task.reset();
+			break;
 		}
 	}
 	return completed_tasks;
@@ -262,6 +272,11 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 				throw InternalException("Task should not return TASK_NOT_FINISHED in PROCESS_ALL mode");
 			case TaskExecutionResult::TASK_BLOCKED:
 				task->Deschedule();
+				task.reset();
+				break;
+			case TaskExecutionResult::TASK_YIELDED:
+				task->Deschedule();
+				task->Reschedule();
 				task.reset();
 				break;
 			}

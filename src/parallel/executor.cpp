@@ -581,6 +581,10 @@ PendingExecutionResult Executor::ExecuteTask(bool dry_run) {
 			if (result == TaskExecutionResult::TASK_BLOCKED) {
 				task->Deschedule();
 				task.reset();
+			} else if (result == TaskExecutionResult::TASK_YIELDED) {
+				task->Deschedule();
+				task->Reschedule();
+				task.reset();
 			} else if (result == TaskExecutionResult::TASK_FINISHED) {
 				// if the task is finished, clean it up
 				task.reset();

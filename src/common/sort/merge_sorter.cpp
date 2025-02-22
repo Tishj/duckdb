@@ -8,17 +8,20 @@ MergeSorter::MergeSorter(GlobalSortState &state, BufferManager &buffer_manager)
     : state(state), buffer_manager(buffer_manager), sort_layout(state.sort_layout) {
 }
 
-void MergeSorter::PerformInMergeRound() {
-	while (true) {
+bool MergeSorter::PerformInMergeRound() {
+	bool finished = false;
+	for (idx_t i = 0; i < BATCH_SIZE && !finished; i++) {
 		{
 			lock_guard<mutex> pair_guard(state.lock);
 			if (state.pair_idx == state.num_pairs) {
+				finished = true;
 				break;
 			}
 			GetNextPartition();
 		}
 		MergePartition();
 	}
+	return finished;
 }
 
 void MergeSorter::MergePartition() {

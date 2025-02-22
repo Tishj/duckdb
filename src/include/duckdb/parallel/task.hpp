@@ -19,7 +19,7 @@ struct ProducerToken;
 
 enum class TaskExecutionMode : uint8_t { PROCESS_ALL, PROCESS_PARTIAL };
 
-enum class TaskExecutionResult : uint8_t { TASK_FINISHED, TASK_NOT_FINISHED, TASK_ERROR, TASK_BLOCKED };
+enum class TaskExecutionResult : uint8_t { TASK_FINISHED, TASK_NOT_FINISHED, TASK_ERROR, TASK_BLOCKED, TASK_YIELDED };
 
 //! Generic parallel task
 class Task : public enable_shared_from_this<Task> {
