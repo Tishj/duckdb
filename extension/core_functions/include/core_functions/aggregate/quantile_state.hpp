@@ -37,7 +37,8 @@ struct QuantileOperation {
 		if (source.v.empty()) {
 			return;
 		}
-		target.v.insert(target.v.end(), source.v.begin(), source.v.end());
+		target.v.insert(target.v.end(), std::make_move_iterator(source.v.begin()),
+		                std::make_move_iterator(source.v.end()));
 	}
 
 	template <class STATE>
