@@ -211,6 +211,7 @@ jobs:
       CIBW_MANYLINUX_PYPY_X86_64_IMAGE: ${{ matrix.manylinux }}
       PYTEST_TIMEOUT: '600'
       DUCKDB_BUILD_UNITY: 1
+      SETUPTOOLS_SCM_PRETEND_VERSION: '${{ inputs.override_git_describe }}'
       CIBW_ENVIRONMENT: 'OVERRIDE_GIT_DESCRIBE=${{ inputs.override_git_describe }}'
 
     steps:
