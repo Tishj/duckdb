@@ -376,6 +376,38 @@ spark_packages = [
 
 packages.extend(spark_packages)
 
+versioning_tag_match = 'v*.*.*'
+describe_command = ['git', 'describe', '--tags', '--long', '--debug', '--match', versioning_tag_match]
+
+
+def get_version(version):
+    def prefix_version(version):
+        """Make sure the version is prefixed with 'v' to be of the form vX.Y.Z"""
+        if version.startswith('v'):
+            return version
+        return 'v' + version
+
+    override_git_describe = os.getenv('OVERRIDE_GIT_DESCRIBE') or ''
+    if len(override_git_describe) != 0:
+        return prefix_version(override_git_describe)
+
+    # If we're exactly on a tag (dev_iteration = 0)
+    distance = version.distance
+    if distance == 0:
+        return prefix_version(str(version.tag))
+
+    major, minor, patch = [int(x) for x in str(version.tag).split('.')]
+    # Increment patch version
+    patch += 1
+
+    # Format as v{major}.{minor}.{patch}-dev{distance}
+    next_version = f"{major}.{minor}.{patch}"
+    # Add dev suffix with distance number
+    next_version += f"-dev{distance}"
+
+    return prefix_version(next_version)
+
+
 setup(
     name=lib_name,
     description='DuckDB in-process database',
@@ -388,7 +420,6 @@ setup(
     packages=packages,
     include_package_data=True,
     python_requires='>=3.7.0',
-    tests_require=['google-cloud-storage', 'mypy', 'pytest'],
     classifiers=[
         'Topic :: Database :: Database Engines/Servers',
         'Intended Audience :: Developers',
@@ -404,4 +435,11 @@ setup(
         "Issues": "https://github.com/duckdb/duckdb/issues",
         "Changelog": "https://github.com/duckdb/duckdb/releases",
     },
+    use_scm_version={
+        'git_describe_command': " ".join(describe_command),
+        "version_scheme": get_version,
+        "root": "../..",
+        "local_scheme": "no-local-version",
+    },
+    setup_requires=["setuptools>=60.0", "setuptools_scm>=6.4"],
 )
