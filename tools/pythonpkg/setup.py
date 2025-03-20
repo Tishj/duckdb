@@ -304,8 +304,9 @@ if len(existing_duckdb_dir) == 0:
 else:
     sys.path.append(os.path.join(script_path, '..', '..', 'scripts'))
     import package_build
+    import amalgamation
 
-    include_directories += [os.path.join('..', '..', include) for include in package_build.third_party_includes()]
+    include_directories += [os.path.join('..', '..', include) for include in amalgamation.third_party_includes()]
     toolchain_args += ['-I' + x for x in package_build.includes(extensions)]
 
     result_libraries = package_build.get_libraries(existing_duckdb_dir, libraries, extensions)
