@@ -150,6 +150,13 @@ def copy_if_different(src, dest):
     # print("Copying " + src + " to " + dest)
     shutil.copyfile(src, dest)
 
+def git_commit_hash():
+    git_describe = get_git_describe()
+    hash = git_describe.split('-')[2].lstrip('g')
+    return hash
+
+### Classes ###
+
 class FileState:
     def __init__(self, filepath):
         self.path = filepath
@@ -208,18 +215,35 @@ class FileState:
         return self.text
 
 class Amalgamator:
-    def __init__(self):
+    def __init__(self, *, source_file: Optional[str] = None, header_file: Optional[str] = None, extended: Optional[bool] = None, linenumbers: Optional[bool] = None):
         self.output_directory = os.path.join('src', 'amalgamation')
         self.temp_header = 'duckdb.hpp.tmp'
         self.temp_source = 'duckdb.cpp.tmp'
-        self.header_file = os.path.join(self.output_directory, "duckdb.hpp")
-        self.source_file = os.path.join(self.output_directory, "duckdb.cpp")
-        self.extended_amalgamation = False
+
+        if header_file:
+            self.header_file = header_file
+        else:
+            self.header_file = os.path.join(self.output_directory, "duckdb.hpp")
+
+        if source_file:
+            self.source_file = source_file
+        else:
+            self.source_file = os.path.join(self.output_directory, "duckdb.cpp")
+
+        if extended != None:
+            self.extended_amalgamation = extended
+        else:
+            self.extended_amalgamation = False
+
+        if linenumbers != None:
+            self.linenumbers = linenumbers
+        else:
+            self.linenumbers = False
+
         self.skip_duckdb_includes = False
         self.src_dir = 'src'
         self.include_dir = os.path.join('src', 'include')
 
-        self.linenumbers = False
         self.written_files = set()
         self.licenses = []
 
@@ -240,6 +264,9 @@ class Amalgamator:
         self.compile_directories = [self.src_dir] + third_party_sources()
         self.excluded_files = ['grammar.cpp', 'grammar.hpp', 'symbols.cpp']
         self.excluded_compilation_files = self.excluded_files + ['gram.hpp', 'kwlist.hpp', "duckdb-c.cpp"]
+
+    def list_include_dirs(self):
+        return self.include_paths
 
     def need_to_write_file(self, file_path, ignore_excluded=False):
         if ignore_excluded:
@@ -332,13 +359,6 @@ class Amalgamator:
             elif fname.endswith('.cpp') or fname.endswith('.c') or fname.endswith('.cc'):
                 text += self.write_file(fpath)
         return text
-
-
-def git_commit_hash():
-    git_describe = get_git_describe()
-    hash = git_describe.split('-')[2].lstrip('g')
-    return hash
-
 
 def generate_duckdb_hpp(header_file):
     print("-----------------------")
@@ -653,52 +673,53 @@ def configure_parser():
     )
     return parser
 
-def list_include_dirs():
-    return include_paths
-
 def main():
     parser = configure_parser()
     args = parser.parse_args()
-    
-    global extended_amalgamation, linenumbers, header_file, source_file
-    extended_amalgamation = args.extended
-    linenumbers = args.linenumbers
 
-    # Handle path separators consistently
+    header_file = None
+    source_file = None
+    extended = None
+    linenumbers = None
+
     if args.header:
         header_file = os.path.join(*args.header.split('/'))
     if args.source:
         source_file = os.path.join(*args.source.split('/'))
-    
+    extended = args.extended
+    linenumbers = args.linenumbers
+
+    amalgamator = Amalgamator(header_file=header_file, source_file=source_file, extended=extended, linenumbers=linenumbers)
+    amalgamtor.initialize()
+
     # Handle listing commands
     if args.list_sources:
         file_list = list_sources()
         print('\n'.join(file_list))
-        sys.exit(0)
-    
+        sys.exit(1)
+
     if args.list_objects:
         file_list = list_sources()
         print(' '.join([x.rsplit('.', 1)[0] + '.o' for x in file_list]))
-        sys.exit(0)
-    
-    if args.includes:
-        include_dirs = list_include_dirs()
-        print(' '.join(['-I' + x for x in include_dirs]))
-        sys.exit(0)
-    
-    if args.include_directories:
-        include_dirs = list_include_dirs()
-        print('\n'.join(include_dirs))
-        sys.exit(0)
+        sys.exit(1)
 
-    if extended_amalgamation:
-        extend_header_files()
+    if args.includes:
+        include_dirs = amalgamator.list_include_dirs()
+        print(' '.join(['-I' + x for x in include_dirs]))
+        sys.exit(1)
+
+    if args.include_directories:
+        include_dirs = amalgamator.list_include_dirs()
+        print('\n'.join(include_dirs))
+        sys.exit(1)
 
     # Create output directory
     if os.path.exists(output_directory):
         shutil.rmtree(output_directory)
     os.makedirs(output_directory)
-    
+
+    amalgamator.gather_headers()
+
     # Generate amalgamation
     if args.splits > 1:
         generate_amalgamation_splits(source_file, header_file, args.splits)
