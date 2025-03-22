@@ -170,6 +170,10 @@ class FileState:
         with open_utf8(path, 'r') as f:
             self.content = f.read()
 
+    def cleanup_file(self):
+        # remove all "#pragma once" notifications
+        self.text = re.sub('#pragma once', '', self.text)
+
     def add_license(self, license_index: int):
         self.text = (
             "\n\n// LICENSE_CHANGE_BEGIN\n// The following code up to LICENSE_CHANGE_END is subject to THIRD PARTY LICENSE #%s\n// See the end of this file for a list\n\n"
@@ -209,11 +213,6 @@ class FileState:
             if not found:
                 raise Exception('Could not find include file "' + included_file + '", included from file "' + self.path + '"')
 
-    def cleanup_file(self):
-        # remove all "#pragma once" notifications
-        self.text = re.sub('#pragma once', '', self.text)
-        return self.text
-
 class Amalgamator:
     def __init__(self, *, source_file: Optional[str] = None, header_file: Optional[str] = None, extended: Optional[bool] = None, linenumbers: Optional[bool] = None):
         self.output_directory = os.path.join('src', 'amalgamation')
@@ -244,6 +243,7 @@ class Amalgamator:
         self.src_dir = 'src'
         self.include_dir = os.path.join('src', 'include')
 
+        self.discovered_files: Dict[str, FileState] = {}
         self.written_files = set()
         self.licenses = []
 
@@ -281,9 +281,6 @@ class Amalgamator:
         if state.path.split(os.sep)[-1] in excluded_paths:
             # file is in ignored files set
             return False
-        if state.path in written_files:
-            # file is already written
-            return False
         return True
 
     def find_or_add_license(self, original_file) -> int:
@@ -316,14 +313,16 @@ class Amalgamator:
         state.get_includes()
         return state
 
-    # FIXME: change this to create a stack of FileState instead
-    # followed by a method to write the FileStates 
-    def write_file(self, filename: str) -> str:
+    def gather_file(self, filename: str, result: List[str]):
+        if filename in self.discovered_files:
+            # If this FileState is already prepared, directly add it
+            result.append(filename)
+            return
+
+        # Check if this file needs to be skipped entirely
         file_state = get_file_state(filename)
         if not file_state:
-            return ''
-
-        self.written_files.add(filename)
+            return
 
         # find the linenr of the final #include statement we parsed
         if len(file_state.include_statements) > 0:
@@ -332,18 +331,22 @@ class Amalgamator:
 
             # now write all the dependencies of this header first
             for i, include_file in enumerate(file_state.include_files):
-                include_text = self.write_file(include_file)
+                self.gather_file(include_file, result)
                 if self.linenumbers and i == len(file_state.include_files) - 1:
                     # for the last include statement, we also include a #line directive
                     include_text += '\n#line %d "%s"\n' % (linenr, filename)
                 file_state.text = file_state.text.replace(file_state.include_statements[i], include_text)
+        self.discovered_files[filename] = file_state
 
         # add the initial line here
         if self.linenumbers:
             file_state.text = '\n#line 1 "%s"\n' % (filename,) + file_state.text
-        # print(filename)
-        # now read the header and write it
-        return cleanup_file(file_state.text)
+        file_state.cleanup_file()
+        result.append(file_state)
+
+    # FIXME: change this to create a stack of FileState instead
+    # followed by a method to write the FileStates 
+    def write_file(self, filename: str) -> str:
 
     def write_directory(self, directory_path: str) -> str
         files = os.listdir(directory_path)
