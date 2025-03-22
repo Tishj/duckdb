@@ -155,15 +155,65 @@ def git_commit_hash():
     hash = git_describe.split('-')[2].lstrip('g')
     return hash
 
+class IncludeStatement:
+    def __init__(self, line_numbers: List[int], content: str, include_file: str):
+        self.line_numbers = line_numbers
+        self.content = content
+        self.include_file = include_file
+        self.full_path = include_file
+    
+    def __repr__(self):
+        return self.include_file
+
+def get_include(line_numbers, content) -> Optional[IncludeStatement]:
+    if not content.startswith('#'):
+        return None
+    
+    tokens = content.split(None, 2)
+    if len(tokens) < 2:
+        return None
+
+    if tokens[0] == '#' and tokens[1] == 'include':
+        path = tokens[2]
+    elif tokens[0] == '#include':
+        path = tokens[1]
+    else:
+        return None
+
+    if path[0] != '"' or path[-1] != '"':
+        return None
+
+    return IncludeStatement(line_numbers, content, path[1:-1])
+
+def collect_includes(text) -> List[IncludeStatement]:
+    include_statements = []
+    lines = text.splitlines()
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        line_numbers = [i]
+        # Handle potential line continuations
+        while line.endswith('\\') and i + 1 < len(lines):
+            i += 1
+            line = line[:-1] + lines[i].strip()
+            line_numbers.append(i)
+            continue
+        
+        include = get_include(line_numbers, line)
+        if include:
+            include_statements.append(include)
+        i += 1
+    return include_statements
+
 ### Classes ###
 
 class FileState:
     def __init__(self, filepath):
         self.path = filepath
-        self.includes = []
         self.content: str = ''
-        self.include_statements: List[str] = []
-        self.include_files: List[str] = []
+        self.includes: List[FileState] = []
 
     def get_content(self):
         # first read this file
@@ -184,11 +234,11 @@ class FileState:
 
     def get_includes(self):
         # find all the includes referred to in the directory
-        regex_include_statements = re.findall("(^[\t ]*[#][\t ]*include[\t ]+[\"]([^\"]+)[\"])", self.text, flags=re.MULTILINE)
+        include_statements = collect_includes(self.text)
         # figure out where they are located
-        for x in regex_include_statements:
-            included_file = x[1]
-            if skip_duckdb_includes and 'duckdb' in included_file:
+        for include_statement in include_statements:
+            included_file = include_statement.include_file
+            if self.skip_duckdb_includes and 'duckdb' in included_file:
                 continue
             if (
                 'extension_helper.cpp' in self.path
@@ -199,19 +249,19 @@ class FileState:
                 continue
             if 'allocator.cpp' in self.path and included_file.endswith('jemalloc_extension.hpp'):
                 continue
-            if x[0] in include_statements:
-                raise Exception(f"duplicate include {x[0]} in file {self.path}")
-            include_statements.append(x[0])
+            if included_file in self.include_statements:
+                raise Exception(f"duplicate include {included_file} in file {self.path}")
             included_file = os.sep.join(included_file.split('/'))
             found = False
             for include_path in include_paths:
                 ipath = os.path.join(include_path, included_file)
                 if os.path.isfile(ipath):
-                    include_files.append(ipath)
+                    include_statement.full_path = ipath
+                    self.include_files.append(include_statement)
                     found = True
                     break
             if not found:
-                raise Exception('Could not find include file "' + included_file + '", included from file "' + self.path + '"')
+                raise Exception(f'Could not find include file "{included_file}", included from file "{self.path}"')
 
 class Amalgamator:
     def __init__(self, *, source_file: Optional[str] = None, header_file: Optional[str] = None, extended: Optional[bool] = None, linenumbers: Optional[bool] = None):
