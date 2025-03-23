@@ -1,10 +1,21 @@
+import os
+
+######
+# MAIN_BRANCH_VERSIONING default value needs to keep in sync between:
+# - CMakeLists.txt
+# - scripts/amalgamation.py
+# - scripts/package_build.py
+# - tools/pythonpkg/setup.py
+######
+MAIN_BRANCH_VERSIONING = False if os.getenv('MAIN_BRANCH_VERSIONING') == "0" else True
+
+
 def get_git_describe():
-    import os
     import subprocess
 
     override_git_describe = os.getenv('OVERRIDE_GIT_DESCRIBE') or ''
     versioning_tag_match = 'v*.*.*'
-    if main_branch_versioning:
+    if MAIN_BRANCH_VERSIONING:
         versioning_tag_match = 'v*.*.0'
     # empty override_git_describe, either since env was empty string or not existing
     # -> ask git (that can fail, so except in place)
@@ -33,16 +44,8 @@ def get_git_describe():
     except subprocess.CalledProcessError:
         return override_git_describe + "-g" + "deadbeeff"
 
-def git_dev_version():
-    ######
-    # MAIN_BRANCH_VERSIONING default value needs to keep in sync between:
-    # - CMakeLists.txt
-    # - scripts/amalgamation.py
-    # - scripts/package_build.py
-    # - tools/pythonpkg/setup.py
-    ######
-    main_branch_versioning = False if os.getenv('MAIN_BRANCH_VERSIONING') == "0" else True
 
+def git_dev_version():
     def prefix_version(version):
         """Make sure the version is prefixed with 'v' to be of the form vX.Y.Z"""
         if version.startswith('v'):
@@ -61,7 +64,7 @@ def git_dev_version():
         else:
             # not on a tag: increment the version by one and add a -devX suffix
             # this needs to keep in sync with changes to CMakeLists.txt
-            if main_branch_versioning == True:
+            if MAIN_BRANCH_VERSIONING == True:
                 # increment minor version
                 version_splits[1] = str(int(version_splits[1]) + 1)
             else:
@@ -70,6 +73,7 @@ def git_dev_version():
             return "v" + '.'.join(version_splits) + "-dev" + dev_version
     except:
         return "v0.0.0"
+
 
 def open_utf8(fpath, flags):
     import sys

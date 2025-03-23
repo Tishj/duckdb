@@ -7,6 +7,7 @@ import re
 
 excluded_objects = ['utf8proc_data.cpp']
 
+
 def file_is_lib(fname, libname):
     libextensions = ['.a', '.lib']
     libprefixes = ['', 'lib']
