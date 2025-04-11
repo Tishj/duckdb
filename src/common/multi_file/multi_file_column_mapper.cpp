@@ -15,7 +15,7 @@ namespace duckdb {
 MultiFileColumnMapper::MultiFileColumnMapper(ClientContext &context, MultiFileReaderData &reader_data,
                                              const vector<MultiFileColumnDefinition> &global_columns,
                                              const vector<ColumnIndex> &global_column_ids,
-                                             optional_ptr<TableFilterSet> filters, const string &initial_file,
+                                             optional_ptr<TableFilterSet> filters, const OpenFileInfo &initial_file,
                                              const MultiFileReaderBindData &bind_data,
                                              const virtual_column_map_t &virtual_columns)
     : context(context), reader_data(reader_data), global_columns(global_columns), global_column_ids(global_column_ids),
@@ -181,7 +181,7 @@ void MultiFileColumnMapper::ThrowColumnNotFoundError(const string &global_column
 	                            "the original file \"%s\", but could not be found in file \"%s\".\nCandidate names: "
 	                            "%s\nIf you are trying to "
 	                            "read files with different schemas, try setting union_by_name=True",
-	                            file_name, global_column_name, initial_file, file_name, candidate_names);
+	                            file_name, global_column_name, initial_file.path, file_name, candidate_names);
 }
 
 //! Check if a column is trivially mappable (i.e. the column is effectively identical to the global column)
@@ -366,8 +366,7 @@ unique_ptr<Expression> ConstructMapExpression(ClientContext &context, idx_t loca
 }
 
 bool VirtualColumnIsConstant(column_t column_id) {
-	if (column_id == COLUMN_IDENTIFIER_EMPTY ||
-	    COLUMN_IDENTIFIER_EMPTY == MultiFileReader::COLUMN_IDENTIFIER_FILENAME) {
+	if (column_id == COLUMN_IDENTIFIER_EMPTY || column_id == MultiFileReader::COLUMN_IDENTIFIER_FILENAME) {
 		return true;
 	}
 	return false;

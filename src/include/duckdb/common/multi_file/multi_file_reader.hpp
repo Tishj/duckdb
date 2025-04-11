@@ -102,7 +102,7 @@ public:
 	DUCKDB_API virtual ReaderInitializeType
 	CreateMapping(ClientContext &context, MultiFileReaderData &reader_data,
 	              const vector<MultiFileColumnDefinition> &global_columns, const vector<ColumnIndex> &global_column_ids,
-	              optional_ptr<TableFilterSet> filters, const string &initial_file,
+	              optional_ptr<TableFilterSet> filters, const OpenFileInfo &initial_file,
 	              const MultiFileReaderBindData &bind_data, const virtual_column_map_t &virtual_columns);
 
 	//! Finalize the reading of a chunk - applying any constants that are required
@@ -168,14 +168,15 @@ public:
 		}
 	}
 
-	ReaderInitializeType InitializeReader(
-	    MultiFileReaderData &reader_data, const MultiFileOptions &options, const MultiFileReaderBindData &bind_data,
-	    const virtual_column_map_t &virtual_columns, const vector<MultiFileColumnDefinition> &global_columns,
-	    const vector<ColumnIndex> &global_column_ids, optional_ptr<TableFilterSet> table_filters,
-	    const string &initial_file, ClientContext &context, optional_ptr<MultiFileReaderGlobalState> global_state) {
-		FinalizeBind(reader_data, options, bind_data, global_columns, global_column_ids, context, global_state);
-		return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters, initial_file,
-		                     bind_data, virtual_columns);
+	virtual ReaderInitializeType InitializeReader(MultiFileReaderData &reader_data, const MultiFileBindData &bind_data,
+	                                              const vector<MultiFileColumnDefinition> &global_columns,
+	                                              const vector<ColumnIndex> &global_column_ids,
+	                                              optional_ptr<TableFilterSet> table_filters, ClientContext &context,
+	                                              optional_ptr<MultiFileReaderGlobalState> global_state) {
+		FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, global_column_ids,
+		             context, global_state);
+		return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters,
+		                     bind_data.file_list->GetFirstFile(), bind_data.reader_bind, bind_data.virtual_columns);
 	}
 
 	template <class BIND_DATA>
@@ -188,7 +189,7 @@ public:
 		}
 
 		for (const auto &file : file_list.Files()) {
-			file_set.insert(file);
+			file_set.insert(file.path);
 		}
 
 		if (data.initial_reader) {
