@@ -241,8 +241,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: duckdb-extensions-${{ matrix.duckdb_arch }}
-          path: |
-            build/release/extension/*/*.duckdb_extension
+          path: build/release/repository/*/${{ matrix.duckdb_arch }}/*.duckdb_extension
  
  upload-linux-extensions-64-aarch64:
     name: Upload Linux Extensions (aarch64)
