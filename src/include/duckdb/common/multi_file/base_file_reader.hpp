@@ -55,6 +55,9 @@ public:
 	const string &GetFileName() {
 		return file.path;
 	}
+	const OpenFileInfo &GetFileInfo() {
+		return file;
+	}
 	virtual string GetReaderType() const = 0;
 	virtual bool UseCastMap() const {
 		//! Whether or not to push casts into the cast map

@@ -228,10 +228,10 @@ void MultiFileReader::BindOptions(MultiFileOptions &options, MultiFileList &file
 	// Add generated constant columns from hive partitioning scheme
 	if (options.hive_partitioning) {
 		D_ASSERT(files.GetExpandResult() != FileExpandResult::NO_FILES);
-		auto partitions = HivePartitioning::Parse(files.GetFirstFile().path);
+		auto partitions = ParseHivePartitioning(files.GetFirstFile());
 		// verify that all files have the same hive partitioning scheme
 		for (const auto &file : files.Files()) {
-			auto file_partitions = HivePartitioning::Parse(file.path);
+			auto file_partitions = ParseHivePartitioning(file);
 			for (auto &part_info : partitions) {
 				if (file_partitions.find(part_info.first) == file_partitions.end()) {
 					string error = "Hive partition mismatch between file \"%s\" and \"%s\": key \"%s\" not found";
@@ -288,6 +288,10 @@ void MultiFileReader::GetVirtualColumns(ClientContext &context, MultiFileReaderB
 	result.insert(make_pair(COLUMN_IDENTIFIER_EMPTY, TableColumn("", LogicalType::BOOLEAN)));
 }
 
+map<string, string> MultiFileReader::ParseHivePartitioning(const OpenFileInfo &file_info) const {
+	return HivePartitioning::Parse(file_info.path);
+}
+
 void MultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
                                    const MultiFileReaderBindData &options,
                                    const vector<MultiFileColumnDefinition> &global_columns,
@@ -296,7 +300,7 @@ void MultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const Multi
 
 	// create a map of name -> column index
 	auto &local_columns = reader_data.reader->GetColumns();
-	auto &filename = reader_data.reader->GetFileName();
+	auto &file_info = reader_data.reader->GetFileInfo();
 	case_insensitive_map_t<idx_t> name_map;
 	if (file_options.union_by_name) {
 		for (idx_t col_idx = 0; col_idx < local_columns.size(); col_idx++) {
@@ -311,7 +315,7 @@ void MultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const Multi
 		if ((options.filename_idx.IsValid() && column_id == options.filename_idx.GetIndex()) ||
 		    column_id == COLUMN_IDENTIFIER_FILENAME) {
 			// filename
-			reader_data.constant_map.Add(global_idx, Value(filename));
+			reader_data.constant_map.Add(global_idx, Value(file_info.path));
 			continue;
 		}
 		if (column_id == COLUMN_IDENTIFIER_FILE_INDEX) {
@@ -324,7 +328,7 @@ void MultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const Multi
 		}
 		if (!options.hive_partitioning_indexes.empty()) {
 			// hive partition constants
-			auto partitions = HivePartitioning::Parse(filename);
+			auto partitions = ParseHivePartitioning(file_info);
 			D_ASSERT(partitions.size() == options.hive_partitioning_indexes.size());
 			bool found_partition = false;
 			for (auto &entry : options.hive_partitioning_indexes) {
@@ -551,16 +555,16 @@ void UnionByName::CombineUnionTypes(const vector<string> &col_names, const vecto
 	}
 }
 
-bool MultiFileOptions::AutoDetectHivePartitioningInternal(MultiFileList &files, ClientContext &context) {
+bool MultiFileOptions::AutoDetectHivePartitioningInternal(MultiFileList &files, MultiFileReader &multi_file_reader, ClientContext &context) {
 	auto first_file = files.GetFirstFile();
-	auto partitions = HivePartitioning::Parse(first_file.path);
+	auto partitions = multi_file_reader.ParseHivePartitioning(first_file);
 	if (partitions.empty()) {
 		// no partitions found in first file
 		return false;
 	}
 
 	for (const auto &file : files.Files()) {
-		auto new_partitions = HivePartitioning::Parse(file.path);
+		auto new_partitions = multi_file_reader.ParseHivePartitioning(file);
 		if (new_partitions.size() != partitions.size()) {
 			// partition count mismatch
 			return false;
@@ -575,12 +579,12 @@ bool MultiFileOptions::AutoDetectHivePartitioningInternal(MultiFileList &files, 
 	}
 	return true;
 }
-void MultiFileOptions::AutoDetectHiveTypesInternal(MultiFileList &files, ClientContext &context) {
+void MultiFileOptions::AutoDetectHiveTypesInternal(MultiFileList &files, MultiFileReader &multi_file_reader, ClientContext &context) {
 	const LogicalType candidates[] = {LogicalType::DATE, LogicalType::TIMESTAMP, LogicalType::BIGINT};
 
 	unordered_map<string, LogicalType> detected_types;
 	for (const auto &file : files.Files()) {
-		auto partitions = HivePartitioning::Parse(file.path);
+		auto partitions = multi_file_reader.ParseHivePartitioning(file);
 		if (partitions.empty()) {
 			return;
 		}
@@ -617,7 +621,7 @@ void MultiFileOptions::AutoDetectHiveTypesInternal(MultiFileList &files, ClientC
 		hive_types_schema.insert(make_pair(entry.first, std::move(entry.second)));
 	}
 }
-void MultiFileOptions::AutoDetectHivePartitioning(MultiFileList &files, ClientContext &context) {
+void MultiFileOptions::AutoDetectHivePartitioning(MultiFileList &files, MultiFileReader &multi_file_reader, ClientContext &context) {
 	if (files.GetExpandResult() == FileExpandResult::NO_FILES) {
 		return;
 	}
@@ -632,10 +636,10 @@ void MultiFileOptions::AutoDetectHivePartitioning(MultiFileList &files, ClientCo
 		auto_detect_hive_partitioning = false;
 	}
 	if (auto_detect_hive_partitioning) {
-		hive_partitioning = AutoDetectHivePartitioningInternal(files, context);
+		hive_partitioning = AutoDetectHivePartitioningInternal(files, multi_file_reader, context);
 	}
 	if (hive_partitioning && hive_types_autocast) {
-		AutoDetectHiveTypesInternal(files, context);
+		AutoDetectHiveTypesInternal(files, multi_file_reader, context);
 	}
 }
 void MultiFileOptions::VerifyHiveTypesArePartitions(const std::map<string, string> &partitions) const {

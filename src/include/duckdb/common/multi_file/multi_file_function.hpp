@@ -58,7 +58,7 @@ public:
 			                                       result->names, result->reader_bind);
 			bound_on_first_file = false;
 		} else {
-			result->file_options.AutoDetectHivePartitioning(*result->file_list, context);
+			result->file_options.AutoDetectHivePartitioning(*result->file_list, *result->multi_file_reader, context);
 			OP::BindReader(context, result->types, result->names, *result);
 		}
 		OP::FinalizeBindData(*result);

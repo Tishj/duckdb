@@ -120,6 +120,8 @@ public:
 	                                      DataChunk &input_chunk, DataChunk &output_chunk, ExpressionExecutor &executor,
 	                                      optional_ptr<MultiFileReaderGlobalState> global_state);
 
+	DUCKDB_API virtual map<string, string> ParseHivePartitioning(const OpenFileInfo &file_info) const;
+
 	//! Fetch the partition data for the current chunk
 	DUCKDB_API virtual void GetPartitionData(ClientContext &context, const MultiFileReaderBindData &bind_data,
 	                                         const MultiFileReaderData &reader_data,
