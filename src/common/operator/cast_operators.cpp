@@ -1478,11 +1478,46 @@ string_t CastFromUUID::Operation(hugeint_t input, Vector &vector) {
 }
 
 //===--------------------------------------------------------------------===//
-// Cast To UUID
+// Cast Varchar To UUID
 //===--------------------------------------------------------------------===//
 template <>
 bool TryCastToUUID::Operation(string_t input, hugeint_t &result, Vector &result_vector, CastParameters &parameters) {
 	return UUID::FromString(input.GetString(), result, parameters.strict);
+}
+
+//===--------------------------------------------------------------------===//
+// Cast Blob To UUID
+//===--------------------------------------------------------------------===//
+
+template <class T>
+static T ReadAsLittleEndian(const uint8_t *data) {
+	T res = 0;
+	for (idx_t i = 0; i < sizeof(T); i++) {
+		res = (res << 8) | data[i];
+	}
+	return res;
+}
+
+template <>
+bool TryCastBlobToUUID::Operation(string_t input, hugeint_t &result, Vector &result_vector,
+                                  CastParameters &parameters) {
+	auto blob_size = input.GetSize();
+	if (blob_size != 16) {
+		if (parameters.error_message) {
+			*parameters.error_message =
+			    StringUtil::Format("Cannot cast BLOB to UUID, blob has to be 16 bytes, not %d", blob_size);
+		}
+		return false;
+	}
+	auto uuid_bytes = reinterpret_cast<const uint8_t *>(input.GetData());
+	uint64_t time_low = ReadAsLittleEndian<uint32_t>(uuid_bytes);
+	uint64_t time_mid = ReadAsLittleEndian<uint16_t>(uuid_bytes + 4);
+	uint64_t time_hi_and_version = ReadAsLittleEndian<uint16_t>(uuid_bytes + 6);
+	result.upper = (time_low << 32) | (time_mid << 16) | time_hi_and_version;
+	result.upper = static_cast<int64_t>(result.upper ^ (1ULL << 63));
+
+	result.lower = ReadAsLittleEndian<uint64_t>(uuid_bytes + 8);
+	return true;
 }
 
 //===--------------------------------------------------------------------===//

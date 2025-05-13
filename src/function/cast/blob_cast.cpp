@@ -13,7 +13,8 @@ BoundCastInfo DefaultCasts::BlobCastSwitch(BindCastInput &input, const LogicalTy
 		return DefaultCasts::ReinterpretCast;
 	case LogicalTypeId::BIT:
 		return BoundCastInfo(&VectorCastHelpers::StringCast<string_t, duckdb::CastFromBlobToBit>);
-
+	case LogicalTypeId::UUID:
+		return BoundCastInfo(&VectorCastHelpers::TryCastStringLoop<string_t, hugeint_t, duckdb::TryCastBlobToUUID>);
 	default:
 		return DefaultCasts::TryVectorNullCast;
 	}

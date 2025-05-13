@@ -893,12 +893,24 @@ struct CastFromBlob {
 template <>
 duckdb::string_t CastFromBlob::Operation(duckdb::string_t input, Vector &vector);
 
+struct TryCastBlobToUUID {
+	template <class SRC, class DST>
+	static inline bool Operation(SRC input, DST &result, Vector &result_vector, CastParameters &parameters) {
+		throw InternalException("Unsupported type for try cast to uuid");
+	}
+};
+
+template <>
+DUCKDB_API bool TryCastBlobToUUID::Operation(string_t input, hugeint_t &result, Vector &result_vector,
+                                             CastParameters &parameters);
+
 struct CastFromBlobToBit {
 	template <class SRC>
 	static inline string_t Operation(SRC input, Vector &result) {
 		throw NotImplementedException("Cast from blob could not be performed!");
 	}
 };
+
 template <>
 string_t CastFromBlobToBit::Operation(string_t input, Vector &result);
 
