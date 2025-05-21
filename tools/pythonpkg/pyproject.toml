@@ -39,9 +39,6 @@ dev = [
     "mypy<=1.13"
 ]
 
-[tool.setuptools_scm]
-root = "../.."
-
 ### CI Builwheel configurations ###
 
 # Default config runs all tests and requires at least one extension to be tested against
