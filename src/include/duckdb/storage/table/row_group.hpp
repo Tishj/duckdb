@@ -42,6 +42,7 @@ struct PersistentRowGroupData;
 struct RowGroupPointer;
 struct TransactionData;
 class CollectionScanState;
+class TableFilter;
 class TableFilterSet;
 struct ColumnFetchState;
 struct RowGroupAppendState;
@@ -183,6 +184,8 @@ public:
 
 	idx_t GetRowGroupSize() const;
 
+	static FilterPropagateResult CheckRowIdFilter(const TableFilter &filter, idx_t beg_row, idx_t end_row);
+
 private:
 	optional_ptr<RowVersionManager> GetVersionInfo();
 	shared_ptr<RowVersionManager> GetOrCreateVersionInfoPtr();
@@ -207,7 +210,7 @@ private:
 	unique_ptr<atomic<bool>[]> is_loaded;
 	vector<MetaBlockPointer> deletes_pointers;
 	atomic<bool> deletes_is_loaded;
-	idx_t allocation_size;
+	atomic<idx_t> allocation_size;
 };
 
 } // namespace duckdb

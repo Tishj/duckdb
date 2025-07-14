@@ -56,9 +56,17 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY: {
 		// aggregate
-		if (!everything_referenced) {
+		auto &aggr = op.Cast<LogicalAggregate>();
+		// if there is more than one grouping set, the group by most likely has a rollup or cube
+		// If there is an equality join underneath the aggregate, this can change the groups to avoid unused columns
+		// This causes the duplicate eliminator to ignore functionality provided by grouping sets
+		bool new_root = false;
+		if (aggr.grouping_sets.size() > 1) {
+			;
+			new_root = true;
+		}
+		if (!everything_referenced && !new_root) {
 			// FIXME: groups that are not referenced need to stay -> but they don't need to be scanned and output!
-			auto &aggr = op.Cast<LogicalAggregate>();
 			ClearUnusedExpressions(aggr.expressions, aggr.aggregate_index);
 			if (aggr.expressions.empty() && aggr.groups.empty()) {
 				// removed all expressions from the aggregate: push a COUNT(*)
@@ -70,7 +78,7 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		}
 
 		// then recurse into the children of the aggregate
-		RemoveUnusedColumns remove(binder, context);
+		RemoveUnusedColumns remove(binder, context, new_root);
 		remove.VisitOperatorExpressions(op);
 		remove.VisitOperator(*op.children[0]);
 		return;
@@ -197,7 +205,8 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 	}
 	case LogicalOperatorType::LOGICAL_INSERT:
 	case LogicalOperatorType::LOGICAL_UPDATE:
-	case LogicalOperatorType::LOGICAL_DELETE: {
+	case LogicalOperatorType::LOGICAL_DELETE:
+	case LogicalOperatorType::LOGICAL_MERGE_INTO: {
 		//! When RETURNING is used, a PROJECTION is the top level operator for INSERTS, UPDATES, and DELETES
 		//! We still need to project all values from these operators so the projection
 		//! on top of them can select from only the table values being inserted.
@@ -248,6 +257,9 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 				ColumnBinding filter_binding(get.table_index, index.GetIndex());
 				auto column_ref = make_uniq<BoundColumnRefExpression>(std::move(column_type), filter_binding);
 				auto filter_expr = filter.second->ToExpression(*column_ref);
+				if (filter_expr->IsScalar()) {
+					filter_expr = std::move(column_ref);
+				}
 				VisitExpression(&filter_expr);
 				filter_expressions.push_back(std::move(filter_expr));
 			}
@@ -303,18 +315,10 @@ void RemoveUnusedColumns::VisitOperator(LogicalOperator &op) {
 		everything_referenced = true;
 		break;
 	}
-	case LogicalOperatorType::LOGICAL_RECURSIVE_CTE: {
-		everything_referenced = true;
-		break;
-	}
-	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE: {
-		everything_referenced = true;
-		break;
-	}
-	case LogicalOperatorType::LOGICAL_CTE_REF: {
-		everything_referenced = true;
-		break;
-	}
+	case LogicalOperatorType::LOGICAL_RECURSIVE_CTE:
+	case LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
+	case LogicalOperatorType::LOGICAL_CTE_REF:
+	case LogicalOperatorType::LOGICAL_COPY_TO_FILE:
 	case LogicalOperatorType::LOGICAL_PIVOT: {
 		everything_referenced = true;
 		break;

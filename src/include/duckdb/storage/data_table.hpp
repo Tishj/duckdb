@@ -96,6 +96,8 @@ public:
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
 	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);
+	//! Returns true, if the transaction can fetch the row ID.
+	bool CanFetch(DuckTransaction &transaction, const row_t row_id);
 
 	//! Initializes appending to transaction-local storage
 	void InitializeLocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context,
@@ -111,6 +113,9 @@ public:
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
 	                 const vector<unique_ptr<BoundConstraint>> &bound_constraints, Vector &row_ids,
 	                 DataChunk &delete_chunk);
+	//! Appends to the transaction-local storage of this table
+	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
+	                 const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 	//! Append a chunk to the transaction-local storage of this table.
 	void LocalWALAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
 	                    const vector<unique_ptr<BoundConstraint>> &bound_constraints);

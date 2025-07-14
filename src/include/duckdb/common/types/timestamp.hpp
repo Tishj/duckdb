@@ -19,6 +19,7 @@ namespace duckdb {
 
 struct date_t;     // NOLINT
 struct dtime_t;    // NOLINT
+struct dtime_ns_t; // NOLINT
 struct dtime_tz_t; // NOLINT
 
 //! Type used to represent a TIMESTAMP. timestamp_t holds the microseconds since 1970-01-01.
@@ -159,6 +160,7 @@ public:
 	DUCKDB_API static date_t GetDate(timestamp_t timestamp);
 
 	DUCKDB_API static dtime_t GetTime(timestamp_t timestamp);
+	DUCKDB_API static dtime_ns_t GetTimeNs(timestamp_ns_t timestamp);
 	//! Create a Timestamp object from a specified (date, time) combination
 	DUCKDB_API static timestamp_t FromDatetime(date_t date, dtime_t time);
 	DUCKDB_API static bool TryFromDatetime(date_t date, dtime_t time, timestamp_t &result);
@@ -218,6 +220,8 @@ public:
 
 	//! Decompose a timestamp into its components
 	DUCKDB_API static TimestampComponents GetComponents(timestamp_t timestamp);
+	DUCKDB_API static time_t ToTimeT(timestamp_t);
+	DUCKDB_API static timestamp_t FromTimeT(time_t);
 
 	DUCKDB_API static bool TryParseUTCOffset(const char *str, idx_t &pos, idx_t len, int &hh, int &mm, int &ss);
 

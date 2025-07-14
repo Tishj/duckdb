@@ -27,6 +27,7 @@ on:
       - 'v*.*-*'
     paths-ignore:
       - '**.md'
+      - 'test/configs/**'
       - 'tools/**'
       - '!tools/shell/**'
       - '.github/patches/duckdb-wasm/**'
@@ -49,6 +50,8 @@ jobs:
 
     env:
       TREAT_WARNINGS_AS_ERRORS: 1
+      CMAKE_CXX_FLAGS: '-DDEBUG'
+      FORCE_ASSERT: 1
 
     steps:
     - uses: actions/checkout@v4
@@ -72,7 +75,7 @@ jobs:
 
     - name: Build
       shell: bash
-      run: GEN=ninja make debug
+      run: GEN=ninja make release
 
     - name: Set DUCKDB_INSTALL_LIB for ADBC tests
       shell: bash
@@ -84,7 +87,7 @@ jobs:
     - name: Test
       if: ${{ inputs.skip_tests != 'true' }}
       shell: bash
-      run: make unittestci
+      run: make unittest_release
 
     - name: Amalgamation
       if: ${{ inputs.skip_tests != 'true' }}
@@ -209,11 +212,12 @@ jobs:
             osx_arch: arm64
             duckdb_arch: osx_arm64
             vcpkg_triplet: arm64-osx
-            run_autoload_tests: ${{ inputs.skip_tests != 'true' && 1 || 0 }}
+            run_autoload_tests: ${{ inputs.skip_tests != 'true' && '1' || '0' }}
 
     env:
       VCPKG_TARGET_TRIPLET: ${{ matrix.vcpkg_triplet }}
       GEN: ninja
+      # TODO check here as well
       DUCKDB_PLATFORM: ${{ matrix.duckdb_arch }}
 
     steps:

@@ -8,13 +8,11 @@
 
 #pragma once
 
-#include "duckdb/common/assert.hpp"
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/helper.hpp"
 
-#include <limits>
 
 namespace duckdb {
 
@@ -212,6 +210,7 @@ enum class LogicalTypeId : uint8_t {
 	UBIGINT = 31,
 	TIMESTAMP_TZ = 32,
 	TIME_TZ = 34,
+	TIME_NS = 35,
 	BIT = 36,
 	STRING_LITERAL = 37, /* string literals, used for constant strings - only exists while binding */
 	INTEGER_LITERAL = 38,/* integer literals, used for constant integers - only exists while binding */
@@ -269,12 +268,17 @@ struct LogicalType {
 		}
 		return false;
 	}
+	inline bool IsUnknown() const {
+		return id_ == LogicalTypeId::UNKNOWN;
+	}
 
 	inline shared_ptr<ExtraTypeInfo> GetAuxInfoShrPtr() const {
 		return type_info_;
 	}
 
-	//! DeepCopy() will make a unique copy of any ExtraTypeInfo as well
+	//! Copies the logical type, making a new ExtraTypeInfo
+	LogicalType Copy() const;
+	//! DeepCopy() will make a unique copy of any nested ExtraTypeInfo as well
 	LogicalType DeepCopy() const;
 
 	inline void CopyAuxInfo(const LogicalType &other) {
@@ -320,6 +324,7 @@ struct LogicalType {
 	DUCKDB_API bool IsIntegral() const;
 	DUCKDB_API bool IsFloating() const;
 	DUCKDB_API bool IsNumeric() const;
+	DUCKDB_API static bool IsNumeric(LogicalTypeId type);
 	DUCKDB_API bool IsTemporal() const;
 	DUCKDB_API hash_t Hash() const;
 	DUCKDB_API void SetAlias(string alias);
@@ -344,6 +349,9 @@ struct LogicalType {
 	DUCKDB_API bool GetDecimalProperties(uint8_t &width, uint8_t &scale) const;
 
 	DUCKDB_API void Verify() const;
+
+	DUCKDB_API bool IsSigned() const;
+	DUCKDB_API bool IsUnsigned() const;
 
 	DUCKDB_API bool IsValid() const;
 	DUCKDB_API bool IsComplete() const;
@@ -380,6 +388,7 @@ public:
 	static constexpr const LogicalTypeId TIMESTAMP_MS = LogicalTypeId::TIMESTAMP_MS;
 	static constexpr const LogicalTypeId TIMESTAMP_NS = LogicalTypeId::TIMESTAMP_NS;
 	static constexpr const LogicalTypeId TIME = LogicalTypeId::TIME;
+	static constexpr const LogicalTypeId TIME_NS = LogicalTypeId::TIME_NS;
 	static constexpr const LogicalTypeId TIMESTAMP_TZ = LogicalTypeId::TIMESTAMP_TZ;
 	static constexpr const LogicalTypeId TIME_TZ = LogicalTypeId::TIME_TZ;
 	static constexpr const LogicalTypeId VARCHAR = LogicalTypeId::VARCHAR;

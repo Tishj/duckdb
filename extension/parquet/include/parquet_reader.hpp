@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include "duckdb/storage/caching_file_system.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/encryption_state.hpp"
 #include "duckdb/common/exception.hpp"
@@ -59,9 +60,9 @@ struct ParquetReaderScanState {
 	int64_t current_group;
 	idx_t offset_in_group;
 	idx_t group_offset;
-	unique_ptr<FileHandle> file_handle;
+	unique_ptr<CachingFileHandle> file_handle;
 	unique_ptr<ColumnReader> root_reader;
-	std::unique_ptr<duckdb_apache::thrift::protocol::TProtocol> thrift_file_proto;
+	duckdb_base_std::unique_ptr<duckdb_apache::thrift::protocol::TProtocol> thrift_file_proto;
 
 	bool finished;
 	SelectionVector sel;
@@ -76,6 +77,9 @@ struct ParquetReaderScanState {
 	unique_ptr<AdaptiveFilter> adaptive_filter;
 	//! Table filter list
 	vector<ParquetScanFilter> scan_filters;
+
+	//! (optional) pointer to the PhysicalOperator for logging
+	optional_ptr<const PhysicalOperator> op;
 };
 
 struct ParquetColumnDefinition {
@@ -101,12 +105,14 @@ struct ParquetOptions {
 	explicit ParquetOptions(ClientContext &context);
 
 	bool binary_as_string = false;
+	bool variant_legacy_encoding = false;
 	bool file_row_number = false;
 	shared_ptr<ParquetEncryptionConfig> encryption_config;
 	bool debug_use_openssl = true;
 
 	vector<ParquetColumnDefinition> schema;
 	idx_t explicit_cardinality = 0;
+	bool can_have_nan = false; // if floats or doubles can contain NaN values
 };
 
 struct ParquetOptionsSerialization {
@@ -128,21 +134,20 @@ struct ParquetUnionData : public BaseUnionData {
 	}
 	~ParquetUnionData() override;
 
+	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, const string &name) override;
+
 	ParquetOptions options;
 	shared_ptr<ParquetFileMetadataCache> metadata;
+	unique_ptr<ParquetColumnSchema> root_schema;
 };
 
 class ParquetReader : public BaseFileReader {
-public:
-	// Reserved field id used for the "ord" field according to the iceberg spec (used for file_row_number)
-	static constexpr int32_t ORDINAL_FIELD_ID = 2147483645;
-
 public:
 	ParquetReader(ClientContext &context, OpenFileInfo file, ParquetOptions parquet_options,
 	              shared_ptr<ParquetFileMetadataCache> metadata = nullptr);
 	~ParquetReader() override;
 
-	FileSystem &fs;
+	CachingFileSystem fs;
 	Allocator &allocator;
 	shared_ptr<ParquetFileMetadataCache> metadata;
 	ParquetOptions parquet_options;
@@ -150,6 +155,21 @@ public:
 	shared_ptr<EncryptionUtil> encryption_util;
 	//! How many rows have been read from this file
 	atomic<idx_t> rows_read;
+
+public:
+	string GetReaderType() const override {
+		return "Parquet";
+	}
+
+	shared_ptr<BaseUnionData> GetUnionData(idx_t file_idx) override;
+	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, const string &name) override;
+
+	bool TryInitializeScan(ClientContext &context, GlobalTableFunctionState &gstate,
+	                       LocalTableFunctionState &lstate) override;
+	void Scan(ClientContext &context, GlobalTableFunctionState &global_state, LocalTableFunctionState &local_state,
+	          DataChunk &chunk) override;
+	void FinishFile(ClientContext &context, GlobalTableFunctionState &gstate_p) override;
+	double GetProgressInFile(ClientContext &context) override;
 
 public:
 	void InitializeScan(ClientContext &context, ParquetReaderScanState &state, vector<idx_t> groups_to_read);
@@ -166,20 +186,22 @@ public:
 
 	unique_ptr<BaseStatistics> ReadStatistics(const string &name);
 
-	FileHandle &GetHandle() {
+	CachingFileHandle &GetHandle() {
 		return *file_handle;
 	}
 
 	static unique_ptr<BaseStatistics> ReadStatistics(ClientContext &context, ParquetOptions parquet_options,
 	                                                 shared_ptr<ParquetFileMetadataCache> metadata, const string &name);
+	static unique_ptr<BaseStatistics> ReadStatistics(const ParquetUnionData &union_data, const string &name);
 
 	LogicalType DeriveLogicalType(const SchemaElement &s_ele, ParquetColumnSchema &schema) const;
 
-	string GetReaderType() const override {
-		return "Parquet";
-	}
-
 	void AddVirtualColumn(column_t virtual_column_id) override;
+
+	void GetPartitionStats(vector<PartitionStatistics> &result);
+	static void GetPartitionStats(const duckdb_parquet::FileMetaData &metadata, vector<PartitionStatistics> &result);
+	static bool MetadataCacheEnabled(ClientContext &context);
+	static shared_ptr<ParquetFileMetadataCache> GetMetadataCacheEntry(ClientContext &context, const OpenFileInfo &file);
 
 private:
 	//! Construct a parquet reader but **do not** open a file, used in ReadStatistics only
@@ -211,7 +233,7 @@ private:
 	                                                ParquetColumnSchema &element);
 
 private:
-	unique_ptr<FileHandle> file_handle;
+	unique_ptr<CachingFileHandle> file_handle;
 };
 
 } // namespace duckdb

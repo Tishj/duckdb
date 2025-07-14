@@ -20,6 +20,7 @@ OrderPreservationType PhysicalPlanGenerator::OrderPreservationRecursive(Physical
 	for (auto &child : op.children) {
 		// Do not take the materialization phase of physical CTEs into account
 		if (op.type == PhysicalOperatorType::CTE && child_idx == 0) {
+			child_idx++;
 			continue;
 		}
 		auto child_preservation = OrderPreservationRecursive(child);
@@ -56,7 +57,6 @@ bool PhysicalPlanGenerator::PreserveInsertionOrder(PhysicalOperator &plan) {
 }
 
 bool PhysicalPlanGenerator::UseBatchIndex(ClientContext &context, PhysicalOperator &plan) {
-	// TODO: always preserve order if query contains ORDER BY
 	auto &scheduler = TaskScheduler::GetScheduler(context);
 	if (scheduler.NumberOfThreads() == 1) {
 		// batch index usage only makes sense if we are using multiple threads

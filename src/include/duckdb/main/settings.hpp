@@ -24,7 +24,7 @@ enum class SettingScope : uint8_t {
 	GLOBAL,
 	//! Setting is from the local Setting scope
 	LOCAL,
-	//! Setting was not feteched from settings, but it was fetched from a secret instead
+	//! Setting was not fetched from settings, but it was fetched from a secret instead
 	SECRET,
 	//! The setting was not found or invalid in some other way
 	INVALID
@@ -213,6 +213,17 @@ struct ArrowOutputListViewSetting {
 	static constexpr const char *Description =
 	    "Whether export to Arrow format should use ListView as the physical layout for LIST columns";
 	static constexpr const char *InputType = "BOOLEAN";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ArrowOutputVersionSetting {
+	using RETURN_TYPE = string;
+	static constexpr const char *Name = "arrow_output_version";
+	static constexpr const char *Description =
+	    "Whether strings should be produced by DuckDB in Utf8View format instead of Utf8";
+	static constexpr const char *InputType = "VARCHAR";
 	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
 	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
 	static Value GetSetting(const ClientContext &context);
@@ -440,6 +451,30 @@ struct DefaultSecretStorageSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct DisableDatabaseInvalidationSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "disable_database_invalidation";
+	static constexpr const char *Description =
+	    "Disables invalidating the database instance when encountering a fatal error. Should be used with great care, "
+	    "as DuckDB cannot guarantee correct behavior after a fatal error.";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static bool OnGlobalSet(DatabaseInstance *db, DBConfig &config, const Value &input);
+	static bool OnGlobalReset(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct DisableTimestamptzCastsSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "disable_timestamptz_casts";
+	static constexpr const char *Description = "Disable casting from timestamp to timestamptz ";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct DisabledCompressionMethodsSetting {
 	using RETURN_TYPE = string;
 	static constexpr const char *Name = "disabled_compression_methods";
@@ -515,6 +550,16 @@ struct EnableExternalAccessSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct EnableExternalFileCacheSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "enable_external_file_cache";
+	static constexpr const char *Description = "Allow the database to cache external files (e.g., Parquet) in memory.";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct EnableFSSTVectorsSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_fsst_vectors";
@@ -529,7 +574,7 @@ struct EnableFSSTVectorsSetting {
 struct EnableHTTPLoggingSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_http_logging";
-	static constexpr const char *Description = "Enables HTTP logging";
+	static constexpr const char *Description = "(deprecated) Enables HTTP logging";
 	static constexpr const char *InputType = "BOOLEAN";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -719,7 +764,7 @@ struct HTTPLoggingOutputSetting {
 	using RETURN_TYPE = string;
 	static constexpr const char *Name = "http_logging_output";
 	static constexpr const char *Description =
-	    "The file to which HTTP logging output should be saved, or empty to print to the terminal";
+	    "(deprecated) The file to which HTTP logging output should be saved, or empty to print to the terminal";
 	static constexpr const char *InputType = "VARCHAR";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -809,6 +854,17 @@ struct IntegerDivisionSetting {
 	static constexpr const char *Description =
 	    "Whether or not the / operator defaults to integer division, or to floating point division";
 	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct LambdaSyntaxSetting {
+	using RETURN_TYPE = string;
+	static constexpr const char *Name = "lambda_syntax";
+	static constexpr const char *Description =
+	    "Configures the use of the deprecated single arrow operator (->) for lambda functions.";
+	static constexpr const char *InputType = "VARCHAR";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
 	static Value GetSetting(const ClientContext &context);
@@ -922,7 +978,7 @@ struct MaxVacuumTasksSetting {
 struct MergeJoinThresholdSetting {
 	using RETURN_TYPE = idx_t;
 	static constexpr const char *Name = "merge_join_threshold";
-	static constexpr const char *Description = "The number of rows we need on either table to choose a merge join";
+	static constexpr const char *Description = "The maximum number of rows on either table to choose a merge join";
 	static constexpr const char *InputType = "UBIGINT";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -933,7 +989,7 @@ struct NestedLoopJoinThresholdSetting {
 	using RETURN_TYPE = idx_t;
 	static constexpr const char *Name = "nested_loop_join_threshold";
 	static constexpr const char *Description =
-	    "The number of rows we need on either table to choose a nested loop join";
+	    "The maximum number of rows on either table to choose a nested loop join";
 	static constexpr const char *InputType = "UBIGINT";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -1014,6 +1070,17 @@ struct PerfectHtThresholdSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct PinThreadsSetting {
+	using RETURN_TYPE = ThreadPinMode;
+	static constexpr const char *Name = "pin_threads";
+	static constexpr const char *Description =
+	    "Whether to pin threads to cores (Linux only, default AUTO: on when there are more than 64 cores)";
+	static constexpr const char *InputType = "VARCHAR";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct PivotFilterThresholdSetting {
 	using RETURN_TYPE = idx_t;
 	static constexpr const char *Name = "pivot_filter_threshold";
@@ -1084,6 +1151,16 @@ struct ProfileOutputSetting {
 	static constexpr const char *Name = "profile_output";
 	static constexpr const char *Description =
 	    "The file to which profile output should be saved, or empty to print to the terminal";
+	static constexpr const char *InputType = "VARCHAR";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ProfilingCoverageSetting {
+	using RETURN_TYPE = string;
+	static constexpr const char *Name = "profiling_coverage";
+	static constexpr const char *Description = "The profiling coverage (SELECT or ALL)";
 	static constexpr const char *InputType = "VARCHAR";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -1196,6 +1273,16 @@ struct TempDirectorySetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct TempFileEncryptionSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "temp_file_encryption";
+	static constexpr const char *Description = "Encrypt all temporary files if database is encrypted";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct ThreadsSetting {
 	using RETURN_TYPE = int64_t;
 	static constexpr const char *Name = "threads";
@@ -1211,6 +1298,26 @@ struct UsernameSetting {
 	static constexpr const char *Name = "username";
 	static constexpr const char *Description = "The username to use. Ignored for legacy compatibility.";
 	static constexpr const char *InputType = "VARCHAR";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct VariantLegacyEncodingSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "variant_legacy_encoding";
+	static constexpr const char *Description = "Enables the Parquet reader to identify a Variant structurally.";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct WalEncryptionSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "wal_encryption";
+	static constexpr const char *Description = "Encrypt the WAL if the database is encrypted";
+	static constexpr const char *InputType = "BOOLEAN";
 	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
 	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
 	static Value GetSetting(const ClientContext &context);

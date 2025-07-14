@@ -16,6 +16,7 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/encryption_state.hpp"
 #include "duckdb/common/enums/access_mode.hpp"
+#include "duckdb/common/enums/thread_pin_mode.hpp"
 #include "duckdb/common/enums/compression_type.hpp"
 #include "duckdb/common/enums/optimizer_type.hpp"
 #include "duckdb/common/enums/order_type.hpp"
@@ -38,6 +39,7 @@
 #include "duckdb/function/encoding_function.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/common/enums/debug_vector_verification.hpp"
+#include "duckdb/logging/logging.hpp"
 
 namespace duckdb {
 
@@ -55,6 +57,7 @@ class ExtensionCallback;
 class SecretManager;
 class CompressionInfo;
 class EncryptionUtil;
+class HTTPUtil;
 
 struct CompressionFunctionSet;
 struct DatabaseCacheEntry;
@@ -176,6 +179,8 @@ struct DBConfigOptions {
 	string collation = string();
 	//! The order type used when none is specified (default: ASC)
 	OrderType default_order_type = OrderType::ASCENDING;
+	//! Disables invalidating the database instance when encountering a fatal error.
+	bool disable_database_invalidation = false;
 	//! NULL ordering used when none is specified (default: NULLS LAST)
 	DefaultOrderByNullType default_null_order = DefaultOrderByNullType::NULLS_LAST;
 	//! enable COPY and related commands
@@ -217,8 +222,9 @@ struct DBConfigOptions {
 	ArrowOffsetSize arrow_offset_size = ArrowOffsetSize::REGULAR;
 	//! Whether LISTs should produce Arrow ListViews
 	bool arrow_use_list_view = false;
-	//! Whenever a DuckDB type does not have a clear native or canonical extension match in Arrow, export the types
-	//! with a duckdb.type_name extension name
+	//! For DuckDB types without an obvious corresponding Arrow type, export to an Arrow extension type instead of a
+	//! more portable but less efficient format. For example, UUIDs are exported to UTF-8 (string) when false, and
+	//! arrow.uuid type when true.
 	bool arrow_lossless_conversion = false;
 	//! Whether when producing arrow objects we produce string_views or regular strings
 	bool produce_arrow_string_views = false;
@@ -264,8 +270,14 @@ struct DBConfigOptions {
 	string custom_user_agent;
 	//! Use old implicit casting style (i.e. allow everything to be implicitly casted to VARCHAR)
 	bool old_implicit_casting = false;
+	//!  By default, WAL is encrypted for encrypted databases
+	bool wal_encryption = true;
+	//! Encrypt the temp files
+	bool temp_file_encryption = false;
 	//! The default block allocation size for new duckdb database files (new as-in, they do not yet exist).
 	idx_t default_block_alloc_size = DUCKDB_BLOCK_ALLOC_SIZE;
+	//! The default block header size for new duckdb database files.
+	idx_t default_block_header_size = DUCKDB_BLOCK_HEADER_STORAGE_SIZE;
 	//!  Whether or not to abort if a serialization exception is thrown during WAL playback (when reading truncated WAL)
 	bool abort_on_wal_failure = false;
 	//! The index_scan_percentage sets a threshold for index scans.
@@ -290,12 +302,20 @@ struct DBConfigOptions {
 	set<string> allowed_directories;
 	//! The log configuration
 	LogConfig log_config = LogConfig();
+	//! Whether to enable external file caching using CachingFileSystem
+	bool enable_external_file_cache = true;
+	//! Output version of arrow depending on the format version
+	ArrowFormatVersion arrow_output_version = V1_0;
 	//! Partially process tasks before rescheduling - allows for more scheduler fairness between separate queries
 #ifdef DUCKDB_ALTERNATIVE_VERIFY
 	bool scheduler_process_partial = true;
 #else
 	bool scheduler_process_partial = false;
 #endif
+	//! Whether to pin threads to cores (linux only, default AUTOMATIC: on when there are more than 64 cores)
+	ThreadPinMode pin_threads = ThreadPinMode::AUTO;
+	//! Enable the Parquet reader to identify a Variant group structurally
+	bool variant_legacy_encoding = false;
 
 	bool operator==(const DBConfigOptions &other) const;
 };
@@ -345,6 +365,8 @@ public:
 	vector<unique_ptr<ExtensionCallback>> extension_callbacks;
 	//! Encryption Util for OpenSSL
 	shared_ptr<EncryptionUtil> encryption_util;
+	//! HTTP Request utility functions
+	shared_ptr<HTTPUtil> http_util;
 	//! Reference to the database cache entry (if any)
 	shared_ptr<DatabaseCacheEntry> db_cache_entry;
 

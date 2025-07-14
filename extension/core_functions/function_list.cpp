@@ -122,6 +122,7 @@ static const StaticFunctionDefinition core_functions[] = {
 	DUCKDB_AGGREGATE_FUNCTION(BoolOrFun),
 	DUCKDB_SCALAR_FUNCTION(CanCastImplicitlyFun),
 	DUCKDB_SCALAR_FUNCTION(CardinalityFun),
+	DUCKDB_SCALAR_FUNCTION(CastToTypeFun),
 	DUCKDB_SCALAR_FUNCTION(CbrtFun),
 	DUCKDB_SCALAR_FUNCTION_SET(CeilFun),
 	DUCKDB_SCALAR_FUNCTION_SET_ALIAS(CeilingFun),
@@ -261,6 +262,7 @@ static const StaticFunctionDefinition core_functions[] = {
 	DUCKDB_SCALAR_FUNCTION_SET(MakeDateFun),
 	DUCKDB_SCALAR_FUNCTION(MakeTimeFun),
 	DUCKDB_SCALAR_FUNCTION_SET(MakeTimestampFun),
+	DUCKDB_SCALAR_FUNCTION_SET(MakeTimestampMsFun),
 	DUCKDB_SCALAR_FUNCTION_SET(MakeTimestampNsFun),
 	DUCKDB_SCALAR_FUNCTION(MapFun),
 	DUCKDB_SCALAR_FUNCTION(MapConcatFun),
@@ -316,6 +318,7 @@ static const StaticFunctionDefinition core_functions[] = {
 	DUCKDB_AGGREGATE_FUNCTION(RegrSYYFun),
 	DUCKDB_SCALAR_FUNCTION_SET(RepeatFun),
 	DUCKDB_SCALAR_FUNCTION(ReplaceFun),
+	DUCKDB_SCALAR_FUNCTION(ReplaceTypeFun),
 	DUCKDB_AGGREGATE_FUNCTION_SET(ReservoirQuantileFun),
 	DUCKDB_SCALAR_FUNCTION(ReverseFun),
 	DUCKDB_SCALAR_FUNCTION(RightFun),
@@ -405,7 +408,7 @@ static const StaticFunctionDefinition core_functions[] = {
 	FINAL_FUNCTION
 };
 
-const StaticFunctionDefinition *StaticFunctionDefinition::GetFunctionList() {
+const StaticFunctionDefinition *CoreFunctionList::GetFunctionList() {
 	return core_functions;
 }
 

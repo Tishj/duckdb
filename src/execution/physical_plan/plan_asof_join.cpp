@@ -42,6 +42,11 @@ PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op, PhysicalOpera
 	const auto &probe_types = op.children[0]->types;
 	join_op.types.insert(join_op.types.end(), probe_types.begin(), probe_types.end());
 
+	// TODO: We can't handle predicates right now because we would have to remap column references.
+	if (op.predicate) {
+		return nullptr;
+	}
+
 	//	Fill in the projection maps to simplify the code below
 	//	Since NLJ doesn't support projection, but ASOF does,
 	//	we have to track this carefully...
@@ -90,8 +95,13 @@ PhysicalPlanGenerator::PlanAsOfLoopJoin(LogicalComparisonJoin &op, PhysicalOpera
 			asof_idx = i;
 			arg_min_max = "arg_min";
 			break;
-		default:
+		case ExpressionType::COMPARE_EQUAL:
+		case ExpressionType::COMPARE_NOTEQUAL:
+		case ExpressionType::COMPARE_DISTINCT_FROM:
 			break;
+		default:
+			//	Unsupported NLJ comparison
+			return nullptr;
 		}
 	}
 
@@ -266,7 +276,7 @@ PhysicalOperator &PhysicalPlanGenerator::PlanAsOfJoin(LogicalComparisonJoin &op)
 
 	auto &config = ClientConfig::GetConfig(context);
 	if (!config.force_asof_iejoin) {
-		if (op.children[0]->has_estimated_cardinality && lhs_cardinality <= config.asof_loop_join_threshold) {
+		if (op.children[0]->has_estimated_cardinality && lhs_cardinality < config.asof_loop_join_threshold) {
 			auto result = PlanAsOfLoopJoin(op, left, right);
 			if (result) {
 				return *result;

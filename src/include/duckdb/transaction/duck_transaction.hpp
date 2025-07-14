@@ -40,6 +40,11 @@ public:
 
 	atomic<idx_t> catalog_version;
 
+	//! Transactions undergo Cleanup, after (1) removing them directly in RemoveTransaction,
+	//! or (2) after they exist old_transactions.
+	//! Some (after rollback) enter old_transactions, but do not require Cleanup.
+	bool awaiting_cleanup;
+
 public:
 	static DuckTransaction &Get(ClientContext &context, AttachedDatabase &db);
 	static DuckTransaction &Get(ClientContext &context, Catalog &catalog);
@@ -99,6 +104,8 @@ private:
 	mutex sequence_lock;
 	//! Map of all sequences that were used during the transaction and the value they had in this transaction
 	reference_map_t<SequenceCatalogEntry, reference<SequenceValue>> sequence_usage;
+	//! Lock for modified_tables
+	mutex modified_tables_lock;
 	//! Tables that are modified by this transaction
 	reference_map_t<DataTable, shared_ptr<DataTable>> modified_tables;
 	//! Lock for the active_locks map

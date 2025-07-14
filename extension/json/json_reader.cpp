@@ -174,8 +174,8 @@ idx_t JSONFileHandle::ReadFromCache(char *&pointer, idx_t &size, atomic<idx_t> &
 	return read_size;
 }
 
-JSONReader::JSONReader(ClientContext &context, JSONReaderOptions options_p, string file_name_p)
-    : BaseFileReader(std::move(file_name_p)), context(context), options(std::move(options_p)), initialized(0),
+JSONReader::JSONReader(ClientContext &context, JSONReaderOptions options_p, OpenFileInfo file_p)
+    : BaseFileReader(std::move(file_p)), context(context), options(std::move(options_p)), initialized(0),
       next_buffer_index(0), thrown(false) {
 }
 
@@ -737,7 +737,7 @@ bool JSONReader::CopyRemainderFromPreviousBuffer(JSONReaderScanState &scan_state
 	idx_t prev_buffer_size = previous_buffer_handle->buffer_size - previous_buffer_handle->buffer_start;
 	auto prev_buffer_ptr = char_ptr_cast(previous_buffer_handle->buffer.get()) + previous_buffer_handle->buffer_size;
 	auto prev_object_start = PreviousNewline(prev_buffer_ptr, prev_buffer_size);
-	auto prev_object_size = prev_buffer_ptr - prev_object_start;
+	auto prev_object_size = NumericCast<idx_t>(prev_buffer_ptr - prev_object_start);
 
 	D_ASSERT(scan_state.buffer_offset == options.maximum_object_size);
 	if (prev_object_size > scan_state.buffer_offset) {

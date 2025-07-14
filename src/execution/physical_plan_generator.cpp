@@ -28,15 +28,15 @@ unique_ptr<PhysicalPlan> PhysicalPlanGenerator::Plan(unique_ptr<LogicalOperator>
 PhysicalOperator &PhysicalPlanGenerator::ResolveAndPlan(unique_ptr<LogicalOperator> op) {
 	auto &profiler = QueryProfiler::Get(context);
 
+	// Resolve the types of each operator.
+	profiler.StartPhase(MetricsType::PHYSICAL_PLANNER_RESOLVE_TYPES);
+	op->ResolveOperatorTypes();
+	profiler.EndPhase();
+
 	// Resolve the column references.
 	profiler.StartPhase(MetricsType::PHYSICAL_PLANNER_COLUMN_BINDING);
 	ColumnBindingResolver resolver;
 	resolver.VisitOperator(*op);
-	profiler.EndPhase();
-
-	// Resolve the types of each operator.
-	profiler.StartPhase(MetricsType::PHYSICAL_PLANNER_RESOLVE_TYPES);
-	op->ResolveOperatorTypes();
 	profiler.EndPhase();
 
 	// Create the main physical plan.
@@ -120,6 +120,8 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalOperator &op) {
 		return CreatePlan(op.Cast<LogicalExpressionGet>());
 	case LogicalOperatorType::LOGICAL_UPDATE:
 		return CreatePlan(op.Cast<LogicalUpdate>());
+	case LogicalOperatorType::LOGICAL_MERGE_INTO:
+		return CreatePlan(op.Cast<LogicalMergeInto>());
 	case LogicalOperatorType::LOGICAL_CREATE_TABLE:
 		return CreatePlan(op.Cast<LogicalCreateTable>());
 	case LogicalOperatorType::LOGICAL_CREATE_INDEX:

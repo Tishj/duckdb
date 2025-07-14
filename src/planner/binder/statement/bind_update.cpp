@@ -20,20 +20,21 @@
 
 namespace duckdb {
 
-// This creates a LogicalProjection and moves 'root' into it as a child
-// unless there are no expressions to project, in which case it just returns 'root'
-unique_ptr<LogicalOperator> Binder::BindUpdateSet(LogicalOperator &op, unique_ptr<LogicalOperator> root,
-                                                  UpdateSetInfo &set_info, TableCatalogEntry &table,
-                                                  vector<PhysicalIndex> &columns) {
-	auto proj_index = GenerateTableIndex();
-
-	vector<unique_ptr<Expression>> projection_expressions;
+void Binder::BindUpdateSet(idx_t proj_index, unique_ptr<LogicalOperator> &root, UpdateSetInfo &set_info,
+                           TableCatalogEntry &table, vector<PhysicalIndex> &columns,
+                           vector<unique_ptr<Expression>> &update_expressions,
+                           vector<unique_ptr<Expression>> &projection_expressions) {
 	D_ASSERT(set_info.columns.size() == set_info.expressions.size());
 	for (idx_t i = 0; i < set_info.columns.size(); i++) {
 		auto &colname = set_info.columns[i];
 		auto &expr = set_info.expressions[i];
 		if (!table.ColumnExists(colname)) {
-			throw BinderException("Referenced update column %s not found in table!", colname);
+			vector<string> column_names;
+			for (auto &col : table.GetColumns().Physical()) {
+				column_names.push_back(col.Name());
+			}
+			auto candidates = StringUtil::CandidatesErrorMessage(column_names, colname, "Did you mean");
+			throw BinderException("Referenced update column %s not found in table!\n%s", colname, candidates);
 		}
 		auto &column = table.GetColumn(colname);
 		if (column.Generated()) {
@@ -44,18 +45,29 @@ unique_ptr<LogicalOperator> Binder::BindUpdateSet(LogicalOperator &op, unique_pt
 		}
 		columns.push_back(column.Physical());
 		if (expr->GetExpressionType() == ExpressionType::VALUE_DEFAULT) {
-			op.expressions.push_back(make_uniq<BoundDefaultExpression>(column.Type()));
+			update_expressions.push_back(make_uniq<BoundDefaultExpression>(column.Type()));
 		} else {
 			UpdateBinder binder(*this, context);
 			binder.target_type = column.Type();
 			auto bound_expr = binder.Bind(expr);
 			PlanSubqueries(bound_expr, root);
 
-			op.expressions.push_back(make_uniq<BoundColumnRefExpression>(
+			update_expressions.push_back(make_uniq<BoundColumnRefExpression>(
 			    bound_expr->return_type, ColumnBinding(proj_index, projection_expressions.size())));
 			projection_expressions.push_back(std::move(bound_expr));
 		}
 	}
+}
+
+// This creates a LogicalProjection and moves 'root' into it as a child
+// unless there are no expressions to project, in which case it just returns 'root'
+unique_ptr<LogicalOperator> Binder::BindUpdateSet(LogicalOperator &op, unique_ptr<LogicalOperator> root,
+                                                  UpdateSetInfo &set_info, TableCatalogEntry &table,
+                                                  vector<PhysicalIndex> &columns) {
+	auto proj_index = GenerateTableIndex();
+
+	vector<unique_ptr<Expression>> projection_expressions;
+	BindUpdateSet(proj_index, root, set_info, table, columns, op.expressions, projection_expressions);
 	if (op.type != LogicalOperatorType::LOGICAL_UPDATE && projection_expressions.empty()) {
 		return root;
 	}
@@ -63,6 +75,34 @@ unique_ptr<LogicalOperator> Binder::BindUpdateSet(LogicalOperator &op, unique_pt
 	auto proj = make_uniq<LogicalProjection>(proj_index, std::move(projection_expressions));
 	proj->AddChild(std::move(root));
 	return unique_ptr_cast<LogicalProjection, LogicalOperator>(std::move(proj));
+}
+
+void Binder::BindRowIdColumns(TableCatalogEntry &table, LogicalGet &get, vector<unique_ptr<Expression>> &expressions) {
+	auto row_id_columns = table.GetRowIdColumns();
+	auto virtual_columns = table.GetVirtualColumns();
+	auto &column_ids = get.GetColumnIds();
+	for (auto &row_id_column : row_id_columns) {
+		auto row_id_entry = virtual_columns.find(row_id_column);
+		if (row_id_entry == virtual_columns.end()) {
+			throw InternalException(
+			    "BindRowIdColumns could not find the row id column in the virtual columns list of the table");
+		}
+		// check if this column has alraedy been projected
+		idx_t column_idx;
+		for (column_idx = 0; column_idx < column_ids.size(); ++column_idx) {
+			if (column_ids[column_idx].GetPrimaryIndex() == row_id_column) {
+				// it has! avoid projecting it again
+				break;
+			}
+		}
+		auto row_id_expr =
+		    make_uniq<BoundColumnRefExpression>(row_id_entry->second.type, ColumnBinding(get.table_index, column_idx));
+		row_id_expr->alias = row_id_entry->second.name;
+		expressions.push_back(std::move(row_id_expr));
+		if (column_idx == column_ids.size()) {
+			get.AddColumnId(row_id_column);
+		}
+	}
 }
 
 BoundStatement Binder::Bind(UpdateStatement &stmt) {
@@ -132,20 +172,8 @@ BoundStatement Binder::Bind(UpdateStatement &stmt) {
 	// bind any extra columns necessary for CHECK constraints or indexes
 	table.BindUpdateConstraints(*this, *get, *proj, *update, context);
 
-	// finally add the row id column to the projection list
-	auto row_id_columns = table.GetRowIdColumns();
-	auto virtual_columns = table.GetVirtualColumns();
-	auto &column_ids = get->GetColumnIds();
-	for (auto &row_id_column : row_id_columns) {
-		auto row_id_entry = virtual_columns.find(row_id_column);
-		if (row_id_entry == virtual_columns.end()) {
-			throw InternalException(
-			    "BindUpdate could not find the row id column in the virtual columns list of the table");
-		}
-		proj->expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    row_id_entry->second.type, ColumnBinding(get->table_index, column_ids.size())));
-		get->AddColumnId(row_id_column);
-	}
+	// finally bind the row id column and add them to the projection list
+	BindRowIdColumns(table, *get, proj->expressions);
 
 	// set the projection as child of the update node and finalize the result
 	update->AddChild(std::move(proj));

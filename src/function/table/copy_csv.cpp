@@ -85,6 +85,9 @@ void BaseCSVData::Finalize() {
 	SubstringDetection(options.dialect_options.state_machine_options.comment.GetValue(), delimiter_string, "COMMENT",
 	                   "DELIMITER");
 
+	// quote and delimiter must not be substrings of each other
+	SubstringDetection(options.thousands_separator, options.decimal_separator, "THOUSANDS", "DECIMAL_SEPARATOR");
+
 	// null string and delimiter must not be substrings of each other
 	for (auto &null_str : options.null_str) {
 		if (!null_str.empty()) {
@@ -218,6 +221,7 @@ static unique_ptr<FunctionData> WriteCSVBind(ClientContext &context, CopyFunctio
 	memset(bind_data->requires_quotes.get(), 0, sizeof(bool) * 256);
 	bind_data->requires_quotes['\n'] = true;
 	bind_data->requires_quotes['\r'] = true;
+	bind_data->requires_quotes['#'] = true;
 	bind_data->requires_quotes[NumericCast<idx_t>(
 	    bind_data->options.dialect_options.state_machine_options.delimiter.GetValue()[0])] = true;
 	bind_data->requires_quotes[NumericCast<idx_t>(
@@ -324,8 +328,8 @@ static void WriteQuotedString(WriteStream &writer, WriteCSVData &csv_data, const
 //===--------------------------------------------------------------------===//
 struct LocalWriteCSVData : public LocalFunctionData {
 public:
-	LocalWriteCSVData(ClientContext &context, vector<unique_ptr<Expression>> &expressions)
-	    : executor(context, expressions), stream(Allocator::Get(context)) {
+	LocalWriteCSVData(ClientContext &context, vector<unique_ptr<Expression>> &expressions, const idx_t &flush_size)
+	    : executor(context, expressions), stream(BufferAllocator::Get(context), flush_size) {
 	}
 
 public:
@@ -383,7 +387,7 @@ struct GlobalWriteCSVData : public GlobalFunctionData {
 
 static unique_ptr<LocalFunctionData> WriteCSVInitializeLocal(ExecutionContext &context, FunctionData &bind_data) {
 	auto &csv_data = bind_data.Cast<WriteCSVData>();
-	auto local_data = make_uniq<LocalWriteCSVData>(context.client, csv_data.cast_expressions);
+	auto local_data = make_uniq<LocalWriteCSVData>(context.client, csv_data.cast_expressions, csv_data.flush_size);
 
 	// create the chunk with VARCHAR types
 	vector<LogicalType> types;
@@ -405,7 +409,7 @@ static unique_ptr<GlobalFunctionData> WriteCSVInitializeGlobal(ClientContext &co
 	}
 
 	if (!(options.dialect_options.header.IsSetByUser() && !options.dialect_options.header.GetValue())) {
-		MemoryStream stream(Allocator::Get(context));
+		MemoryStream stream(BufferAllocator::Get(context), csv_data.flush_size);
 		// write the header line to the file
 		for (idx_t i = 0; i < csv_data.options.name_list.size(); i++) {
 			if (i != 0) {
@@ -508,7 +512,7 @@ void WriteCSVFinalize(ClientContext &context, FunctionData &bind_data, GlobalFun
 	auto &csv_data = bind_data.Cast<WriteCSVData>();
 	auto &options = csv_data.options;
 
-	MemoryStream stream(Allocator::Get(context));
+	MemoryStream stream(BufferAllocator::Get(context), csv_data.flush_size);
 	if (!options.suffix.empty()) {
 		stream.WriteData(const_data_ptr_cast(options.suffix.c_str()), options.suffix.size());
 	} else if (global_state.written_anything) {
@@ -536,7 +540,7 @@ CopyFunctionExecutionMode WriteCSVExecutionMode(bool preserve_insertion_order, b
 // Prepare Batch
 //===--------------------------------------------------------------------===//
 struct WriteCSVBatchData : public PreparedBatchData {
-	explicit WriteCSVBatchData(Allocator &allocator) : stream(allocator) {
+	explicit WriteCSVBatchData(Allocator &allocator, const idx_t flush_size) : stream(allocator, flush_size) {
 	}
 
 	//! The thread-local buffer to write data into
@@ -560,7 +564,7 @@ unique_ptr<PreparedBatchData> WriteCSVPrepareBatch(ClientContext &context, Funct
 
 	// write CSV chunks to the batch data
 	bool written_anything = false;
-	auto batch = make_uniq<WriteCSVBatchData>(Allocator::Get(context));
+	auto batch = make_uniq<WriteCSVBatchData>(BufferAllocator::Get(context), NextPowerOfTwo(collection->SizeInBytes()));
 	for (auto &chunk : collection->Chunks()) {
 		WriteCSVChunkInternal(context, bind_data, cast_chunk, batch->stream, chunk, written_anything, executor);
 	}

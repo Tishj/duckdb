@@ -305,6 +305,19 @@ void RowGroupCollection::Fetch(TransactionData transaction, DataChunk &result, c
 	result.SetCardinality(count);
 }
 
+bool RowGroupCollection::CanFetch(TransactionData transaction, const row_t row_id) {
+	RowGroup *row_group;
+	{
+		idx_t segment_index;
+		auto l = row_groups->Lock();
+		if (!row_groups->TryGetSegmentIndex(l, UnsafeNumericCast<idx_t>(row_id), segment_index)) {
+			return false;
+		}
+		row_group = row_groups->GetSegmentByIndex(l, UnsafeNumericCast<int64_t>(segment_index));
+	}
+	return row_group->Fetch(transaction, UnsafeNumericCast<idx_t>(row_id) - row_group->start);
+}
+
 //===--------------------------------------------------------------------===//
 // Append
 //===--------------------------------------------------------------------===//
@@ -787,6 +800,10 @@ public:
 		checkpoint_state.write_data[index] = row_group.WriteToDisk(*checkpoint_state.writers[index]);
 	}
 
+	string TaskType() const override {
+		return "CheckpointTask";
+	}
+
 private:
 	idx_t index;
 };
@@ -906,6 +923,10 @@ public:
 			auto checkpoint_task = collection.GetCheckpointTask(checkpoint_state, segment_idx + i);
 			checkpoint_task->ExecuteTask();
 		}
+	}
+
+	string TaskType() const override {
+		return "VacuumTask";
 	}
 
 private:
