@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       base_hash:
+        description: 'Base hash'
         type: string
   repository_dispatch:
   push:
@@ -16,22 +17,25 @@ on:
       - 'v*.*-*'
     paths-ignore:
       - '**.md'
+      - 'test/configs/**'
       - 'tools/**'
       - '!tools/pythonpkg/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/Regression.yml'
-
+      - '.github/config/out_of_tree_extensions.cmake'
+  merge_group:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - '**.md'
+      - 'test/configs/**'
       - 'tools/**'
       - '!tools/pythonpkg/**'
       - '.github/patches/duckdb-wasm/**'
       - '.github/workflows/**'
       - '!.github/workflows/Regression.yml'
-
+      - '.github/config/out_of_tree_extensions.cmake'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
@@ -40,11 +44,20 @@ concurrency:
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
   BASE_BRANCH: ${{ github.base_ref || (endsWith(github.ref, '_feature') && 'feature' || 'main') }}
-  BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || inputs.base_hash }}
+  BASE_HASH: ${{ inputs.base_hash }}
 
 jobs:
+  check-draft:
+    # We run all other jobs on PRs only if they are not draft PR
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Preliminary checks on CI 
+        run: echo "Event name is ${{ github.event_name }}"
+      
   regression-test-benchmark-runner:
     name: Regression Tests
+    needs: check-draft
     runs-on: ubuntu-22.04
     env:
       CC: gcc-10
@@ -90,7 +103,6 @@ jobs:
           make
           git clone --branch ${{ env.BASE_BRANCH }} https://github.com/duckdb/duckdb.git --depth=1
           cd duckdb
-          git checkout ${{ env.BASE_SHA }}
           make
           cd ..
 
@@ -105,7 +117,7 @@ jobs:
           if [[ -z "${BASE_HASH}" ]]; then
             export CHECKOUT_HASH=$(gh run list --repo duckdb/duckdb --branch=main --workflow=Regression --event=repository_dispatch --status=completed --json=headSha --limit=1 --jq '.[0].headSha')
           else
-            export CHECKOUT_HASH="$BASE_SHA"
+            export CHECKOUT_HASH="$BASE_HASH"
           fi
           git checkout $CHECKOUT_HASH
           make
@@ -183,6 +195,7 @@ jobs:
 
   regression-test-storage:
     name: Storage Size Regression Test
+    needs: check-draft
     runs-on: ubuntu-22.04
     env:
       CC: gcc-10
@@ -215,7 +228,6 @@ jobs:
           make
           git clone --branch ${{ env.BASE_BRANCH }} https://github.com/duckdb/duckdb.git --depth=1
           cd duckdb
-          git checkout ${{ env.BASE_SHA }}
           make
           cd ..
 
@@ -264,6 +276,7 @@ jobs:
 
   regression-test-binary-size:
     name: Regression test binary size
+    needs: check-draft
     runs-on: ubuntu-22.04
     env:
       CC: gcc-10
@@ -296,7 +309,6 @@ jobs:
           make
           git clone --branch ${{ env.BASE_BRANCH }} https://github.com/duckdb/duckdb.git --depth=1
           cd duckdb
-          git checkout ${{ env.BASE_SHA }}
           make
           cd ..
 
@@ -307,6 +319,7 @@ jobs:
 
   regression-test-plan-cost:
     name: Regression Test Join Order Plan Cost
+    needs: check-draft
     runs-on: ubuntu-22.04
     env:
       CC: gcc-10
@@ -339,7 +352,6 @@ jobs:
           make
           git clone --branch ${{ env.BASE_BRANCH }} https://github.com/duckdb/duckdb.git --depth=1
           cd duckdb
-          git checkout ${{ env.BASE_SHA }}
           make
           cd ..
 

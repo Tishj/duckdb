@@ -43,8 +43,14 @@ struct ConstraintState;
 struct TableUpdateState;
 enum class VerifyExistenceType : uint8_t;
 
+enum class DataTableVersion {
+	MAIN_TABLE, // this is the newest version of the table - it has not been altered or dropped
+	ALTERED,    // this table has been altered
+	DROPPED     // this table has been dropped
+};
+
 //! DataTable represents a physical table on disk
-class DataTable {
+class DataTable : public enable_shared_from_this<DataTable> {
 public:
 	//! Constructs a new data table from an (optional) set of persistent segments
 	DataTable(AttachedDatabase &db, shared_ptr<TableIOManager> table_io_manager, const string &schema,
@@ -90,6 +96,8 @@ public:
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<StorageIndex> &column_ids,
 	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);
+	//! Returns true, if the transaction can fetch the row ID.
+	bool CanFetch(DuckTransaction &transaction, const row_t row_id);
 
 	//! Initializes appending to transaction-local storage
 	void InitializeLocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context,
@@ -105,6 +113,9 @@ public:
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
 	                 const vector<unique_ptr<BoundConstraint>> &bound_constraints, Vector &row_ids,
 	                 DataChunk &delete_chunk);
+	//! Appends to the transaction-local storage of this table
+	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
+	                 const vector<unique_ptr<BoundConstraint>> &bound_constraints);
 	//! Append a chunk to the transaction-local storage of this table.
 	void LocalWALAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
 	                    const vector<unique_ptr<BoundConstraint>> &bound_constraints);
@@ -183,13 +194,21 @@ public:
 	//! Remove the row identifiers from all the indexes of the table
 	void RemoveFromIndexes(Vector &row_identifiers, idx_t count);
 
-	void SetAsRoot() {
-		this->is_root = true;
+	void SetAsMainTable() {
+		this->version = DataTableVersion::MAIN_TABLE;
 	}
 
-	bool IsRoot() {
-		return this->is_root;
+	void SetAsDropped() {
+		this->version = DataTableVersion::DROPPED;
 	}
+
+	bool IsMainTable() const {
+		return this->version == DataTableVersion::MAIN_TABLE;
+	}
+	bool IsRoot() const {
+		return IsMainTable();
+	}
+	string TableModification() const;
 
 	//! Get statistics of a physical column within the table
 	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, column_t column_id);
@@ -234,6 +253,7 @@ public:
 	bool HasForeignKeyIndex(const vector<PhysicalIndex> &keys, ForeignKeyType type);
 	void SetIndexStorageInfo(vector<IndexStorageInfo> index_storage_info);
 	void VacuumIndexes();
+	void VerifyIndexBuffers();
 	void CleanupAppend(transaction_t lowest_transaction, idx_t start, idx_t count);
 
 	string GetTableName() const;
@@ -289,8 +309,7 @@ private:
 	mutex append_lock;
 	//! The row groups of the table
 	shared_ptr<RowGroupCollection> row_groups;
-	//! Whether or not the data table is the root DataTable for this table; the root DataTable is the newest version
-	//! that can be appended to
-	atomic<bool> is_root;
+	//! The version of the data table
+	atomic<DataTableVersion> version;
 };
 } // namespace duckdb

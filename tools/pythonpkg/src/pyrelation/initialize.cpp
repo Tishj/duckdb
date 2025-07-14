@@ -68,7 +68,7 @@ static void InitializeConsumers(py::class_<DuckDBPyRelation> &m) {
 	    .def("to_arrow_table", &DuckDBPyRelation::ToArrowTable, "Execute and fetch all rows as an Arrow Table",
 	         py::arg("batch_size") = 1000000)
 	    .def("pl", &DuckDBPyRelation::ToPolars, "Execute and fetch all rows as a Polars DataFrame",
-	         py::arg("batch_size") = 1000000)
+	         py::arg("batch_size") = 1000000, py::kw_only(), py::arg("lazy") = false)
 	    .def("torch", &DuckDBPyRelation::FetchPyTorch, "Fetch a result as dict of PyTorch Tensors")
 	    .def("tf", &DuckDBPyRelation::FetchTF, "Fetch a result as dict of TensorFlow Tensors");
 	const char *capsule_docs = R"(
@@ -152,7 +152,7 @@ static void InitializeAggregates(py::class_<DuckDBPyRelation> &m) {
 	         py::arg("projected_columns") = "")
 	    .def("sum", &DuckDBPyRelation::Sum, "Computes the sum of all values present in a given column",
 	         py::arg("column"), py::arg("groups") = "", py::arg("window_spec") = "", py::arg("projected_columns") = "")
-	    .def("unique", &DuckDBPyRelation::Unique, "Number of distinct values in a column.", py::arg("unique_aggr"));
+	    .def("unique", &DuckDBPyRelation::Unique, "Returns the distinct values in a column.", py::arg("unique_aggr"));
 	/* TODO: Approximate aggregate functions */
 	/* TODO: Statistical aggregate functions */
 	m.def("median", &DuckDBPyRelation::Median, "Computes the median over all values present in a given column",

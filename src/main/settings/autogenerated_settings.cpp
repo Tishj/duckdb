@@ -178,6 +178,13 @@ Value ArrowOutputListViewSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
+// Arrow Output Version
+//===----------------------------------------------------------------------===//
+void ArrowOutputVersionSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.arrow_output_version = DBConfig().options.arrow_output_version;
+}
+
+//===----------------------------------------------------------------------===//
 // Asof Loop Join Threshold
 //===----------------------------------------------------------------------===//
 void AsofLoopJoinThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
@@ -374,6 +381,23 @@ Value DebugSkipCheckpointOnCommitSetting::GetSetting(const ClientContext &contex
 }
 
 //===----------------------------------------------------------------------===//
+// Debug Verify Vector
+//===----------------------------------------------------------------------===//
+void DebugVerifyVectorSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto str_input = StringUtil::Upper(input.GetValue<string>());
+	config.options.debug_verify_vector = EnumUtil::FromString<DebugVectorVerification>(str_input);
+}
+
+void DebugVerifyVectorSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.debug_verify_vector = DBConfig().options.debug_verify_vector;
+}
+
+Value DebugVerifyVectorSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(StringUtil::Lower(EnumUtil::ToString(config.options.debug_verify_vector)));
+}
+
+//===----------------------------------------------------------------------===//
 // Debug Window Mode
 //===----------------------------------------------------------------------===//
 void DebugWindowModeSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
@@ -407,6 +431,45 @@ Value DefaultNullOrderSetting::GetSetting(const ClientContext &context) {
 //===----------------------------------------------------------------------===//
 void DefaultOrderSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
 	config.options.default_order_type = DBConfig().options.default_order_type;
+}
+
+//===----------------------------------------------------------------------===//
+// Disable Database Invalidation
+//===----------------------------------------------------------------------===//
+void DisableDatabaseInvalidationSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	if (!OnGlobalSet(db, config, input)) {
+		return;
+	}
+	config.options.disable_database_invalidation = input.GetValue<bool>();
+}
+
+void DisableDatabaseInvalidationSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	if (!OnGlobalReset(db, config)) {
+		return;
+	}
+	config.options.disable_database_invalidation = DBConfig().options.disable_database_invalidation;
+}
+
+Value DisableDatabaseInvalidationSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.disable_database_invalidation);
+}
+
+//===----------------------------------------------------------------------===//
+// Disable Timestamptz Casts
+//===----------------------------------------------------------------------===//
+void DisableTimestamptzCastsSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.disable_timestamptz_casts = input.GetValue<bool>();
+}
+
+void DisableTimestamptzCastsSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).disable_timestamptz_casts = ClientConfig().disable_timestamptz_casts;
+}
+
+Value DisableTimestamptzCastsSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.disable_timestamptz_casts);
 }
 
 //===----------------------------------------------------------------------===//
@@ -462,23 +525,6 @@ void EnableFSSTVectorsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &confi
 Value EnableFSSTVectorsSetting::GetSetting(const ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return Value::BOOLEAN(config.options.enable_fsst_vectors);
-}
-
-//===----------------------------------------------------------------------===//
-// Enable H T T P Logging
-//===----------------------------------------------------------------------===//
-void EnableHTTPLoggingSetting::SetLocal(ClientContext &context, const Value &input) {
-	auto &config = ClientConfig::GetConfig(context);
-	config.enable_http_logging = input.GetValue<bool>();
-}
-
-void EnableHTTPLoggingSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).enable_http_logging = ClientConfig().enable_http_logging;
-}
-
-Value EnableHTTPLoggingSetting::GetSetting(const ClientContext &context) {
-	auto &config = ClientConfig::GetConfig(context);
-	return Value::BOOLEAN(config.enable_http_logging);
 }
 
 //===----------------------------------------------------------------------===//
@@ -635,23 +681,6 @@ void HomeDirectorySetting::ResetLocal(ClientContext &context) {
 Value HomeDirectorySetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value(config.home_directory);
-}
-
-//===----------------------------------------------------------------------===//
-// H T T P Logging Output
-//===----------------------------------------------------------------------===//
-void HTTPLoggingOutputSetting::SetLocal(ClientContext &context, const Value &input) {
-	auto &config = ClientConfig::GetConfig(context);
-	config.http_logging_output = input.GetValue<string>();
-}
-
-void HTTPLoggingOutputSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).http_logging_output = ClientConfig().http_logging_output;
-}
-
-Value HTTPLoggingOutputSetting::GetSetting(const ClientContext &context) {
-	auto &config = ClientConfig::GetConfig(context);
-	return Value(config.http_logging_output);
 }
 
 //===----------------------------------------------------------------------===//
@@ -983,6 +1012,23 @@ void PerfectHtThresholdSetting::ResetLocal(ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
+// Pin Threads
+//===----------------------------------------------------------------------===//
+void PinThreadsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto str_input = StringUtil::Upper(input.GetValue<string>());
+	config.options.pin_threads = EnumUtil::FromString<ThreadPinMode>(str_input);
+}
+
+void PinThreadsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.pin_threads = DBConfig().options.pin_threads;
+}
+
+Value PinThreadsSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(StringUtil::Lower(EnumUtil::ToString(config.options.pin_threads)));
+}
+
+//===----------------------------------------------------------------------===//
 // Pivot Filter Threshold
 //===----------------------------------------------------------------------===//
 void PivotFilterThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
@@ -1098,6 +1144,54 @@ void ScalarSubqueryErrorOnMultipleRowsSetting::ResetLocal(ClientContext &context
 Value ScalarSubqueryErrorOnMultipleRowsSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value::BOOLEAN(config.scalar_subquery_error_on_multiple_rows);
+}
+
+//===----------------------------------------------------------------------===//
+// Scheduler Process Partial
+//===----------------------------------------------------------------------===//
+void SchedulerProcessPartialSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.scheduler_process_partial = input.GetValue<bool>();
+}
+
+void SchedulerProcessPartialSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.scheduler_process_partial = DBConfig().options.scheduler_process_partial;
+}
+
+Value SchedulerProcessPartialSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.scheduler_process_partial);
+}
+
+//===----------------------------------------------------------------------===//
+// Variant Legacy Encoding
+//===----------------------------------------------------------------------===//
+void VariantLegacyEncodingSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.variant_legacy_encoding = input.GetValue<bool>();
+}
+
+void VariantLegacyEncodingSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.variant_legacy_encoding = DBConfig().options.variant_legacy_encoding;
+}
+
+Value VariantLegacyEncodingSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.variant_legacy_encoding);
+}
+
+//===----------------------------------------------------------------------===//
+// Wal Encryption
+//===----------------------------------------------------------------------===//
+void WalEncryptionSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.wal_encryption = input.GetValue<bool>();
+}
+
+void WalEncryptionSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.wal_encryption = DBConfig().options.wal_encryption;
+}
+
+Value WalEncryptionSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::BOOLEAN(config.options.wal_encryption);
 }
 
 //===----------------------------------------------------------------------===//
