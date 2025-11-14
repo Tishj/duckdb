@@ -185,7 +185,7 @@ void ColumnCheckpointState::FlushSegmentInternal(unique_ptr<ColumnSegment> segme
 	DataPointer data_pointer(segment->stats.statistics.Copy());
 	data_pointer.block_pointer.block_id = block_id;
 	data_pointer.block_pointer.offset = offset_in_block;
-	data_pointer.row_start = row_group.start;
+	data_pointer.row_start = 0;
 	if (!data_pointers.empty()) {
 		auto &last_pointer = data_pointers.back();
 		data_pointer.row_start = last_pointer.row_start + last_pointer.tuple_count;
@@ -203,7 +203,7 @@ void ColumnCheckpointState::FlushSegmentInternal(unique_ptr<ColumnSegment> segme
 }
 
 PersistentColumnData ColumnCheckpointState::ToPersistentData() {
-	PersistentColumnData data(column_data.type.InternalType());
+	PersistentColumnData data(column_data.type);
 	data.pointers = std::move(data_pointers);
 	return data;
 }
