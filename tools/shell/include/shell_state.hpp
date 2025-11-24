@@ -45,6 +45,8 @@ using duckdb::InvalidInputException;
 using duckdb::to_string;
 struct Prompt;
 struct ShellProgressBar;
+struct PagerState;
+struct ShellTableInfo;
 
 using idx_t = uint64_t;
 
@@ -59,6 +61,7 @@ enum class RenderMode : uint32_t {
 	TCL,       /* Generate ANSI-C or TCL quoted elements */
 	CSV,       /* Quote strings, numbers are plain */
 	EXPLAIN,   /* Like RenderMode::Column, but do not truncate data */
+	DESCRIBE,  /* Special DESCRIBE Renderer */
 	ASCII,     /* Use ASCII unit and record separators (0x1F/0x1E) */
 	PRETTY,    /* Pretty-print schemas */
 	EQP,       /* Converts EXPLAIN QUERY PLAN output into a graph */
@@ -93,6 +96,7 @@ enum class SuccessState { SUCCESS, FAILURE };
 enum class OptionType { DEFAULT, ON, OFF };
 enum class StartupText { ALL, VERSION, NONE };
 enum class ReadLineVersion { LINENOISE, FALLBACK };
+enum class PagerMode { PAGER_AUTOMATIC, PAGER_ON, PAGER_OFF };
 
 enum class MetadataResult : uint8_t { SUCCESS = 0, FAIL = 1, EXIT = 2, PRINT_USAGE = 3 };
 
@@ -124,6 +128,24 @@ struct MetadataCommand {
 	const char *description;
 	idx_t match_size;
 	const char *extra_description;
+};
+
+struct ShellColumnInfo {
+	string column_name;
+	string column_type;
+	bool is_primary_key = false;
+	bool is_not_null = false;
+	bool is_unique = false;
+	string default_value;
+};
+
+struct ShellTableInfo {
+	string database_name;
+	string schema_name;
+	string table_name;
+	optional_idx estimated_size;
+	bool is_view = false;
+	vector<ShellColumnInfo> columns;
 };
 
 /*
@@ -230,7 +252,19 @@ public:
 	ReadLineVersion rl_version = ReadLineVersion::FALLBACK;
 #endif
 
+	//! Whether or not to run the pager
+	PagerMode pager_mode = PagerMode::PAGER_AUTOMATIC;
+	//! The command to run when running the pager
+	string pager_command;
+	// In automatic mode, only show a pager when this row count is exceeded
+	idx_t pager_min_rows = 50;
+	// In automatic mode, only show a pager when this column count is exceeded
+	idx_t pager_min_columns = 5;
+	//! Whether or not the pager is currently active
+	bool pager_is_active = false;
+
 #if defined(_WIN32) || defined(WIN32)
+	//! When enabled, sets the console page to UTF8 and renders using that code page
 	bool win_utf8_mode = false;
 #endif
 
@@ -262,11 +296,12 @@ public:
 	bool ReadFromFile(const string &file);
 	bool DisplaySchemas(const vector<string> &args);
 	MetadataResult DisplayEntries(const vector<string> &args, char type);
+	MetadataResult DisplayTables(const vector<string> &args);
 	void ShowConfiguration();
 
-	idx_t RenderLength(const char *z);
-	idx_t RenderLength(const string &str);
-	bool IsCharacter(char c);
+	static idx_t RenderLength(const char *z);
+	static idx_t RenderLength(const string &str);
+	static bool IsCharacter(char c);
 	void SetBinaryMode();
 	void SetTextMode();
 	static idx_t StringLength(const char *z);
@@ -293,6 +328,9 @@ public:
 	vector<string> TableColumnList(const char *zTab);
 	SuccessState ExecuteStatement(unique_ptr<duckdb::SQLStatement> statement);
 	SuccessState RenderDuckBoxResult(duckdb::QueryResult &res);
+	SuccessState RenderDescribe(duckdb::QueryResult &res);
+	static bool UseDescribeRenderMode(const duckdb::SQLStatement &stmt, string &describe_table_name);
+	void RenderTableMetadata(vector<ShellTableInfo> &result);
 
 	void PrintDatabaseError(const string &zErr);
 	int RunInitialCommand(const char *sql, bool bail);
@@ -318,6 +356,13 @@ public:
 		shellFlgs &= ~static_cast<uint32_t>(flag);
 	}
 	void ResetOutput();
+	bool ShouldUsePager(duckdb::QueryResult &result);
+	bool ShouldUsePager();
+	bool ShouldUsePager(idx_t line_count);
+	string GetSystemPager();
+	unique_ptr<PagerState> SetupPager();
+	static void StartPagerDisplay();
+	static void FinishPagerDisplay();
 	void ClearTempFile();
 	void NewTempFile(const char *zSuffix);
 	int DoMetaCommand(const string &zLine);
@@ -381,6 +426,23 @@ public:
 private:
 	ShellState();
 	~ShellState();
+
+private:
+	string describe_table_name;
+};
+
+struct PagerState {
+	explicit PagerState(ShellState &state) : state(state) {
+	}
+	~PagerState() {
+		if (state) {
+			state->ResetOutput();
+			ShellState::FinishPagerDisplay();
+			state = nullptr;
+		}
+	}
+
+	optional_ptr<ShellState> state;
 };
 
 } // namespace duckdb_shell
