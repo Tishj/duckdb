@@ -203,6 +203,7 @@ public:
 
 public:
 	void Initialize(const vector<LogicalType> &types);
+	void InitializeWithColumnIds(const vector<LogicalType> &types, const vector<StorageIndex> &column_ids);
 	const vector<StorageIndex> &GetColumnIds();
 	ScanFilterInfo &GetFilterInfo();
 	ScanSamplingInfo &GetSamplingInfo();

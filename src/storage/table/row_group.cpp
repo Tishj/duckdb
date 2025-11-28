@@ -236,8 +236,8 @@ void ColumnScanState::Initialize(const LogicalType &type, optional_ptr<TableScan
 	Initialize(type, children, options);
 }
 
-void CollectionScanState::Initialize(const vector<LogicalType> &types) {
-	auto &column_ids = GetColumnIds();
+void CollectionScanState::InitializeWithColumnIds(const vector<LogicalType> &types,
+                                                  const vector<StorageIndex> &column_ids) {
 	column_scans = make_unsafe_uniq_array<ColumnScanState>(column_ids.size());
 	for (idx_t i = 0; i < column_ids.size(); i++) {
 		if (column_ids[i].IsRowIdColumn()) {
@@ -246,6 +246,11 @@ void CollectionScanState::Initialize(const vector<LogicalType> &types) {
 		auto col_id = column_ids[i].GetPrimaryIndex();
 		column_scans[i].Initialize(types[col_id], column_ids[i].GetChildIndexes(), &GetOptions());
 	}
+}
+
+void CollectionScanState::Initialize(const vector<LogicalType> &types) {
+	auto &column_ids = GetColumnIds();
+	InitializeWithColumnIds(types, column_ids);
 }
 
 bool RowGroup::InitializeScanWithOffset(CollectionScanState &state, idx_t vector_offset) {

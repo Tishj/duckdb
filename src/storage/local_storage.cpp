@@ -95,7 +95,8 @@ LocalTableStorage::LocalTableStorage(ClientContext &context, DataTable &new_dt, 
       optimistic_collections(std::move(parent.optimistic_collections)),
       optimistic_writer(new_dt, parent.optimistic_writer), merged_storage(parent.merged_storage) {
 
-	row_groups = parent.row_groups->AddColumn(context, new_column, default_executor);
+	idx_t ignored_column_idx;
+	row_groups = parent.row_groups->AddColumn(context, new_column, default_executor, ignored_column_idx);
 	parent.row_groups.reset();
 	append_indexes.Move(parent.append_indexes);
 }

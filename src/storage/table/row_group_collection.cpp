@@ -160,7 +160,7 @@ void RowGroupCollection::InitializeScan(CollectionScanState &state, const vector
 	D_ASSERT(row_group);
 	state.row_groups = row_groups.get();
 	state.max_row = row_start + total_rows;
-	state.Initialize(GetTypes());
+	state.InitializeWithColumnIds(GetTypes(), column_ids);
 	while (row_group && !row_group->InitializeScan(state)) {
 		row_group = row_groups->GetNextSegment(row_group);
 	}
@@ -259,7 +259,12 @@ bool RowGroupCollection::Scan(DuckTransaction &transaction, const vector<Storage
                               const std::function<bool(DataChunk &chunk)> &fun) {
 	vector<LogicalType> scan_types;
 	for (idx_t i = 0; i < column_ids.size(); i++) {
-		scan_types.push_back(types[column_ids[i].GetPrimaryIndex()]);
+		auto &column_id = column_ids[i];
+		if (column_id.IsRowIdColumn()) {
+			scan_types.push_back(LogicalType::ROW_TYPE);
+			continue;
+		}
+		scan_types.push_back(types[column_id.GetPrimaryIndex()]);
 	}
 	DataChunk chunk;
 	chunk.Initialize(GetAllocator(), scan_types);
@@ -1374,31 +1379,32 @@ vector<ColumnSegmentInfo> RowGroupCollection::GetColumnSegmentInfo() {
 // Alter
 //===--------------------------------------------------------------------===//
 shared_ptr<RowGroupCollection> RowGroupCollection::AddColumn(ClientContext &context, ColumnDefinition &new_column,
-                                                             ExpressionExecutor &default_executor) {
+                                                             ExpressionExecutor &default_executor, idx_t &column_path) {
 	idx_t new_column_idx = types.size();
+	column_path = new_column_idx;
+
 	auto new_types = types;
 	new_types.push_back(new_column.GetType());
-	auto result = make_shared_ptr<RowGroupCollection>(info, block_manager, std::move(new_types), row_start,
-	                                                  total_rows.load(), row_group_size);
+	auto new_collection = make_shared_ptr<RowGroupCollection>(info, block_manager, std::move(new_types), row_start,
+	                                                          total_rows.load(), row_group_size);
 
-	DataChunk dummy_chunk;
 	Vector default_vector(new_column.GetType());
 
-	result->stats.InitializeAddColumn(stats, new_column.GetType());
-	auto lock = result->stats.GetLock();
-	auto &new_column_stats = result->stats.GetStats(*lock, new_column_idx);
+	new_collection->stats.InitializeAddColumn(stats, new_column.GetType());
+	auto lock = new_collection->stats.GetLock();
+	auto &new_column_stats = new_collection->stats.GetStats(*lock, new_column_idx);
 
 	// fill the column with its DEFAULT value, or NULL if none is specified
 	auto new_stats = make_uniq<SegmentStatistics>(new_column.GetType());
 	for (auto &current_row_group : row_groups->Segments()) {
-		auto new_row_group = current_row_group.AddColumn(*result, new_column, default_executor, default_vector);
+		auto new_row_group = current_row_group.AddColumn(*new_collection, new_column, default_executor, default_vector);
 		// merge in the statistics
 		new_row_group->MergeIntoStatistics(new_column_idx, new_column_stats.Statistics());
 
-		result->row_groups->AppendSegment(std::move(new_row_group));
+		new_collection->row_groups->AppendSegment(std::move(new_row_group));
 	}
 
-	return result;
+	return new_collection;
 }
 
 shared_ptr<RowGroupCollection> RowGroupCollection::RemoveColumn(idx_t col_idx) {
