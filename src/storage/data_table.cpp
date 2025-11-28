@@ -87,27 +87,30 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition
 	lock_guard<mutex> parent_lock(parent.append_lock);
 
 	idx_t column_path;
-	this->row_groups = parent.row_groups->AddColumn(context, new_column, default_executor, column_path);
+	this->row_groups = parent.row_groups->AddColumn(context, new_column, column_path);
 	// also add this column to client local storage
 	local_storage.AddColumn(parent, *this, new_column, default_executor);
 
 	auto &transaction = DuckTransaction::Get(context, parent.db);
 
+	DataChunk dummy_chunk;
+	DataChunk default_chunk;
+	default_chunk.Initialize(context, {new_column.GetType()}, STANDARD_VECTOR_SIZE);
+
 	vector<StorageIndex> column_ids;
-	column_ids.reserve(2);
-	column_ids.emplace_back(column_path);
+	column_ids.reserve(1);
 	column_ids.emplace_back(COLUMN_IDENTIFIER_ROW_ID);
 	this->row_groups->Scan(transaction, column_ids, [&](DataChunk &chunk) -> bool {
-		D_ASSERT(chunk.ColumnCount() == 2);
-		D_ASSERT(chunk.data[0].GetType() == new_column.GetType());
-		D_ASSERT(chunk.data[1].GetType() == LogicalType::ROW_TYPE);
+		D_ASSERT(chunk.ColumnCount() == 1);
+		D_ASSERT(chunk.data[0].GetType() == LogicalType::ROW_TYPE);
 		auto &row_ids = chunk.data.back();
 		row_ids.Flatten(chunk.size());
 
-		DataChunk data_only;
-		data_only.InitializeEmpty({chunk.data[0].GetType()});
-		data_only.ReferenceColumns(chunk, {0});
-		this->row_groups->UpdateColumn(transaction, *this, row_ids, {column_path}, data_only);
+		dummy_chunk.SetCardinality(chunk.size());
+		default_chunk.Reset();
+		default_executor.ExecuteExpression(dummy_chunk, default_chunk.data[0]);
+		default_chunk.SetCardinality(chunk.size());
+		this->row_groups->UpdateColumn(transaction, *this, row_ids, {column_path}, default_chunk);
 		return true;
 	});
 

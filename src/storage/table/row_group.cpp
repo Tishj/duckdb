@@ -354,7 +354,7 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 }
 
 unique_ptr<RowGroup> RowGroup::AddColumn(RowGroupCollection &new_collection, ColumnDefinition &new_column,
-                                         ExpressionExecutor &executor, Vector &result) {
+                                         Vector &null_vector) {
 	Verify();
 
 	// construct a new column data for the new column
@@ -370,8 +370,7 @@ unique_ptr<RowGroup> RowGroup::AddColumn(RowGroupCollection &new_collection, Col
 		for (idx_t i = 0; i < rows_to_write; i += STANDARD_VECTOR_SIZE) {
 			idx_t rows_in_this_vector = MinValue<idx_t>(rows_to_write - i, STANDARD_VECTOR_SIZE);
 			dummy_chunk.SetCardinality(rows_in_this_vector);
-			executor.ExecuteExpression(dummy_chunk, result);
-			added_column->Append(state, result, rows_in_this_vector);
+			added_column->Append(state, null_vector, rows_in_this_vector);
 		}
 	}
 

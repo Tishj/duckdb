@@ -120,8 +120,7 @@ public:
 	vector<ColumnSegmentInfo> GetColumnSegmentInfo();
 	const vector<LogicalType> &GetTypes() const;
 
-	shared_ptr<RowGroupCollection> AddColumn(ClientContext &context, ColumnDefinition &new_column,
-	                                         ExpressionExecutor &default_executor, idx_t &column_path);
+	shared_ptr<RowGroupCollection> AddColumn(ClientContext &context, ColumnDefinition &new_column, idx_t &column_path);
 	shared_ptr<RowGroupCollection> RemoveColumn(idx_t col_idx);
 	shared_ptr<RowGroupCollection> AlterType(ClientContext &context, idx_t changed_idx, const LogicalType &target_type,
 	                                         vector<StorageIndex> bound_columns, Expression &cast_expr);

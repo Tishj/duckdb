@@ -1379,7 +1379,7 @@ vector<ColumnSegmentInfo> RowGroupCollection::GetColumnSegmentInfo() {
 // Alter
 //===--------------------------------------------------------------------===//
 shared_ptr<RowGroupCollection> RowGroupCollection::AddColumn(ClientContext &context, ColumnDefinition &new_column,
-                                                             ExpressionExecutor &default_executor, idx_t &column_path) {
+                                                             idx_t &column_path) {
 	idx_t new_column_idx = types.size();
 	column_path = new_column_idx;
 
@@ -1388,7 +1388,9 @@ shared_ptr<RowGroupCollection> RowGroupCollection::AddColumn(ClientContext &cont
 	auto new_collection = make_shared_ptr<RowGroupCollection>(info, block_manager, std::move(new_types), row_start,
 	                                                          total_rows.load(), row_group_size);
 
-	Vector default_vector(new_column.GetType());
+	Vector null_vector(new_column.GetType());
+	null_vector.Reference(Value(new_column.GetType()));
+	null_vector.Flatten(STANDARD_VECTOR_SIZE);
 
 	new_collection->stats.InitializeAddColumn(stats, new_column.GetType());
 	auto lock = new_collection->stats.GetLock();
@@ -1397,7 +1399,7 @@ shared_ptr<RowGroupCollection> RowGroupCollection::AddColumn(ClientContext &cont
 	// fill the column with its DEFAULT value, or NULL if none is specified
 	auto new_stats = make_uniq<SegmentStatistics>(new_column.GetType());
 	for (auto &current_row_group : row_groups->Segments()) {
-		auto new_row_group = current_row_group.AddColumn(*new_collection, new_column, default_executor, default_vector);
+		auto new_row_group = current_row_group.AddColumn(*new_collection, new_column, null_vector);
 		// merge in the statistics
 		new_row_group->MergeIntoStatistics(new_column_idx, new_column_stats.Statistics());
 
