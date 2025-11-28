@@ -173,8 +173,7 @@ void StandardColumnData::UpdateColumn(TransactionData transaction, DataTable &da
 		// update this column
 		ColumnData::Update(transaction, data_table, column_path[0], update_vector, row_ids, update_count);
 	} else {
-		// update the child column (i.e. the validity column)
-		validity.UpdateColumn(transaction, data_table, column_path, update_vector, row_ids, update_count, depth + 1);
+		validity.UpdateWithBase(transaction, data_table, column_path[0], update_vector, row_ids, update_count, *this);
 	}
 }
 
