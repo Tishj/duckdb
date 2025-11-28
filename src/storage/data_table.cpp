@@ -111,6 +111,8 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition
 		default_executor.ExecuteExpression(dummy_chunk, default_chunk.data[0]);
 		default_chunk.SetCardinality(chunk.size());
 		this->row_groups->UpdateColumn(transaction, *this, row_ids, {column_path}, default_chunk);
+		//! Also update the validity
+		this->row_groups->UpdateColumn(transaction, *this, row_ids, {column_path, 0}, default_chunk);
 		return true;
 	});
 
