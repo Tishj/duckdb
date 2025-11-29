@@ -62,12 +62,16 @@ static StorageIndex TransformStorageIndex(const ColumnIndex &column_id) {
 	for (auto &child_id : column_id.GetChildIndexes()) {
 		result.push_back(TransformStorageIndex(child_id));
 	}
-	return StorageIndex(column_id.GetPrimaryIndex(), std::move(result));
+	auto storage_index = StorageIndex(column_id.GetPrimaryIndex(), column_id.GetType(), std::move(result));
+	if (column_id.IsPushdownExtract()) {
+		storage_index.SetPushdownExtract();
+	}
+	return storage_index;
 }
 
 static StorageIndex GetStorageIndex(TableCatalogEntry &table, const ColumnIndex &column_id) {
 	if (column_id.IsRowIdColumn()) {
-		return StorageIndex();
+		return StorageIndex(COLUMN_IDENTIFIER_ROW_ID, LogicalType::ROW_TYPE);
 	}
 
 	// The index of the base ColumnIndex is equal to the physical column index in the table
@@ -401,7 +405,7 @@ unique_ptr<GlobalTableFunctionState> DuckTableScanInitGlobal(ClientContext &cont
 		if (col_idx.IsRowIdColumn()) {
 			g_state->scanned_types.emplace_back(LogicalType::ROW_TYPE);
 		} else {
-			g_state->scanned_types.push_back(columns.GetColumn(col_idx.ToLogical()).Type());
+			g_state->scanned_types.push_back(col_idx.GetScanType());
 		}
 	}
 	return std::move(g_state);

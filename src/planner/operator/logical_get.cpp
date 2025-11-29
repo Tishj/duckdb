@@ -120,14 +120,19 @@ vector<ColumnBinding> LogicalGet::GetColumnBindings() {
 }
 
 const LogicalType &LogicalGet::GetColumnType(const ColumnIndex &index) const {
+	optional_ptr<const LogicalType> res_p;
 	if (index.IsVirtualColumn()) {
 		auto entry = virtual_columns.find(index.GetPrimaryIndex());
 		if (entry == virtual_columns.end()) {
 			throw InternalException("Failed to find referenced virtual column %d", index.GetPrimaryIndex());
 		}
-		return entry->second.type;
+		res_p = entry->second.type;
+	} else {
+		res_p = returned_types[index.GetPrimaryIndex()];
 	}
-	return returned_types[index.GetPrimaryIndex()];
+	D_ASSERT(res_p);
+	auto &res = *res_p;
+	return index.GetScanType();
 }
 
 const string &LogicalGet::GetColumnName(const ColumnIndex &index) const {
