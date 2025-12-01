@@ -70,6 +70,7 @@ public:
 	void FinalizeCheckpoint();
 
 private:
+	void DetermineChangesMade();
 	void ScanSegments(const std::function<void(Vector &, idx_t)> &callback);
 	vector<CheckpointAnalyzeResult> DetectBestCompressionMethod();
 	void WriteToDisk();
@@ -78,6 +79,7 @@ private:
 	void InitAnalyze();
 	void DropSegments();
 	bool ValidityCoveredByBasedata(vector<CheckpointAnalyzeResult> &result);
+	bool ValidityHasChanges();
 
 private:
 	vector<reference<ColumnCheckpointState>> &checkpoint_states;

@@ -270,6 +270,18 @@ vector<CheckpointAnalyzeResult> ColumnDataCheckpointer::DetectBestCompressionMet
 	return result;
 }
 
+bool ColumnDataCheckpointer::ValidityHasChanges() {
+	if (checkpoint_states.size() != 2) {
+		//! There is no validity, only data is being checkpointed
+		return false;
+	}
+	auto &validity_state = checkpoint_states[1];
+	D_ASSERT(validity_state.get().column_data.type.id() == LogicalTypeId::VALIDITY);
+	D_ASSERT(has_changes.size() == 2);
+	auto validity_has_changes = has_changes[1];
+	return validity_has_changes;
+}
+
 void ColumnDataCheckpointer::DropSegments() {
 	// first we check the current segments
 	// if there are any persistent segments, we will mark their old block ids as modified
@@ -279,7 +291,6 @@ void ColumnDataCheckpointer::DropSegments() {
 		if (!has_changes[i]) {
 			continue;
 		}
-
 		auto &state = checkpoint_states[i];
 		auto &col_data = state.get().column_data;
 		auto &nodes = col_data.data.ReferenceSegments();
@@ -407,12 +418,47 @@ void ColumnDataCheckpointer::WritePersistentSegments(ColumnCheckpointState &stat
 	}
 }
 
-void ColumnDataCheckpointer::Checkpoint() {
+void ColumnDataCheckpointer::DetermineChangesMade() {
 	for (idx_t i = 0; i < checkpoint_states.size(); i++) {
 		auto &state = checkpoint_states[i];
 		auto &col_data = state.get().column_data;
 		has_changes.push_back(HasChanges(col_data));
 	}
+
+	const bool validity_has_changes = ValidityHasChanges();
+	auto &column_data = checkpoint_states[0].get().column_data;
+	if (!validity_has_changes) {
+		//! Validity wasnt changed
+		return;
+	}
+	if (has_changes[0]) {
+		//! Data already has changes
+		return;
+	}
+	if (column_data.type.InternalType() != PhysicalType::VARCHAR) {
+		//! FIXME: expand for future uses of CompressionValidity::NO_VALIDITY_REQUIRED
+		return;
+	}
+	//! The data was not changed, only the validity
+	//! For DICT_FSST we still need to checkpoint the data, because it also covers the validity
+	if (column_data.compression && column_data.compression->type == CompressionType::COMPRESSION_DICT_FSST) {
+		has_changes[0] = true;
+		return;
+	}
+	bool has_dict_fsst_segments = false;
+	//! Not *all* segments have DICT_FSST, but maybe some of them do
+	auto &nodes = column_data.data.ReferenceSegments();
+	for (idx_t segment_idx = 0; segment_idx < nodes.size(); segment_idx++) {
+		auto segment = nodes[segment_idx].node.get();
+		auto &compression = segment->GetCompressionFunction();
+		if (compression.type == CompressionType::COMPRESSION_DICT_FSST) {
+			has_dict_fsst_segments = true;
+		}
+	}
+}
+
+void ColumnDataCheckpointer::Checkpoint() {
+	DetermineChangesMade();
 
 	bool any_has_changes = false;
 	for (idx_t i = 0; i < has_changes.size(); i++) {
