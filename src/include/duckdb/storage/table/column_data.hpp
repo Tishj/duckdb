@@ -96,6 +96,10 @@ public:
 		return *parent;
 	}
 
+	bool CoversValidity() const {
+		return contains_segments_that_cover_validity;
+	}
+
 	virtual void SetStart(idx_t new_start);
 	//! The root type of the column
 	const LogicalType &RootType() const;
@@ -239,6 +243,8 @@ protected:
 	unique_ptr<SegmentStatistics> stats;
 	//! Total transient allocation size
 	atomic<idx_t> allocation_size;
+	//! Contains segments that cover validity
+	bool contains_segments_that_cover_validity = false;
 
 private:
 	//! The parent column (if any)

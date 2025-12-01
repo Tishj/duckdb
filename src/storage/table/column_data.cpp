@@ -642,6 +642,9 @@ void ColumnData::UpdateCompressionFunction(SegmentLock &l, const CompressionFunc
 
 void ColumnData::AppendSegment(SegmentLock &l, unique_ptr<ColumnSegment> segment) {
 	UpdateCompressionFunction(l, segment->GetCompressionFunction());
+	if (segment->GetCompressionFunction().validity == CompressionValidity::NO_VALIDITY_REQUIRED) {
+		contains_segments_that_cover_validity = true;
+	}
 	data.AppendSegment(l, std::move(segment));
 }
 

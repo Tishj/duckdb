@@ -431,29 +431,10 @@ void ColumnDataCheckpointer::DetermineChangesMade() {
 		//! Validity wasnt changed
 		return;
 	}
-	if (has_changes[0]) {
-		//! Data already has changes
-		return;
-	}
-	if (column_data.type.InternalType() != PhysicalType::VARCHAR) {
-		//! FIXME: expand for future uses of CompressionValidity::NO_VALIDITY_REQUIRED
-		return;
-	}
-	//! The data was not changed, only the validity
-	//! For DICT_FSST we still need to checkpoint the data, because it also covers the validity
-	if (column_data.compression && column_data.compression->type == CompressionType::COMPRESSION_DICT_FSST) {
+	if (column_data.CoversValidity()) {
+		//! The segment contains segments that cover validity, so if the validity has changed
+		//! these segments need to be rewritten
 		has_changes[0] = true;
-		return;
-	}
-	bool has_dict_fsst_segments = false;
-	//! Not *all* segments have DICT_FSST, but maybe some of them do
-	auto &nodes = column_data.data.ReferenceSegments();
-	for (idx_t segment_idx = 0; segment_idx < nodes.size(); segment_idx++) {
-		auto segment = nodes[segment_idx].node.get();
-		auto &compression = segment->GetCompressionFunction();
-		if (compression.type == CompressionType::COMPRESSION_DICT_FSST) {
-			has_dict_fsst_segments = true;
-		}
 	}
 }
 
