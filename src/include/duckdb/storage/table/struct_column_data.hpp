@@ -27,6 +27,9 @@ public:
 	void InitializeScan(ColumnScanState &state) override;
 	void InitializeScanWithOffset(ColumnScanState &state, idx_t row_idx) override;
 
+	void IterateFields(ColumnScanState &state,
+	                   std::function<void(ColumnData &, optional_idx, ColumnScanState &, bool)> callback);
+
 	idx_t Scan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
 	           idx_t scan_count) override;
 	idx_t ScanCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, bool allow_updates,
@@ -48,7 +51,7 @@ public:
 	                  idx_t row_group_start) override;
 	unique_ptr<BaseStatistics> GetUpdateStatistics() override;
 
-	void CommitDropColumn() override;
+	void VisitBlockIds(BlockIdVisitor &visitor) const override;
 
 	unique_ptr<ColumnCheckpointState> CreateCheckpointState(const RowGroup &row_group,
 	                                                        PartialBlockManager &partial_block_manager) override;

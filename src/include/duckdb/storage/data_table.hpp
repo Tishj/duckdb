@@ -159,7 +159,7 @@ public:
 	                  const vector<column_t> &column_path, DataChunk &updates);
 
 	//! Fetches an append lock
-	void AppendLock(TableAppendState &state);
+	void AppendLock(DuckTransaction &transaction, TableAppendState &state);
 	//! Begin appending structs to this table, obtaining necessary locks, etc
 	void InitializeAppend(DuckTransaction &transaction, TableAppendState &state);
 	//! Append a chunk to the table using the AppendState obtained from InitializeAppend
@@ -215,7 +215,7 @@ public:
 	string TableModification() const;
 
 	//! Get statistics of a physical column within the table
-	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, column_t column_id);
+	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, const StorageIndex &column_id);
 
 	//! Get table sample
 	unique_ptr<BlockingSample> GetSample();
