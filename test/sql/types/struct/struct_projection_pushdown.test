@@ -7,6 +7,9 @@ require parquet
 statement ok
 PRAGMA enable_verification
 
+foreach type struct variant
+
+onlyif type=struct
 statement ok
 CREATE TABLE test_structs(
 	id INT,
@@ -107,6 +110,7 @@ SELECT s FROM ${source} WHERE s.b
 ----
 {'a': 42, 'b': true}
 
+onlyif type=struct
 query I
 SELECT a FROM (SELECT UNNEST(s) FROM ${source}) WHERE b
 ----
@@ -132,3 +136,5 @@ query II
 SELECT s['b'], s.a FROM test_structs WHERE id=2
 ----
 false	84
+
+endloop
