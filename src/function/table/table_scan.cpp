@@ -718,7 +718,8 @@ static unique_ptr<BaseStatistics> TableScanStatistics(ClientContext &context, Ta
 	}
 
 	if (column_id.IsRowIdColumn()) {
-		return nullptr;
+		auto storage_index = StorageIndex(COLUMN_IDENTIFIER_ROW_ID);
+		return duck_table.GetStatistics(context, storage_index);
 	}
 	auto &column = duck_table.GetColumn(LogicalIndex(column_id.GetPrimaryIndex()));
 	if (column.Generated()) {

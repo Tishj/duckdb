@@ -137,7 +137,6 @@
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/main/secret/secret.hpp"
 #include "duckdb/main/setting_info.hpp"
-#include "duckdb/optimizer/remove_unused_columns.hpp"
 #include "duckdb/parallel/async_result.hpp"
 #include "duckdb/parallel/interrupt.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
@@ -680,24 +679,6 @@ const char* EnumUtil::ToChars<AsyncResultsExecutionMode>(AsyncResultsExecutionMo
 template<>
 AsyncResultsExecutionMode EnumUtil::FromString<AsyncResultsExecutionMode>(const char *value) {
 	return static_cast<AsyncResultsExecutionMode>(StringUtil::StringToEnum(GetAsyncResultsExecutionModeValues(), 2, "AsyncResultsExecutionMode", value));
-}
-
-const StringUtil::EnumStringLiteral *GetBaseColumnPrunerModeValues() {
-	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(BaseColumnPrunerMode::DEFAULT), "DEFAULT" },
-		{ static_cast<uint32_t>(BaseColumnPrunerMode::DISABLE_PUSHDOWN_EXTRACT), "DISABLE_PUSHDOWN_EXTRACT" }
-	};
-	return values;
-}
-
-template<>
-const char* EnumUtil::ToChars<BaseColumnPrunerMode>(BaseColumnPrunerMode value) {
-	return StringUtil::EnumToString(GetBaseColumnPrunerModeValues(), 2, "BaseColumnPrunerMode", static_cast<uint32_t>(value));
-}
-
-template<>
-BaseColumnPrunerMode EnumUtil::FromString<BaseColumnPrunerMode>(const char *value) {
-	return static_cast<BaseColumnPrunerMode>(StringUtil::StringToEnum(GetBaseColumnPrunerModeValues(), 2, "BaseColumnPrunerMode", value));
 }
 
 const StringUtil::EnumStringLiteral *GetBinderTypeValues() {
@@ -3780,25 +3761,6 @@ const char* EnumUtil::ToChars<ProfilingCoverage>(ProfilingCoverage value) {
 template<>
 ProfilingCoverage EnumUtil::FromString<ProfilingCoverage>(const char *value) {
 	return static_cast<ProfilingCoverage>(StringUtil::StringToEnum(GetProfilingCoverageValues(), 2, "ProfilingCoverage", value));
-}
-
-const StringUtil::EnumStringLiteral *GetPushdownExtractSupportValues() {
-	static constexpr StringUtil::EnumStringLiteral values[] {
-		{ static_cast<uint32_t>(PushdownExtractSupport::UNCHECKED), "UNCHECKED" },
-		{ static_cast<uint32_t>(PushdownExtractSupport::DISABLED), "DISABLED" },
-		{ static_cast<uint32_t>(PushdownExtractSupport::ENABLED), "ENABLED" }
-	};
-	return values;
-}
-
-template<>
-const char* EnumUtil::ToChars<PushdownExtractSupport>(PushdownExtractSupport value) {
-	return StringUtil::EnumToString(GetPushdownExtractSupportValues(), 3, "PushdownExtractSupport", static_cast<uint32_t>(value));
-}
-
-template<>
-PushdownExtractSupport EnumUtil::FromString<PushdownExtractSupport>(const char *value) {
-	return static_cast<PushdownExtractSupport>(StringUtil::StringToEnum(GetPushdownExtractSupportValues(), 3, "PushdownExtractSupport", value));
 }
 
 const StringUtil::EnumStringLiteral *GetQuantileSerializationTypeValues() {

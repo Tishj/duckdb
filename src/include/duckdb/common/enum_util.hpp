@@ -82,8 +82,6 @@ enum class AsyncResultType : uint8_t;
 
 enum class AsyncResultsExecutionMode : uint8_t;
 
-enum class BaseColumnPrunerMode : uint8_t;
-
 enum class BinderType : uint8_t;
 
 enum class BindingMode : uint8_t;
@@ -336,8 +334,6 @@ enum class ProfilerPrintFormat : uint8_t;
 
 enum class ProfilingCoverage : uint8_t;
 
-enum class PushdownExtractSupport : uint8_t;
-
 enum class QuantileSerializationType : uint8_t;
 
 enum class QueryNodeType : uint8_t;
@@ -559,9 +555,6 @@ const char* EnumUtil::ToChars<AsyncResultType>(AsyncResultType value);
 
 template<>
 const char* EnumUtil::ToChars<AsyncResultsExecutionMode>(AsyncResultsExecutionMode value);
-
-template<>
-const char* EnumUtil::ToChars<BaseColumnPrunerMode>(BaseColumnPrunerMode value);
 
 template<>
 const char* EnumUtil::ToChars<BinderType>(BinderType value);
@@ -942,9 +935,6 @@ template<>
 const char* EnumUtil::ToChars<ProfilingCoverage>(ProfilingCoverage value);
 
 template<>
-const char* EnumUtil::ToChars<PushdownExtractSupport>(PushdownExtractSupport value);
-
-template<>
 const char* EnumUtil::ToChars<QuantileSerializationType>(QuantileSerializationType value);
 
 template<>
@@ -1238,9 +1228,6 @@ AsyncResultType EnumUtil::FromString<AsyncResultType>(const char *value);
 
 template<>
 AsyncResultsExecutionMode EnumUtil::FromString<AsyncResultsExecutionMode>(const char *value);
-
-template<>
-BaseColumnPrunerMode EnumUtil::FromString<BaseColumnPrunerMode>(const char *value);
 
 template<>
 BinderType EnumUtil::FromString<BinderType>(const char *value);
@@ -1619,9 +1606,6 @@ ProfilerPrintFormat EnumUtil::FromString<ProfilerPrintFormat>(const char *value)
 
 template<>
 ProfilingCoverage EnumUtil::FromString<ProfilingCoverage>(const char *value);
-
-template<>
-PushdownExtractSupport EnumUtil::FromString<PushdownExtractSupport>(const char *value);
 
 template<>
 QuantileSerializationType EnumUtil::FromString<QuantileSerializationType>(const char *value);
