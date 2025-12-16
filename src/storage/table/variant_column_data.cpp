@@ -145,6 +145,7 @@ idx_t VariantColumnData::GetMaxEntry() {
 }
 
 void VariantColumnData::InitializePrefetch(PrefetchState &prefetch_state, ColumnScanState &scan_state, idx_t rows) {
+	//! FIXME: does this also need CreateScanStates ??
 	validity->InitializePrefetch(prefetch_state, scan_state.child_states[0], rows);
 	for (idx_t i = 0; i < sub_columns.size(); i++) {
 		sub_columns[i]->InitializePrefetch(prefetch_state, scan_state.child_states[i + 1], rows);
@@ -177,7 +178,7 @@ void VariantColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t r
 	}
 }
 
-Vector VariantColumnData::CreateUnshreddingIntermediate(idx_t count) {
+Vector VariantColumnData::CreateUnshreddingIntermediate(idx_t count) const {
 	D_ASSERT(IsShredded());
 	D_ASSERT(sub_columns.size() == 2);
 
@@ -189,19 +190,21 @@ Vector VariantColumnData::CreateUnshreddingIntermediate(idx_t count) {
 	return intermediate;
 }
 
-idx_t VariantColumnData::Scan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
-                              idx_t target_count) {
+idx_t VariantColumnData::ScanWithCallback(
+    ColumnScanState &state, Vector &result, idx_t target_count,
+    std::function<idx_t(ColumnData &column, ColumnScanState &child_state, Vector &target_vector, idx_t count)> callback)
+    const {
 	if (state.storage_index.IsPushdownExtract()) {
 		if (IsShredded() && state.child_states[2].storage_index.IsPushdownExtract()) {
 			//! In the initialize we have verified that the field exists and the data is fully shredded (for this
 			//! rowgroup) We have created a scan state that performs a 'struct_extract' in the shredded data, to extract
 			//! the requested field.
-			return sub_columns[1]->Scan(transaction, vector_index, state.child_states[2], result, target_count);
+			return callback(*sub_columns[1], state.child_states[2], result, target_count);
 		}
 		//! Fall back to unshredding
 		Vector intermediate(LogicalType::VARIANT(), target_count);
-		auto scan_count = validity->Scan(transaction, vector_index, state.child_states[0], intermediate, target_count);
-		sub_columns[0]->Scan(transaction, vector_index, state.child_states[1], intermediate, target_count);
+		auto scan_count = callback(*validity, state.child_states[0], intermediate, target_count);
+		callback(*sub_columns[0], state.child_states[1], intermediate, target_count);
 
 		Vector extract_intermediate(LogicalType::VARIANT(), target_count);
 		vector<VariantPathComponent> components;
@@ -229,18 +232,26 @@ idx_t VariantColumnData::Scan(TransactionData transaction, idx_t vector_index, C
 		if (IsShredded()) {
 			auto intermediate = CreateUnshreddingIntermediate(target_count);
 			auto &child_vectors = StructVector::GetEntries(intermediate);
-			sub_columns[0]->Scan(transaction, vector_index, state.child_states[1], *child_vectors[0], target_count);
-			sub_columns[1]->Scan(transaction, vector_index, state.child_states[2], *child_vectors[1], target_count);
-			auto scan_count =
-			    validity->Scan(transaction, vector_index, state.child_states[0], intermediate, target_count);
+
+			callback(*sub_columns[0], state.child_states[1], *child_vectors[0], target_count);
+			callback(*sub_columns[1], state.child_states[2], *child_vectors[1], target_count);
+			auto scan_count = callback(*validity, state.child_states[0], intermediate, target_count);
 
 			VariantColumnData::UnshredVariantData(intermediate, result, target_count);
 			return scan_count;
 		}
-		auto scan_count = validity->Scan(transaction, vector_index, state.child_states[0], result, target_count);
-		sub_columns[0]->Scan(transaction, vector_index, state.child_states[1], result, target_count);
+		auto scan_count = callback(*validity, state.child_states[0], result, target_count);
+		callback(*sub_columns[0], state.child_states[1], result, target_count);
 		return scan_count;
 	}
+}
+
+idx_t VariantColumnData::Scan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
+                              idx_t target_count) {
+	return ScanWithCallback(state, result, target_count,
+	                        [&](ColumnData &col, ColumnScanState &child_state, Vector &target_vector, idx_t count) {
+		                        return col.Scan(transaction, vector_index, child_state, target_vector, count);
+	                        });
 }
 
 idx_t VariantColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count, idx_t result_offset) {
