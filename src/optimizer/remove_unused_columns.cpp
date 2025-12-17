@@ -765,6 +765,7 @@ bool BaseColumnPruner::HandleStructExtract(unique_ptr<Expression> *expression,
 	if (cast_expression) {
 		auto &top_level = expressions.back();
 		top_level.cast = cast_expression;
+		path_ref.get().SetType((*cast_expression)->return_type);
 	}
 
 	auto index = PathToIndex(indexes, cast_expression);
