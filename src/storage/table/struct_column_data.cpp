@@ -126,25 +126,6 @@ static Vector &GetFieldVectorForScan(Vector &result, optional_idx field_index) {
 	return *children[index];
 }
 
-static void ScanChild(ColumnScanState &state, Vector &result, const std::function<idx_t(Vector &target)> &callback) {
-	if (state.expression_state) {
-		auto &expression_state = *state.expression_state;
-		D_ASSERT(state.context.Valid());
-		auto &executor = expression_state.executor;
-		auto &target = expression_state.target;
-		auto &input = expression_state.input;
-
-		target.Reset();
-		input.Reset();
-		auto scan_count = callback(input.data[0]);
-		input.SetCardinality(scan_count);
-		executor.Execute(input, target);
-		result.Reference(target.data[0]);
-	} else {
-		callback(result);
-	}
-}
-
 idx_t StructColumnData::Scan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                              idx_t target_count) {
 	auto scan_count = validity->Scan(transaction, vector_index, state.child_states[0], result, target_count);
