@@ -57,11 +57,11 @@ vector<StructColumnData::StructColumnDataChild> StructColumnData::GetStructChild
 		auto child_index = child_storage_index.GetPrimaryIndex();
 		auto &field_state = state.child_states[1];
 		D_ASSERT(state.scan_child_column[0]);
-		res.emplace_back(child_index, optional_idx(), field_state, true);
+		res.emplace_back(*sub_columns[child_index], optional_idx(), field_state, true);
 	} else {
 		for (idx_t i = 0; i < sub_columns.size(); i++) {
 			auto &field_state = state.child_states[1 + i];
-			res.emplace_back(i, i, field_state, state.scan_child_column[i]);
+			res.emplace_back(*sub_columns[i], i, field_state, state.scan_child_column[i]);
 		}
 	}
 	return res;
@@ -74,8 +74,7 @@ void StructColumnData::InitializePrefetch(PrefetchState &prefetch_state, ColumnS
 		if (!child.should_scan) {
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
-		field.InitializePrefetch(prefetch_state, child.state, rows);
+		child.col.InitializePrefetch(prefetch_state, child.state, rows);
 	}
 }
 
@@ -92,8 +91,7 @@ void StructColumnData::InitializeScan(ColumnScanState &state) {
 		if (!child.should_scan) {
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
-		field.InitializeScan(child.state);
+		child.col.InitializeScan(child.state);
 	}
 }
 
@@ -111,8 +109,7 @@ void StructColumnData::InitializeScanWithOffset(ColumnScanState &state, idx_t ro
 		if (!child.should_scan) {
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
-		field.InitializeScanWithOffset(child.state, row_idx);
+		child.col.InitializeScanWithOffset(child.state, row_idx);
 	}
 }
 
@@ -138,9 +135,8 @@ idx_t StructColumnData::Scan(TransactionData transaction, idx_t vector_index, Co
 			ConstantVector::SetNull(target_vector, true);
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
 		ScanChild(state, target_vector, [&](Vector &child_result) {
-			return field.Scan(transaction, vector_index, child.state, child_result, target_count);
+			return child.col.Scan(transaction, vector_index, child.state, child_result, target_count);
 		});
 	}
 	return scan_count;
@@ -159,9 +155,8 @@ idx_t StructColumnData::ScanCommitted(idx_t vector_index, ColumnScanState &state
 			ConstantVector::SetNull(target_vector, true);
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
 		ScanChild(state, target_vector, [&](Vector &child_result) {
-			return field.ScanCommitted(vector_index, child.state, child_result, allow_updates, target_count);
+			return child.col.ScanCommitted(vector_index, child.state, child_result, allow_updates, target_count);
 		});
 	}
 	return scan_count;
@@ -179,9 +174,8 @@ idx_t StructColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t 
 			ConstantVector::SetNull(target_vector, true);
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
 		ScanChild(state, target_vector, [&](Vector &child_result) {
-			return field.ScanCount(child.state, child_result, count, result_offset);
+			return child.col.ScanCount(child.state, child_result, count, result_offset);
 		});
 	}
 	return scan_count;
@@ -196,8 +190,7 @@ void StructColumnData::Skip(ColumnScanState &state, idx_t count) {
 		if (!child.should_scan) {
 			continue;
 		}
-		auto &field = *sub_columns[child.child_index];
-		field.Skip(child.state, count);
+		child.col.Skip(child.state, count);
 	}
 }
 
