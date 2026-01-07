@@ -155,9 +155,8 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 	auto owned_nested_data = allocator.Allocate(sizeof(VariantNestedData) * count);
 	auto nested_data = reinterpret_cast<VariantNestedData *>(owned_nested_data.get());
 
-	ValidityMask out_validity;
+	ValidityMask validity(count);
 	for (idx_t i = 0; i < components.size(); i++) {
-		out_validity.Reset(count);
 		auto &component = components[i];
 		auto &input_indices = i % 2 == 0 ? value_index_sel : new_value_index_sel;
 		auto &output_indices = i % 2 == 0 ? new_value_index_sel : value_index_sel;
@@ -165,9 +164,8 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 		auto expected_type = component.lookup_mode == VariantChildLookupMode::BY_INDEX ? VariantLogicalType::ARRAY
 		                                                                               : VariantLogicalType::OBJECT;
 
-		auto collection_result =
-		    VariantUtils::CollectNestedData(variant, expected_type, input_indices, count, optional_idx(), 0,
-		                                    nested_data, FlatVector::Validity(result), out_validity);
+		auto collection_result = VariantUtils::CollectNestedData(variant, expected_type, input_indices, count,
+		                                                         optional_idx(), 0, nested_data, validity);
 		if (!collection_result.success) {
 			if (expected_type == VariantLogicalType::ARRAY) {
 				throw InvalidInputException("Can't extract index %d from a VARIANT(%s)", component.index,
@@ -182,9 +180,9 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 		//! Look up the value_index of the child we're extracting
 		ValidityMask lookup_validity(count);
 		VariantUtils::FindChildValues(variant, component, nullptr, output_indices, lookup_validity, nested_data,
-		                              out_validity, count);
+		                              validity, count);
 		for (idx_t i = 0; i < count; i++) {
-			if (!out_validity.RowIsValid(i)) {
+			if (!validity.RowIsValid(i)) {
 				output_indices[i] = input_indices[i];
 			}
 		}
@@ -248,7 +246,7 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 	//! Prepare the selection vector to remap index 0 of each row
 	SelectionVector new_sel(0, values_list_size);
 	for (idx_t i = 0; i < count; i++) {
-		if (!out_validity.RowIsValid(i)) {
+		if (!validity.RowIsValid(i)) {
 			continue;
 		}
 		auto &list_entry = values_data[values.sel->get_index(i)];

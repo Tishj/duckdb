@@ -92,7 +92,7 @@ struct VariantUtils {
 	DUCKDB_API static VariantNestedDataCollectionResult
 	CollectNestedData(const UnifiedVariantVectorData &variant, VariantLogicalType expected_type,
 	                  const SelectionVector &value_index_sel, idx_t count, optional_idx row, idx_t offset,
-	                  VariantNestedData *child_data, const ValidityMask &validity, ValidityMask &output_validity);
+	                  VariantNestedData *child_data, ValidityMask &validity);
 	DUCKDB_API static vector<uint32_t> ValueIsNull(const UnifiedVariantVectorData &variant, const SelectionVector &sel,
 	                                               idx_t count, optional_idx row);
 	DUCKDB_API static Value ConvertVariantToValue(const UnifiedVariantVectorData &variant, idx_t row,
