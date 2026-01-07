@@ -203,9 +203,10 @@ static bool ConvertVariantToList(FromVariantConversionData &conversion_data, Vec
 		child_data = reinterpret_cast<VariantNestedData *>(owned_child_data.get());
 	}
 
+	ValidityMask out_validity;
 	auto collection_result =
 	    VariantUtils::CollectNestedData(conversion_data.variant, VariantLogicalType::ARRAY, sel, count, row, offset,
-	                                    child_data, FlatVector::Validity(result));
+	                                    child_data, FlatVector::Validity(result), out_validity);
 	if (!collection_result.success) {
 		conversion_data.error =
 		    StringUtil::Format("Expected to find VARIANT(ARRAY), found VARIANT(%s) instead, can't convert",
@@ -269,9 +270,10 @@ static bool ConvertVariantToArray(FromVariantConversionData &conversion_data, Ve
 		child_data = reinterpret_cast<VariantNestedData *>(owned_child_data.get());
 	}
 
+	ValidityMask out_validity;
 	auto collection_result =
 	    VariantUtils::CollectNestedData(conversion_data.variant, VariantLogicalType::ARRAY, sel, count, row, offset,
-	                                    child_data, FlatVector::Validity(result));
+	                                    child_data, FlatVector::Validity(result), out_validity);
 	if (!collection_result.success) {
 		conversion_data.error =
 		    StringUtil::Format("Expected to find VARIANT(ARRAY), found VARIANT(%s) instead, can't convert",
@@ -327,9 +329,10 @@ static bool ConvertVariantToStruct(FromVariantConversionData &conversion_data, V
 		child_data = reinterpret_cast<VariantNestedData *>(owned_child_data.get());
 	}
 
+	ValidityMask out_validity;
 	auto collection_result =
 	    VariantUtils::CollectNestedData(conversion_data.variant, VariantLogicalType::OBJECT, sel, count, row, offset,
-	                                    child_data, FlatVector::Validity(result));
+	                                    child_data, FlatVector::Validity(result), out_validity);
 	if (!collection_result.success) {
 		conversion_data.error =
 		    StringUtil::Format("Expected to find VARIANT(OBJECT), found VARIANT(%s) instead, can't convert",

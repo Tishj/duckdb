@@ -139,26 +139,45 @@ vector<uint32_t> VariantUtils::ValueIsNull(const UnifiedVariantVectorData &varia
 
 VariantNestedDataCollectionResult
 VariantUtils::CollectNestedData(const UnifiedVariantVectorData &variant, VariantLogicalType expected_type,
-                                const SelectionVector &sel, idx_t count, optional_idx row, idx_t offset,
-                                VariantNestedData *child_data, ValidityMask &validity) {
+                                const SelectionVector &value_index_sel, idx_t count, optional_idx row, idx_t offset,
+                                VariantNestedData *child_data, const ValidityMask &validity,
+                                ValidityMask &output_validity) {
+	VariantLogicalType wrong_type = VariantLogicalType::VARIANT_NULL;
+	output_validity.Resize(count);
 	for (idx_t i = 0; i < count; i++) {
 		auto row_index = row.IsValid() ? row.GetIndex() : i;
 
 		//! NOTE: the validity is assumed to be from a FlatVector
+		//! Is the input row NULL ?
 		if (!variant.RowIsValid(row_index) || !validity.RowIsValid(offset + i)) {
 			child_data[i].is_null = true;
-			continue;
-		}
-		auto type_id = variant.GetTypeId(row_index, sel[i]);
-		if (type_id == VariantLogicalType::VARIANT_NULL) {
-			child_data[i].is_null = true;
+			output_validity.SetInvalid(i);
 			continue;
 		}
 
-		if (type_id != expected_type) {
-			return VariantNestedDataCollectionResult(type_id);
+		//! Is the variant value NULL ?
+		auto type_id = variant.GetTypeId(row_index, value_index_sel[i]);
+		if (type_id == VariantLogicalType::VARIANT_NULL) {
+			child_data[i].is_null = true;
+			output_validity.SetInvalid(i);
+			continue;
 		}
-		child_data[i] = DecodeNestedData(variant, row_index, sel[i]);
+
+		//! Is the type of the VARIANT correct?
+		if (type_id != expected_type) {
+			if (wrong_type == VariantLogicalType::VARIANT_NULL) {
+				//! Record the type of the first row that doesn't have the expected type
+				wrong_type = type_id;
+			}
+			output_validity.SetInvalid(i);
+			continue;
+		}
+
+		child_data[i] = DecodeNestedData(variant, row_index, value_index_sel[i]);
+	}
+
+	if (wrong_type != VariantLogicalType::VARIANT_NULL) {
+		return VariantNestedDataCollectionResult(wrong_type);
 	}
 	return VariantNestedDataCollectionResult();
 }

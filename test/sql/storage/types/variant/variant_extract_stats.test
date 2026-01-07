@@ -185,6 +185,6 @@ select stats(col) from tbl limit 1;
 # FIXME: should this succeed? it used to
 # We have no stats for field 'c' because it's not part of our shredding
 statement error
-select stats(col.c) from tbl offset 2 limit 1;
+select stats(col.c) from tbl order by rowid offset 2 limit 1;
 ----
 Invalid Input Error: Can't extract key 'c' from a VARIANT(INT32)

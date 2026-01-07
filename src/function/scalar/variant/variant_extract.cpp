@@ -163,8 +163,10 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 		auto expected_type = component.lookup_mode == VariantChildLookupMode::BY_INDEX ? VariantLogicalType::ARRAY
 		                                                                               : VariantLogicalType::OBJECT;
 
-		auto collection_result = VariantUtils::CollectNestedData(
-		    variant, expected_type, input_indices, count, optional_idx(), 0, nested_data, FlatVector::Validity(result));
+		ValidityMask out_validity;
+		auto collection_result =
+		    VariantUtils::CollectNestedData(variant, expected_type, input_indices, count, optional_idx(), 0,
+		                                    nested_data, FlatVector::Validity(result), out_validity);
 		if (!collection_result.success) {
 			if (expected_type == VariantLogicalType::ARRAY) {
 				throw InvalidInputException("Can't extract index %d from a VARIANT(%s)", component.index,
