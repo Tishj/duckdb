@@ -92,6 +92,9 @@ static unique_ptr<BaseStatistics> VariantExtractPropagateStats(ClientContext &co
 		return nullptr;
 	}
 	auto &shredded_stats = VariantStats::GetShreddedStats(variant_stats);
+	if (!VariantShreddedStats::IsFullyShredded(shredded_stats)) {
+		return nullptr;
+	}
 	auto found_stats = FindShreddedStats(shredded_stats, info.component);
 	if (!found_stats) {
 		return nullptr;
@@ -145,16 +148,18 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 	//! Extract always starts by looking at value_index 0
 	SelectionVector value_index_sel;
 	value_index_sel.Initialize(count);
-	for (idx_t i = 0; i < count; i++) {
-		value_index_sel[i] = 0;
-	}
 
 	SelectionVector new_value_index_sel;
 	new_value_index_sel.Initialize(count);
 
+	for (idx_t i = 0; i < count; i++) {
+		value_index_sel[i] = 0;
+	}
+
 	auto owned_nested_data = allocator.Allocate(sizeof(VariantNestedData) * count);
 	auto nested_data = reinterpret_cast<VariantNestedData *>(owned_nested_data.get());
 
+	//! Perform the extract
 	ValidityMask validity(count);
 	for (idx_t i = 0; i < components.size(); i++) {
 		auto &component = components[i];
@@ -164,54 +169,26 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 		auto expected_type = component.lookup_mode == VariantChildLookupMode::BY_INDEX ? VariantLogicalType::ARRAY
 		                                                                               : VariantLogicalType::OBJECT;
 
-		auto collection_result = VariantUtils::CollectNestedData(variant, expected_type, input_indices, count,
-		                                                         optional_idx(), 0, nested_data, validity);
-		if (!collection_result.success) {
-			if (expected_type == VariantLogicalType::ARRAY) {
-				throw InvalidInputException("Can't extract index %d from a VARIANT(%s)", component.index,
-				                            EnumUtil::ToString(collection_result.wrong_type));
-			} else {
-				D_ASSERT(expected_type == VariantLogicalType::OBJECT);
-				throw InvalidInputException("Can't extract key '%s' from a VARIANT(%s)", component.key,
-				                            EnumUtil::ToString(collection_result.wrong_type));
-			}
-		}
-
+		(void)VariantUtils::CollectNestedData(variant, expected_type, input_indices, count, optional_idx(), 0,
+		                                      nested_data, validity);
 		//! Look up the value_index of the child we're extracting
 		ValidityMask lookup_validity(count);
 		VariantUtils::FindChildValues(variant, component, nullptr, output_indices, lookup_validity, nested_data,
 		                              validity, count);
-		for (idx_t i = 0; i < count; i++) {
-			if (!validity.RowIsValid(i)) {
-				output_indices[i] = input_indices[i];
-			}
-		}
 
-		if (!lookup_validity.AllValid()) {
-			optional_idx index;
-			for (idx_t i = 0; i < count; i++) {
-				if (!lookup_validity.RowIsValid(i)) {
-					index = i;
-					break;
-				}
+		for (idx_t j = 0; j < count; j++) {
+			if (!validity.RowIsValid(j)) {
+				continue;
 			}
-			D_ASSERT(index.IsValid());
-			switch (component.lookup_mode) {
-			case VariantChildLookupMode::BY_INDEX: {
-				auto nested_index = index.GetIndex();
-				throw InvalidInputException("VARIANT(ARRAY(%d)) is missing index %d",
-				                            nested_data[nested_index].child_count, component.index);
+			if (!lookup_validity.AllValid() && !lookup_validity.RowIsValid(j)) {
+				//! No child could be extracted, set to NULL
+				validity.SetInvalid(j);
+				continue;
 			}
-			case VariantChildLookupMode::BY_KEY: {
-				auto nested_index = index.GetIndex();
-				auto row_index = nested_index;
-				auto object_keys = VariantUtils::GetObjectKeys(variant, row_index, nested_data[nested_index]);
-				throw InvalidInputException("VARIANT(OBJECT(%s)) is missing key '%s'",
-				                            StringUtil::Join(object_keys, ","), component.key);
-			}
-			default:
-				throw InternalException("VariantChildLookupMode::%s not handled in VariantUtils::VariantExtract",
-				                        EnumUtil::ToString(component.lookup_mode));
+			//! Get the index into 'values'
+			auto type_id = variant.GetTypeId(j, output_indices[j]);
+			if (type_id == VariantLogicalType::VARIANT_NULL) {
+				validity.SetInvalid(j);
 			}
 		}
 	}
@@ -260,22 +237,24 @@ void VariantUtils::VariantExtract(Vector &variant_vec, const vector<VariantPathC
 	result_byte_offset.Dictionary(VariantVector::GetValuesByteOffset(variant_vec), values_list_size, new_sel,
 	                              values_list_size);
 
-	auto value_is_null = VariantUtils::ValueIsNull(variant, result_indices, count, optional_idx());
-	if (!value_is_null.empty()) {
+	if (!validity.AllValid()) {
 		//! Create a copy of the vector, because we used Reference before, and we now need to adjust the data
 		//! Which is a problem if we're still sharing the memory with 'input'
 		Vector other(result.GetType(), count);
 		VectorOperations::Copy(result, other, count, 0, 0);
 		result.Reference(other);
 
-		for (auto &i : value_is_null) {
-			FlatVector::SetNull(result, i, true);
+		for (idx_t i = 0; i < count; i++) {
+			if (!validity.RowIsValid(i)) {
+				FlatVector::SetNull(result, i, true);
+			}
 		}
 	}
 
 	if (variant_vec.GetVectorType() == VectorType::CONSTANT_VECTOR) {
 		result.SetVectorType(VectorType::CONSTANT_VECTOR);
 	}
+	result.Verify(count);
 }
 
 //! FIXME: it could make sense to allow a third argument: 'default'
