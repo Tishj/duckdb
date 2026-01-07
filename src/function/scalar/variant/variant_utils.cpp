@@ -140,24 +140,22 @@ vector<uint32_t> VariantUtils::ValueIsNull(const UnifiedVariantVectorData &varia
 VariantNestedDataCollectionResult
 VariantUtils::CollectNestedData(const UnifiedVariantVectorData &variant, VariantLogicalType expected_type,
                                 const SelectionVector &value_index_sel, idx_t count, optional_idx row, idx_t offset,
-                                VariantNestedData *child_data, const ValidityMask &validity,
-                                ValidityMask &output_validity) {
+                                VariantNestedData *child_data, ValidityMask &validity) {
 	VariantLogicalType wrong_type = VariantLogicalType::VARIANT_NULL;
-	output_validity.Resize(count);
 	for (idx_t i = 0; i < count; i++) {
 		auto row_index = row.IsValid() ? row.GetIndex() : i;
 
 		//! NOTE: the validity is assumed to be from a FlatVector
 		//! Is the input row NULL ?
-		if (!variant.RowIsValid(row_index) || !validity.RowIsValid(offset + i)) {
-			output_validity.SetInvalid(i);
+		if (!variant.RowIsValid(row_index) || !validity.RowIsValid(i)) {
+			validity.SetInvalid(i);
 			continue;
 		}
 
 		//! Is the variant value NULL ?
 		auto type_id = variant.GetTypeId(row_index, value_index_sel[i]);
 		if (type_id == VariantLogicalType::VARIANT_NULL) {
-			output_validity.SetInvalid(i);
+			validity.SetInvalid(i);
 			continue;
 		}
 
@@ -167,7 +165,7 @@ VariantUtils::CollectNestedData(const UnifiedVariantVectorData &variant, Variant
 				//! Record the type of the first row that doesn't have the expected type
 				wrong_type = type_id;
 			}
-			output_validity.SetInvalid(i);
+			validity.SetInvalid(i);
 			continue;
 		}
 
