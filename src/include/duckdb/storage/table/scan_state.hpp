@@ -9,11 +9,9 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
-#include "duckdb/common/map.hpp"
 #include "duckdb/storage/buffer/buffer_handle.hpp"
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/storage/table/row_group_reorderer.hpp"
-#include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/common/random_engine.hpp"
 #include "duckdb/storage/table/segment_lock.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
@@ -147,7 +145,15 @@ public:
 	idx_t GetPositionInSegment() const;
 };
 
+enum class FetchType {
+	//! Verify if each row is valid for the transaction prior to fetching
+	TRANSACTIONAL_FETCH,
+	// Force fetch the row, regardless of it if is valid for the transaction or not
+	FORCE_FETCH
+};
+
 struct ColumnFetchState {
+	FetchType fetch_type = FetchType::TRANSACTIONAL_FETCH;
 	//! The query context for this fetch
 	QueryContext context;
 	//! The set of pinned block handles for this set of fetches
