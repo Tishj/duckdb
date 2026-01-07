@@ -87,7 +87,8 @@ struct VariantUtils {
 	DUCKDB_API static void FindChildValues(const UnifiedVariantVectorData &variant,
 	                                       const VariantPathComponent &component,
 	                                       optional_ptr<const SelectionVector> sel, SelectionVector &res,
-	                                       ValidityMask &res_validity, VariantNestedData *nested_data, idx_t count);
+	                                       ValidityMask &res_validity, const VariantNestedData *nested_data,
+	                                       const ValidityMask &validity, idx_t count);
 	DUCKDB_API static VariantNestedDataCollectionResult
 	CollectNestedData(const UnifiedVariantVectorData &variant, VariantLogicalType expected_type,
 	                  const SelectionVector &value_index_sel, idx_t count, optional_idx row, idx_t offset,

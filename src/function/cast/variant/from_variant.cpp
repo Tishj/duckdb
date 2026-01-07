@@ -217,7 +217,7 @@ static bool ConvertVariantToList(FromVariantConversionData &conversion_data, Vec
 	idx_t max_children = 0;
 	for (idx_t i = 0; i < count; i++) {
 		auto &child_data_entry = child_data[i];
-		if (child_data_entry.is_null) {
+		if (!out_validity.RowIsValid(i)) {
 			continue;
 		}
 		if (child_data_entry.child_count > max_children) {
@@ -240,7 +240,7 @@ static bool ConvertVariantToList(FromVariantConversionData &conversion_data, Vec
 		auto row_index = row.IsValid() ? row.GetIndex() : i;
 		auto &child_data_entry = child_data[i];
 
-		if (child_data_entry.is_null) {
+		if (!out_validity.RowIsValid(i)) {
 			FlatVector::SetNull(result, offset + i, true);
 			continue;
 		}
@@ -284,7 +284,7 @@ static bool ConvertVariantToArray(FromVariantConversionData &conversion_data, Ve
 	const auto array_size = ArrayType::GetSize(result.GetType());
 	for (idx_t i = 0; i < count; i++) {
 		auto &child_data_entry = child_data[i];
-		if (child_data_entry.is_null) {
+		if (!out_validity.RowIsValid(i)) {
 			continue;
 		}
 		if (child_data_entry.child_count != array_size) {
@@ -304,7 +304,7 @@ static bool ConvertVariantToArray(FromVariantConversionData &conversion_data, Ve
 		auto row_index = row.IsValid() ? row.GetIndex() : i;
 		auto &child_data_entry = child_data[i];
 
-		if (child_data_entry.is_null) {
+		if (!out_validity.RowIsValid(i)) {
 			FlatVector::SetNull(result, offset + i, true);
 			total_offset += array_size;
 			continue;
@@ -341,7 +341,7 @@ static bool ConvertVariantToStruct(FromVariantConversionData &conversion_data, V
 	}
 
 	for (idx_t i = 0; i < count; i++) {
-		if (child_data[i].is_null) {
+		if (!out_validity.RowIsValid(i)) {
 			FlatVector::SetNull(result, offset + i, true);
 		}
 	}
@@ -370,7 +370,7 @@ static bool ConvertVariantToStruct(FromVariantConversionData &conversion_data, V
 		component.lookup_mode = VariantChildLookupMode::BY_KEY;
 		ValidityMask lookup_validity(count);
 		VariantUtils::FindChildValues(conversion_data.variant, component, row_sel, child_values_sel, lookup_validity,
-		                              child_data, count);
+		                              child_data, out_validity, count);
 		if (!lookup_validity.AllValid()) {
 			optional_idx nested_index;
 			for (idx_t i = 0; i < count; i++) {

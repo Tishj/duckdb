@@ -56,7 +56,6 @@ VariantNestedData VariantUtils::DecodeNestedData(const UnifiedVariantVectorData 
 	auto ptr = data + byte_offset;
 
 	VariantNestedData result;
-	result.is_null = false;
 	result.child_count = VarintDecode<uint32_t>(ptr);
 	if (result.child_count) {
 		result.children_idx = VarintDecode<uint32_t>(ptr);
@@ -78,14 +77,15 @@ vector<string> VariantUtils::GetObjectKeys(const UnifiedVariantVectorData &varia
 
 void VariantUtils::FindChildValues(const UnifiedVariantVectorData &variant, const VariantPathComponent &component,
                                    optional_ptr<const SelectionVector> sel, SelectionVector &res,
-                                   ValidityMask &res_validity, VariantNestedData *nested_data, idx_t count) {
+                                   ValidityMask &res_validity, const VariantNestedData *nested_data,
+                                   const ValidityMask &validity, idx_t count) {
 	for (idx_t i = 0; i < count; i++) {
 		auto row_index = sel ? sel->get_index(i) : i;
 
-		auto &nested_data_entry = nested_data[i];
-		if (nested_data_entry.is_null) {
+		if (!validity.RowIsValid(i)) {
 			continue;
 		}
+		auto &nested_data_entry = nested_data[i];
 		if (component.lookup_mode == VariantChildLookupMode::BY_INDEX) {
 			auto child_idx = component.index;
 			if (child_idx >= nested_data_entry.child_count) {
@@ -150,7 +150,6 @@ VariantUtils::CollectNestedData(const UnifiedVariantVectorData &variant, Variant
 		//! NOTE: the validity is assumed to be from a FlatVector
 		//! Is the input row NULL ?
 		if (!variant.RowIsValid(row_index) || !validity.RowIsValid(offset + i)) {
-			child_data[i].is_null = true;
 			output_validity.SetInvalid(i);
 			continue;
 		}
@@ -158,7 +157,6 @@ VariantUtils::CollectNestedData(const UnifiedVariantVectorData &variant, Variant
 		//! Is the variant value NULL ?
 		auto type_id = variant.GetTypeId(row_index, value_index_sel[i]);
 		if (type_id == VariantLogicalType::VARIANT_NULL) {
-			child_data[i].is_null = true;
 			output_validity.SetInvalid(i);
 			continue;
 		}
