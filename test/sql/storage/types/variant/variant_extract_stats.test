@@ -112,7 +112,7 @@ select stats(col.a) from tbl limit 1;
 query I
 select stats(col.b) from tbl limit 1;
 ----
-<REGEX>:.*shredding_state: SHREDDED.*fully_shredded: false}.*
+shredding_state: INCONSISTENT[Has Null: true, Has No Null: true]
 
 # OBJECT is fully shredded
 query I
@@ -142,7 +142,7 @@ select stats(col) from tbl limit 1;
 query I
 select stats(col.a) from tbl limit 1;
 ----
-<REGEX>:.*shredding_state: SHREDDED.*stats: {fully_shredded: false.*
+shredding_state: INCONSISTENT[Has Null: true, Has No Null: true]
 
 # Insert an object with additional field(s)
 statement ok

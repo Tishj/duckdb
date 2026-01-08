@@ -543,33 +543,39 @@ VariantStatsData &VariantStats::GetDataUnsafe(BaseStatistics &stats) {
 	return stats.stats_union.variant_data;
 }
 
+static bool CanUseShreddedStats(optional_ptr<const BaseStatistics> shredded_stats) {
+	return shredded_stats && VariantShreddedStats::IsFullyShredded(*shredded_stats);
+}
+
 unique_ptr<BaseStatistics> VariantStats::PushdownExtract(const BaseStatistics &stats, const StorageIndex &index) {
 	if (!VariantStats::IsShredded(stats)) {
 		//! Not shredded at all, no stats available
 		return nullptr;
 	}
-	auto &shredded_stats = VariantStats::GetShreddedStats(stats);
+
+	optional_ptr<const BaseStatistics> res(VariantStats::GetShreddedStats(stats));
+	if (!CanUseShreddedStats(res)) {
+		//! Not fully shredded, can't say anything meaningful about the stats
+		return nullptr;
+	}
+
 	reference<const StorageIndex> index_iter(index);
-	optional_ptr<const BaseStatistics> res(shredded_stats);
 	while (true) {
 		auto &current = index_iter.get();
 		D_ASSERT(!current.HasPrimaryIndex());
 		auto &field_name = current.GetFieldName();
 		res = VariantShreddedStats::FindChildStats(*res, field_name);
-		if (!res) {
+		if (!CanUseShreddedStats(res)) {
+			//! Not fully shredded, can't say anything meaningful about the stats
 			return nullptr;
 		}
 		if (!index_iter.get().HasChildren()) {
 			break;
 		}
 	}
-	if (!res) {
-		//! Not shredded on this field
-		return nullptr;
-	}
-	auto &child_stats = *res;
+	auto &shredded_child_stats = *res;
 
-	auto &typed_value_stats = StructStats::GetChildStats(child_stats, 1);
+	auto &typed_value_stats = StructStats::GetChildStats(shredded_child_stats, 1);
 	auto &last_index = index_iter.get();
 	auto &child_type = typed_value_stats.type;
 	if (!last_index.HasType() || last_index.GetType().id() == LogicalTypeId::VARIANT) {
@@ -577,11 +583,11 @@ unique_ptr<BaseStatistics> VariantStats::PushdownExtract(const BaseStatistics &s
 
 		BaseStatistics copy = BaseStatistics::CreateUnknown(stats.type);
 		copy.Copy(stats);
-		copy.child_stats[1] = BaseStatistics::CreateUnknown(child_stats.GetType());
-		copy.child_stats[1].Copy(child_stats);
+		copy.child_stats[1] = BaseStatistics::CreateUnknown(shredded_child_stats.GetType());
+		copy.child_stats[1].Copy(shredded_child_stats);
 		return copy.ToUnique();
 	}
-	if (!VariantShreddedStats::IsFullyShredded(child_stats)) {
+	if (!VariantShreddedStats::IsFullyShredded(shredded_child_stats)) {
 		//! Not all data is shredded, so there are values in the column that are not of the shredded type
 		return nullptr;
 	}
@@ -591,7 +597,8 @@ unique_ptr<BaseStatistics> VariantStats::PushdownExtract(const BaseStatistics &s
 		//! FIXME: support try_cast
 		return StatisticsPropagator::TryPropagateCast(typed_value_stats, child_type, cast_type);
 	}
-	return typed_value_stats.ToUnique();
+	auto result = typed_value_stats.ToUnique();
+	return result;
 }
 
 } // namespace duckdb
