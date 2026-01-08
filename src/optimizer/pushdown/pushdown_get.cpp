@@ -53,9 +53,17 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownGet(unique_ptr<LogicalOperat
 		return make_uniq<LogicalEmptyResult>(std::move(op));
 	}
 
+	auto &column_ids = get.GetColumnIds();
+	for (auto &column_id : column_ids) {
+		if (column_id.IsPushdownExtract()) {
+			//! Can't push down filters if we have a pushdown extract (table filter rewrites aren't implemented yet)
+			return FinishPushdown(std::move(op));
+		}
+	}
+
 	//! We generate the table filters that will be executed during the table scan
 	vector<FilterPushdownResult> pushdown_results;
-	get.table_filters = combiner.GenerateTableScanFilters(get.GetColumnIds(), pushdown_results);
+	get.table_filters = combiner.GenerateTableScanFilters(column_ids, pushdown_results);
 
 	GenerateFilters();
 
