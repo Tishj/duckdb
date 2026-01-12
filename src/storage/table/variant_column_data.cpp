@@ -30,7 +30,7 @@ VariantColumnData::VariantColumnData(BlockManager &block_manager, DataTableInfo 
 	}
 }
 
-bool FindShreddedColumnInternal(const StructColumnData &shredded, const BaseStatistics &stats,
+bool FindShreddedColumnInternal(const StructColumnData &shredded, reference<const BaseStatistics> &stats,
                                 reference<const StorageIndex> &path_iter, ColumnIndex &out) {
 	auto &path = path_iter.get();
 	D_ASSERT(!path.HasPrimaryIndex());
@@ -38,12 +38,14 @@ bool FindShreddedColumnInternal(const StructColumnData &shredded, const BaseStat
 
 	D_ASSERT(shredded.type.id() == LogicalTypeId::STRUCT);
 	auto &typed_value = shredded.GetChildColumn(1);
-	auto &typed_value_stats = StructStats::GetChildStats(stats, 1);
+	auto &parent_stats = stats.get();
+
+	stats = StructStats::GetChildStats(parent_stats, 1);
 	if (typed_value.type.id() != LogicalTypeId::STRUCT) {
 		//! Not shredded on an OBJECT, but we're looking for a specific OBJECT field
 		return false;
 	}
-	if (!VariantShreddedStats::IsFullyShredded(stats)) {
+	if (!VariantShreddedStats::IsFullyShredded(parent_stats)) {
 		//! Can't push down to the shredded data, stats are inconsistent
 		return false;
 	}
@@ -67,20 +69,21 @@ bool FindShreddedColumnInternal(const StructColumnData &shredded, const BaseStat
 	auto child_index = opt_index.GetIndex();
 	auto &typed_value_struct = typed_value.Cast<StructColumnData>();
 	auto &object_field = typed_value_struct.GetChildColumn(child_index);
-	auto &child_stats = StructStats::GetChildStats(typed_value_stats, child_index);
+	stats = StructStats::GetChildStats(stats.get(), child_index);
 
 	//! typed_value.<child_name>
 	typed_value_index.AddChildIndex(ColumnIndex(child_index));
 	auto &child_column = typed_value_index.GetChildIndex(0);
 
 	if (!path.HasChildren()) {
-		if (!VariantShreddedStats::IsFullyShredded(child_stats)) {
+		if (!VariantShreddedStats::IsFullyShredded(stats.get())) {
 			//! Child isn't fully shredded, can't use it
 			return false;
 		}
 		//! We're done, we've found the field referenced by the path!
 		//! typed_value_index.<child_name>.typed_value
 		child_column.AddChildIndex(ColumnIndex(1));
+		stats = StructStats::GetChildStats(stats.get(), 1);
 		return true;
 	}
 	path_iter = path.GetChildIndex(0);
@@ -89,7 +92,7 @@ bool FindShreddedColumnInternal(const StructColumnData &shredded, const BaseStat
 	D_ASSERT(object_field.type.id() == LogicalTypeId::STRUCT);
 	auto &struct_field = object_field.Cast<StructColumnData>();
 
-	return FindShreddedColumnInternal(struct_field, child_stats, path_iter, child_column);
+	return FindShreddedColumnInternal(struct_field, stats, path_iter, child_column);
 }
 
 bool VariantColumnData::PushdownShreddedFieldExtract(const StorageIndex &variant_extract,
@@ -110,12 +113,18 @@ bool VariantColumnData::PushdownShreddedFieldExtract(const StorageIndex &variant
 	//! shredded.typed_value
 	ColumnIndex column_index(0);
 	auto &struct_column = shredded.Cast<StructColumnData>();
-	auto &shredded_stats = VariantStats::GetShreddedStats(variant_stats);
 
+	reference<const BaseStatistics> shredded_stats(VariantStats::GetShreddedStats(variant_stats));
 	reference<const StorageIndex> path_iter(variant_extract);
 	if (!FindShreddedColumnInternal(struct_column, shredded_stats, path_iter, column_index)) {
 		return false;
 	}
+	if (shredded_stats.get().GetType().IsNested()) {
+		//! Can't push down an extract if the leaf we're extracting is not a primitive
+		//! (Since the shredded representation for OBJECT/ARRAY is interleaved with 'untyped_value_index' fields)
+		return false;
+	}
+
 	column_index.SetPushdownExtractType(shredded.type, path_iter.get().GetType());
 	out_struct_extract = StorageIndex::FromColumnIndex(column_index);
 	return true;
@@ -132,10 +141,12 @@ void VariantColumnData::CreateScanStates(ColumnScanState &state) {
 	state.child_states.emplace_back(state.parent);
 	state.child_states[1].Initialize(state.context, unshredded_type, state.scan_options);
 
+	const bool is_pushed_down_cast =
+	    state.storage_index.HasType() && state.storage_index.GetScanType().id() != LogicalTypeId::VARIANT;
 	if (IsShredded()) {
 		auto &shredded_column = sub_columns[1];
 		state.child_states.emplace_back(state.parent);
-		if (state.storage_index.IsPushdownExtract()) {
+		if (state.storage_index.IsPushdownExtract() && is_pushed_down_cast) {
 			StorageIndex struct_extract;
 			if (PushdownShreddedFieldExtract(state.storage_index.GetChildIndex(0), struct_extract)) {
 				//! Shredded field exists and is fully shredded,
@@ -205,10 +216,33 @@ idx_t VariantColumnData::ScanWithCallback(
         &callback) const {
 	if (state.storage_index.IsPushdownExtract()) {
 		if (IsShredded() && state.child_states[2].storage_index.IsPushdownExtract()) {
+			//! FIXME: We could also push down the extract if we're returning VARIANT
+			//! Then we can do the unshredding on the extracted data, rather than falling back to unshredding+extracting
+			//! This invariant is ensured by CreateScanStates
+			D_ASSERT(result.GetType().id() != LogicalTypeId::VARIANT);
+
 			//! In the initialize we have verified that the field exists and the data is fully shredded (for this
 			//! rowgroup) We have created a scan state that performs a 'struct_extract' in the shredded data, to extract
-			//! the requested field.
-			return callback(*sub_columns[1], state.child_states[2], result, target_count);
+			//! the requested field.s
+			auto res = callback(*sub_columns[1], state.child_states[2], result, target_count);
+			if (result.GetType().id() == LogicalTypeId::LIST) {
+				//! Shredded ARRAY Variant looks like:
+				//! LIST(STRUCT(untyped_value_index UINTEGER, typed_value <child_type>))
+				//! We need to transform this to:
+				//! LIST(<child_type>)
+
+				auto &list_child = ListVector::GetEntry(result);
+				D_ASSERT(list_child.GetType().id() == LogicalTypeId::STRUCT);
+				D_ASSERT(StructType::GetChildCount(list_child.GetType()) == 2);
+
+				auto &typed_value = *StructVector::GetEntries(list_child)[1];
+				auto list_res = Vector(LogicalType::LIST(typed_value.GetType()));
+				ListVector::SetListSize(list_res, ListVector::GetListSize(result));
+				list_res.CopyBuffer(result);
+				ListVector::GetEntry(list_res).Reference(typed_value);
+				return res;
+			}
+			return res;
 		}
 		//! Fall back to unshredding
 		Vector intermediate(LogicalType::VARIANT(), target_count);
