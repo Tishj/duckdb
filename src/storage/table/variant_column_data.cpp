@@ -318,15 +318,6 @@ idx_t VariantColumnData::Scan(TransactionData transaction, idx_t vector_index, C
 	                        });
 }
 
-idx_t VariantColumnData::ScanCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, bool allow_updates,
-                                       idx_t target_count) {
-	return ScanWithCallback(state, result, target_count,
-	                        [&](ColumnData &col, ColumnScanState &child_state, Vector &target_vector, idx_t count) {
-		                        return col.ScanCommitted(vector_index, child_state, target_vector, allow_updates,
-		                                                 count);
-	                        });
-}
-
 idx_t VariantColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count, idx_t result_offset) {
 	return ScanWithCallback(state, result, count,
 	                        [&](ColumnData &col, ColumnScanState &child_state, Vector &target_vector, idx_t count) {
@@ -671,7 +662,7 @@ vector<shared_ptr<ColumnData>> VariantColumnData::WriteShreddedData(const RowGro
 	for (idx_t scanned = 0; scanned < total_count; scanned += STANDARD_VECTOR_SIZE) {
 		scan_chunk.Reset();
 		auto to_scan = MinValue(total_count - scanned, static_cast<idx_t>(STANDARD_VECTOR_SIZE));
-		ScanCommitted(vector_index++, scan_state, scan_vector, false, to_scan);
+		Scan(TransactionData::Committed(), vector_index++, scan_state, scan_vector, to_scan);
 		append_chunk.Reset();
 
 		AppendShredded(scan_vector, append_vector, to_scan, append_data);
@@ -695,7 +686,7 @@ LogicalType VariantColumnData::GetShreddedType() {
 	for (idx_t scanned = 0; scanned < total_count; scanned += STANDARD_VECTOR_SIZE) {
 		scan_chunk.Reset();
 		auto to_scan = MinValue(total_count - scanned, static_cast<idx_t>(STANDARD_VECTOR_SIZE));
-		ScanCommitted(vector_index++, scan_state, scan_vector, false, to_scan);
+		Scan(TransactionData::Committed(), vector_index++, scan_state, scan_vector, to_scan);
 		variant_stats.Update(scan_vector, to_scan);
 	}
 

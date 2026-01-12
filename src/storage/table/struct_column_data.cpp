@@ -161,26 +161,6 @@ idx_t StructColumnData::Scan(TransactionData transaction, idx_t vector_index, Co
 	return scan_count;
 }
 
-idx_t StructColumnData::ScanCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, bool allow_updates,
-                                      idx_t target_count) {
-	auto scan_count = validity->ScanCommitted(vector_index, state.child_states[0], result, allow_updates, target_count);
-
-	auto struct_children = GetStructChildren(state);
-	for (auto &child : struct_children) {
-		auto &target_vector = GetFieldVectorForScan(result, child.vector_index);
-		if (!child.should_scan) {
-			// if we are not scanning this vector - set it to NULL
-			target_vector.SetVectorType(VectorType::CONSTANT_VECTOR);
-			ConstantVector::SetNull(target_vector, true);
-			continue;
-		}
-		ScanChild(state, target_vector, [&](Vector &child_result) {
-			return child.col.ScanCommitted(vector_index, child.state, child_result, allow_updates, target_count);
-		});
-	}
-	return scan_count;
-}
-
 idx_t StructColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count, idx_t result_offset) {
 	auto scan_count = validity->ScanCount(state.child_states[0], result, count);
 
