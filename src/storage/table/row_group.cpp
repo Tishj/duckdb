@@ -8,7 +8,6 @@
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/execution/adaptive_filter.hpp"
 #include "duckdb/execution/expression_executor.hpp"
-#include "duckdb/main/database.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/checkpoint/table_data_writer.hpp"
 #include "duckdb/storage/metadata/metadata_reader.hpp"
@@ -19,7 +18,6 @@
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/row_version_manager.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
-#include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/duck_transaction_manager.hpp"
@@ -189,16 +187,18 @@ void RowGroup::InitializeEmpty(const vector<LogicalType> &types, ColumnDataType 
 	}
 }
 
-static unique_ptr<PushedDownExpressionState> CreateCast(ClientContext &context, const LogicalType &original_type,
-                                                        const LogicalType &cast_type) {
+void ColumnScanState::PushDownCast(const LogicalType &original_type, const LogicalType &cast_type) {
+	D_ASSERT(context.Valid());
+	D_ASSERT(!expression_state);
+	auto &client_context = *context.GetClientContext();
+
 	auto input = make_uniq<BoundReferenceExpression>(original_type, 0);
-	auto cast_expression = BoundCastExpression::AddCastToType(context, std::move(input), cast_type);
-	auto res = make_uniq<PushedDownExpressionState>(context);
-	res->target.Initialize(context, {cast_type});
-	res->input.Initialize(context, {original_type});
-	res->executor.AddExpression(*cast_expression);
-	res->expression = std::move(cast_expression);
-	return res;
+	auto cast_expression = BoundCastExpression::AddCastToType(client_context, std::move(input), cast_type);
+	expression_state = make_uniq<PushedDownExpressionState>(client_context);
+	expression_state->target.Initialize(client_context, {cast_type});
+	expression_state->input.Initialize(client_context, {original_type});
+	expression_state->executor.AddExpression(*cast_expression);
+	expression_state->expression = std::move(cast_expression);
 }
 
 void ColumnScanState::Initialize(const QueryContext &context_p, const LogicalType &type, const StorageIndex &column_id,
@@ -219,6 +219,13 @@ void ColumnScanState::Initialize(const QueryContext &context_p, const LogicalTyp
 		// variant - column scan states are created later
 		// this is done because the internal shape of the VARIANT is different per rowgroup
 		scan_child_column.resize(2, true);
+		if (!storage_index.IsPushdownExtract()) {
+			return;
+		}
+		auto &scan_type = storage_index.GetScanType();
+		if (scan_type.id() != LogicalTypeId::VARIANT) {
+			PushDownCast(type, scan_type);
+		}
 		return;
 	}
 
@@ -246,7 +253,7 @@ void ColumnScanState::Initialize(const QueryContext &context_p, const LogicalTyp
 				auto child_index = child.GetPrimaryIndex();
 				auto &child_type = StructType::GetChildTypes(type)[child_index].second;
 				if (!child.HasChildren() && child_type != child.GetType()) {
-					expression_state = CreateCast(*context.GetClientContext(), child_type, child.GetType());
+					PushDownCast(child_type, child.GetType());
 				}
 				child_states[1].Initialize(context, struct_children[child_index].second, child, options);
 			} else {
@@ -383,7 +390,7 @@ unique_ptr<RowGroup> RowGroup::AlterType(RowGroupCollection &new_collection, con
 	while (true) {
 		// scan the table
 		scan_chunk.Reset();
-		ScanCommitted(scan_state, scan_chunk, TableScanType::TABLE_SCAN_COMMITTED_ROWS);
+		Scan(scan_state, scan_chunk, TableScanType::TABLE_SCAN_ALL_ROWS);
 		if (scan_chunk.size() == 0) {
 			break;
 		}
@@ -586,12 +593,10 @@ bool RowGroup::CheckZonemapSegments(CollectionScanState &state) {
 	}
 }
 
-template <TableScanType TYPE>
-void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &state, DataChunk &result) {
-	const bool ALLOW_UPDATES = TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES &&
-	                           TYPE != TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED;
+void RowGroup::Scan(ScanOptions options, CollectionScanState &state, DataChunk &result) {
 	const auto &column_ids = state.GetColumnIds();
 	auto &filter_info = state.GetFilterInfo();
+	auto &transaction = options.transaction;
 	while (true) {
 		if (state.vector_index * STANDARD_VECTOR_SIZE >= state.max_row_group_row) {
 			// exceeded the amount of rows to scan
@@ -614,24 +619,11 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 		auto &current_row_group = state.row_group->GetNode();
 
 		// second, scan the version chunk manager to figure out which tuples to load for this transaction
-		idx_t count;
-		if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
-			count = current_row_group.GetSelVector(transaction, state.vector_index, state.valid_sel, max_count);
-			if (count == 0) {
-				// nothing to scan for this vector, skip the entire vector
-				NextVector(state);
-				continue;
-			}
-		} else if (TYPE == TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED) {
-			count = current_row_group.GetCommittedSelVector(transaction.start_time, transaction.transaction_id,
-			                                                state.vector_index, state.valid_sel, max_count);
-			if (count == 0) {
-				// nothing to scan for this vector, skip the entire vector
-				NextVector(state);
-				continue;
-			}
-		} else {
-			count = max_count;
+		idx_t count = current_row_group.GetSelVector(options, state.vector_index, state.valid_sel, max_count);
+		if (count == 0) {
+			// nothing to scan for this vector, skip the entire vector
+			NextVector(state);
+			continue;
 		}
 		auto &block_manager = GetBlockManager();
 		if (block_manager.Prefetch()) {
@@ -650,11 +642,8 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				const auto &column = column_ids[i];
 				auto &col_data = GetColumn(column);
-				if (TYPE != TableScanType::TABLE_SCAN_REGULAR) {
-					col_data.ScanCommitted(state.vector_index, state.column_scans[i], result.data[i], ALLOW_UPDATES);
-				} else {
-					col_data.Scan(transaction, state.vector_index, state.column_scans[i], result.data[i]);
-				}
+				state.column_scans[i].update_scan_type = options.update_type;
+				col_data.Scan(transaction, state.vector_index, state.column_scans[i], result.data[i]);
 			}
 		} else {
 			// partial scan: we have deletions or table filters
@@ -670,7 +659,6 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			auto adaptive_filter = filter_info.GetAdaptiveFilter();
 			auto filter_state = filter_info.BeginFilter();
 			if (has_filters) {
-				D_ASSERT(ALLOW_UPDATES);
 				auto &filter_list = filter_info.GetFilterList();
 				for (idx_t i = 0; i < filter_list.size(); i++) {
 					auto filter_idx = adaptive_filter->permutation[i];
@@ -725,13 +713,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				}
 				auto &column = column_ids[i];
 				auto &col_data = GetColumn(column);
-				if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
-					col_data.Select(transaction, state.vector_index, state.column_scans[i], result.data[i], sel,
-					                approved_tuple_count);
-				} else {
-					col_data.SelectCommitted(state.vector_index, state.column_scans[i], result.data[i], sel,
-					                         approved_tuple_count, ALLOW_UPDATES);
-				}
+				state.column_scans[i].update_scan_type = options.update_type;
+				col_data.Select(transaction, state.vector_index, state.column_scans[i], result.data[i], sel,
+				                approved_tuple_count);
 			}
 			filter_info.EndFilter(filter_state);
 
@@ -744,37 +728,38 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 	}
 }
 
-void RowGroup::Scan(TransactionData transaction, CollectionScanState &state, DataChunk &result) {
-	TemplatedScan<TableScanType::TABLE_SCAN_REGULAR>(transaction, state, result);
+ScanOptions::ScanOptions(TransactionData transaction) : transaction(transaction) {
 }
 
-void RowGroup::ScanCommitted(CollectionScanState &state, DataChunk &result, TableScanType type) {
+void RowGroup::Scan(CollectionScanState &state, DataChunk &result, TableScanType type) {
 	auto &transaction_manager = DuckTransactionManager::Get(GetCollection().GetAttached());
 
 	transaction_t start_ts;
 	transaction_t transaction_id;
-	if (type == TableScanType::TABLE_SCAN_LATEST_COMMITTED_ROWS) {
+	if (type == TableScanType::TABLE_SCAN_COMMITTED_ROWS) {
 		start_ts = transaction_manager.GetLastCommit() + 1;
 		transaction_id = MAX_TRANSACTION_ID;
 	} else {
 		start_ts = transaction_manager.LowestActiveStart();
 		transaction_id = transaction_manager.LowestActiveId();
 	}
-	TransactionData data(transaction_id, start_ts);
+	TransactionData transaction(transaction_id, start_ts);
+
+	ScanOptions options(transaction);
+	options.insert_type = InsertedScanType::ALL_ROWS;
 	switch (type) {
+	case TableScanType::TABLE_SCAN_ALL_ROWS:
+		options.delete_type = DeletedScanType::INCLUDE_ALL_DELETED;
+		break;
+	case TableScanType::TABLE_SCAN_OMIT_PERMANENTLY_DELETED:
 	case TableScanType::TABLE_SCAN_COMMITTED_ROWS:
-		TemplatedScan<TableScanType::TABLE_SCAN_COMMITTED_ROWS>(data, state, result);
-		break;
-	case TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES:
-		TemplatedScan<TableScanType::TABLE_SCAN_COMMITTED_ROWS_DISALLOW_UPDATES>(data, state, result);
-		break;
-	case TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED:
-	case TableScanType::TABLE_SCAN_LATEST_COMMITTED_ROWS:
-		TemplatedScan<TableScanType::TABLE_SCAN_COMMITTED_ROWS_OMIT_PERMANENTLY_DELETED>(data, state, result);
+		options.delete_type = DeletedScanType::OMIT_COMMITTED_DELETES;
+		options.update_type = UpdateScanType::DISALLOW_UPDATES;
 		break;
 	default:
 		throw InternalException("Unrecognized table scan type");
 	}
+	Scan(options, state, result);
 }
 
 optional_ptr<RowVersionManager> RowGroup::GetVersionInfo() {
@@ -850,22 +835,16 @@ bool RowGroup::ShouldCheckpointRowGroup(transaction_t checkpoint_id) const {
 	return vinfo->ShouldCheckpointRowGroup(checkpoint_id, count);
 }
 
-idx_t RowGroup::GetSelVector(TransactionData transaction, idx_t vector_idx, SelectionVector &sel_vector,
-                             idx_t max_count) {
+idx_t RowGroup::GetSelVector(ScanOptions options, idx_t vector_idx, SelectionVector &sel_vector, idx_t max_count) {
+	if (options.insert_type == InsertedScanType::ALL_ROWS &&
+	    options.delete_type == DeletedScanType::INCLUDE_ALL_DELETED) {
+		return max_count;
+	}
 	auto vinfo = GetVersionInfo();
 	if (!vinfo) {
 		return max_count;
 	}
-	return vinfo->GetSelVector(transaction, vector_idx, sel_vector, max_count);
-}
-
-idx_t RowGroup::GetCommittedSelVector(transaction_t start_time, transaction_t transaction_id, idx_t vector_idx,
-                                      SelectionVector &sel_vector, idx_t max_count) {
-	auto vinfo = GetVersionInfo();
-	if (!vinfo) {
-		return max_count;
-	}
-	return vinfo->GetCommittedSelVector(start_time, transaction_id, vector_idx, sel_vector, max_count);
+	return vinfo->GetSelVector(options, vector_idx, sel_vector, max_count);
 }
 
 bool RowGroup::Fetch(TransactionData transaction, idx_t row) {
@@ -1255,7 +1234,7 @@ RowGroupPointer RowGroup::Checkpoint(RowGroupWriteData write_data, RowGroupWrite
 		row_group_pointer.data_pointers = column_pointers;
 		row_group_pointer.has_metadata_blocks = true;
 		row_group_pointer.extra_metadata_blocks = write_data.existing_extra_metadata_blocks;
-		row_group_pointer.deletes_pointers = CheckpointDeletes(*metadata_manager);
+		row_group_pointer.deletes_pointers = CheckpointDeletes(writer);
 		if (metadata_manager) {
 			vector<MetaBlockPointer> extra_metadata_block_pointers;
 			extra_metadata_block_pointers.reserve(write_data.existing_extra_metadata_blocks.size());
@@ -1323,7 +1302,7 @@ RowGroupPointer RowGroup::Checkpoint(RowGroupWriteData write_data, RowGroupWrite
 		metadata_blocks.insert(column_pointer.block_pointer);
 	}
 	if (metadata_manager) {
-		row_group_pointer.deletes_pointers = CheckpointDeletes(*metadata_manager);
+		row_group_pointer.deletes_pointers = CheckpointDeletes(writer);
 	}
 	// set up the pointers correctly within this row group for future operations
 	column_pointers = row_group_pointer.data_pointers;
@@ -1376,10 +1355,11 @@ PersistentRowGroupData RowGroup::SerializeRowGroupInfo(idx_t row_group_start) co
 	return result;
 }
 
-vector<MetaBlockPointer> RowGroup::CheckpointDeletes(MetadataManager &manager) {
+vector<MetaBlockPointer> RowGroup::CheckpointDeletes(RowGroupWriter &writer) {
 	if (HasUnloadedDeletes()) {
 		// deletes were not loaded so they cannot be changed
 		// re-use them as-is
+		auto &manager = *writer.GetMetadataManager();
 		manager.ClearModifiedBlocks(deletes_pointers);
 		return deletes_pointers;
 	}
@@ -1388,7 +1368,7 @@ vector<MetaBlockPointer> RowGroup::CheckpointDeletes(MetadataManager &manager) {
 		// no version information: write nothing
 		return vector<MetaBlockPointer>();
 	}
-	return vinfo->Checkpoint(manager);
+	return vinfo->Checkpoint(writer);
 }
 
 void RowGroup::Serialize(RowGroupPointer &pointer, Serializer &serializer) {
@@ -1417,19 +1397,19 @@ RowGroupPointer RowGroup::Deserialize(Deserializer &deserializer) {
 // GetPartitionStats
 //===--------------------------------------------------------------------===//
 struct DuckDBPartitionRowGroup : public PartitionRowGroup {
-	explicit DuckDBPartitionRowGroup(const RowGroup &row_group_p, bool is_exact_p)
-	    : row_group(row_group_p), is_exact(is_exact_p) {
+	explicit DuckDBPartitionRowGroup(shared_ptr<RowGroup> row_group_p, bool is_exact_p)
+	    : row_group(std::move(row_group_p)), is_exact(is_exact_p) {
 	}
 
-	const RowGroup &row_group;
+	shared_ptr<RowGroup> row_group;
 	const bool is_exact;
 
 	unique_ptr<BaseStatistics> GetColumnStatistics(const StorageIndex &storage_index) override {
-		return row_group.GetStatistics(storage_index);
+		return row_group->GetStatistics(storage_index);
 	}
 
-	bool MinMaxIsExact(const BaseStatistics &stats) override {
-		if (!is_exact || row_group.HasChanges()) {
+	bool MinMaxIsExact(const BaseStatistics &stats, const StorageIndex &) override {
+		if (!is_exact || row_group->HasChanges()) {
 			return false;
 		}
 		if (stats.GetStatsType() == StatisticsType::STRING_STATS) {
@@ -1443,17 +1423,19 @@ struct DuckDBPartitionRowGroup : public PartitionRowGroup {
 	}
 };
 
-PartitionStatistics RowGroup::GetPartitionStats(idx_t row_group_start) {
+PartitionStatistics RowGroup::GetPartitionStats(SegmentNode<RowGroup> &row_group) {
+	auto &row_group_ref = row_group.GetNode();
+
 	PartitionStatistics result;
-	result.row_start = row_group_start;
-	result.count = count;
-	if (HasUnloadedDeletes() || version_info.load().get()) {
+	result.row_start = row_group.GetRowStart();
+	result.count = row_group_ref.count;
+	if (row_group_ref.HasUnloadedDeletes() || row_group_ref.GetVersionInfoIfLoaded()) {
 		// we have version info - approx count
 		result.count_type = CountType::COUNT_APPROXIMATE;
-		result.partition_row_group = make_shared_ptr<DuckDBPartitionRowGroup>(*this, false);
+		result.partition_row_group = make_shared_ptr<DuckDBPartitionRowGroup>(row_group.ReferenceNode(), false);
 	} else {
 		result.count_type = CountType::COUNT_EXACT;
-		result.partition_row_group = make_shared_ptr<DuckDBPartitionRowGroup>(*this, true);
+		result.partition_row_group = make_shared_ptr<DuckDBPartitionRowGroup>(row_group.ReferenceNode(), true);
 	}
 
 	return result;

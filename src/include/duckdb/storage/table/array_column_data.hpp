@@ -29,8 +29,6 @@ public:
 
 	idx_t Scan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
 	           idx_t scan_count) override;
-	idx_t ScanCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, bool allow_updates,
-	                    idx_t scan_count) override;
 	idx_t ScanCount(ColumnScanState &state, Vector &result, idx_t count, idx_t result_offset = 0) override;
 
 	void Select(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
@@ -68,6 +66,8 @@ public:
 
 	void SetValidityData(shared_ptr<ValidityColumnData> validity);
 	void SetChildData(shared_ptr<ColumnData> child_column);
+
+	const BaseStatistics &GetChildStats(const ColumnData &child) const override;
 
 protected:
 	//! The child-column of the list

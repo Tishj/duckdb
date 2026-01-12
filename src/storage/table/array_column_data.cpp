@@ -82,11 +82,6 @@ idx_t ArrayColumnData::Scan(TransactionData transaction, idx_t vector_index, Col
 	return ScanCount(state, result, scan_count);
 }
 
-idx_t ArrayColumnData::ScanCommitted(idx_t vector_index, ColumnScanState &state, Vector &result, bool allow_updates,
-                                     idx_t scan_count) {
-	return ScanCount(state, result, scan_count);
-}
-
 idx_t ArrayColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count, idx_t result_offset) {
 	// Scan validity
 	auto scan_count = validity->ScanCount(state.child_states[0], result, count, result_offset);
@@ -271,6 +266,14 @@ void ArrayColumnData::FetchRow(TransactionData transaction, ColumnFetchState &st
 void ArrayColumnData::VisitBlockIds(BlockIdVisitor &visitor) const {
 	validity->VisitBlockIds(visitor);
 	child_column->VisitBlockIds(visitor);
+}
+
+const BaseStatistics &ArrayColumnData::GetChildStats(const ColumnData &child) const {
+	if (!RefersToSameObject(child, *child_column)) {
+		throw InternalException("ArrayColumnData::GetChildStats provided column data is not a child of this array");
+	}
+	auto &stats = GetStatisticsRef();
+	return ArrayStats::GetChildStats(stats);
 }
 
 void ArrayColumnData::SetValidityData(shared_ptr<ValidityColumnData> validity_p) {
