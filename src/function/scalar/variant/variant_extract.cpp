@@ -47,40 +47,6 @@ static bool GetConstantArgument(ClientContext &context, Expression &expr, Value 
 	return false;
 }
 
-optional_ptr<const BaseStatistics> FindShreddedStats(const BaseStatistics &shredded,
-                                                     const VariantPathComponent &component) {
-	D_ASSERT(shredded.GetType().id() == LogicalTypeId::STRUCT);
-	D_ASSERT(StructType::GetChildTypes(shredded.GetType()).size() == 2);
-
-	auto &typed_value_type = StructType::GetChildTypes(shredded.GetType())[1].second;
-	auto &typed_value_stats = StructStats::GetChildStats(shredded, 1);
-	switch (component.lookup_mode) {
-	case VariantChildLookupMode::BY_INDEX: {
-		if (typed_value_type.id() != LogicalTypeId::LIST) {
-			return nullptr;
-		}
-		auto &child_stats = ListStats::GetChildStats(typed_value_stats);
-		return child_stats;
-	}
-	case VariantChildLookupMode::BY_KEY: {
-		if (typed_value_type.id() != LogicalTypeId::STRUCT) {
-			return nullptr;
-		}
-		auto &object_fields = StructType::GetChildTypes(typed_value_type);
-		for (idx_t i = 0; i < object_fields.size(); i++) {
-			auto &object_field = object_fields[i];
-			if (StringUtil::CIEquals(object_field.first, component.key)) {
-				return StructStats::GetChildStats(typed_value_stats, i);
-			}
-		}
-		return nullptr;
-	}
-	default:
-		throw InternalException("VariantChildLookupMode::%s not implemented for FindShreddedStats",
-		                        EnumUtil::ToString(component.lookup_mode));
-	}
-}
-
 static unique_ptr<BaseStatistics> VariantExtractPropagateStats(ClientContext &context, FunctionStatisticsInput &input) {
 	auto &child_stats = input.child_stats;
 	auto &bind_data = input.bind_data;
@@ -95,20 +61,12 @@ static unique_ptr<BaseStatistics> VariantExtractPropagateStats(ClientContext &co
 	if (!VariantShreddedStats::IsFullyShredded(shredded_stats)) {
 		return nullptr;
 	}
-	auto found_stats = FindShreddedStats(shredded_stats, info.component);
-	if (!found_stats) {
+	auto found_stats = VariantShreddedStats::FindChildStats(shredded_stats, info.component);
+	if (!found_stats || !VariantShreddedStats::IsFullyShredded(*found_stats)) {
 		return nullptr;
 	}
 
-	auto &unshredded_stats = VariantStats::GetUnshreddedStats(variant_stats);
-	auto child_variant_stats = VariantStats::CreateShredded(found_stats->GetType());
-	VariantStats::SetUnshreddedStats(child_variant_stats, unshredded_stats);
-	VariantStats::SetShreddedStats(child_variant_stats, *found_stats);
-	//! FIXME: these stats are too wide
-	child_variant_stats.SetHasNoNull();
-	child_variant_stats.SetHasNull();
-
-	return child_variant_stats.ToUnique();
+	return VariantStats::WrapExtractedFieldAsVariant(variant_stats, *found_stats);
 }
 
 static unique_ptr<FunctionData> VariantExtractBind(ClientContext &context, ScalarFunction &bound_function,
