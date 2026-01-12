@@ -67,10 +67,23 @@ public:
 
 public:
 	idx_t GetPrimaryIndex() const {
+		if (!has_index) {
+			throw InternalException("Attempted to get the primary index (numeric) for an index that consists of a "
+			                        "field identifier (string: %s)",
+			                        field);
+		}
 		return index;
 	}
+	const string &GetFieldName() const {
+		if (has_index) {
+			throw InternalException("Attempted to get the field identifier (string) for an index that consists of a "
+			                        "primary index (numeric: %d)",
+			                        index);
+		}
+		return field;
+	}
 	LogicalIndex ToLogical() const {
-		return LogicalIndex(index);
+		return LogicalIndex(GetPrimaryIndex());
 	}
 	bool HasChildren() const {
 		return !child_indexes.empty();
@@ -149,12 +162,21 @@ public:
 		this->child_indexes.push_back(std::move(new_index));
 	}
 	bool IsRowIdColumn() const {
+		if (!has_index) {
+			return false;
+		}
 		return index == COLUMN_IDENTIFIER_ROW_ID;
 	}
 	bool IsEmptyColumn() const {
+		if (!has_index) {
+			return false;
+		}
 		return index == COLUMN_IDENTIFIER_EMPTY;
 	}
 	bool IsVirtualColumn() const {
+		if (!has_index) {
+			return false;
+		}
 		return index >= VIRTUAL_COLUMN_START;
 	}
 	void VerifySinglePath() const {
