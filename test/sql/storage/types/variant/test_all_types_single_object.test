@@ -1,0 +1,65 @@
+# name: test/sql/storage/types/variant/test_all_types_single_object.test
+# group: [variant]
+
+load __TEST_DIR__/variant_test_all_types_single_table.db
+
+# Always shred
+statement ok
+SET variant_minimum_shredding_size = 0;
+
+statement ok
+create table tbl (
+	col VARIANT
+)
+
+statement ok
+insert into tbl select t::VARIANT var from test_all_types() t
+
+statement ok
+checkpoint
+
+restart
+
+foreach col <all_types_columns>
+
+onlyif col=union
+continue
+
+onlyif col=small_enum
+continue
+
+onlyif col=medium_enum
+continue
+
+onlyif col=large_enum
+continue
+
+statement ok
+set variable col_type = (select typeof("${col}") from test_all_types() limit 1);
+
+statement ok
+set variable col_name = (select '${col}');
+
+# Select the regular column from 'test_all_types'
+query I nosort expected_res
+select "${col}" from test_all_types();
+----
+
+# Pushed down the extract + the cast
+# SELECT col.${col}::<col_type> from tbl
+query I nosort expected_res
+from query($$select col."$$ || getvariable('col_name') || $$"::$$ || getvariable('col_type') || ' from tbl');
+
+# Push down only the extract
+statement ok
+create or replace table intermediate as
+	from query($$select col."$$ || getvariable('col_name') || $$" extracted from tbl$$);
+
+# Add the cast to the regular type, to make the comparison work
+# SELECT extracted::<col_type> from intermediate
+query I nosort expected_res
+from query('select extracted::' || getvariable('col_type') || ' from intermediate');
+
+reset label expected_res
+
+endloop
