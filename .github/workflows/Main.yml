@@ -317,12 +317,19 @@ jobs:
 
     - uses: ./.github/actions/ccache-action
 
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11.1
+      with:
+        vcpkgGitCommitId: 84bab45d415d22042bd0b9081aea57f362da3f35
+
     - name: Build
       id: build
       shell: bash
       env:
         CORE_EXTENSIONS: "json;parquet;icu;tpch;tpcds;autocomplete"
         GEN: ninja
+        VCPKG_TOOLCHAIN_PATH: ${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+        USE_MERGED_VCPKG_MANIFEST: 1
       run: make
 
     - name: test/configs/force_storage.json
@@ -478,8 +485,9 @@ jobs:
       env:
         CORE_EXTENSIONS: "json;parquet;icu;tpch;tpcds;httpfs"
         GEN: ninja
-      run:
-        make
+        VCPKG_TOOLCHAIN_PATH: ${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+        USE_MERGED_VCPKG_MANIFEST: 1
+      run: make
 
     - name: test/configs/encryption.json
       if: (success() || failure()) && steps.build.conclusion == 'success'
