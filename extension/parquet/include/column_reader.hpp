@@ -111,6 +111,7 @@ public:
 	static unique_ptr<ColumnReader> CreateReader(const ParquetReader &reader, const ParquetColumnSchema &schema);
 	virtual void InitializeRead(idx_t row_group_index, const vector<ColumnChunk> &columns, TProtocol &protocol_p);
 	virtual idx_t Read(ColumnReaderInput &input, Vector &result);
+	//! Grab only the tuples referenced by the selection vector
 	virtual void Select(ColumnReaderInput &input, Vector &result, const SelectionVector &sel,
 	                    idx_t approved_tuple_count);
 	virtual void Filter(ColumnReaderInput &input, Vector &result, const TableFilter &filter,
