@@ -16,10 +16,16 @@
 
 namespace duckdb {
 
+struct ColumnBinding;
+class Expression;
 struct RenameColumnInfo;
 struct RenameTableInfo;
 
 class ColumnDefinition;
+
+typedef unique_ptr<Expression> (*default_projection_resolver_t)(const LogicalType &original_type,
+                                                                ColumnBinding source_binding,
+                                                                const Expression &default_expression);
 
 //! A column of a table.
 class ColumnDefinition {
@@ -33,6 +39,8 @@ public:
 	const ParsedExpression &DefaultValue() const;
 	bool HasDefaultValue() const;
 	void SetDefaultValue(unique_ptr<ParsedExpression> default_value);
+	DUCKDB_API default_projection_resolver_t DefaultProjectionResolver() const;
+	DUCKDB_API void SetDefaultProjectionResolver(default_projection_resolver_t resolver);
 
 	//! type
 	DUCKDB_API const LogicalType &Type() const;
@@ -107,6 +115,8 @@ private:
 	//! The default value of the column (for non-generated columns)
 	//! The generated column expression (for generated columns)
 	unique_ptr<ParsedExpression> expression;
+	//! Optional in-memory hook for resolving present source values against default values during INSERT binding
+	default_projection_resolver_t default_projection_resolver = nullptr;
 	//! Comment on this column
 	Value comment;
 	//! Tags on this column

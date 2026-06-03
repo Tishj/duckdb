@@ -21,6 +21,7 @@ ColumnDefinition ColumnDefinition::Copy() const {
 	copy.oid = oid;
 	copy.storage_oid = storage_oid;
 	copy.expression = expression ? expression->Copy() : nullptr;
+	copy.default_projection_resolver = default_projection_resolver;
 	copy.compression_type = compression_type;
 	copy.category = category;
 	copy.comment = comment;
@@ -50,6 +51,14 @@ void ColumnDefinition::SetDefaultValue(unique_ptr<ParsedExpression> default_valu
 		throw InternalException("Calling SetDefaultValue() on a generated column");
 	}
 	this->expression = std::move(default_value);
+}
+
+default_projection_resolver_t ColumnDefinition::DefaultProjectionResolver() const {
+	return default_projection_resolver;
+}
+
+void ColumnDefinition::SetDefaultProjectionResolver(default_projection_resolver_t resolver) {
+	default_projection_resolver = resolver;
 }
 
 const LogicalType &ColumnDefinition::Type() const {

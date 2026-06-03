@@ -119,6 +119,14 @@ unique_ptr<LogicalOperator> Binder::ResolveDefaultsProjection(LogicalInsert &ins
 
 		auto &original_type = source_types[mapped_index];
 		auto source_binding = source_bindings[mapped_index];
+		if (col.DefaultProjectionResolver()) {
+			auto default_projection =
+			    col.DefaultProjectionResolver()(original_type, source_binding, *insert.bound_defaults[storage_idx]);
+			if (default_projection) {
+				select_list.push_back(std::move(default_projection));
+				continue;
+			}
+		}
 		select_list.push_back(make_uniq<BoundColumnRefExpression>(original_type, source_binding));
 	}
 
