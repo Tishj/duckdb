@@ -3,6 +3,7 @@
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/checkpoint/write_overflow_strings_to_disk.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 #include "duckdb/storage/segment/uncompressed.hpp"
 #include "duckdb/storage/table/append_state.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
@@ -160,8 +161,8 @@ void FixedSizeScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t 
 	auto &scan_state = state.scan_state->Cast<FixedSizeScanState>();
 	auto start = state.GetPositionInSegment();
 
-	auto data = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
-	auto source_data = data + start * sizeof(T);
+	CompressionSegmentReader reader(scan_state.handle, segment, "uncompressed fixed-size segment");
+	auto source_data = reader.GetArrayAt<T>(start, scan_count);
 
 	// copy the data from the base table
 	result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -173,11 +174,11 @@ void FixedSizeScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_co
 	auto &scan_state = state.scan_state->template Cast<FixedSizeScanState>();
 	auto start = state.GetPositionInSegment();
 
-	auto data = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
-	auto source_data = data + start * sizeof(T);
+	CompressionSegmentReader reader(scan_state.handle, segment, "uncompressed fixed-size segment");
+	auto source_data = reader.GetArrayAt<T>(start, scan_count);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	FlatVector::SetData(result, source_data, count_t(scan_count));
+	FlatVector::SetData(result, data_ptr_cast(source_data), count_t(scan_count));
 }
 
 //===--------------------------------------------------------------------===//
@@ -190,7 +191,8 @@ void FixedSizeFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t ro
 	auto handle = buffer_manager.Pin(segment.GetBlockHandle());
 
 	// first fetch the data from the base table
-	auto data_ptr = handle.GetDataMutable() + segment.GetBlockOffset() + NumericCast<idx_t>(row_id) * sizeof(T);
+	CompressionSegmentReader reader(handle, segment, "uncompressed fixed-size segment");
+	auto data_ptr = reader.GetArrayAt<T>(NumericCast<idx_t>(row_id), 1);
 
 	memcpy(FlatVector::GetDataMutable(result) + result_idx * sizeof(T), data_ptr, sizeof(T));
 }

@@ -53,28 +53,21 @@ string_t CompressedStringScanState::FetchStringFromDict(int32_t dict_offset, uin
 	}
 
 	// normal string: read string from this block
-	auto dict_end = baseptr + dict.end;
-	auto dict_pos = dict_end - dict_offset;
+	auto dict_pos = dictionary_data + dict.size - dict_offset;
 
 	auto str_ptr = char_ptr_cast(dict_pos);
 	return string_t(str_ptr, string_len);
 }
 
 void CompressedStringScanState::Initialize(ColumnSegment &segment, bool initialize_dictionary) {
-	block_size = segment.GetBlockSize();
-	auto block_offset = segment.GetBlockOffset();
-	if (block_offset > block_size || DictionaryCompression::DICTIONARY_HEADER_SIZE > block_size - block_offset) {
-		throw IOException(
-		    "Failed to scan dictionary string - dictionary was out of range. Database file appears to be corrupted.");
-	}
-	auto segment_capacity = block_size - block_offset;
-	baseptr = handle->GetDataMutable() + block_offset;
+	reader = CompressionSegmentReader(*handle, segment, "dictionary-compressed string segment");
+	block_size = reader.Size();
+	reader.GetSpan(0, DictionaryCompression::DICTIONARY_HEADER_SIZE);
 
 	// Load header values
-	auto header_ptr = reinterpret_cast<dictionary_compression_header_t *>(baseptr);
-	auto index_buffer_offset = Load<uint32_t>(data_ptr_cast(&header_ptr->index_buffer_offset));
-	index_buffer_count = Load<uint32_t>(data_ptr_cast(&header_ptr->index_buffer_count));
-	auto stored_width = Load<uint32_t>(data_ptr_cast(&header_ptr->bitpacking_width));
+	auto index_buffer_offset = reader.ReadAt<uint32_t>(offsetof(dictionary_compression_header_t, index_buffer_offset));
+	index_buffer_count = reader.ReadAt<uint32_t>(offsetof(dictionary_compression_header_t, index_buffer_count));
+	auto stored_width = reader.ReadAt<uint32_t>(offsetof(dictionary_compression_header_t, bitpacking_width));
 	if (index_buffer_count == 0) {
 		throw IOException(
 		    "Failed to scan dictionary string - dictionary was out of range. Database file appears to be corrupted.");
@@ -86,26 +79,23 @@ void CompressedStringScanState::Initialize(ColumnSegment &segment, bool initiali
 		    "corrupted.");
 	}
 	current_width = expected_width;
-	auto selection_buffer_size = BitpackingPrimitives::GetRequiredSize(segment.count.load(), current_width);
+	selection_buffer_size = BitpackingPrimitives::GetRequiredSize(segment.count.load(), current_width);
 	auto expected_index_buffer_offset = DictionaryCompression::DICTIONARY_HEADER_SIZE + selection_buffer_size;
 	if (index_buffer_offset != expected_index_buffer_offset) {
 		throw IOException("Failed to scan dictionary string - selection buffer was out of range. Database file appears "
 		                  "to be corrupted.");
 	}
-	if (index_buffer_offset > segment_capacity ||
-	    index_buffer_count > (segment_capacity - index_buffer_offset) / sizeof(uint32_t)) {
-		throw IOException(
-		    "Failed to scan dictionary string - index was out of range. Database file appears to be corrupted.");
-	}
-	index_buffer_ptr = reinterpret_cast<uint32_t *>(baseptr + index_buffer_offset);
-	base_data = data_ptr_cast(baseptr + DictionaryCompression::DICTIONARY_HEADER_SIZE);
+	base_data = reader.GetSpan(DictionaryCompression::DICTIONARY_HEADER_SIZE, selection_buffer_size);
+	index_buffer_ptr = reader.GetArray<uint32_t>(index_buffer_offset, index_buffer_count);
 
-	dict = DictionaryCompression::GetDictionary(segment, *handle);
+	dict.size = reader.ReadAt<uint32_t>(offsetof(dictionary_compression_header_t, dict_size));
+	dict.end = reader.ReadAt<uint32_t>(offsetof(dictionary_compression_header_t, dict_end));
 	auto index_buffer_end = index_buffer_offset + sizeof(uint32_t) * index_buffer_count;
-	if (dict.end > segment_capacity || dict.size > dict.end || dict.end - dict.size < index_buffer_end) {
+	if (dict.end > reader.Size() || dict.size > dict.end || dict.end - dict.size < index_buffer_end) {
 		throw IOException(
 		    "Failed to scan dictionary string - dictionary was out of range. Database file appears to be corrupted.");
 	}
+	dictionary_data = reader.GetSpan(dict.end - dict.size, dict.size);
 	if (!initialize_dictionary) {
 		// Used by fetch, as fetch will never produce a DictionaryVector
 		return;
@@ -135,7 +125,9 @@ void CompressedStringScanState::ScanToFlatVector(Vector &result, idx_t result_of
 		sel_vec = make_buffer<SelectionVector>(decompress_count);
 	}
 
-	data_ptr_t src = &base_data[((start - start_offset) * current_width) / 8];
+	auto source_offset = ((start - start_offset) * current_width) / 8;
+	auto source_size = BitpackingPrimitives::GetRequiredSize(decompress_count, current_width);
+	data_ptr_t src = reader.GetSpan(DictionaryCompression::DICTIONARY_HEADER_SIZE + source_offset, source_size);
 	sel_t *sel_vec_ptr = sel_vec->data();
 
 	BitpackingPrimitives::UnPackBuffer<sel_t>(data_ptr_cast(sel_vec_ptr), src, decompress_count, current_width);
@@ -167,7 +159,9 @@ void CompressedStringScanState::ScanToDictionaryVector(ColumnSegment &segment, V
 
 	// Scanning 2048 values, emitting a dict vector
 	data_ptr_t dst = data_ptr_cast(sel_vec->data());
-	data_ptr_t src = data_ptr_cast(&base_data[((start - start_offset) * current_width) / 8]);
+	auto source_offset = ((start - start_offset) * current_width) / 8;
+	auto source_size = BitpackingPrimitives::GetRequiredSize(decompress_count, current_width);
+	data_ptr_t src = reader.GetSpan(DictionaryCompression::DICTIONARY_HEADER_SIZE + source_offset, source_size);
 
 	BitpackingPrimitives::UnPackBuffer<sel_t>(dst, src, decompress_count, current_width);
 

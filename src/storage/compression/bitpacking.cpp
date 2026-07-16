@@ -12,6 +12,7 @@
 #include "duckdb/main/settings.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/compression/bitpacking.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 #include "duckdb/storage/compression/standard_compression_state.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
@@ -37,10 +38,10 @@ static bitpacking_metadata_encoded_t EncodeMeta(bitpacking_metadata_t metadata) 
 	encoded_value |= UnsafeNumericCast<bitpacking_metadata_encoded_t>((uint8_t)metadata.mode << 24);
 	return encoded_value;
 }
-static bitpacking_metadata_t DecodeMeta(bitpacking_metadata_encoded_t *metadata_encoded) {
+static bitpacking_metadata_t DecodeMeta(bitpacking_metadata_encoded_t metadata_encoded) {
 	bitpacking_metadata_t metadata;
-	metadata.mode = static_cast<BitpackingMode>((*metadata_encoded >> 24) & 0xFF);
-	metadata.offset = *metadata_encoded & 0x00FFFFFF;
+	metadata.mode = static_cast<BitpackingMode>((metadata_encoded >> 24) & 0xFF);
+	metadata.offset = metadata_encoded & 0x00FFFFFF;
 	return metadata;
 }
 
@@ -581,19 +582,25 @@ static T DeltaDecode(T *data, T previous_value, const size_t size) {
 template <class T, class T_S = typename MakeSigned<T>::type>
 struct BitpackingScanState : public SegmentScanState {
 public:
-	explicit BitpackingScanState(const QueryContext &context, ColumnSegment &segment) : current_segment(segment) {
+	explicit BitpackingScanState(const QueryContext &context, ColumnSegment &segment)
+	    : current_segment(segment), reader(nullptr, 0, "bitpacking segment") {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.GetDatabase());
 		handle = buffer_manager.Pin(context, segment.GetBlockHandle());
-		auto data_ptr = handle.GetDataMutable();
+		reader = CompressionSegmentReader(handle, segment, "bitpacking segment");
 
-		// load offset to bitpacking widths pointer
-		auto bitpacking_metadata_offset = Load<idx_t>(data_ptr + segment.GetBlockOffset());
-		bitpacking_metadata_ptr =
-		    data_ptr + segment.GetBlockOffset() + bitpacking_metadata_offset - sizeof(bitpacking_metadata_encoded_t);
-		if (bitpacking_metadata_ptr >= handle.GetDataMutable() + current_segment.GetBlockSize()) {
-			throw InternalException("Bitpacking offset is out of range at block \"%llu\" - corrupt database file",
-			                        segment.GetBlockHandle()->BlockId());
+		auto metadata_end = reader.Read<idx_t>();
+		group_count = segment.count / BITPACKING_METADATA_GROUP_SIZE;
+		group_count += segment.count % BITPACKING_METADATA_GROUP_SIZE != 0;
+		if (group_count == 0 || group_count > reader.Size() / sizeof(bitpacking_metadata_encoded_t)) {
+			throw IOException("Corrupted bitpacking segment: invalid metadata count");
 		}
+		auto metadata_size = group_count * sizeof(bitpacking_metadata_encoded_t);
+		if (metadata_end > reader.Size() || metadata_size > metadata_end ||
+		    metadata_end - metadata_size < BitpackingPrimitives::BITPACKING_HEADER_SIZE) {
+			throw IOException("Corrupted bitpacking segment: metadata is out of range");
+		}
+		metadata_start = metadata_end - metadata_size;
+		metadata_position = metadata_end;
 
 		// load the first group
 		LoadNextGroup();
@@ -601,6 +608,7 @@ public:
 
 	BufferHandle handle;
 	ColumnSegment &current_segment;
+	CompressionSegmentReader reader;
 
 	T decompression_buffer[BITPACKING_METADATA_GROUP_SIZE];
 
@@ -612,59 +620,85 @@ public:
 
 	idx_t current_group_offset = 0;
 	data_ptr_t current_group_ptr;
-	data_ptr_t bitpacking_metadata_ptr;
+	idx_t metadata_start;
+	idx_t metadata_position;
+	idx_t group_count;
+	idx_t loaded_group_count = 0;
 
 public:
 	//! Loads the metadata for the current metadata group. This will set bitpacking_metadata_ptr to the next group.
 	//! It also loads any metadata at the start of a compressed buffer (e.g. the width, for, or constant value)
 	//! depending on the bitpacking mode of that group.
 	void LoadNextGroup() {
-		D_ASSERT(bitpacking_metadata_ptr > handle.GetDataMutable() &&
-		         (bitpacking_metadata_ptr < handle.GetDataMutable() + current_segment.GetBlockSize()));
+		if (loaded_group_count >= group_count ||
+		    metadata_position < metadata_start + sizeof(bitpacking_metadata_encoded_t)) {
+			throw IOException("Corrupted bitpacking segment: metadata is out of range");
+		}
 		current_group_offset = 0;
-		current_group = DecodeMeta(reinterpret_cast<bitpacking_metadata_encoded_t *>(bitpacking_metadata_ptr));
+		metadata_position -= sizeof(bitpacking_metadata_encoded_t);
+		current_group = DecodeMeta(reader.ReadAt<bitpacking_metadata_encoded_t>(metadata_position));
+		if (current_group.offset < BitpackingPrimitives::BITPACKING_HEADER_SIZE ||
+		    current_group.offset >= metadata_start) {
+			throw IOException("Corrupted bitpacking segment: group offset is out of range");
+		}
+		auto rows_before_group = loaded_group_count * BITPACKING_METADATA_GROUP_SIZE;
+		auto group_row_count =
+		    MinValue<idx_t>(BITPACKING_METADATA_GROUP_SIZE, current_segment.count - rows_before_group);
+		loaded_group_count++;
 
-		bitpacking_metadata_ptr -= sizeof(bitpacking_metadata_encoded_t);
-		current_group_ptr = GetPtr(current_group);
+		idx_t group_position = current_group.offset;
 
 		// Read first value
 		switch (current_group.mode) {
 		case BitpackingMode::CONSTANT:
-			current_constant = *reinterpret_cast<T *>(current_group_ptr);
-			current_group_ptr += sizeof(T);
+			current_constant = reader.ReadAt<T>(group_position);
+			group_position += sizeof(T);
 			break;
 		case BitpackingMode::FOR:
 		case BitpackingMode::CONSTANT_DELTA:
 		case BitpackingMode::DELTA_FOR:
-			current_frame_of_reference = *reinterpret_cast<T *>(current_group_ptr);
-			current_group_ptr += sizeof(T);
+			current_frame_of_reference = reader.ReadAt<T>(group_position);
+			group_position += sizeof(T);
 			break;
 		default:
-			throw InternalException("Invalid bitpacking mode");
+			throw IOException("Corrupted bitpacking segment: invalid mode");
 		}
 
 		// Read second value
 		switch (current_group.mode) {
 		case BitpackingMode::CONSTANT_DELTA:
-			current_constant = *reinterpret_cast<T *>(current_group_ptr);
-			current_group_ptr += sizeof(T);
+			current_constant = reader.ReadAt<T>(group_position);
+			group_position += sizeof(T);
 			break;
 		case BitpackingMode::FOR:
 		case BitpackingMode::DELTA_FOR:
-			current_width = (bitpacking_width_t)(*reinterpret_cast<T *>(current_group_ptr));
-			current_group_ptr += MaxValue(sizeof(T), sizeof(bitpacking_width_t));
+			if (reader.ReadAt<T>(group_position) > static_cast<T>(sizeof(T) * 8)) {
+				throw IOException("Corrupted bitpacking segment: invalid bit width");
+			}
+			current_width = static_cast<bitpacking_width_t>(reader.ReadAt<T>(group_position));
+			group_position += sizeof(T);
 			break;
 		case BitpackingMode::CONSTANT:
 			break;
 		default:
-			throw InternalException("Invalid bitpacking mode");
+			throw IOException("Corrupted bitpacking segment: invalid mode");
 		}
 
 		// Read third value
 		if (current_group.mode == BitpackingMode::DELTA_FOR) {
-			current_delta_offset = *reinterpret_cast<T *>(current_group_ptr);
-			current_group_ptr += sizeof(T);
+			current_delta_offset = reader.ReadAt<T>(group_position);
+			group_position += sizeof(T);
 		}
+
+		idx_t packed_size = 0;
+		if (current_group.mode == BitpackingMode::FOR || current_group.mode == BitpackingMode::DELTA_FOR) {
+			packed_size = BitpackingPrimitives::GetRequiredSize(group_row_count, current_width);
+		}
+		reader.GetSpan(group_position, packed_size);
+		if (group_position + packed_size > metadata_start) {
+			throw IOException("Corrupted bitpacking segment: group payload overlaps metadata");
+		}
+		current_group_ptr = reader.GetSpan(group_position, packed_size);
 	}
 
 	void Skip(ColumnSegment &segment, idx_t skip_count) {
@@ -677,8 +711,9 @@ public:
 		idx_t meta_groups_to_skip = (skip_count + current_group_offset) / BITPACKING_METADATA_GROUP_SIZE;
 		if (meta_groups_to_skip) {
 			// bitpacking_metadata_ptr points to the next metadata: this means we need to advance the pointer by n-1
-			bitpacking_metadata_ptr -= (meta_groups_to_skip - 1) * sizeof(bitpacking_metadata_encoded_t);
-			LoadNextGroup();
+			for (idx_t i = 0; i < meta_groups_to_skip; i++) {
+				LoadNextGroup();
+			}
 			// The first (partial) group we skipped
 			skipped += BITPACKING_METADATA_GROUP_SIZE - initial_group_offset;
 			// The remaining groups that were skipped
@@ -729,10 +764,6 @@ public:
 		}
 
 		D_ASSERT(skipped == skip_count);
-	}
-
-	data_ptr_t GetPtr(bitpacking_metadata_t group) {
-		return handle.GetDataMutable() + current_segment.GetBlockOffset() + group.offset;
 	}
 };
 

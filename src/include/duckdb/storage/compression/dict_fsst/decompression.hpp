@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb/storage/compression/dict_fsst/common.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 
 namespace duckdb {
 
@@ -12,10 +13,11 @@ namespace dict_fsst {
 struct CompressedStringScanState : public SegmentScanState {
 public:
 	CompressedStringScanState(ColumnSegment &segment, BufferHandle &&handle_p)
-	    : segment(segment), owned_handle(std::move(handle_p)), handle(owned_handle) {
+	    : segment(segment), owned_handle(std::move(handle_p)), handle(owned_handle),
+	      reader(nullptr, 0, "DICT_FSST string segment") {
 	}
 	CompressedStringScanState(ColumnSegment &segment, BufferHandle &handle_p)
-	    : segment(segment), owned_handle(), handle(handle_p) {
+	    : segment(segment), owned_handle(), handle(handle_p), reader(nullptr, 0, "DICT_FSST string segment") {
 	}
 
 	~CompressedStringScanState() override;
@@ -37,6 +39,7 @@ public:
 	ColumnSegment &segment;
 	BufferHandle owned_handle;
 	optional_ptr<BufferHandle> handle;
+	CompressionSegmentReader reader;
 
 	DictFSSTMode mode;
 	idx_t dictionary_size;
@@ -53,11 +56,9 @@ public:
 
 	vector<uint32_t> string_lengths;
 
-	//! Start of the block (pointing to the dictionary_header)
-	data_ptr_t baseptr;
 	data_ptr_t dict_ptr;
-	data_ptr_t dictionary_indices_ptr;
-	data_ptr_t string_lengths_ptr;
+	idx_t dictionary_indices_offset;
+	idx_t dictionary_indices_size;
 
 	buffer_ptr<DictionaryEntry> dictionary;
 	void *decoder = nullptr;

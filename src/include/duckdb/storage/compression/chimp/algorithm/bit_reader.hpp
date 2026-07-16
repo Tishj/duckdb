@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/common/numeric_utils.hpp"
+#include "duckdb/common/exception.hpp"
 
 namespace duckdb {
 
@@ -52,15 +53,20 @@ private:
 
 public:
 public:
-	BitReader() : input(nullptr), index(0) {
+	BitReader() : input(nullptr), index(0), bit_capacity(0) {
 	}
 	uint8_t *input;
 	uint32_t index;
+	idx_t bit_capacity;
 
 public:
-	void SetStream(uint8_t *input) {
+	void SetStream(uint8_t *input, idx_t byte_count) {
 		this->input = input;
 		index = 0;
+		if (byte_count > NumericLimits<idx_t>::Maximum() / 8) {
+			throw IOException("Corrupted Chimp segment: bit stream size is out of range");
+		}
+		bit_capacity = byte_count * 8;
 	}
 
 	inline uint8_t BitIndex() const {
@@ -71,8 +77,10 @@ public:
 	}
 
 	inline uint8_t InnerReadByte(const uint8_t &offset) {
-		uint8_t result = static_cast<uint8_t>(input[ByteIndex() + offset] << BitIndex()) |
-		                 ((input[ByteIndex() + offset + 1] & REMAINDER_MASKS[8 + BitIndex()]) >> (8 - BitIndex()));
+		uint8_t result = static_cast<uint8_t>(input[ByteIndex() + offset] << BitIndex());
+		if (BitIndex() != 0) {
+			result |= ((input[ByteIndex() + offset + 1] & REMAINDER_MASKS[8 + BitIndex()]) >> (8 - BitIndex()));
+		}
 		return result;
 	}
 
@@ -104,14 +112,16 @@ public:
 		// We bit-wise AND these together (no need to shift anything because the index is essentially zero for this new
 		// byte) And we then right-shift these bits in place (to the right of the previous bits)
 		const bool spill_to_next_byte = (size + BitIndex() >= 8);
-		uint8_t result =
-		    ((input[ByteIndex() + offset] << BitIndex()) & MASKS[size]) >> right_shift |
-		    ((input[ByteIndex() + offset + spill_to_next_byte] & REMAINDER_MASKS[size + BitIndex()]) >> bit_remainder);
+		uint8_t result = ((input[ByteIndex() + offset] << BitIndex()) & MASKS[size]) >> right_shift;
+		if (spill_to_next_byte) {
+			result |= ((input[ByteIndex() + offset + 1] & REMAINDER_MASKS[size + BitIndex()]) >> bit_remainder);
+		}
 		return result;
 	}
 
 	template <class T, uint8_t BYTES>
 	inline T ReadBytes(const uint8_t &remainder) {
+		CheckAvailable((BYTES << 3) + remainder);
 		T result = 0;
 		if (BYTES > 0) {
 			result = UnsafeNumericCast<T>(result << 8 | InnerReadByte(0));
@@ -144,6 +154,7 @@ public:
 
 	template <class T>
 	inline T ReadBytes(const uint8_t &bytes, const uint8_t &remainder) {
+		CheckAvailable(static_cast<idx_t>(bytes) * 8 + remainder);
 		T result = 0;
 		for (uint8_t i = 0; i < bytes; i++) {
 			result = result << 8 | InnerReadByte(i);
@@ -165,6 +176,13 @@ public:
 		const uint8_t bytes = size >> 3; // divide by 8;
 		const uint8_t remainder = size & 7;
 		return ReadBytes<T>(bytes, remainder);
+	}
+
+private:
+	void CheckAvailable(idx_t bits) const {
+		if (index > bit_capacity || bits > bit_capacity - index) {
+			throw IOException("Corrupted Chimp segment: bit stream is out of range");
+		}
 	}
 };
 

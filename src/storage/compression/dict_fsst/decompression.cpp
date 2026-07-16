@@ -13,12 +13,16 @@ CompressedStringScanState::~CompressedStringScanState() {
 }
 
 string_t CompressedStringScanState::FetchStringFromDict(Vector &result, uint32_t dict_offset, idx_t dict_idx) {
-	D_ASSERT(dict_offset <= NumericCast<uint32_t>(segment.GetBlockSize()));
-
+	if (dict_idx >= dict_count) {
+		throw IOException("Corrupted DICT_FSST string segment: dictionary index is out of range");
+	}
 	if (dict_idx == 0) {
 		return string_t(nullptr, 0);
 	}
 	uint32_t string_len = string_lengths[dict_idx];
+	if (dict_offset > dictionary_size || string_len > dictionary_size - dict_offset) {
+		throw IOException("Corrupted DICT_FSST string segment: dictionary string is out of range");
+	}
 
 	// normal string: read string from this block
 	auto dict_pos = dict_ptr + dict_offset;
@@ -44,48 +48,62 @@ string_t CompressedStringScanState::FetchStringFromDict(Vector &result, uint32_t
 }
 
 void CompressedStringScanState::Initialize(bool initialize_dictionary) {
-	baseptr = handle->GetDataMutable() + segment.GetBlockOffset();
+	reader = CompressionSegmentReader(*handle, segment, "DICT_FSST string segment");
+	reader.GetSpan(0, DictFSSTCompression::DICTIONARY_HEADER_SIZE);
 
 	// Load header values
-	auto header_ptr = reinterpret_cast<dict_fsst_compression_header_t *>(baseptr);
-	mode = header_ptr->mode;
+	mode = reader.ReadAt<DictFSSTMode>(offsetof(dict_fsst_compression_header_t, mode));
 	if (mode >= DictFSSTMode::COUNT) {
-		throw FatalException("This block was written with a mode that is not recognized by this version, highest "
-		                     "available mode %d, found mode: %d",
-		                     static_cast<uint8_t>(DictFSSTMode::COUNT), static_cast<uint8_t>(mode));
+		throw IOException("Corrupted DICT_FSST string segment: invalid compression mode");
 	}
 
-	dict_count = header_ptr->dict_count;
-	auto symbol_table_size = header_ptr->symbol_table_size;
-	dictionary_size = header_ptr->dict_size;
+	dict_count = reader.ReadAt<uint32_t>(offsetof(dict_fsst_compression_header_t, dict_count));
+	auto symbol_table_size = reader.ReadAt<uint32_t>(offsetof(dict_fsst_compression_header_t, symbol_table_size));
+	dictionary_size = reader.ReadAt<uint32_t>(offsetof(dict_fsst_compression_header_t, dict_size));
+	if (dict_count == 0) {
+		throw IOException("Corrupted DICT_FSST string segment: dictionary count is zero");
+	}
 
 	dictionary_indices_width =
-	    (bitpacking_width_t)(Load<uint8_t>(data_ptr_cast(&header_ptr->dictionary_indices_width)));
-	string_lengths_width = (bitpacking_width_t)(Load<uint8_t>(data_ptr_cast(&header_ptr->string_lengths_width)));
+	    reader.ReadAt<uint8_t>(offsetof(dict_fsst_compression_header_t, dictionary_indices_width));
+	string_lengths_width = reader.ReadAt<uint8_t>(offsetof(dict_fsst_compression_header_t, string_lengths_width));
+	if (string_lengths_width > sizeof(uint32_t) * 8) {
+		throw IOException("Corrupted DICT_FSST string segment: invalid string-length bit width");
+	}
+	if (mode == DictFSSTMode::FSST_ONLY) {
+		if (dictionary_indices_width != 0 || dict_count != segment.count + 1) {
+			throw IOException("Corrupted DICT_FSST string segment: invalid FSST-only dictionary metadata");
+		}
+	} else if (dictionary_indices_width != BitpackingPrimitives::MinimumBitWidth(dict_count - 1)) {
+		throw IOException("Corrupted DICT_FSST string segment: invalid dictionary-index bit width");
+	}
 
 	auto string_lengths_space = BitpackingPrimitives::GetRequiredSize(dict_count, string_lengths_width);
 	auto dictionary_indices_space =
 	    BitpackingPrimitives::GetRequiredSize(segment.count.load(), dictionary_indices_width);
 
-	auto dictionary_dest = AlignValue<idx_t>(DictFSSTCompression::DICTIONARY_HEADER_SIZE);
-	auto symbol_table_dest = AlignValue<idx_t>(dictionary_dest + dictionary_size);
-	auto string_lengths_dest = AlignValue<idx_t>(symbol_table_dest + symbol_table_size);
-	auto dictionary_indices_dest = AlignValue<idx_t>(string_lengths_dest + string_lengths_space);
-
-	const auto total_space = segment.GetBlockOffset() + dictionary_indices_dest + dictionary_indices_space;
-	if (total_space > segment.GetBlockSize()) {
-		throw IOException(
-		    "Failed to scan dictionary string - index was out of range. Database file appears to be corrupted.");
+	auto layout = reader;
+	layout.SetPosition(DictFSSTCompression::DICTIONARY_HEADER_SIZE);
+	layout.Align(8);
+	dict_ptr = layout.ReadSpan(dictionary_size);
+	layout.Align(8);
+	auto symbol_table_ptr = layout.ReadSpan(symbol_table_size);
+	layout.Align(8);
+	auto string_lengths_ptr = layout.ReadSpan(string_lengths_space);
+	layout.Align(8);
+	dictionary_indices_offset = layout.Position();
+	dictionary_indices_size = dictionary_indices_space;
+	layout.ReadSpan(dictionary_indices_space);
+	if ((mode == DictFSSTMode::DICTIONARY && symbol_table_size != 0) ||
+	    (mode != DictFSSTMode::DICTIONARY && symbol_table_size == 0)) {
+		throw IOException("Corrupted DICT_FSST string segment: invalid FSST symbol-table size");
 	}
-	dict_ptr = data_ptr_cast(baseptr + dictionary_dest);
-	dictionary_indices_ptr = data_ptr_cast(baseptr + dictionary_indices_dest);
-	string_lengths_ptr = data_ptr_cast(baseptr + string_lengths_dest);
 
 	switch (mode) {
 	case DictFSSTMode::FSST_ONLY:
 	case DictFSSTMode::DICT_FSST: {
 		decoder = new duckdb_fsst_decoder_t;
-		auto ret = duckdb_fsst_import(reinterpret_cast<duckdb_fsst_decoder_t *>(decoder), baseptr + symbol_table_dest);
+		auto ret = duckdb_fsst_import(reinterpret_cast<duckdb_fsst_decoder_t *>(decoder), symbol_table_ptr);
 		if (ret == 0) {
 			throw IOException("Failed to scan DICT_FSST string segment: invalid FSST symbol table. Database file "
 			                  "appears to be corrupted.");
@@ -99,6 +117,19 @@ void CompressedStringScanState::Initialize(bool initialize_dictionary) {
 	string_lengths.resize(AlignValue<uint32_t, BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE>(dict_count));
 	BitpackingPrimitives::UnPackBuffer<uint32_t>(data_ptr_cast(string_lengths.data()),
 	                                             data_ptr_cast(string_lengths_ptr), dict_count, string_lengths_width);
+	if (string_lengths[0] != 0) {
+		throw IOException("Corrupted DICT_FSST string segment: NULL dictionary entry has a nonzero length");
+	}
+	uint32_t dictionary_bytes = 0;
+	for (idx_t i = 0; i < dict_count; i++) {
+		if (string_lengths[i] > dictionary_size - dictionary_bytes) {
+			throw IOException("Corrupted DICT_FSST string segment: dictionary lengths are out of range");
+		}
+		dictionary_bytes += string_lengths[i];
+	}
+	if (dictionary_bytes != dictionary_size) {
+		throw IOException("Corrupted DICT_FSST string segment: dictionary lengths do not match dictionary size");
+	}
 	if (!initialize_dictionary || mode == DictFSSTMode::FSST_ONLY) {
 		// Used by fetch, as fetch will never produce a DictionaryVector
 		return;
@@ -121,6 +152,9 @@ void CompressedStringScanState::Initialize(bool initialize_dictionary) {
 }
 
 const SelectionVector &CompressedStringScanState::GetSelVec(idx_t start, idx_t scan_count) {
+	if (start > segment.count || scan_count > segment.count - start) {
+		throw IOException("Corrupted DICT_FSST string segment: scan range is out of bounds");
+	}
 	switch (mode) {
 	case DictFSSTMode::FSST_ONLY: {
 		return *FlatVector::IncrementalSelectionVector();
@@ -137,7 +171,12 @@ const SelectionVector &CompressedStringScanState::GetSelVec(idx_t start, idx_t s
 			sel_vec = make_buffer<SelectionVector>(decompress_count);
 		}
 
-		data_ptr_t sel_buf_src = &dictionary_indices_ptr[((start - start_offset) * dictionary_indices_width) / 8];
+		auto source_offset = ((start - start_offset) * dictionary_indices_width) / 8;
+		auto source_size = BitpackingPrimitives::GetRequiredSize(decompress_count, dictionary_indices_width);
+		if (source_offset > dictionary_indices_size || source_size > dictionary_indices_size - source_offset) {
+			throw IOException("Corrupted DICT_FSST string segment: selection data is out of range");
+		}
+		data_ptr_t sel_buf_src = reader.GetSpan(dictionary_indices_offset + source_offset, source_size);
 		sel_t *sel_vec_ptr = sel_vec->data();
 		BitpackingPrimitives::UnPackBuffer<sel_t>(data_ptr_cast(sel_vec_ptr), sel_buf_src, decompress_count,
 		                                          dictionary_indices_width);
@@ -145,6 +184,11 @@ const SelectionVector &CompressedStringScanState::GetSelVec(idx_t start, idx_t s
 		if (start_offset != 0) {
 			for (idx_t i = 0; i < scan_count; i++) {
 				sel_vec->set_index(i, sel_vec->get_index(i + start_offset));
+			}
+		}
+		for (idx_t i = 0; i < scan_count; i++) {
+			if (sel_vec->get_index(i) >= dict_count) {
+				throw IOException("Corrupted DICT_FSST string segment: selection index is out of range");
 			}
 		}
 

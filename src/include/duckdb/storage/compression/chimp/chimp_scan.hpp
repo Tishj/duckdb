@@ -10,6 +10,7 @@
 
 #include "duckdb/storage/compression/chimp/chimp.hpp"
 #include "duckdb/storage/compression/chimp/algorithm/chimp_utils.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -27,8 +28,8 @@ namespace duckdb {
 template <class CHIMP_TYPE>
 struct ChimpGroupState {
 public:
-	void Init(uint8_t *data) {
-		chimp_state.input.SetStream(data);
+	void Init(uint8_t *data, idx_t size) {
+		chimp_state.input.SetStream(data, size);
 		Reset();
 	}
 
@@ -63,15 +64,15 @@ public:
 	}
 
 	void LoadLeadingZeros(uint8_t *packed_data, idx_t leading_zero_block_size) {
-#ifdef DEBUG
 		idx_t flag_one_count = 0;
 		for (idx_t i = 0; i < max_flags_to_read; i++) {
 			flag_one_count += flags[1 + i] == ChimpConstants::Flags::LEADING_ZERO_LOAD;
 		}
 		// There are 8 leading zero values packed in one block, the block could be partially filled
 		flag_one_count = AlignValue<idx_t, 8>(flag_one_count);
-		D_ASSERT(flag_one_count == leading_zero_block_size);
-#endif
+		if (flag_one_count != leading_zero_block_size) {
+			throw IOException("Corrupted Chimp segment: leading-zero count does not match flags");
+		}
 		LeadingZeroBuffer<false> leading_zero_buffer;
 		leading_zero_buffer.SetBuffer(packed_data);
 		for (idx_t i = 0; i < leading_zero_block_size; i++) {
@@ -93,10 +94,14 @@ public:
 		for (idx_t i = 0; i < packed_data_block_count; i++) {
 			PackedDataUtils<CHIMP_TYPE>::Unpack(packed_data[i], unpacked_data_blocks[i]);
 			if (unpacked_data_blocks[i].significant_bits == 0) {
-				unpacked_data_blocks[i].significant_bits = 64;
+				unpacked_data_blocks[i].significant_bits = sizeof(CHIMP_TYPE) * 8;
 			}
 			unpacked_data_blocks[i].leading_zero =
 			    ChimpConstants::Decompression::LEADING_REPRESENTATION[unpacked_data_blocks[i].leading_zero];
+			if (unpacked_data_blocks[i].significant_bits + unpacked_data_blocks[i].leading_zero >
+			    sizeof(CHIMP_TYPE) * 8) {
+				throw IOException("Corrupted Chimp segment: invalid packed value metadata");
+			}
 		}
 		unpacked_index = 0;
 		max_packed_data_to_read = packed_data_block_count;
@@ -132,21 +137,28 @@ struct ChimpScanState : public SegmentScanState {
 public:
 	using CHIMP_TYPE = typename ChimpType<T>::TYPE;
 
-	explicit ChimpScanState(ColumnSegment &segment) : segment(segment), segment_count(segment.count) {
+	explicit ChimpScanState(ColumnSegment &segment)
+	    : reader(nullptr, 0, "Chimp segment"), metadata_reader(nullptr, 0, "Chimp metadata"), segment(segment),
+	      segment_count(segment.count) {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.GetDatabase());
 
 		handle = buffer_manager.Pin(segment.GetBlockHandle());
-		auto dataptr = handle.GetDataMutable();
-		// ScanStates never exceed the boundaries of a Segment,
-		// but are not guaranteed to start at the beginning of the Block
-		auto start_of_data_segment = dataptr + segment.GetBlockOffset() + ChimpPrimitives::HEADER_SIZE;
-		group_state.Init(start_of_data_segment);
-		auto metadata_offset = Load<uint32_t>(dataptr + segment.GetBlockOffset());
-		metadata_ptr = dataptr + segment.GetBlockOffset() + metadata_offset;
+		reader = CompressionSegmentReader(handle, segment, "Chimp segment");
+		metadata_offset = reader.ReadAt<uint32_t>(0);
+		if (metadata_offset < ChimpPrimitives::HEADER_SIZE || metadata_offset > reader.Size()) {
+			throw IOException("Corrupted Chimp segment: metadata is out of range");
+		}
+		metadata_reader = reader.SubReader(ChimpPrimitives::HEADER_SIZE, metadata_offset - ChimpPrimitives::HEADER_SIZE,
+		                                   "Chimp metadata");
+		metadata_reader.SetPosition(metadata_reader.Size());
+		group_state.Init(reader.GetSpan(ChimpPrimitives::HEADER_SIZE, metadata_offset - ChimpPrimitives::HEADER_SIZE),
+		                 metadata_offset - ChimpPrimitives::HEADER_SIZE);
 	}
 
 	BufferHandle handle;
-	data_ptr_t metadata_ptr;
+	CompressionSegmentReader reader;
+	CompressionSegmentReader metadata_reader;
+	idx_t metadata_offset;
 	idx_t total_value_count = 0;
 	ChimpGroupState<CHIMP_TYPE> group_state;
 
@@ -185,31 +197,28 @@ public:
 		//! Extracting all the flags and counting the 3's
 
 		// Load the offset indicating where a groups data starts
-		metadata_ptr -= sizeof(uint32_t);
-		auto data_byte_offset = Load<uint32_t>(metadata_ptr);
-		D_ASSERT(data_byte_offset < segment.GetBlockSize());
-		//  Only used for point queries
-		(void)data_byte_offset;
+		auto data_byte_offset = metadata_reader.ReadBackward<uint32_t>();
 
 		// Load how many blocks of leading zero bits we have
-		metadata_ptr -= sizeof(uint8_t);
-		auto leading_zero_block_count = Load<uint8_t>(metadata_ptr);
-		D_ASSERT(leading_zero_block_count <= ChimpPrimitives::CHIMP_SEQUENCE_SIZE / 8);
+		auto leading_zero_block_count = metadata_reader.ReadBackward<uint8_t>();
+		if (leading_zero_block_count > ChimpPrimitives::CHIMP_SEQUENCE_SIZE / 8) {
+			throw IOException("Corrupted Chimp segment: invalid leading-zero block count");
+		}
 
 		// Load the leading zero block count
-		metadata_ptr -= 3ULL * leading_zero_block_count;
-		const auto leading_zero_block_ptr = metadata_ptr;
+		const auto leading_zero_block_ptr = metadata_reader.ReadBackwardSpan(3ULL * leading_zero_block_count);
 
 		// Figure out how many flags there are
-		D_ASSERT(segment_count >= total_value_count);
+		if (total_value_count >= segment_count) {
+			throw IOException("Corrupted Chimp segment: group count exceeds segment count");
+		}
 		auto group_size = MinValue<idx_t>(segment_count - total_value_count, ChimpPrimitives::CHIMP_SEQUENCE_SIZE);
 		// Reduce by one, because the first value of a group does not have a flag
 		auto flag_count = group_size - 1;
 		uint16_t flag_byte_count = AlignValue<uint16_t, 4>(UnsafeNumericCast<uint16_t>(flag_count)) / 4;
 
 		// Load the flags
-		metadata_ptr -= flag_byte_count;
-		auto flags = metadata_ptr;
+		auto flags = metadata_reader.ReadBackwardSpan(flag_byte_count);
 		group_state.LoadFlags(flags, flag_count);
 
 		// Load the leading zero blocks
@@ -217,12 +226,18 @@ public:
 
 		// Load packed data blocks
 		auto packed_data_block_count = group_state.CalculatePackedDataCount();
-		metadata_ptr -= packed_data_block_count * 2;
-		if ((uint64_t)metadata_ptr & 1) {
+		metadata_reader.Rewind(packed_data_block_count * sizeof(uint16_t));
+		auto absolute_metadata_position = ChimpPrimitives::HEADER_SIZE + metadata_reader.Position();
+		if (absolute_metadata_position & 1) {
 			// Align on a two-byte boundary
-			metadata_ptr--;
+			metadata_reader.Rewind(1);
 		}
-		group_state.LoadPackedData((uint16_t *)metadata_ptr, packed_data_block_count);
+		auto packed_data = metadata_reader.GetArray<uint16_t>(metadata_reader.Position(), packed_data_block_count);
+		group_state.LoadPackedData(packed_data, packed_data_block_count);
+
+		if (data_byte_offset < ChimpPrimitives::HEADER_SIZE || data_byte_offset >= metadata_offset) {
+			throw IOException("Corrupted Chimp segment: group data is out of range");
+		}
 
 		group_state.Reset();
 

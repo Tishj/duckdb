@@ -1,12 +1,20 @@
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 #include "duckdb/storage/segment/uncompressed.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 
 namespace duckdb {
+
+static data_ptr_t GetValidityData(BufferHandle &handle, ColumnSegment &segment) {
+	CompressionSegmentReader reader(handle, segment, "uncompressed validity segment");
+	auto entry_count = segment.count / ValidityMask::BITS_PER_VALUE;
+	entry_count += segment.count % ValidityMask::BITS_PER_VALUE != 0;
+	return reader.GetSpan(0, entry_count * sizeof(validity_t));
+}
 
 //===--------------------------------------------------------------------===//
 // Mask constants
@@ -460,7 +468,7 @@ void ValidityScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t s
 	static_assert(sizeof(validity_t) == sizeof(uint64_t), "validity_t should be 64-bit");
 	auto &scan_state = state.scan_state->Cast<ValidityScanState>();
 
-	auto buffer_ptr = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
+	auto buffer_ptr = GetValidityData(scan_state.handle, segment);
 	D_ASSERT(scan_state.block_id == segment.GetBlockHandle()->BlockId());
 	auto &result_mask = FlatVector::ValidityMutable(result);
 	ValidityUncompressed::UnalignedScan(buffer_ptr, segment.count, start, result_mask, result_offset, scan_count);
@@ -473,7 +481,7 @@ void ValidityScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_cou
 	if (start % ValidityMask::BITS_PER_VALUE == 0) {
 		auto &scan_state = state.scan_state->Cast<ValidityScanState>();
 
-		auto buffer_ptr = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
+		auto buffer_ptr = GetValidityData(scan_state.handle, segment);
 		D_ASSERT(scan_state.block_id == segment.GetBlockHandle()->BlockId());
 		auto &result_mask = FlatVector::ValidityMutable(result);
 		ValidityUncompressed::AlignedScan(buffer_ptr, start, result_mask, scan_count);
@@ -491,7 +499,7 @@ void ValiditySelect(ColumnSegment &segment, ColumnScanState &state, idx_t, Vecto
 	result.Flatten();
 
 	auto &scan_state = state.scan_state->Cast<ValidityScanState>();
-	auto buffer_ptr = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
+	auto buffer_ptr = GetValidityData(scan_state.handle, segment);
 	auto &result_mask = FlatVector::ValidityMutable(result);
 	auto input_data = reinterpret_cast<validity_t *>(buffer_ptr);
 
@@ -512,7 +520,7 @@ void ValidityFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row
 	D_ASSERT(row_id >= 0 && row_id < row_t(segment.count));
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.GetDatabase());
 	auto handle = buffer_manager.Pin(segment.GetBlockHandle());
-	auto dataptr = handle.GetDataMutable() + segment.GetBlockOffset();
+	auto dataptr = GetValidityData(handle, segment);
 	ValidityMask mask(reinterpret_cast<validity_t *>(dataptr), segment.count);
 	auto &result_mask = FlatVector::ValidityMutable(result);
 	if (!mask.RowIsValidUnsafe(NumericCast<idx_t>(row_id))) {

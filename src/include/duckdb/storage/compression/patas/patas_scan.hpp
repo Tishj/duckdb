@@ -14,6 +14,7 @@
 #include "duckdb/storage/compression/patas/shared.hpp"
 #include "duckdb/storage/compression/patas/algorithm/patas.hpp"
 #include "duckdb/storage/compression/patas/patas.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
@@ -33,8 +34,8 @@ struct PatasUnpackedValueStats {
 template <class EXACT_TYPE>
 struct PatasGroupState {
 public:
-	void Init(uint8_t *data) {
-		byte_reader.SetStream(data);
+	void Init(uint8_t *data, idx_t size) {
+		byte_reader.SetStream(data, size);
 	}
 
 	idx_t BytesRead() const {
@@ -95,22 +96,34 @@ struct PatasScanState : public SegmentScanState {
 public:
 	using EXACT_TYPE = typename FloatingToExact<T>::TYPE;
 
-	explicit PatasScanState(ColumnSegment &segment) : segment(segment), count(segment.count) {
+	explicit PatasScanState(ColumnSegment &segment)
+	    : reader(nullptr, 0, "Patas segment"), segment(segment), count(segment.count) {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.GetDatabase());
 
 		handle = buffer_manager.Pin(segment.GetBlockHandle());
 		// ScanStates never exceed the boundaries of a Segment,
 		// but are not guaranteed to start at the beginning of the Block
-		segment_data = handle.GetDataMutable() + segment.GetBlockOffset();
-		auto metadata_offset = Load<uint32_t>(segment_data);
-		if (segment.GetBlockOffset() + metadata_offset > segment.GetBlockSize()) {
-			throw IOException("Corrupted Patas segment: metadata_offset reaches outside of the blocks memory");
+		reader = CompressionSegmentReader(handle, segment, "Patas segment");
+		segment_data = reader.GetSpan(0, reader.Size());
+		auto metadata_offset = reader.ReadAt<uint32_t>(0);
+		auto group_count = count / PatasPrimitives::PATAS_GROUP_SIZE;
+		group_count += count % PatasPrimitives::PATAS_GROUP_SIZE != 0;
+		if (group_count > reader.Size() / sizeof(uint32_t) || count > reader.Size() / sizeof(uint16_t)) {
+			throw IOException("Corrupted Patas segment: metadata size is out of range");
 		}
-		metadata_ptr = segment_data + metadata_offset;
+		auto metadata_size = group_count * sizeof(uint32_t) + count * sizeof(uint16_t);
+		if (metadata_offset > reader.Size() || metadata_size > metadata_offset ||
+		    metadata_offset - metadata_size < PatasPrimitives::HEADER_SIZE) {
+			throw IOException("Corrupted Patas segment: metadata is out of range");
+		}
+		metadata_start = metadata_offset - metadata_size;
+		metadata_position = metadata_offset;
 	}
 
 	BufferHandle handle;
-	data_ptr_t metadata_ptr;
+	CompressionSegmentReader reader;
+	idx_t metadata_start;
+	idx_t metadata_position;
 	data_ptr_t segment_data;
 	idx_t total_value_count = 0;
 	PatasGroupState<EXACT_TYPE> group_state;
@@ -150,10 +163,21 @@ public:
 	// Using the metadata, we can avoid loading any of the data if we don't care about the group at all
 	void SkipGroup() {
 		// Skip the offset indicating where the data starts
-		metadata_ptr -= sizeof(uint32_t);
+		if (metadata_position < metadata_start + sizeof(uint32_t)) {
+			throw IOException("Corrupted Patas segment: metadata is out of range");
+		}
+		metadata_position -= sizeof(uint32_t);
+		auto data_byte_offset = reader.ReadAt<uint32_t>(metadata_position);
+		if (data_byte_offset < PatasPrimitives::HEADER_SIZE || data_byte_offset >= metadata_start) {
+			throw IOException("Corrupted Patas segment: data offset is out of range");
+		}
 		idx_t group_size = MinValue((idx_t)PatasPrimitives::PATAS_GROUP_SIZE, count - total_value_count);
 		// Skip the blocks of packed data
-		metadata_ptr -= sizeof(uint16_t) * group_size;
+		auto packed_size = sizeof(uint16_t) * group_size;
+		if (packed_size > metadata_position - metadata_start) {
+			throw IOException("Corrupted Patas segment: packed metadata is out of range");
+		}
+		metadata_position -= packed_size;
 
 		total_value_count += group_size;
 	}
@@ -163,20 +187,36 @@ public:
 		group_state.Reset();
 
 		// Load the offset indicating where a groups data starts
-		metadata_ptr -= sizeof(uint32_t);
-		auto data_byte_offset = Load<uint32_t>(metadata_ptr);
-		if (segment.GetBlockOffset() + data_byte_offset >= segment.GetBlockSize()) {
-			throw IOException("Corrupted Patas segment: data_byte_offset would reach outside of the blocks memory");
+		if (metadata_position < metadata_start + sizeof(uint32_t)) {
+			throw IOException("Corrupted Patas segment: metadata is out of range");
 		}
-
-		// Initialize the byte_reader with the data values for the group
-		group_state.Init(segment_data + data_byte_offset);
+		metadata_position -= sizeof(uint32_t);
+		auto data_byte_offset = reader.ReadAt<uint32_t>(metadata_position);
 
 		idx_t group_size = MinValue((idx_t)PatasPrimitives::PATAS_GROUP_SIZE, (count - total_value_count));
 
 		// Read the compacted blocks of (7 + 6 + 3 bits) value stats
-		metadata_ptr -= sizeof(uint16_t) * group_size;
-		group_state.LoadPackedData((uint16_t *)metadata_ptr, group_size);
+		auto packed_size = sizeof(uint16_t) * group_size;
+		if (packed_size > metadata_position - metadata_start) {
+			throw IOException("Corrupted Patas segment: packed metadata is out of range");
+		}
+		metadata_position -= packed_size;
+		group_state.LoadPackedData(reader.GetArray<uint16_t>(metadata_position, group_size), group_size);
+
+		idx_t data_end = metadata_start;
+		if (total_value_count + group_size < count) {
+			if (metadata_position < metadata_start + sizeof(uint32_t)) {
+				throw IOException("Corrupted Patas segment: next group metadata is out of range");
+			}
+			data_end = reader.ReadAt<uint32_t>(metadata_position - sizeof(uint32_t));
+		}
+		if (data_byte_offset < PatasPrimitives::HEADER_SIZE || data_end <= data_byte_offset ||
+		    data_end > metadata_start) {
+			throw IOException("Corrupted Patas segment: group data is out of range");
+		}
+
+		// Initialize the byte_reader with the data values for the group
+		group_state.Init(reader.GetSpan(data_byte_offset, data_end - data_byte_offset), data_end - data_byte_offset);
 
 		// Read all the values to the specified 'value_buffer'
 		group_state.template LoadValues<SKIP>(value_buffer, group_size);

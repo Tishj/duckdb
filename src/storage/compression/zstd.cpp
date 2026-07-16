@@ -12,6 +12,7 @@
 #include "duckdb/storage/table/data_table_info.hpp"
 
 #include "duckdb/storage/compression/zstd/zstd.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 #include "zstd.h"
 
 /*
@@ -678,7 +679,7 @@ struct ZSTDVectorScanMetadata {
 
 struct ZSTDVectorScanState {
 public:
-	ZSTDVectorScanState() {
+	ZSTDVectorScanState() : page_reader(nullptr, 0, "ZSTD data page") {
 	}
 	ZSTDVectorScanState(ZSTDVectorScanState &&other) = default;
 	ZSTDVectorScanState(const ZSTDVectorScanState &other) = delete;
@@ -688,8 +689,8 @@ public:
 	ZSTDVectorScanMetadata metadata;
 	//! The (pinned) buffer handle(s) for this vectors data
 	vector<BufferHandle> buffer_handles;
-	//! The current pointer at which we're reading the vectors data
-	data_ptr_t current_buffer_ptr;
+	CompressionSegmentReader page_reader;
+	idx_t next_block_id_offset = 0;
 	//! The (uncompressed) string lengths for this vector
 	string_length_t *string_lengths;
 	//! The amount of values already consumed from the state
@@ -708,33 +709,38 @@ public:
 	explicit ZSTDScanState(ColumnSegment &segment)
 	    : state(segment.GetSegmentState()->Cast<UncompressedStringSegmentState>()),
 	      block_manager(segment.GetBlockHandle()->GetBlockManager()),
-	      buffer_manager(BufferManager::GetBufferManager(segment.GetDatabase())),
-	      segment_block_offset(segment.GetBlockOffset()), segment(segment) {
+	      buffer_manager(BufferManager::GetBufferManager(segment.GetDatabase())), reader(nullptr, 0, "ZSTD segment"),
+	      segment(segment) {
 		decompression_context = duckdb_zstd::ZSTD_createDCtx();
 		segment_handle = buffer_manager.Pin(segment.GetBlockHandle());
 
-		auto data = segment_handle.GetDataMutable() + segment.GetBlockOffset();
-		idx_t offset = 0;
+		reader = CompressionSegmentReader(segment_handle, segment, "ZSTD segment");
 
 		segment_count = segment.count.load();
 		idx_t amount_of_vectors = (segment_count / ZSTD_VECTOR_SIZE) + ((segment_count % ZSTD_VECTOR_SIZE) != 0);
 
 		// Set pointers to the Vector Metadata
-		offset = AlignValue<idx_t, sizeof(page_id_t)>(offset);
-		page_ids = reinterpret_cast<page_id_t *>(data + offset);
-		offset += (sizeof(page_id_t) * amount_of_vectors);
-
-		offset = AlignValue<idx_t, sizeof(page_offset_t)>(offset);
-		page_offsets = reinterpret_cast<page_offset_t *>(data + offset);
-		offset += (sizeof(page_offset_t) * amount_of_vectors);
-
-		offset = AlignValue<idx_t, sizeof(uncompressed_size_t)>(offset);
-		uncompressed_sizes = reinterpret_cast<uncompressed_size_t *>(data + offset);
-		offset += (sizeof(uncompressed_size_t) * amount_of_vectors);
-
-		offset = AlignValue<idx_t, sizeof(compressed_size_t)>(offset);
-		compressed_sizes = reinterpret_cast<compressed_size_t *>(data + offset);
-		offset += (sizeof(compressed_size_t) * amount_of_vectors);
+		auto metadata_reader = reader;
+		metadata_reader.Align(alignof(page_id_t));
+		page_ids = metadata_reader.ReadArray<page_id_t>(amount_of_vectors);
+		metadata_reader.Align(alignof(page_offset_t));
+		page_offsets = metadata_reader.ReadArray<page_offset_t>(amount_of_vectors);
+		metadata_reader.Align(alignof(uncompressed_size_t));
+		uncompressed_sizes = metadata_reader.ReadArray<uncompressed_size_t>(amount_of_vectors);
+		metadata_reader.Align(alignof(compressed_size_t));
+		compressed_sizes = metadata_reader.ReadArray<compressed_size_t>(amount_of_vectors);
+		segment_data_start = metadata_reader.Position();
+		for (idx_t i = 0; i < amount_of_vectors; i++) {
+			if (uncompressed_sizes[i] > NumericLimits<idx_t>::Maximum() ||
+			    compressed_sizes[i] > NumericLimits<idx_t>::Maximum()) {
+				throw IOException("Corrupted ZSTD segment: vector size exceeds addressable memory");
+			}
+			if ((page_ids[i] == INVALID_BLOCK &&
+			     (page_offsets[i] < segment_data_start || page_offsets[i] > reader.Size())) ||
+			    (page_ids[i] != INVALID_BLOCK && page_offsets[i] > block_manager.GetBlockSize())) {
+				throw IOException("Corrupted ZSTD segment: vector page offset is out of range");
+			}
+		}
 
 		scanned_count = 0;
 	}
@@ -750,6 +756,11 @@ public:
 	}
 
 	ZSTDVectorScanMetadata GetVectorMetadata(idx_t vector_idx) {
+		auto vector_count = segment_count / ZSTD_VECTOR_SIZE;
+		vector_count += segment_count % ZSTD_VECTOR_SIZE != 0;
+		if (vector_idx >= vector_count) {
+			throw IOException("Corrupted ZSTD segment: vector index is out of range");
+		}
 		idx_t previous_value_count = vector_idx * ZSTD_VECTOR_SIZE;
 		idx_t value_count = MinValue<idx_t>(segment_count - previous_value_count, ZSTD_VECTOR_SIZE);
 
@@ -789,43 +800,50 @@ public:
 		current_vector->metadata = GetVectorMetadata(vector_idx);
 		auto &metadata = current_vector->metadata;
 		auto &scan_state = *current_vector;
-		data_ptr_t handle_start;
-		idx_t ptr_offset = 0;
+		idx_t ptr_offset = metadata.block_offset;
 		if (metadata.block_id == INVALID_BLOCK) {
 			// Data lives on the segment's page
-			handle_start = segment_handle.GetDataMutable();
-			ptr_offset += segment_block_offset;
+			scan_state.page_reader = reader;
 		} else {
 			// Data lives on an extra page, have to load the block first
 			auto block = LoadPage(metadata.block_id);
 			auto data_handle = buffer_manager.Pin(block);
-			handle_start = data_handle.GetDataMutable();
+			scan_state.page_reader = CompressionSegmentReader(data_handle.GetDataMutable(),
+			                                                  block_manager.GetBlockSize(), "ZSTD overflow page");
 			scan_state.buffer_handles.push_back(std::move(data_handle));
 		}
 
-		ptr_offset += metadata.block_offset;
-		ptr_offset = AlignValue<idx_t, sizeof(string_length_t)>(ptr_offset);
-		scan_state.current_buffer_ptr = handle_start + ptr_offset;
+		scan_state.page_reader.SetPosition(ptr_offset);
+		scan_state.page_reader.Align(alignof(string_length_t));
 
 		auto vector_size = metadata.count;
 
-		auto string_lengths_size = (sizeof(string_length_t) * vector_size);
-		scan_state.string_lengths = reinterpret_cast<string_length_t *>(scan_state.current_buffer_ptr);
-		scan_state.current_buffer_ptr += string_lengths_size;
+		scan_state.string_lengths = scan_state.page_reader.ReadArray<string_length_t>(vector_size);
+		uint64_t total_string_length = 0;
+		for (idx_t i = 0; i < vector_size; i++) {
+			total_string_length += scan_state.string_lengths[i];
+		}
+		if (total_string_length != metadata.uncompressed_size) {
+			throw IOException("Corrupted ZSTD segment: string lengths do not match uncompressed size");
+		}
 
 		// Update the in_buffer to point to the start of the compressed data frame
-		idx_t current_offset = UnsafeNumericCast<idx_t>(scan_state.current_buffer_ptr - handle_start);
-		scan_state.in_buffer.src = scan_state.current_buffer_ptr;
+		auto current_offset = scan_state.page_reader.Position();
 		scan_state.in_buffer.pos = 0;
-		if (scan_state.metadata.block_offset + string_lengths_size + scan_state.metadata.compressed_size >
-		    (segment.SegmentSize() - sizeof(block_id_t))) {
-			//! We know that the compressed size is too big to fit on the current page
-			scan_state.in_buffer.size =
-			    MinValue(metadata.compressed_size, block_manager.GetBlockSize() - sizeof(block_id_t) - current_offset);
+		auto compressed_size = UnsafeNumericCast<idx_t>(metadata.compressed_size);
+		auto available = scan_state.page_reader.Remaining();
+		idx_t input_size;
+		if (compressed_size > available) {
+			if (available < sizeof(block_id_t)) {
+				throw IOException("Corrupted ZSTD segment: compressed data page has no room for next-page id");
+			}
+			input_size = available - sizeof(block_id_t);
 		} else {
-			scan_state.in_buffer.size =
-			    MinValue(metadata.compressed_size, block_manager.GetBlockSize() - current_offset);
+			input_size = compressed_size;
 		}
+		scan_state.in_buffer.src = scan_state.page_reader.GetSpan(current_offset, input_size);
+		scan_state.in_buffer.size = input_size;
+		scan_state.next_block_id_offset = current_offset + input_size;
 
 		// Initialize the context for streaming decompression
 		duckdb_zstd::ZSTD_DCtx_reset(decompression_context, duckdb_zstd::ZSTD_reset_session_only);
@@ -839,29 +857,38 @@ public:
 
 	void LoadNextPageForVector(ZSTDVectorScanState &scan_state) {
 		if (scan_state.in_buffer.pos != scan_state.in_buffer.size) {
-			throw InternalException(
-			    "(ZSTDScanState::LoadNextPageForVector) Trying to load the next page before consuming the current one");
+			throw IOException("Corrupted ZSTD segment: next page requested before current page was consumed");
+		}
+		if (scan_state.compressed_scan_count >= scan_state.metadata.compressed_size) {
+			throw IOException("Corrupted ZSTD segment: compressed stream ended before requested output");
 		}
 		// Read the next block id from the end of the page
-		auto base_ptr =
-		    reinterpret_cast<data_ptr_t>(const_cast<void *>(scan_state.in_buffer.src)); // NOLINT: const cast
-		auto next_id_ptr = base_ptr + scan_state.in_buffer.size;
-		block_id_t next_id = Load<block_id_t>(next_id_ptr);
+		block_id_t next_id = scan_state.page_reader.ReadAt<block_id_t>(scan_state.next_block_id_offset);
 
 		// Load the next page
 		auto block = LoadPage(next_id);
 		auto handle = buffer_manager.Pin(block);
 		auto ptr = handle.GetDataMutable();
+		scan_state.page_reader = CompressionSegmentReader(ptr, block_manager.GetBlockSize(), "ZSTD overflow page");
 		scan_state.buffer_handles.push_back(std::move(handle));
-		scan_state.current_buffer_ptr = ptr;
 
 		// Update the in_buffer to point to the new page
-		scan_state.in_buffer.src = ptr;
 		scan_state.in_buffer.pos = 0;
 
-		idx_t page_size = segment.SegmentSize() - sizeof(block_id_t);
-		idx_t remaining_compressed_data = scan_state.metadata.compressed_size - scan_state.compressed_scan_count;
-		scan_state.in_buffer.size = MinValue<idx_t>(page_size, remaining_compressed_data);
+		idx_t remaining_compressed_data =
+		    UnsafeNumericCast<idx_t>(scan_state.metadata.compressed_size - scan_state.compressed_scan_count);
+		idx_t input_size;
+		if (remaining_compressed_data > scan_state.page_reader.Size()) {
+			if (scan_state.page_reader.Size() < sizeof(block_id_t)) {
+				throw IOException("Corrupted ZSTD segment: overflow page is too small");
+			}
+			input_size = scan_state.page_reader.Size() - sizeof(block_id_t);
+		} else {
+			input_size = remaining_compressed_data;
+		}
+		scan_state.in_buffer.src = scan_state.page_reader.GetSpan(0, input_size);
+		scan_state.in_buffer.size = input_size;
+		scan_state.next_block_id_offset = input_size;
 	}
 
 	void DecompressString(ZSTDVectorScanState &scan_state, data_ptr_t destination, idx_t uncompressed_length) {
@@ -884,18 +911,19 @@ public:
 			    /* input =*/&in_buffer);
 			scan_state.compressed_scan_count += in_buffer.pos - old_pos;
 			if (duckdb_zstd::ZSTD_isError(res)) {
-				throw InvalidInputException("ZSTD Decompression failed: %s", duckdb_zstd::ZSTD_getErrorName(res));
+				throw IOException("Corrupted ZSTD segment: decompression failed: %s",
+				                  duckdb_zstd::ZSTD_getErrorName(res));
 			}
 			if (out_buffer.pos == out_buffer.size) {
 				//! Done decompressing the relevant portion
 				break;
 			}
 			if (!res) {
-				D_ASSERT(out_buffer.pos == out_buffer.size);
-				D_ASSERT(in_buffer.pos == in_buffer.size);
-				break;
+				throw IOException("Corrupted ZSTD segment: frame ended before requested output was produced");
 			}
-			D_ASSERT(in_buffer.pos == in_buffer.size);
+			if (in_buffer.pos != in_buffer.size) {
+				throw IOException("Corrupted ZSTD segment: decompressor stalled before consuming the input page");
+			}
 			// Did not fully decompress, it needs a new page to read from
 			LoadNextPageForVector(scan_state);
 		}
@@ -906,7 +934,10 @@ public:
 			skip_buffer = Allocator::DefaultAllocator().Allocate(duckdb_zstd::ZSTD_DStreamOutSize());
 		}
 
-		D_ASSERT(scan_state.scanned_count + count <= scan_state.metadata.count);
+		if (scan_state.scanned_count > scan_state.metadata.count ||
+		    count > scan_state.metadata.count - scan_state.scanned_count) {
+			throw IOException("Corrupted ZSTD segment: skip range is out of bounds");
+		}
 
 		// Figure out how much we need to skip
 		string_length_t *string_lengths = &scan_state.string_lengths[scan_state.scanned_count];
@@ -927,7 +958,10 @@ public:
 	}
 
 	void ScanInternal(ZSTDVectorScanState &scan_state, idx_t count, Vector &result, idx_t result_offset) {
-		D_ASSERT(scan_state.scanned_count + count <= scan_state.metadata.count);
+		if (scan_state.scanned_count > scan_state.metadata.count ||
+		    count > scan_state.metadata.count - scan_state.scanned_count) {
+			throw IOException("Corrupted ZSTD segment: scan range is out of bounds");
+		}
 		D_ASSERT(result.GetType().InternalType() == PhysicalType::VARCHAR);
 
 		string_length_t *string_lengths = &scan_state.string_lengths[scan_state.scanned_count];
@@ -951,6 +985,9 @@ public:
 	}
 
 	void ScanPartial(idx_t start_idx, Vector &result, idx_t offset, idx_t count) {
+		if (start_idx > segment_count || count > segment_count - start_idx) {
+			throw IOException("Corrupted ZSTD segment: scan range is out of bounds");
+		}
 		idx_t remaining = count;
 		idx_t scanned = 0;
 		while (remaining) {
@@ -973,8 +1010,9 @@ public:
 
 	duckdb_zstd::ZSTD_DCtx *decompression_context = nullptr;
 
-	idx_t segment_block_offset;
 	BufferHandle segment_handle;
+	CompressionSegmentReader reader;
+	idx_t segment_data_start;
 
 	//===--------------------------------------------------------------------===//
 	// Vector metadata

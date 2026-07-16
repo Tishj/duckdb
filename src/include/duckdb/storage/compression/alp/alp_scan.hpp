@@ -12,6 +12,7 @@
 
 #include "duckdb/common/limits.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 
 #include "duckdb/storage/table/column_segment.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
@@ -62,19 +63,34 @@ struct AlpScanState : public SegmentScanState {
 public:
 	using EXACT_TYPE = typename FloatingToExact<T>::TYPE;
 
-	explicit AlpScanState(ColumnSegment &segment) : segment(segment), count(segment.count) {
+	explicit AlpScanState(ColumnSegment &segment)
+	    : reader(nullptr, 0, "ALP segment"), metadata_reader(nullptr, 0, "ALP metadata"), segment(segment),
+	      count(segment.count) {
 		auto &buffer_manager = BufferManager::GetBufferManager(segment.GetDatabase());
 		handle = buffer_manager.Pin(segment.GetBlockHandle());
 		// ScanStates never exceed the boundaries of a Segment,
 		// but are not guaranteed to start at the beginning of the Block
-		segment_data = handle.GetDataMutable() + segment.GetBlockOffset();
-		auto metadata_offset = Load<uint32_t>(segment_data);
-		metadata_ptr = segment_data + metadata_offset;
+		reader = CompressionSegmentReader(handle, segment, "ALP segment");
+		auto metadata_offset = reader.ReadAt<uint32_t>(0);
+		auto vector_count = count / AlpConstants::ALP_VECTOR_SIZE;
+		vector_count += count % AlpConstants::ALP_VECTOR_SIZE != 0;
+		if (vector_count > reader.Size() / AlpConstants::METADATA_POINTER_SIZE) {
+			throw IOException("Corrupted ALP segment: metadata size is out of range");
+		}
+		auto metadata_size = vector_count * AlpConstants::METADATA_POINTER_SIZE;
+		if (metadata_offset > reader.Size() || metadata_size > metadata_offset ||
+		    metadata_offset - metadata_size < AlpConstants::HEADER_SIZE) {
+			throw IOException("Corrupted ALP segment: metadata is out of range");
+		}
+		metadata_start = metadata_offset - metadata_size;
+		metadata_reader = reader.SubReader(metadata_start, metadata_size, "ALP metadata");
+		metadata_reader.SetPosition(metadata_reader.Size());
 	}
 
 	BufferHandle handle;
-	data_ptr_t metadata_ptr;
-	data_ptr_t segment_data;
+	CompressionSegmentReader reader;
+	CompressionSegmentReader metadata_reader;
+	idx_t metadata_start;
 	idx_t total_value_count = 0;
 	AlpVectorState<T> vector_state;
 
@@ -112,7 +128,10 @@ public:
 	// Using the metadata, we can avoid loading any of the data if we don't care about the vector at all
 	void SkipVector() {
 		// Skip the offset indicating where the data starts
-		metadata_ptr -= AlpConstants::METADATA_POINTER_SIZE;
+		auto data_byte_offset = metadata_reader.ReadBackward<uint32_t>();
+		if (data_byte_offset < AlpConstants::HEADER_SIZE || data_byte_offset >= metadata_start) {
+			throw IOException("Corrupted ALP segment: vector data offset is out of range");
+		}
 		idx_t vector_size = MinValue((idx_t)AlpConstants::ALP_VECTOR_SIZE, count - total_value_count);
 		total_value_count += vector_size;
 	}
@@ -122,50 +141,54 @@ public:
 		vector_state.Reset();
 
 		// Load the offset (metadata) indicating where the vector data starts
-		metadata_ptr -= AlpConstants::METADATA_POINTER_SIZE;
-		auto data_byte_offset = Load<uint32_t>(metadata_ptr);
-		const auto block_size = segment.GetBlockSize();
-
-		if (data_byte_offset >= block_size) {
-			throw IOException(
-			    "Corrupted ALP segment: stored data_byte_offset (%d) exceeds the segments block size (%d)",
-			    data_byte_offset, block_size);
-		}
+		auto data_byte_offset = metadata_reader.ReadBackward<uint32_t>();
 
 		idx_t vector_size = MinValue((idx_t)AlpConstants::ALP_VECTOR_SIZE, (count - total_value_count));
-
-		data_ptr_t vector_ptr = segment_data + data_byte_offset;
+		idx_t data_end = metadata_start;
+		if (total_value_count + vector_size < count) {
+			if (metadata_reader.Position() < sizeof(uint32_t)) {
+				throw IOException("Corrupted ALP segment: next vector metadata is out of range");
+			}
+			data_end = metadata_reader.ReadAt<uint32_t>(metadata_reader.Position() - sizeof(uint32_t));
+		}
+		if (data_byte_offset < AlpConstants::HEADER_SIZE || data_byte_offset >= reader.Size()) {
+			throw IOException("Corrupted ALP segment: vector data is out of range");
+		}
+		auto block_reader = reader.SubReader(data_byte_offset, reader.Size() - data_byte_offset, "ALP vector");
 
 		// Load the vector data
-		vector_state.v_exponent = Load<uint8_t>(vector_ptr);
-		vector_ptr += AlpConstants::EXPONENT_SIZE;
+		vector_state.v_exponent = block_reader.template Read<uint8_t>();
 
 		const bool uncompressed_mode = vector_state.v_exponent == AlpConstants::UNCOMPRESSED_MODE_SENTINEL;
 		if (uncompressed_mode) {
-			if (!SKIP) {
-				// Read uncompressed values
-				const idx_t value_buffer_copy_size = sizeof(T) * vector_size;
-				if (vector_ptr + value_buffer_copy_size > segment_data + block_size) {
-					const auto bytes_remaining_in_block = (segment_data + block_size) - vector_ptr;
-					throw IOException("Corrupted ALP segment: stored vector_size is invalid, to-copy bytes (%d) "
-					                  "would exceed bytes remaining in the block (%d)",
-					                  value_buffer_copy_size, bytes_remaining_in_block);
+			const idx_t value_buffer_copy_size = sizeof(T) * vector_size;
+			if (value_buffer_copy_size > block_reader.Remaining()) {
+				auto bytes_remaining = block_reader.Remaining();
+				if (data_byte_offset + 1 <= segment.GetBlockSize()) {
+					bytes_remaining = segment.GetBlockSize() - data_byte_offset - 1;
 				}
-				memcpy(value_buffer, vector_ptr, value_buffer_copy_size);
+				throw IOException("Corrupted ALP segment: stored vector_size is invalid, to-copy bytes (%d) "
+				                  "would exceed bytes remaining in the block (%d)",
+				                  value_buffer_copy_size, bytes_remaining);
+			}
+			if (data_end <= data_byte_offset || data_end > metadata_start ||
+			    value_buffer_copy_size > data_end - data_byte_offset - 1) {
+				throw IOException("Corrupted ALP segment: vector data is out of range");
+			}
+			auto source = block_reader.ReadSpan(value_buffer_copy_size);
+			if (!SKIP) {
+				memcpy(value_buffer, source, value_buffer_copy_size);
 			}
 			return;
 		}
-		vector_state.v_factor = Load<uint8_t>(vector_ptr);
-		vector_ptr += AlpConstants::FACTOR_SIZE;
-
-		vector_state.exceptions_count = Load<uint16_t>(vector_ptr);
-		vector_ptr += AlpConstants::EXCEPTIONS_COUNT_SIZE;
-
-		vector_state.frame_of_reference = Load<uint64_t>(vector_ptr);
-		vector_ptr += AlpConstants::FOR_SIZE;
-
-		vector_state.bit_width = Load<uint8_t>(vector_ptr);
-		vector_ptr += AlpConstants::BIT_WIDTH_SIZE;
+		if (data_end <= data_byte_offset || data_end > metadata_start) {
+			throw IOException("Corrupted ALP segment: vector data is out of range");
+		}
+		auto vector_reader = reader.SubReader(data_byte_offset + 1, data_end - data_byte_offset - 1, "ALP vector");
+		vector_state.v_factor = vector_reader.template Read<uint8_t>();
+		vector_state.exceptions_count = vector_reader.template Read<uint16_t>();
+		vector_state.frame_of_reference = vector_reader.template Read<uint64_t>();
+		vector_state.bit_width = vector_reader.template Read<uint8_t>();
 
 		if (vector_state.exceptions_count > vector_size) {
 			throw IOException("Corrupted ALP segment: exceptions_count (%d) exceeds vector_size (%d)",
@@ -179,42 +202,33 @@ public:
 			throw IOException("Corrupted ALP segment: Invalid bit_width encountered: %d", vector_state.bit_width);
 		}
 
-		idx_t read_bytes = 0;
 		if (vector_state.bit_width > 0) {
 			auto bp_size = BitpackingPrimitives::GetRequiredSize(vector_size, vector_state.bit_width);
 
 			const idx_t max_encoded = sizeof(vector_state.for_encoded);
-			if (bp_size > max_encoded || data_byte_offset + read_bytes + bp_size > block_size) {
+			if (bp_size > max_encoded) {
 				throw IOException("Corrupted ALP segment: encoded payload too large");
 			}
-			memcpy(vector_state.for_encoded, (void *)vector_ptr, bp_size);
-			vector_ptr += bp_size;
-			read_bytes += bp_size;
+			vector_reader.CopyTo(vector_state.for_encoded, bp_size);
 		}
 
 		if (vector_state.exceptions_count > 0) {
 			//! Load the exceptions
 			const idx_t max_exceptions_size = sizeof(vector_state.exceptions);
 			const idx_t exceptions_copy_size = sizeof(EXACT_TYPE) * vector_state.exceptions_count;
-			if (exceptions_copy_size > max_exceptions_size ||
-			    data_byte_offset + read_bytes + exceptions_copy_size > block_size) {
+			if (exceptions_copy_size > max_exceptions_size) {
 				throw IOException("Corrupted ALP segment: exceptions payload too large");
 			}
-			memcpy(vector_state.exceptions, (void *)vector_ptr, exceptions_copy_size);
-			vector_ptr += exceptions_copy_size;
-			read_bytes += exceptions_copy_size;
+			vector_reader.CopyTo(data_ptr_cast(vector_state.exceptions), exceptions_copy_size);
 
 			//! Load the exceptions_positions
 			const idx_t max_exceptions_positions_size = sizeof(vector_state.exceptions_positions);
 			const idx_t exceptions_positions_copy_size =
 			    AlpConstants::EXCEPTION_POSITION_SIZE * vector_state.exceptions_count;
-			if (exceptions_positions_copy_size > max_exceptions_positions_size ||
-			    data_byte_offset + read_bytes + exceptions_positions_copy_size > block_size) {
+			if (exceptions_positions_copy_size > max_exceptions_positions_size) {
 				throw IOException("Corrupted ALP segment: exceptions_positions payload too large");
 			}
-			memcpy(vector_state.exceptions_positions, (void *)vector_ptr, exceptions_positions_copy_size);
-			vector_ptr += exceptions_positions_copy_size;
-			read_bytes += exceptions_positions_copy_size;
+			vector_reader.CopyTo(data_ptr_cast(vector_state.exceptions_positions), exceptions_positions_copy_size);
 		}
 
 		// Decode all the vector values to the specified 'value_buffer'

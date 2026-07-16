@@ -15,13 +15,14 @@ namespace duckdb {
 
 class ByteReader {
 public:
-	ByteReader() : buffer(nullptr), index(0) {
+	ByteReader() : buffer(nullptr), index(0), size(0) {
 	}
 
 public:
-	void SetStream(const uint8_t *buffer) {
+	void SetStream(const uint8_t *buffer, idx_t size_p) {
 		this->buffer = buffer;
 		index = 0;
+		size = size_p;
 	}
 
 	size_t Index() const {
@@ -30,6 +31,7 @@ public:
 
 	template <class T>
 	T ReadValue() {
+		CheckAvailable(sizeof(T));
 		auto result = Load<T>(buffer + index);
 		index += sizeof(T);
 		return result;
@@ -43,6 +45,11 @@ public:
 	template <class T>
 	inline T ReadValue(uint8_t bytes, uint8_t trailing_zero) {
 		T result = 0;
+		auto bytes_to_read = bytes;
+		if (bytes_to_read == 0 && trailing_zero < 8) {
+			bytes_to_read = sizeof(T);
+		}
+		CheckAvailable(bytes_to_read);
 		switch (bytes) {
 			// LCOV_EXCL_START
 		case 1:
@@ -85,13 +92,25 @@ public:
 	}
 
 private:
+	void CheckAvailable(idx_t bytes) const {
+		if (index > size || bytes > size - index) {
+			throw IOException("Corrupted compressed floating-point segment: byte stream is out of range");
+		}
+	}
+
 	const uint8_t *buffer;
 	uint32_t index;
+	idx_t size;
 };
 
 template <>
 inline uint32_t ByteReader::ReadValue(uint8_t bytes, uint8_t trailing_zero) {
 	uint32_t result = 0;
+	auto bytes_to_read = bytes;
+	if (bytes_to_read == 0 && trailing_zero < 8) {
+		bytes_to_read = sizeof(uint32_t);
+	}
+	CheckAvailable(bytes_to_read);
 	switch (bytes) {
 	case 0:
 		// LCOV_EXCL_START

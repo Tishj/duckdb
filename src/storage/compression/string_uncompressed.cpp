@@ -5,9 +5,52 @@
 #include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/storage/checkpoint/write_overflow_strings_to_disk.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 
 namespace duckdb {
+
+struct UncompressedStringLayout {
+	UncompressedStringLayout(BufferHandle &handle, ColumnSegment &segment)
+	    : reader(handle, segment, "uncompressed string segment"), base(reader.GetSpan(0, reader.Size())) {
+		reader.GetSpan(0, UncompressedStringStorage::DICTIONARY_HEADER_SIZE);
+		dictionary.size = reader.ReadAt<uint32_t>(0);
+		dictionary.end = reader.ReadAt<uint32_t>(sizeof(uint32_t));
+		offsets = reader.GetArray<int32_t>(UncompressedStringStorage::DICTIONARY_HEADER_SIZE, segment.count);
+		auto offsets_end = UncompressedStringStorage::DICTIONARY_HEADER_SIZE + segment.count * sizeof(int32_t);
+		if (dictionary.end > reader.Size() || dictionary.size > dictionary.end ||
+		    dictionary.end - dictionary.size < offsets_end) {
+			throw IOException("Corrupted uncompressed string segment: dictionary is out of range");
+		}
+		reader.GetSpan(dictionary.end - dictionary.size, dictionary.size);
+	}
+
+	uint32_t AbsoluteOffset(int32_t offset) const {
+		if (offset == NumericLimits<int32_t>::Minimum()) {
+			throw IOException("Corrupted uncompressed string segment: invalid dictionary offset");
+		}
+		return offset < 0 ? UnsafeNumericCast<uint32_t>(-static_cast<int64_t>(offset))
+		                  : UnsafeNumericCast<uint32_t>(offset);
+	}
+
+	uint32_t StringLength(idx_t index) const {
+		auto current = AbsoluteOffset(offsets[index]);
+		auto previous = index == 0 ? 0 : AbsoluteOffset(offsets[index - 1]);
+		if (current < previous || current > dictionary.size) {
+			throw IOException("Corrupted uncompressed string segment: dictionary offset is out of range");
+		}
+		auto length = current - previous;
+		if (offsets[index] < 0 && length != 0 && length != UncompressedStringStorage::BIG_STRING_MARKER_SIZE) {
+			throw IOException("Corrupted uncompressed string segment: invalid overflow string marker");
+		}
+		return length;
+	}
+
+	CompressionSegmentReader reader;
+	data_ptr_t base;
+	int32_t *offsets;
+	StringDictionaryContainer dictionary;
+};
 
 //===--------------------------------------------------------------------===//
 // Storage Class
@@ -95,20 +138,18 @@ void UncompressedStringStorage::StringScanPartial(ColumnSegment &segment, Column
 	auto &scan_state = state.scan_state->Cast<StringScanState>();
 	auto start = state.GetPositionInSegment();
 
-	auto baseptr = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
-	auto dict_end = GetDictionaryEnd(segment, scan_state.handle);
-	auto base_data = reinterpret_cast<int32_t *>(baseptr + DICTIONARY_HEADER_SIZE);
+	UncompressedStringLayout layout(scan_state.handle, segment);
+	if (start > segment.count || scan_count > segment.count - start) {
+		throw IOException("Corrupted uncompressed string segment: scan is out of range");
+	}
 	auto result_data = FlatVector::GetDataMutable<string_t>(result);
 
-	int32_t previous_offset = start > 0 ? base_data[start - 1] : 0;
-
 	for (idx_t i = 0; i < scan_count; i++) {
-		// std::abs used since offsets can be negative to indicate big strings
-		auto current_offset = base_data[start + i];
-		auto string_length = UnsafeNumericCast<uint32_t>(std::abs(current_offset) - std::abs(previous_offset));
+		auto index = start + i;
+		auto current_offset = layout.offsets[index];
+		auto string_length = layout.StringLength(index);
 		result_data[result_offset + i] =
-		    FetchStringFromDict(segment, dict_end, result, baseptr, current_offset, string_length);
-		previous_offset = base_data[start + i];
+		    FetchStringFromDict(segment, layout.dictionary.end, result, layout.base, current_offset, string_length);
 	}
 }
 
@@ -126,17 +167,22 @@ void UncompressedStringStorage::Select(ColumnSegment &segment, ColumnScanState &
 	auto &scan_state = state.scan_state->Cast<StringScanState>();
 	auto start = state.GetPositionInSegment();
 
-	auto baseptr = scan_state.handle.GetDataMutable() + segment.GetBlockOffset();
-	auto dict_end = GetDictionaryEnd(segment, scan_state.handle);
-	auto base_data = reinterpret_cast<int32_t *>(baseptr + DICTIONARY_HEADER_SIZE);
+	UncompressedStringLayout layout(scan_state.handle, segment);
+	if (start > segment.count || vector_count > segment.count - start) {
+		throw IOException("Corrupted uncompressed string segment: selection is out of range");
+	}
 	auto result_data = FlatVector::GetDataMutable<string_t>(result);
 
 	for (idx_t i = 0; i < sel_count; i++) {
-		idx_t index = start + sel.get_index(i);
-		auto current_offset = base_data[index];
-		auto prev_offset = index > 0 ? base_data[index - 1] : 0;
-		auto string_length = UnsafeNumericCast<uint32_t>(std::abs(current_offset) - std::abs(prev_offset));
-		result_data[i] = FetchStringFromDict(segment, dict_end, result, baseptr, current_offset, string_length);
+		auto selected_index = sel.get_index(i);
+		if (selected_index >= vector_count) {
+			throw IOException("Corrupted uncompressed string segment: selection index is out of range");
+		}
+		idx_t index = start + selected_index;
+		auto current_offset = layout.offsets[index];
+		auto string_length = layout.StringLength(index);
+		result_data[i] =
+		    FetchStringFromDict(segment, layout.dictionary.end, result, layout.base, current_offset, string_length);
 	}
 }
 
@@ -165,20 +211,17 @@ void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFet
 	// first pin the main buffer if it is not already pinned
 	auto &handle = state.GetOrInsertHandle(segment);
 
-	auto baseptr = handle.GetDataMutable() + segment.GetBlockOffset();
-	auto dict_end = GetDictionaryEnd(segment, handle);
-	auto base_data = reinterpret_cast<int32_t *>(baseptr + DICTIONARY_HEADER_SIZE);
+	UncompressedStringLayout layout(handle, segment);
 	auto result_data = FlatVector::GetDataMutable<string_t>(result);
 
-	auto dict_offset = base_data[row_id];
-	uint32_t string_length;
-	if (DUCKDB_UNLIKELY(row_id == 0LL)) {
-		// edge case where this is the first string in the dict
-		string_length = NumericCast<uint32_t>(std::abs(dict_offset));
-	} else {
-		string_length = NumericCast<uint32_t>(std::abs(dict_offset) - std::abs(base_data[row_id - 1]));
+	if (row_id < 0 || NumericCast<idx_t>(row_id) >= segment.count) {
+		throw IOException("Corrupted uncompressed string segment: row id is out of range");
 	}
-	result_data[result_idx] = FetchStringFromDict(segment, dict_end, result, baseptr, dict_offset, string_length);
+	auto index = NumericCast<idx_t>(row_id);
+	auto dict_offset = layout.offsets[index];
+	auto string_length = layout.StringLength(index);
+	result_data[result_idx] =
+	    FetchStringFromDict(segment, layout.dictionary.end, result, layout.base, dict_offset, string_length);
 }
 
 //===--------------------------------------------------------------------===//
@@ -372,17 +415,20 @@ string_t UncompressedStringStorage::ReadOverflowString(ColumnSegment &segment, V
 	auto &buffer_manager = segment.GetBlockHandle()->GetMemory().GetBufferManager();
 	auto &state = segment.GetSegmentState()->Cast<UncompressedStringSegmentState>();
 
-	D_ASSERT(block != INVALID_BLOCK);
-	D_ASSERT(offset < NumericCast<int32_t>(segment.GetBlockSize()));
+	if (block == INVALID_BLOCK || offset < 0 || NumericCast<idx_t>(offset) >= segment.GetBlockSize()) {
+		throw IOException("Corrupted overflow string marker: block or offset is invalid");
+	}
 
 	if (block < MAXIMUM_BLOCK) {
 		// read the overflow string from disk
 		// pin the initial handle and read the length
 		auto block_handle = state.GetHandle(segment.GetBlockHandle()->GetBlockManager(), block);
 		auto handle = buffer_manager.Pin(block_handle);
+		CompressionSegmentReader overflow_reader(handle.GetDataMutable(), segment.GetBlockSize(),
+		                                         "overflow string block");
 
 		// read header
-		uint32_t length = Load<uint32_t>(handle.GetDataMutable() + offset);
+		uint32_t length = overflow_reader.ReadAt<uint32_t>(UnsafeNumericCast<idx_t>(offset));
 		uint32_t remaining = length;
 		offset += sizeof(uint32_t);
 
@@ -402,17 +448,22 @@ string_t UncompressedStringStorage::ReadOverflowString(ColumnSegment &segment, V
 
 		// now append the string to the single buffer
 		while (remaining > 0) {
-			idx_t to_write = MinValue<idx_t>(remaining, segment.GetBlockSize() - sizeof(block_id_t) -
-			                                                UnsafeNumericCast<idx_t>(offset));
-			memcpy(target_ptr, handle.GetDataMutable() + offset, to_write);
+			auto current_offset = UnsafeNumericCast<idx_t>(offset);
+			if (current_offset > segment.GetBlockSize() - sizeof(block_id_t)) {
+				throw IOException("Corrupted overflow string block: payload offset is out of range");
+			}
+			idx_t to_write = MinValue<idx_t>(remaining, segment.GetBlockSize() - sizeof(block_id_t) - current_offset);
+			memcpy(target_ptr, overflow_reader.GetSpan(current_offset, to_write), to_write);
 			remaining -= to_write;
 			offset += UnsafeNumericCast<int32_t>(to_write);
 			target_ptr += to_write;
 			if (remaining > 0) {
 				// read the next block
-				block_id_t next_block = Load<block_id_t>(handle.GetDataMutable() + offset);
+				block_id_t next_block = overflow_reader.ReadAt<block_id_t>(UnsafeNumericCast<idx_t>(offset));
 				block_handle = state.GetHandle(segment.GetBlockHandle()->GetBlockManager(), next_block);
 				handle = buffer_manager.Pin(block_handle);
+				overflow_reader =
+				    CompressionSegmentReader(handle.GetDataMutable(), segment.GetBlockSize(), "overflow string block");
 				offset = 0;
 			}
 		}
@@ -430,7 +481,12 @@ string_t UncompressedStringStorage::ReadOverflowString(ColumnSegment &segment, V
 	// first pin the handle, if it is not pinned yet
 	auto string_block = state.FindOverflowBlock(block);
 	auto handle = buffer_manager.Pin(string_block.get().block);
-	auto final_buffer = handle.GetDataMutable();
+	CompressionSegmentReader overflow_reader(handle.GetDataMutable(), string_block.get().size,
+	                                         "in-memory overflow string block");
+	auto string_offset = UnsafeNumericCast<idx_t>(offset);
+	auto string_length = overflow_reader.ReadAt<uint32_t>(string_offset);
+	overflow_reader.GetSpan(string_offset + sizeof(uint32_t), string_length);
+	auto final_buffer = overflow_reader.GetSpan(0, overflow_reader.Size());
 	StringVector::AddHandle(result, std::move(handle));
 	return ReadStringWithLength(final_buffer, offset);
 }

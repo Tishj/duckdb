@@ -9,6 +9,82 @@ namespace duckdb {
 
 namespace roaring {
 
+static idx_t GetSegmentValueCount(data_ptr_t segments) {
+	idx_t total = 0;
+	for (idx_t i = 0; i < COMPRESSED_SEGMENT_COUNT; i++) {
+		total += segments[i];
+	}
+	return total;
+}
+
+static uint16_t GetCompressedValue(data_ptr_t segments, data_ptr_t values, idx_t value_index,
+                                   bool allow_container_end) {
+	idx_t segment_index = 0;
+	idx_t values_before_segment = 0;
+	while (segment_index < COMPRESSED_SEGMENT_COUNT && value_index >= values_before_segment + segments[segment_index]) {
+		values_before_segment += segments[segment_index++];
+	}
+	if (segment_index > COMPRESSED_SEGMENT_COUNT ||
+	    (segment_index == COMPRESSED_SEGMENT_COUNT &&
+	     (!allow_container_end || value_index != values_before_segment || values[value_index] != 0))) {
+		throw IOException("Corrupted Roaring segment: compressed value has no segment");
+	}
+	return UnsafeNumericCast<uint16_t>(segment_index * COMPRESSED_SEGMENT_SIZE + values[value_index]);
+}
+
+static void ValidateContainerData(const ContainerMetadata &metadata, data_ptr_t data, idx_t container_size) {
+	if (metadata.IsUncompressed()) {
+		return;
+	}
+	if (metadata.IsArray()) {
+		auto cardinality = metadata.Cardinality();
+		if (cardinality >= COMPRESSED_ARRAY_THRESHOLD && GetSegmentValueCount(data) != cardinality) {
+			throw IOException("Corrupted Roaring segment: compressed segment counts do not match cardinality");
+		}
+		uint16_t previous = 0;
+		for (idx_t i = 0; i < cardinality; i++) {
+			uint16_t value;
+			if (cardinality >= COMPRESSED_ARRAY_THRESHOLD) {
+				value = GetCompressedValue(data, data + COMPRESSED_SEGMENT_COUNT, i, false);
+			} else {
+				value = Load<uint16_t>(data + i * sizeof(uint16_t));
+			}
+			if ((i > 0 && value <= previous) || value >= container_size) {
+				throw IOException("Corrupted Roaring segment: array value is out of range or unordered");
+			}
+			previous = value;
+		}
+		return;
+	}
+
+	auto run_count = metadata.NumberOfRuns();
+	uint16_t previous_end = 0;
+	if (run_count >= COMPRESSED_RUN_THRESHOLD) {
+		auto segment_value_count = GetSegmentValueCount(data);
+		if (segment_value_count != run_count * 2 && segment_value_count + 1 != run_count * 2) {
+			throw IOException("Corrupted Roaring segment: compressed segment counts do not match run count");
+		}
+	}
+	for (idx_t i = 0; i < run_count; i++) {
+		idx_t start;
+		idx_t end;
+		if (run_count >= COMPRESSED_RUN_THRESHOLD) {
+			auto values = data + COMPRESSED_SEGMENT_COUNT;
+			start = GetCompressedValue(data, values, i * 2, false);
+			end = GetCompressedValue(data, values, i * 2 + 1, i + 1 == run_count);
+		} else {
+			auto pair = Load<RunContainerRLEPair>(data + i * sizeof(RunContainerRLEPair));
+			start = pair.start;
+			end = start + 1 + pair.length;
+		}
+		auto terminal_run_end = i + 1 == run_count && end == container_size + 1;
+		if ((i > 0 && start < previous_end) || end <= start || (end > container_size && !terminal_run_end)) {
+			throw IOException("Corrupted Roaring segment: run is out of range or overlapping");
+		}
+		previous_end = UnsafeNumericCast<uint16_t>(end);
+	}
+}
+
 //===--------------------------------------------------------------------===//
 // Scan
 //===--------------------------------------------------------------------===//
@@ -189,46 +265,54 @@ void BitsetContainerScanState::Verify() const {
 	return;
 }
 
-RoaringScanState::RoaringScanState(ColumnSegment &segment) : segment(segment) {
+RoaringScanState::RoaringScanState(ColumnSegment &segment)
+    : segment(segment), reader(nullptr, 0, "Roaring segment"), data_reader(nullptr, 0, "Roaring container data") {
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.GetDatabase());
 	handle = buffer_manager.Pin(segment.GetBlockHandle());
-	auto segment_size = segment.SegmentSize();
-	auto segment_block_offset = segment.GetBlockOffset();
-	if (segment_block_offset >= segment_size) {
-		throw InternalException("invalid segment_block_offset in RoaringScanState constructor");
-	}
-
-	auto base_ptr = handle.GetDataMutable() + segment_block_offset;
-	data_ptr = base_ptr + sizeof(idx_t);
+	reader = CompressionSegmentReader(handle, segment, "Roaring segment");
 
 	// Deserialize the container metadata for this segment
-	auto metadata_offset = Load<idx_t>(base_ptr);
-	if (metadata_offset >= segment_size) {
-		throw InternalException("invalid metadata offset in RoaringScanState constructor");
+	auto metadata_offset = reader.Read<idx_t>();
+	if (metadata_offset > reader.Remaining()) {
+		throw IOException("Corrupted Roaring segment: metadata offset is out of range");
 	}
-	auto metadata_ptr = data_ptr + metadata_offset;
+	data_reader = reader.ReadSubReader(metadata_offset, "Roaring container data");
+	auto metadata_reader = reader.SubReader(reader.Position(), reader.Remaining(), "Roaring metadata");
 
 	auto segment_count = segment.count.load();
 	auto container_count = segment_count / ROARING_CONTAINER_SIZE;
 	if (segment_count % ROARING_CONTAINER_SIZE != 0) {
 		container_count++;
 	}
-	metadata_collection.Deserialize(metadata_ptr, container_count);
+	metadata_collection.Deserialize(metadata_reader, container_count);
 	ContainerMetadataCollectionScanner scanner(metadata_collection);
 	data_start_position.reserve(container_count);
 	idx_t position = 0;
 	for (idx_t i = 0; i < container_count; i++) {
 		auto metadata = scanner.GetNext();
-		container_metadata.push_back(metadata);
-		if (metadata.IsUncompressed()) {
-			position = AlignValue<idx_t>(position);
-		} else if (metadata.IsArray() && metadata.Cardinality() < COMPRESSED_ARRAY_THRESHOLD) {
-			position = AlignValue<idx_t, sizeof(uint16_t)>(position);
-		} else if (metadata.IsRun() && metadata.NumberOfRuns() < COMPRESSED_RUN_THRESHOLD) {
-			position = AlignValue<idx_t, sizeof(RunContainerRLEPair)>(position);
+		if ((metadata.IsRun() && (metadata.NumberOfRuns() == 0 || metadata.NumberOfRuns() >= MAX_RUN_IDX)) ||
+		    (metadata.IsArray() && metadata.Cardinality() > MAX_ARRAY_IDX)) {
+			throw IOException("Corrupted Roaring segment: invalid container cardinality");
 		}
+		container_metadata.push_back(metadata);
+		auto layout = data_reader;
+		layout.SetPosition(position);
+		if (metadata.IsUncompressed()) {
+			layout.Align(8);
+		} else if (metadata.IsArray() && metadata.Cardinality() < COMPRESSED_ARRAY_THRESHOLD) {
+			layout.Align(sizeof(uint16_t));
+		} else if (metadata.IsRun() && metadata.NumberOfRuns() < COMPRESSED_RUN_THRESHOLD) {
+			layout.Align(alignof(RunContainerRLEPair));
+		}
+		position = layout.Position();
 		data_start_position.push_back(position);
-		position += SkipVector(metadata);
+		auto start_of_container = i * ROARING_CONTAINER_SIZE;
+		auto container_size = MinValue<idx_t>(segment_count - start_of_container, ROARING_CONTAINER_SIZE);
+		auto data_size = metadata.GetDataSizeInBytes(container_size);
+		auto container_data = data_reader.GetSpan(position, data_size);
+		ValidateContainerData(metadata, container_data, container_size);
+		container_data_size.push_back(data_size);
+		position += data_size;
 	}
 }
 
@@ -258,7 +342,7 @@ ContainerMetadata RoaringScanState::GetContainerMetadata(idx_t container_index) 
 }
 
 data_ptr_t RoaringScanState::GetStartOfContainerData(idx_t container_index) {
-	return data_ptr + data_start_position[container_index];
+	return data_reader.GetSpan(data_start_position[container_index], container_data_size[container_index]);
 }
 
 ContainerScanState &RoaringScanState::LoadContainer(idx_t container_index, idx_t internal_offset) {

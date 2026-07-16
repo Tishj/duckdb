@@ -14,6 +14,7 @@
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/compression/standard_compression_state.hpp"
+#include "duckdb/storage/compression/compression_segment_reader.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 
 namespace duckdb {
@@ -160,7 +161,7 @@ public:
 	void Reset();
 	// Write the metadata for the current segment
 	idx_t Serialize(data_ptr_t dest) const;
-	void Deserialize(data_ptr_t src, idx_t container_count);
+	void Deserialize(CompressionSegmentReader &reader, idx_t container_count);
 
 private:
 	void AddBitsetContainer();
@@ -623,11 +624,13 @@ public:
 public:
 	BufferHandle handle;
 	ColumnSegment &segment;
+	CompressionSegmentReader reader;
+	CompressionSegmentReader data_reader;
 	unique_ptr<ContainerScanState> current_container;
-	data_ptr_t data_ptr;
 	ContainerMetadataCollection metadata_collection;
 	vector<ContainerMetadata> container_metadata;
 	vector<idx_t> data_start_position;
+	vector<idx_t> container_data_size;
 };
 
 //! Boolean BitPacking

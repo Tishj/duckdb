@@ -153,14 +153,14 @@ idx_t ContainerMetadataCollection::Serialize(data_ptr_t dest) const {
 	return types_size + runs_size + arrays_size;
 }
 
-void ContainerMetadataCollection::Deserialize(data_ptr_t src, idx_t container_count) {
+void ContainerMetadataCollection::Deserialize(CompressionSegmentReader &reader, idx_t container_count) {
 	container_type.resize(AlignValue<idx_t, BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE>(container_count));
 	count_in_segment = container_count;
 
 	// Load the types of the containers
 	idx_t types_size = BitpackingPrimitives::GetRequiredSize(container_type.size(), 2);
-	BitpackingPrimitives::UnPackBuffer<uint8_t>(container_type.data(), src, container_count, 2, true);
-	src += types_size;
+	BitpackingPrimitives::UnPackBuffer<uint8_t>(container_type.data(), reader.ReadSpan(types_size), container_count, 2,
+	                                            true);
 
 	// Figure out how many are run containers
 	idx_t runs_count = 0;
@@ -175,16 +175,15 @@ void ContainerMetadataCollection::Deserialize(data_ptr_t src, idx_t container_co
 	// Load the run containers
 	if (runs_count) {
 		idx_t runs_size = BitpackingPrimitives::GetRequiredSize(runs_count, RUN_CONTAINER_SIZE_BITWIDTH);
-		BitpackingPrimitives::UnPackBuffer<uint8_t>(number_of_runs.data(), src, runs_count, RUN_CONTAINER_SIZE_BITWIDTH,
-		                                            true);
-		src += runs_size;
+		BitpackingPrimitives::UnPackBuffer<uint8_t>(number_of_runs.data(), reader.ReadSpan(runs_size), runs_count,
+		                                            RUN_CONTAINER_SIZE_BITWIDTH, true);
 	}
 
 	// Load the array/bitset containers
 	if (!cardinality.empty()) {
 		idx_t arrays_size = sizeof(uint8_t) * cardinality.size();
 		arrays_in_segment = arrays_size;
-		memcpy(cardinality.data(), src, arrays_size);
+		reader.CopyTo(cardinality.data(), arrays_size);
 	}
 }
 
