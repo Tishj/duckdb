@@ -26,6 +26,7 @@ class DataTable;
 class DataChunk;
 class DistinctStatistics;
 class DuckTransaction;
+class DuckTableEntry;
 class Expression;
 class Index;
 class OptimisticDataWriter;
@@ -54,10 +55,21 @@ struct ParallelTableScanState;
 struct TableAppendState;
 class CommitDropState;
 
-enum class DataTableVersion {
-	MAIN_TABLE, // this is the newest version of the table - it has not been altered or dropped
-	ALTERED,    // this table has been altered
-	DROPPED     // this table has been dropped
+class DataTableVersionGuard {
+public:
+	DataTableVersionGuard(DataTable &table, DuckTableEntry &entry, bool reserve);
+	~DataTableVersionGuard();
+
+	DataTable &GetTable();
+	void Publish(DuckTableEntry &entry, DataTable &replacement);
+
+private:
+	DataTable &table;
+	DuckTableEntry &entry;
+	unique_lock<mutex> append_lock;
+	Identifier table_name;
+	bool reserved;
+	bool active;
 };
 
 //! DataTable represents a physical table on disk
@@ -68,14 +80,15 @@ public:
 	          Identifier table, vector<ColumnDefinition> column_definitions_p,
 	          unique_ptr<PersistentTableData> data = nullptr);
 	//! Constructs a DataTable as a delta on an existing data table with a newly added column
-	DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression &default_value);
+	DataTable(ClientContext &context, DataTableVersionGuard &version_guard, ColumnDefinition &new_column,
+	          Expression &default_value);
 	//! Constructs a DataTable as a delta on an existing data table but with one column removed
-	DataTable(ClientContext &context, DataTable &parent, idx_t removed_column);
+	DataTable(ClientContext &context, DataTableVersionGuard &version_guard, idx_t removed_column);
 	//! Constructs a DataTable as a delta on an existing data table but with one column changed type
-	DataTable(ClientContext &context, DataTable &parent, idx_t changed_idx, const LogicalType &target_type,
-	          const vector<StorageIndex> &bound_columns, Expression &cast_expr);
+	DataTable(ClientContext &context, DataTableVersionGuard &version_guard, idx_t changed_idx,
+	          const LogicalType &target_type, const vector<StorageIndex> &bound_columns, Expression &cast_expr);
 	//! Constructs a DataTable as a delta on an existing data table but with one column added new constraint
-	DataTable(ClientContext &context, DataTable &parent, BoundConstraint &constraint);
+	DataTable(ClientContext &context, DataTableVersionGuard &version_guard, BoundConstraint &constraint);
 
 	//! A reference to the database instance
 	AttachedDatabase &db;
@@ -174,7 +187,7 @@ public:
 	                  const vector<column_t> &column_path, DataChunk &updates);
 
 	//! Fetches an append lock
-	void AppendLock(DuckTransaction &transaction, TableAppendState &state);
+	void AppendLock(DuckTransaction &transaction, DuckTableEntry &table, TableAppendState &state);
 	//! Begin appending structs to this table, obtaining necessary locks, etc
 	void InitializeAppend(DuckTransaction &transaction, TableAppendState &state);
 	//! Append a chunk to the table using the AppendState obtained from InitializeAppend
@@ -188,7 +201,7 @@ public:
 	                optional_ptr<StorageCommitState> commit_state);
 	//! Revert a set of appends made by the given AppendState, used to revert appends in the event of an error during
 	//! commit (e.g. because of an I/O exception)
-	void RevertAppend(DuckTransaction &transaction, idx_t start_row, idx_t count);
+	void RevertAppend(DuckTransaction &transaction, DuckTableEntry &table, idx_t start_row, idx_t count);
 	void RevertAppendInternal(idx_t start_row);
 
 	void ScanTableSegment(DuckTransaction &transaction, idx_t start_row, idx_t count,
@@ -212,21 +225,24 @@ public:
 	void RemoveFromIndexes(const QueryContext &context, Vector &row_identifiers, idx_t count,
 	                       IndexRemovalType removal_type, optional_idx checkpoint_id = optional_idx());
 
-	void SetAsMainTable() {
-		this->version = DataTableVersion::MAIN_TABLE;
+	unique_ptr<DataTableVersionGuard> InitializeVersionChange(DuckTableEntry &entry, bool reserve = true) {
+		return make_uniq<DataTableVersionGuard>(*this, entry, reserve);
 	}
 
-	void SetAsDropped() {
-		this->version = DataTableVersion::DROPPED;
+	optional_ptr<DuckTableEntry> GetVersion() const {
+		return version.load();
 	}
 
-	bool IsMainTable() const {
-		return this->version == DataTableVersion::MAIN_TABLE;
+	void SetVersion(optional_ptr<DuckTableEntry> new_version) {
+		version.store(new_version);
 	}
-	bool IsRoot() const {
-		return IsMainTable();
+
+	bool CompareAndSetVersion(optional_ptr<DuckTableEntry> &expected, optional_ptr<DuckTableEntry> new_version) {
+		return version.compare_exchange_strong(expected, new_version);
 	}
-	string TableModification() const;
+
+	bool IsMainTable(const DuckTableEntry &entry) const;
+	string TableModification(const DuckTableEntry &entry) const;
 
 	//! Get statistics of a physical column within the table
 	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, const StorageIndex &column_id);
@@ -345,7 +361,9 @@ private:
 	mutex append_lock;
 	//! The row groups of the table
 	shared_ptr<RowGroupCollection> row_groups;
-	//! The version of the data table
-	atomic<DataTableVersion> version;
+	//! The Duck table catalog entry that most recently modified this DataTable
+	atomic<optional_ptr<DuckTableEntry>> version;
+
+	friend class DataTableVersionGuard;
 };
 } // namespace duckdb

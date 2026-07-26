@@ -72,7 +72,7 @@ DataTable::DataTable(AttachedDatabase &db, shared_ptr<TableIOManager> table_io_m
                      unique_ptr<PersistentTableData> data)
     : db(db),
       info(make_shared_ptr<DataTableInfo>(db, std::move(table_io_manager_p), std::move(schema_path), std::move(table))),
-      column_definitions(std::move(column_definitions_p)), version(DataTableVersion::MAIN_TABLE) {
+      column_definitions(std::move(column_definitions_p)), version(nullptr) {
 	// initialize the table with the existing data from disk, if any
 	auto types = GetTypes();
 	auto &io_manager = TableIOManager::Get(*this);
@@ -87,8 +87,49 @@ DataTable::DataTable(AttachedDatabase &db, shared_ptr<TableIOManager> table_io_m
 	row_groups->Verify();
 }
 
-DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition &new_column, Expression &default_value)
-    : db(parent.db), info(parent.info), version(DataTableVersion::MAIN_TABLE) {
+DataTableVersionGuard::DataTableVersionGuard(DataTable &table_p, DuckTableEntry &entry_p, bool reserve)
+    : table(table_p), entry(entry_p), append_lock(table.append_lock), table_name(table.GetTableName()),
+      reserved(reserve), active(true) {
+	optional_ptr<DuckTableEntry> expected(&entry);
+	if (reserved ? !table.CompareAndSetVersion(expected, nullptr) : table.GetVersion().get() != &entry) {
+		throw TransactionException("Catalog write-write conflict on alter with \"%s\"", table.GetTableName());
+	}
+}
+
+DataTableVersionGuard::~DataTableVersionGuard() {
+	if (!active) {
+		return;
+	}
+	table.SetTableName(std::move(table_name));
+	if (!reserved) {
+		return;
+	}
+	optional_ptr<DuckTableEntry> expected;
+	if (!table.CompareAndSetVersion(expected, &entry)) {
+		D_ASSERT(false);
+	}
+}
+
+DataTable &DataTableVersionGuard::GetTable() {
+	return table;
+}
+
+void DataTableVersionGuard::Publish(DuckTableEntry &new_entry, DataTable &replacement) {
+	D_ASSERT(active);
+	D_ASSERT(reserved ? !table.GetVersion() : table.GetVersion().get() == &entry);
+	if (!RefersToSameObject(table, replacement)) {
+		D_ASSERT(!replacement.GetVersion());
+		replacement.SetVersion(&new_entry);
+	}
+	table.SetVersion(&new_entry);
+	active = false;
+	append_lock.unlock();
+}
+
+DataTable::DataTable(ClientContext &context, DataTableVersionGuard &version_guard, ColumnDefinition &new_column,
+                     Expression &default_value)
+    : db(version_guard.GetTable().db), info(version_guard.GetTable().info), version(nullptr) {
+	auto &parent = version_guard.GetTable();
 	// add the column definitions from this DataTable
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
@@ -100,23 +141,16 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, ColumnDefinition
 	ExpressionExecutor default_executor(context);
 	default_executor.AddExpression(default_value);
 
-	// prevent any new tuples from being added to the parent
-	lock_guard<mutex> parent_lock(parent.append_lock);
-
 	this->row_groups = parent.row_groups->AddColumn(context, new_column, default_executor);
 
 	// also add this column to client local storage
 	local_storage.AddColumn(parent, *this, new_column, default_executor);
-
-	// this table replaces the previous table, hence the parent is no longer the root DataTable
-	parent.version = DataTableVersion::ALTERED;
 }
 
-DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_column)
-    : db(parent.db), info(parent.info), version(DataTableVersion::MAIN_TABLE) {
-	// prevent any new tuples from being added to the parent
+DataTable::DataTable(ClientContext &context, DataTableVersionGuard &version_guard, idx_t removed_column)
+    : db(version_guard.GetTable().db), info(version_guard.GetTable().info), version(nullptr) {
+	auto &parent = version_guard.GetTable();
 	auto &local_storage = LocalStorage::Get(context, db);
-	lock_guard<mutex> parent_lock(parent.append_lock);
 
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
@@ -155,20 +189,18 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t removed_co
 
 	// scan the original table, and fill the new column with the transformed value
 	local_storage.DropColumn(parent, *this, removed_column);
-
-	// this table replaces the previous table, hence the parent is no longer the root DataTable
-	parent.version = DataTableVersion::ALTERED;
 }
 
-DataTable::DataTable(ClientContext &context, DataTable &parent, BoundConstraint &constraint)
-    : db(parent.db), info(parent.info), row_groups(parent.row_groups), version(DataTableVersion::MAIN_TABLE) {
+DataTable::DataTable(ClientContext &context, DataTableVersionGuard &version_guard, BoundConstraint &constraint)
+    : db(version_guard.GetTable().db), info(version_guard.GetTable().info),
+      row_groups(version_guard.GetTable().row_groups), version(nullptr) {
+	auto &parent = version_guard.GetTable();
 	// ALTER COLUMN to add a new constraint.
 
 	// Bind all indexes.
 	info->BindIndexes(context);
 
 	auto &local_storage = LocalStorage::Get(context, db);
-	lock_guard<mutex> parent_lock(parent.append_lock);
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -177,16 +209,14 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, BoundConstraint 
 		VerifyNewConstraint(local_storage, parent, constraint);
 	}
 	local_storage.MoveStorage(parent, *this);
-	parent.version = DataTableVersion::ALTERED;
 }
 
-DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_idx, const LogicalType &target_type,
-                     const vector<StorageIndex> &bound_columns, Expression &cast_expr)
-    : db(parent.db), info(parent.info), version(DataTableVersion::MAIN_TABLE) {
+DataTable::DataTable(ClientContext &context, DataTableVersionGuard &version_guard, idx_t changed_idx,
+                     const LogicalType &target_type, const vector<StorageIndex> &bound_columns, Expression &cast_expr)
+    : db(version_guard.GetTable().db), info(version_guard.GetTable().info), version(nullptr) {
+	auto &parent = version_guard.GetTable();
 	auto &transaction = DuckTransaction::Get(context, db);
 	auto &local_storage = LocalStorage::Get(transaction);
-	// prevent any tuples from being added to the parent
-	lock_guard<mutex> lock(append_lock);
 	for (auto &column_def : parent.column_definitions) {
 		column_definitions.emplace_back(column_def.Copy());
 	}
@@ -212,9 +242,6 @@ DataTable::DataTable(ClientContext &context, DataTable &parent, idx_t changed_id
 
 	// scan the original table, and fill the new column with the transformed value
 	local_storage.ChangeType(parent, *this, changed_idx, target_type, bound_columns, cast_expr);
-
-	// this table replaces the previous table, hence the parent is no longer the root DataTable
-	parent.version = DataTableVersion::ALTERED;
 }
 
 vector<LogicalType> DataTable::GetTypes() {
@@ -973,25 +1000,27 @@ DataTable::InitializeConstraintState(TableCatalogEntry &table,
 	return make_uniq<ConstraintState>(table, bound_constraints);
 }
 
-string DataTable::TableModification() const {
-	switch (version.load()) {
-	case DataTableVersion::MAIN_TABLE:
+bool DataTable::IsMainTable(const DuckTableEntry &entry) const {
+	return GetVersion().get() == &entry && !entry.HasParent();
+}
+
+string DataTable::TableModification(const DuckTableEntry &entry) const {
+	if (IsMainTable(entry)) {
 		return "no changes";
-	case DataTableVersion::ALTERED:
-		return "altered";
-	case DataTableVersion::DROPPED:
-		return "dropped";
-	default:
-		throw InternalException("Unrecognized table version");
 	}
+	auto current_entry = GetVersion();
+	if (current_entry && current_entry->HasParent() && current_entry->Parent().type == CatalogType::DELETED_ENTRY) {
+		return "dropped";
+	}
+	return "altered";
 }
 
 void DataTable::InitializeLocalAppend(LocalAppendState &state, DuckTableEntry &table, ClientContext &context,
                                       const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-	if (!IsMainTable()) {
+	if (!IsMainTable(table)) {
 		throw TransactionException("Transaction conflict: attempting to insert into table \"%s\" but it has been %s by "
 		                           "a different transaction",
-		                           GetTableName(), TableModification());
+		                           GetTableName(), TableModification(table));
 	}
 	auto &local_storage = LocalStorage::Get(context, db);
 	local_storage.InitializeAppend(state, *this, table);
@@ -1000,10 +1029,10 @@ void DataTable::InitializeLocalAppend(LocalAppendState &state, DuckTableEntry &t
 
 void DataTable::InitializeLocalStorage(LocalAppendState &state, DuckTableEntry &table, ClientContext &context,
                                        const vector<unique_ptr<BoundConstraint>> &bound_constraints) {
-	if (!IsMainTable()) {
+	if (!IsMainTable(table)) {
 		throw TransactionException("Transaction conflict: attempting to insert into table \"%s\" but it has been %s by "
 		                           "a different transaction",
-		                           GetTableName(), TableModification());
+		                           GetTableName(), TableModification(table));
 	}
 
 	auto &local_storage = LocalStorage::Get(context, db);
@@ -1016,10 +1045,10 @@ void DataTable::LocalAppend(LocalAppendState &state, DuckTableEntry &table_entry
 	if (chunk.size() == 0) {
 		return;
 	}
-	if (!IsMainTable()) {
+	if (!IsMainTable(table_entry)) {
 		throw TransactionException("Transaction conflict: attempting to insert into table \"%s\" but it has been %s by "
 		                           "a different transaction",
-		                           GetTableName(), TableModification());
+		                           GetTableName(), TableModification(table_entry));
 	}
 	chunk.Verify(context.db);
 
@@ -1154,13 +1183,14 @@ void DataTable::LocalAppend(DuckTableEntry &table, ClientContext &context, Colum
 	storage.FinalizeLocalAppend(append_state);
 }
 
-void DataTable::AppendLock(DuckTransaction &transaction, TableAppendState &state) {
+void DataTable::AppendLock(DuckTransaction &transaction, DuckTableEntry &table, TableAppendState &state) {
 	state.append_lock = unique_lock<mutex>(append_lock);
-	if (!IsMainTable()) {
+	if (!IsMainTable(table)) {
 		throw TransactionException("Transaction conflict: attempting to insert into table \"%s\" but it has been %s by "
 		                           "a different transaction",
-		                           GetTableName(), TableModification());
+		                           GetTableName(), TableModification(table));
 	}
+	state.table_entry = &table;
 	state.table_lock = transaction.SharedLockTable(*info);
 	state.row_start = NumericCast<row_t>(row_groups->GetNextRowId());
 	state.current_row = state.row_start;
@@ -1208,7 +1238,8 @@ void DataTable::InitializeAppend(DuckTransaction &transaction, TableAppendState 
 }
 
 void DataTable::Append(DataChunk &chunk, TableAppendState &state) {
-	D_ASSERT(IsMainTable());
+	D_ASSERT(state.table_entry);
+	D_ASSERT(IsMainTable(*state.table_entry));
 	row_groups->Append(chunk, state);
 }
 
@@ -1317,14 +1348,17 @@ void DataTable::CommitAppend(transaction_t commit_id, idx_t row_start, idx_t cou
 }
 
 void DataTable::RevertAppendInternal(idx_t start_row) {
-	D_ASSERT(IsMainTable());
 	// revert appends made to row_groups
 	row_groups->RevertAppendInternal(start_row);
 }
 
-void DataTable::RevertAppend(DuckTransaction &transaction, idx_t start_row, idx_t count) {
+void DataTable::RevertAppend(DuckTransaction &transaction, DuckTableEntry &table, idx_t start_row, idx_t count) {
 	lock_guard<mutex> lock(append_lock);
 	auto table_lock = transaction.SharedLockTable(*info);
+	auto current_entry = GetVersion();
+	if (!current_entry || (current_entry.get() != &table && !RefersToSameObject(current_entry->GetStorage(), *this))) {
+		CompareAndSetVersion(current_entry, &table);
+	}
 
 	// revert any appends to indexes
 	if (!info->indexes.Empty()) {
@@ -1469,14 +1503,14 @@ ErrorData DataTable::AppendToIndexes(TableIndexList &indexes, optional_ptr<Table
 
 ErrorData DataTable::AppendToIndexes(optional_ptr<TableIndexList> delete_indexes, DataChunk &table_chunk,
                                      row_t row_start, const IndexAppendMode index_append_mode) {
-	D_ASSERT(IsMainTable());
 	auto active_checkpoint = GetAttached().GetTransactionManager().Cast<DuckTransactionManager>().GetActiveCheckpoint();
 	auto checkpoint_id = active_checkpoint == MAX_TRANSACTION_ID ? optional_idx() : active_checkpoint;
 	return AppendToIndexes(info->indexes, delete_indexes, table_chunk, row_start, index_append_mode, checkpoint_id);
 }
 
 void DataTable::RevertIndexAppend(TableAppendState &state, DataChunk &chunk, row_t row_start) {
-	D_ASSERT(IsMainTable());
+	D_ASSERT(state.table_entry);
+	D_ASSERT(IsMainTable(*state.table_entry));
 	if (info->indexes.Empty()) {
 		return;
 	}
@@ -1489,7 +1523,8 @@ void DataTable::RevertIndexAppend(TableAppendState &state, DataChunk &chunk, row
 }
 
 void DataTable::RevertIndexAppend(TableAppendState &state, DataChunk &chunk, Vector &row_identifiers) {
-	D_ASSERT(IsMainTable());
+	D_ASSERT(state.table_entry);
+	D_ASSERT(IsMainTable(*state.table_entry));
 	for (auto &index : info->indexes.Indexes()) {
 		auto &main_index = index.Cast<BoundIndex>();
 		main_index.Delete(chunk, row_identifiers);
@@ -1732,10 +1767,10 @@ void DataTable::Update(TableUpdateState &state, ClientContext &context, DuckTabl
 		return;
 	}
 
-	if (!IsMainTable()) {
+	if (!IsMainTable(table_entry)) {
 		throw TransactionException(
 		    "Transaction conflict: attempting to update table \"%s\" but it has been %s by a different transaction",
-		    GetTableName(), TableModification());
+		    GetTableName(), TableModification(table_entry));
 	}
 
 	// first verify that no constraints are violated
@@ -1784,10 +1819,10 @@ void DataTable::UpdateColumn(DuckTableEntry &table, ClientContext &context, Vect
 		return;
 	}
 
-	if (!IsMainTable()) {
+	if (!IsMainTable(table)) {
 		throw TransactionException(
 		    "Transaction conflict: attempting to update table \"%s\" but it has been %s by a different transaction",
-		    GetTableName(), TableModification());
+		    GetTableName(), TableModification(table));
 	}
 
 	// now perform the actual update
@@ -1908,12 +1943,6 @@ bool DataTable::ScanColumnSegmentInfo(const QueryContext &context, ColumnSegment
 //===--------------------------------------------------------------------===//
 void DataTable::AddIndex(const ColumnList &columns, const vector<LogicalIndex> &column_indexes,
                          const IndexConstraintType type, IndexStorageInfo index_info) {
-	if (!IsMainTable()) {
-		throw TransactionException("Transaction conflict: attempting to add an index to table \"%s\" but it has been "
-		                           "%s by a different transaction",
-		                           GetTableName(), TableModification());
-	}
-
 	// Fetch the column types and create bound column reference expressions.
 	vector<column_t> physical_ids;
 	vector<unique_ptr<Expression>> expressions;

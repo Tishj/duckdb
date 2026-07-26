@@ -165,6 +165,17 @@ optional_ptr<CatalogEntry> CatalogSet::CreateCommittedEntry(unique_ptr<CatalogEn
 	// Give the entry commit id 0, so it is visible to all transactions
 	entry->timestamp = 0;
 	map.AddEntry(std::move(entry));
+	try {
+		if (catalog_entry->type == CatalogType::TABLE_ENTRY) {
+			auto &table = catalog_entry->Cast<TableCatalogEntry>();
+			if (table.IsDuckTable()) {
+				table.Cast<DuckTableEntry>().InitializeVersion();
+			}
+		}
+	} catch (...) {
+		map.DropEntry(*catalog_entry);
+		throw;
+	}
 
 	return catalog_entry;
 }
@@ -188,10 +199,21 @@ bool CatalogSet::CreateEntryInternal(CatalogTransaction transaction, const Ident
 	// Finally add the new entry to the chain
 	auto value_ptr = value.get();
 	map.UpdateEntry(std::move(value));
-	// Push the old entry in the undo buffer for this transaction, so it can be restored in the event of failure
-	if (transaction.transaction) {
-		DuckTransactionManager::Get(GetCatalog().GetAttached())
-		    .PushCatalogEntry(*transaction.transaction, value_ptr->Child());
+	try {
+		if (value_ptr->type == CatalogType::TABLE_ENTRY) {
+			auto &table = value_ptr->Cast<TableCatalogEntry>();
+			if (table.IsDuckTable()) {
+				table.Cast<DuckTableEntry>().InitializeVersion();
+			}
+		}
+		// Push the old entry in the undo buffer for this transaction, so it can be restored in the event of failure
+		if (transaction.transaction) {
+			DuckTransactionManager::Get(GetCatalog().GetAttached())
+			    .PushCatalogEntry(*transaction.transaction, value_ptr->Child());
+		}
+	} catch (...) {
+		map.DropEntry(*value_ptr);
+		throw;
 	}
 	return true;
 }
@@ -335,18 +357,24 @@ bool CatalogSet::AlterEntry(CatalogTransaction transaction, const Identifier &na
 		}
 	}
 
-	// If this ALTER produced a new DuckTableEntry, refresh the LocalTableStorage's table_entry
-	// pointer so that commit-time Flush pushes an AppendInfo referencing the current DuckTableEntry.
-	if (transaction.context && value->type == CatalogType::TABLE_ENTRY) {
-		auto &tce = value->Cast<TableCatalogEntry>();
-		if (tce.IsDuckTable()) {
-			auto &new_entry = tce.Cast<DuckTableEntry>();
-			auto &new_storage = new_entry.GetStorage();
-			auto lstorage = LocalStorage::Get(*transaction.context, new_storage.db).GetStorage(new_storage);
-			if (lstorage) {
-				lstorage->table_entry = &new_entry;
-			}
+	optional_ptr<DuckTableEntry> new_duck_entry;
+	if (entry->type == CatalogType::TABLE_ENTRY && value->type == CatalogType::TABLE_ENTRY) {
+		auto &old_table = entry->Cast<TableCatalogEntry>();
+		auto &new_table = value->Cast<TableCatalogEntry>();
+		if (old_table.IsDuckTable() && new_table.IsDuckTable()) {
+			new_duck_entry = &new_table.Cast<DuckTableEntry>();
+			new_duck_entry->InitializeVersionChange(old_table.Cast<DuckTableEntry>());
 		}
+	}
+
+	unique_ptr<MemoryStream> undo_stream;
+	if (transaction.transaction) {
+		undo_stream = make_uniq<MemoryStream>(Allocator::Get(*transaction.db));
+		BinarySerializer serializer(*undo_stream);
+		serializer.Begin();
+		serializer.WriteProperty(100, "column_name", alter_info.GetColumnName());
+		serializer.WriteProperty(101, "alter_info", &alter_info);
+		serializer.End();
 	}
 
 	// lock the catalog for writing
@@ -357,6 +385,13 @@ bool CatalogSet::AlterEntry(CatalogTransaction transaction, const Identifier &na
 	// fetch the entry again before doing the modification
 	// this will catch any write-write conflicts between transactions
 	entry = GetEntryInternal(transaction, name);
+	if (new_duck_entry) {
+		auto &old_table = entry->Cast<TableCatalogEntry>();
+		if (!old_table.IsDuckTable()) {
+			throw InternalException("Cannot replace a non-Duck table with a DuckTableEntry");
+		}
+		new_duck_entry->InitializeVersionChange(old_table.Cast<DuckTableEntry>());
+	}
 
 	// Mark this entry as being created by this transaction
 	value->timestamp = transaction.transaction_id;
@@ -369,23 +404,35 @@ bool CatalogSet::AlterEntry(CatalogTransaction transaction, const Identifier &na
 			return false;
 		}
 	}
+	if (new_duck_entry) {
+		new_duck_entry->PrepareVersion();
+	}
 	auto new_entry = value.get();
 	map.UpdateEntry(std::move(value));
 
 	// push the old entry in the undo buffer for this transaction
 	unique_ptr<CatalogEntry> entry_to_destroy;
 	if (transaction.transaction) {
-		// serialize the AlterInfo into a temporary buffer
-		MemoryStream stream(Allocator::Get(*transaction.db));
-		BinarySerializer serializer(stream);
-		serializer.Begin();
-		serializer.WriteProperty(100, "column_name", alter_info.GetColumnName());
-		serializer.WriteProperty(101, "alter_info", &alter_info);
-		serializer.End();
-
-		DuckTransactionManager::Get(GetCatalog().GetAttached())
-		    .PushCatalogEntry(*transaction.transaction, new_entry->Child(), stream.GetData(), stream.GetPosition());
-	} else {
+		try {
+			DuckTransactionManager::Get(GetCatalog().GetAttached())
+			    .PushCatalogEntry(*transaction.transaction, new_entry->Child(), undo_stream->GetData(),
+			                      undo_stream->GetPosition());
+		} catch (...) {
+			map.DropEntry(*new_entry);
+			throw;
+		}
+	}
+	if (new_duck_entry) {
+		new_duck_entry->PublishVersion();
+		if (transaction.context) {
+			auto &new_storage = new_duck_entry->GetStorage();
+			auto local_storage = LocalStorage::Get(*transaction.context, new_storage.db).GetStorage(new_storage);
+			if (local_storage) {
+				local_storage->table_entry = new_duck_entry;
+			}
+		}
+	}
+	if (!transaction.transaction) {
 		// if we don't have a transaction this alter is non-transactional
 		// in that case we are able to just directly destroy the child (if there is any)
 		entry_to_destroy = new_entry->TakeChild();

@@ -235,6 +235,59 @@ DuckTableEntry::DuckTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, Bou
 	}
 }
 
+DuckTableEntry::~DuckTableEntry() {
+	optional_ptr<DuckTableEntry> expected(this);
+	storage->CompareAndSetVersion(expected, nullptr);
+	if (version_source) {
+		expected = this;
+		version_source->CompareAndSetVersion(expected, nullptr);
+	}
+}
+
+void DuckTableEntry::InitializeVersion() {
+	optional_ptr<DuckTableEntry> expected;
+	if (!storage->CompareAndSetVersion(expected, this)) {
+		throw InternalException("Cannot initialize a DuckTableEntry with storage that is already published");
+	}
+}
+
+void DuckTableEntry::InitializeVersionChange(DuckTableEntry &old_entry) {
+	if (version_guard) {
+		if (!RefersToSameObject(version_guard->GetTable(), old_entry.GetStorage())) {
+			throw InternalException("DuckTableEntry version guard does not reference its catalog predecessor");
+		}
+		return;
+	}
+	if (!RefersToSameObject(*storage, old_entry.GetStorage())) {
+		throw InternalException("Structural DuckTableEntry alteration is missing its version guard");
+	}
+	version_guard = storage->InitializeVersionChange(old_entry, false);
+}
+
+void DuckTableEntry::PrepareVersion() {
+	if (!version_guard) {
+		throw InternalException("Cannot prepare a DuckTableEntry without a version guard");
+	}
+	auto &source = version_guard->GetTable();
+	if (!RefersToSameObject(source, *storage)) {
+		version_source = source.shared_from_this();
+	}
+	storage->SetTableName(name);
+}
+
+void DuckTableEntry::PublishVersion() {
+	if (!version_guard) {
+		throw InternalException("Cannot publish a DuckTableEntry without a version guard");
+	}
+	version_guard->Publish(*this, *storage);
+	version_guard.reset();
+}
+
+void DuckTableEntry::SetVersionGuard(unique_ptr<DataTableVersionGuard> version_guard_p) {
+	D_ASSERT(!version_guard);
+	version_guard = std::move(version_guard_p);
+}
+
 unique_ptr<BaseStatistics> DuckTableEntry::GetStatistics(ClientContext &context, const StorageIndex &column_id) {
 	return storage->GetStatistics(context, column_id);
 }
@@ -304,7 +357,6 @@ unique_ptr<CatalogEntry> DuckTableEntry::AlterEntry(ClientContext &context, Alte
 		auto &rename_info = table_info.Cast<RenameTableInfo>();
 		auto copied_table = Copy(context);
 		copied_table->name = rename_info.new_table_name;
-		storage->SetTableName(rename_info.new_table_name);
 		return copied_table;
 	}
 	case AlterTableType::ADD_COLUMN: {
@@ -501,8 +553,11 @@ unique_ptr<CatalogEntry> DuckTableEntry::AddColumn(ClientContext &context, AddCo
 		binder->BindDefaultValue(info.new_column, bound_defaults, catalog_name.GetIdentifierName(),
 		                         schema_name.GetIdentifierName());
 	}
-	auto new_storage = make_shared_ptr<DataTable>(context, *storage, info.new_column, *bound_defaults.back());
-	return make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	auto version_guard = storage->InitializeVersionChange(*this);
+	auto new_storage = make_shared_ptr<DataTable>(context, *version_guard, info.new_column, *bound_defaults.back());
+	auto result = make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	result->SetVersionGuard(std::move(version_guard));
+	return std::move(result);
 }
 
 struct StructMappingInfo {
@@ -819,9 +874,12 @@ unique_ptr<CatalogEntry> DuckTableEntry::RemoveColumn(ClientContext &context, Re
 	if (columns.GetColumn(LogicalIndex(removed_index)).Generated()) {
 		return make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, storage, triggers);
 	}
-	auto new_storage =
-	    make_shared_ptr<DataTable>(context, *storage, columns.LogicalToPhysical(LogicalIndex(removed_index)).index);
-	return make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	auto version_guard = storage->InitializeVersionChange(*this);
+	auto new_storage = make_shared_ptr<DataTable>(context, *version_guard,
+	                                              columns.LogicalToPhysical(LogicalIndex(removed_index)).index);
+	auto result = make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	result->SetVersionGuard(std::move(version_guard));
+	return std::move(result);
 }
 
 struct DroppedFieldMapping {
@@ -1077,8 +1135,11 @@ unique_ptr<CatalogEntry> DuckTableEntry::SetNotNull(ClientContext &context, SetN
 	// Return with new storage info. Note that we need the bound column index here.
 	auto physical_columns = columns.LogicalToPhysical(LogicalIndex(not_null_idx));
 	auto bound_constraint = make_uniq<BoundNotNullConstraint>(physical_columns);
-	auto new_storage = make_shared_ptr<DataTable>(context, *storage, *bound_constraint);
-	return make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	auto version_guard = storage->InitializeVersionChange(*this);
+	auto new_storage = make_shared_ptr<DataTable>(context, *version_guard, *bound_constraint);
+	auto result = make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	result->SetVersionGuard(std::move(version_guard));
+	return std::move(result);
 }
 
 unique_ptr<CatalogEntry> DuckTableEntry::DropNotNull(ClientContext &context, DropNotNullInfo &info) {
@@ -1201,10 +1262,12 @@ unique_ptr<CatalogEntry> DuckTableEntry::ChangeColumnType(ClientContext &context
 		storage_oids.emplace_back(COLUMN_IDENTIFIER_ROW_ID);
 	}
 
+	auto version_guard = storage->InitializeVersionChange(*this);
 	auto new_storage =
-	    make_shared_ptr<DataTable>(context, *storage, columns.LogicalToPhysical(LogicalIndex(change_idx)).index,
+	    make_shared_ptr<DataTable>(context, *version_guard, columns.LogicalToPhysical(LogicalIndex(change_idx)).index,
 	                               info.target_type, std::move(storage_oids), *bound_expression);
 	auto result = make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	result->SetVersionGuard(std::move(version_guard));
 	return std::move(result);
 }
 
@@ -1276,8 +1339,25 @@ unique_ptr<CatalogEntry> DuckTableEntry::DropForeignKeyConstraint(ClientContext 
 }
 
 void DuckTableEntry::Rollback(CatalogEntry &prev_entry) {
+	version_guard.reset();
+	optional_ptr<DuckTableEntry> expected(this);
 	if (prev_entry.type != CatalogType::TABLE_ENTRY) {
+		storage->CompareAndSetVersion(expected, nullptr);
+		if (version_source) {
+			expected = this;
+			version_source->CompareAndSetVersion(expected, nullptr);
+			version_source.reset();
+		}
 		return;
+	}
+	auto &prev_table = prev_entry.Cast<DuckTableEntry>();
+	if (version_source) {
+		version_source->CompareAndSetVersion(expected, &prev_table);
+		expected = this;
+		storage->CompareAndSetVersion(expected, nullptr);
+		version_source.reset();
+	} else {
+		storage->CompareAndSetVersion(expected, &prev_table);
 	}
 
 	// Rolls back any physical index creation.
@@ -1285,7 +1365,6 @@ void DuckTableEntry::Rollback(CatalogEntry &prev_entry) {
 	// FIXME: Should be changed to work for any index-based constraint.
 
 	auto &table = Cast<DuckTableEntry>();
-	auto &prev_table = prev_entry.Cast<DuckTableEntry>();
 	auto &prev_info = prev_table.GetStorage().GetDataTableInfo();
 	auto &prev_indexes = prev_info->GetIndexes();
 
@@ -1320,7 +1399,6 @@ void DuckTableEntry::Rollback(CatalogEntry &prev_entry) {
 }
 
 void DuckTableEntry::OnDrop() {
-	storage->SetAsDropped();
 }
 
 unique_ptr<CatalogEntry> DuckTableEntry::AddConstraint(ClientContext &context, AddConstraintInfo &info) {
@@ -1347,8 +1425,10 @@ unique_ptr<CatalogEntry> DuckTableEntry::AddConstraint(ClientContext &context, A
 	    binder->BindConstraint(*info.constraint, table_info.GetTableName(), table_info.columns);
 	const auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info), schema, info.bind_mode);
 
-	auto new_storage = make_shared_ptr<DataTable>(context, *storage, *bound_constraint);
+	auto version_guard = storage->InitializeVersionChange(*this);
+	auto new_storage = make_shared_ptr<DataTable>(context, *version_guard, *bound_constraint);
 	auto new_entry = make_uniq<DuckTableEntry>(catalog, schema, *bound_create_info, new_storage, triggers);
+	new_entry->SetVersionGuard(std::move(version_guard));
 	return std::move(new_entry);
 }
 
@@ -1362,7 +1442,7 @@ unique_ptr<CatalogEntry> DuckTableEntry::Copy(ClientContext &context) const {
 }
 
 void DuckTableEntry::SetAsRoot() {
-	storage->SetAsMainTable();
+	storage->SetVersion(this);
 	storage->SetTableName(name);
 }
 

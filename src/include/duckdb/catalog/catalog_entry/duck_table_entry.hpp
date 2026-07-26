@@ -16,6 +16,7 @@
 namespace duckdb {
 
 class CommitDropState;
+class DataTableVersionGuard;
 
 struct AddConstraintInfo;
 struct CreateTriggerInfo;
@@ -27,6 +28,7 @@ public:
 	DuckTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, BoundCreateTableInfo &info,
 	               shared_ptr<DataTable> inherited_storage = nullptr,
 	               shared_ptr<CatalogSet> inherited_triggers = nullptr);
+	~DuckTableEntry() override;
 
 public:
 	unique_ptr<CatalogEntry> AlterEntry(ClientContext &context, AlterInfo &info) override;
@@ -47,6 +49,10 @@ public:
 	unique_ptr<CatalogEntry> Copy(ClientContext &context) const override;
 
 	void SetAsRoot() override;
+	void InitializeVersion();
+	void InitializeVersionChange(DuckTableEntry &old_entry);
+	void PrepareVersion();
+	void PublishVersion();
 
 	void CommitAlter(string &column_name, CommitDropState &drop_state);
 	void CommitDrop(CommitDropState &drop_state);
@@ -96,6 +102,7 @@ private:
 	void UpdateConstraintsOnColumnDrop(const LogicalIndex &removed_index, const vector<LogicalIndex> &adjusted_indices,
 	                                   const RemoveColumnInfo &info, CreateTableInfo &create_info,
 	                                   const vector<unique_ptr<BoundConstraint>> &bound_constraints, bool is_generated);
+	void SetVersionGuard(unique_ptr<DataTableVersionGuard> version_guard_p);
 
 private:
 	//! A reference to the underlying storage unit used for this table
@@ -104,5 +111,9 @@ private:
 	shared_ptr<CatalogSet> triggers;
 	//! Manages dependencies of the individual columns of the table
 	ColumnDependencyManager column_dependency_manager;
+	//! The source storage this entry was structurally published into
+	shared_ptr<DataTable> version_source;
+	//! Holds an unpublished version transition and the source append lock
+	unique_ptr<DataTableVersionGuard> version_guard;
 };
 } // namespace duckdb

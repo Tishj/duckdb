@@ -134,7 +134,7 @@ SinkFinalizeType PhysicalCreateIndex::Finalize(Pipeline &pipeline, Event &event,
 	bound_index->VerifyAllocations();
 
 	auto &storage = table.GetStorage();
-	if (!storage.IsMainTable()) {
+	if (!storage.IsMainTable(table)) {
 		throw TransactionException(
 		    "Transaction conflict: cannot add an index to a table that has been altered or dropped");
 	}

@@ -31,7 +31,7 @@ void RollbackState::RollbackEntry(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::INSERT_TUPLE: {
 		auto info = reinterpret_cast<AppendInfo *>(data);
 		// revert the append in the base table
-		info->table->GetStorage().RevertAppend(transaction, info->start_row, info->count);
+		info->table->GetStorage().RevertAppend(transaction, *info->table, info->start_row, info->count);
 		break;
 	}
 	case UndoFlags::DELETE_TUPLE: {

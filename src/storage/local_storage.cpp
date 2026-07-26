@@ -580,7 +580,8 @@ void LocalStorage::Flush(DataTable &table, LocalTableStorage &storage, optional_
 	const auto row_group_size = storage.GetCollection().GetRowGroupSize();
 
 	TableAppendState append_state;
-	table.AppendLock(transaction, append_state);
+	D_ASSERT(storage.table_entry);
+	table.AppendLock(transaction, *storage.table_entry, append_state);
 	if ((append_state.row_start == 0 || storage.GetCollection().GetTotalRows() >= row_group_size) &&
 	    storage.deleted_rows == 0) {
 		// table is currently empty OR we are bulk appending: move over the storage directly
@@ -601,7 +602,6 @@ void LocalStorage::Flush(DataTable &table, LocalTableStorage &storage, optional_
 		storage.AppendToTable(transaction, append_state);
 	}
 	// table_entry is set through the append path (InitializeAppend/Append/LocalMerge/Alter)
-	D_ASSERT(storage.table_entry);
 	transaction.PushAppend(*storage.table_entry, NumericCast<idx_t>(append_state.row_start), append_count);
 
 #ifdef DEBUG

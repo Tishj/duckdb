@@ -26,6 +26,19 @@
 
 namespace duckdb {
 
+static void VerifyTableVersion(DuckTransaction &transaction, DuckTableEntry &table) {
+	auto &storage = table.GetStorage();
+	if (table.HasParent()) {
+		if (table.Parent().timestamp == transaction.transaction_id) {
+			return;
+		}
+	} else if (storage.GetVersion().get() == &table) {
+		return;
+	}
+	throw TransactionException("Attempting to modify table %s but another transaction has %s this table",
+	                           storage.GetTableName(), storage.TableModification(table));
+}
+
 //===--------------------------------------------------------------------===//
 // CommitDropState
 //===--------------------------------------------------------------------===//
@@ -277,6 +290,23 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data, CommitInfo &info)
 		D_ASSERT(catalog.IsDuckCatalog());
 
 		auto &new_entry = old_entry.Parent();
+		if (old_entry.type == CatalogType::TABLE_ENTRY && new_entry.type == CatalogType::TABLE_ENTRY) {
+			auto &old_table = old_entry.Cast<TableCatalogEntry>();
+			auto &new_table = new_entry.Cast<TableCatalogEntry>();
+			if (old_table.IsDuckTable() && new_table.IsDuckTable()) {
+				auto &old_duck_table = old_table.Cast<DuckTableEntry>();
+				auto &new_duck_table = new_table.Cast<DuckTableEntry>();
+				auto &old_storage = old_duck_table.GetStorage();
+				auto &new_storage = new_duck_table.GetStorage();
+				if (!RefersToSameObject(old_storage, new_storage) &&
+				    old_storage.GetVersion().get() != &new_duck_table) {
+					throw TransactionException(
+					    "Failed to alter table \"%s\" because the underlying table state was reverted by a "
+					    "concurrent transaction",
+					    old_entry.name);
+				}
+			}
+		}
 		if (new_entry.type == CatalogType::DEPENDENCY_ENTRY) {
 			auto &dep = new_entry.Cast<DependencyEntry>();
 			if (dep.Side() == DependencyEntryType::SUBJECT) {
@@ -299,13 +329,7 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data, CommitInfo &info)
 	case UndoFlags::INSERT_TUPLE: {
 		// append:
 		auto info = reinterpret_cast<AppendInfo *>(data);
-		if (info->table->HasParent() && info->table->Parent().timestamp != transaction.transaction_id) {
-			auto &storage = info->table->GetStorage();
-			auto table_name = storage.GetTableName();
-			auto table_modification = storage.TableModification();
-			throw TransactionException("Attempting to modify table %s but another transaction has %s this table",
-			                           table_name, table_modification);
-		}
+		VerifyTableVersion(transaction, *info->table);
 		// mark the tuples as committed
 		info->table->GetStorage().CommitAppend(commit_id, info->start_row, info->count);
 		break;
@@ -313,26 +337,14 @@ void CommitState::CommitEntry(UndoFlags type, data_ptr_t data, CommitInfo &info)
 	case UndoFlags::DELETE_TUPLE: {
 		// deletion:
 		auto info = reinterpret_cast<DeleteInfo *>(data);
-		if (info->table->HasParent() && info->table->Parent().timestamp != transaction.transaction_id) {
-			auto &storage = info->table->GetStorage();
-			auto table_name = storage.GetTableName();
-			auto table_modification = storage.TableModification();
-			throw TransactionException("Attempting to modify table %s but another transaction has %s this table",
-			                           table_name, table_modification);
-		}
+		VerifyTableVersion(transaction, *info->table);
 		CommitDelete(*info);
 		break;
 	}
 	case UndoFlags::UPDATE_TUPLE: {
 		// update:
 		auto info = reinterpret_cast<UpdateInfo *>(data);
-		if (info->table->HasParent() && info->table->Parent().timestamp != transaction.transaction_id) {
-			auto &storage = info->table->GetStorage();
-			auto table_name = storage.GetTableName();
-			auto table_modification = storage.TableModification();
-			throw TransactionException("Attempting to modify table %s but another transaction has %s this table",
-			                           table_name, table_modification);
-		}
+		VerifyTableVersion(transaction, *info->table);
 		info->version_number = commit_id;
 		break;
 	}
@@ -368,7 +380,7 @@ void CommitState::RevertCommit(UndoFlags type, data_ptr_t data) {
 	case UndoFlags::INSERT_TUPLE: {
 		auto info = reinterpret_cast<AppendInfo *>(data);
 		// revert this append
-		info->table->GetStorage().RevertAppend(transaction, info->start_row, info->count);
+		info->table->GetStorage().RevertAppend(transaction, *info->table, info->start_row, info->count);
 		break;
 	}
 	case UndoFlags::DELETE_TUPLE: {

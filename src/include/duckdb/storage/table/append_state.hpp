@@ -18,6 +18,7 @@
 namespace duckdb {
 class ColumnSegment;
 class DataTable;
+class DuckTableEntry;
 class LocalTableStorage;
 class RowGroup;
 class UpdateSegment;
@@ -99,6 +100,8 @@ struct TableAppendState {
 	optional_ptr<SegmentNode<RowGroup>> start_row_group;
 	//! The transaction data
 	TransactionData transaction;
+	//! The table entry used to initialize this append
+	optional_ptr<DuckTableEntry> table_entry;
 	//! Table statistics gathered during the Append phase - flushed to the table in FinalizeAppend
 	TableStatistics stats;
 	//! Cached hash vector
