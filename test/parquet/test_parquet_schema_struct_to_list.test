@@ -1,0 +1,41 @@
+# name: test/parquet/test_parquet_schema_struct_to_list.test
+# description: Test mapping a Parquet STRUCT field to a LIST
+# group: [parquet]
+
+require parquet
+
+statement ok
+COPY (
+	SELECT struct_pack(
+		profiles := struct_pack(list := 'profile')
+	) AS event
+) TO '{TEMP_DIR}/struct_to_list.parquet'
+
+statement error
+SELECT event.profiles
+FROM read_parquet(
+	'{TEMP_DIR}/struct_to_list.parquet',
+	schema=map {
+		'event': ({
+			name: 'event',
+			type: 'STRUCT(profiles VARCHAR[])',
+			default_value: NULL,
+			children: map {
+				'profiles': ({
+					name: 'profiles',
+					type: 'VARCHAR[]',
+					default_value: NULL,
+					children: map {
+						'list': ({
+							name: 'list',
+							type: 'VARCHAR',
+							default_value: NULL
+						})::VARIANT
+					}
+				})::VARIANT
+			}
+		})::VARIANT
+	}
+)
+----
+Binder Error: Can't change source type (STRUCT(list VARCHAR)) to target type (VARCHAR[]), type conversion not allowed
