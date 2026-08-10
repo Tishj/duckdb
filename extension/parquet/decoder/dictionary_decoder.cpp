@@ -41,6 +41,7 @@ void DictionaryDecoder::InitializeDictionary(idx_t new_dictionary_size, optional
 	// we use the last entry as a NULL, dictionary vectors don't have a separate validity mask
 	const auto duckdb_dictionary_size = dictionary_size + can_have_nulls;
 	dictionary = DictionaryVector::CreateReusableDictionary(reader.Type(), duckdb_dictionary_size);
+	dictionary->is_unique = true;
 	auto &dictionary_data = dictionary->data;
 	auto &dict_validity = FlatVector::ValidityMutable(dictionary_data);
 	dict_validity.Reset(duckdb_dictionary_size);

@@ -22,7 +22,9 @@ public:
 	Vector data;
 	//! Optional id to uniquely identify re-occurring dictionaries
 	string id;
-	//! True iff the producer wraps this same entry in every output chunk for its lifetime (stable id, no flat
+	//! True if all values in the dictionary are distinct
+	bool is_unique = false;
+	//! True if the producer wraps this same entry in every output chunk for its lifetime (stable id, no flat
 	//! fall-through), making it a global dictionary. Set only via CreateReusableGlobalDictionary.
 	bool global_dictionary = false;
 	//! For caching the hashes of a child buffer (mutable: cache is logically const)
@@ -146,6 +148,10 @@ struct DictionaryVector {
 		VerifyDictionary(vector);
 		const auto &dict_buffer = vector.Buffer().Cast<DictionaryBuffer>();
 		return dict_buffer.GetDictionaryId();
+	}
+	static inline bool IsUnique(const Vector &vector) {
+		VerifyDictionary(vector);
+		return vector.Buffer().Cast<DictionaryBuffer>().GetEntry().is_unique;
 	}
 	static inline bool CanCacheHashes(const LogicalType &type) {
 		return type.InternalType() == PhysicalType::VARCHAR;

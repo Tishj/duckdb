@@ -1,0 +1,32 @@
+# name: test/sql/storage/compression/dictionary/dictionary_expression_group_by.test
+# description: Grouping dictionary expressions that produce duplicate values
+# group: [dictionary]
+
+require no_latest_storage
+
+require vector_size 2048
+
+load {TEST_DIR}/dictionary_expression_group_by.db readwrite v1.0.0
+
+statement ok
+PRAGMA force_compression = 'dictionary'
+
+statement ok
+CREATE TABLE test (s VARCHAR)
+
+statement ok
+INSERT INTO test SELECT CASE WHEN i % 2 = 0 THEN 'A' ELSE 'a' END FROM range(10000) t(i)
+
+statement ok
+CHECKPOINT
+
+query I
+SELECT compression FROM pragma_storage_info('test') WHERE segment_type ILIKE 'VARCHAR' LIMIT 1
+----
+Dictionary
+
+# lower is evaluated over the dictionary, but it maps both dictionary entries to the same value
+query II
+SELECT lower(s), count(*) FROM test GROUP BY ALL
+----
+a	10000

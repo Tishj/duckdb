@@ -108,6 +108,7 @@ void CompressedStringScanState::Initialize(bool initialize_dictionary) {
 	}
 
 	dictionary = DictionaryVector::CreateReusableDictionary(segment.GetType(), dict_count);
+	dictionary->is_unique = true;
 	auto &dict_data = dictionary->data;
 	auto dict_child_data = FlatVector::GetDataMutable<string_t>(dict_data);
 	auto &validity = FlatVector::ValidityMutable(dict_data);

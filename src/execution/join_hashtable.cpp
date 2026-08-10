@@ -575,6 +575,7 @@ void JoinHashTable::PinDictSurvivingColumn(idx_t build_col_idx, const Vector &in
 		VectorOperations::Copy(upstream_child, owned_entry->data, child_count, 0, 0);
 	}
 	owned_entry->id = entry.id;
+	owned_entry->is_unique = entry.is_unique;
 	dict_registry[build_col_idx] = std::move(owned_entry);
 }
 
