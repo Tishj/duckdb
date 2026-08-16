@@ -64,7 +64,9 @@ private:
 	friend class PEGTransformerFactory;
 
 	void AddParsedRule(ParsedGrammarRule rule);
+	void InheritLiteralSuggestions(PEGRule &rule);
 	void RegisterStrings(PEGRule &rule);
+	void SetLiteralSuggestion(const string &literal, int32_t score_bonus, char extra_char);
 	ParsedGrammarRule &GetMutableRule(const string &rule_name);
 	static ParsedGrammarRule ParseSingleRule(const string &rule_definition);
 

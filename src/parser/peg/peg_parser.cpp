@@ -231,6 +231,9 @@ ParsedGrammar ParsedGrammar::CreateDefault() {
 	if (!result.HasRule("EndOfInput")) {
 		result.AddParsedRule(ParsedGrammarRule("EndOfInput", PEGRule()));
 	}
+	result.SetLiteralSuggestion("TABLE", 1, ' ');
+	result.SetLiteralSuggestion(".", 0, '\0');
+	result.SetLiteralSuggestion("(", 0, '\0');
 	PEGTransformerFactory::RegisterDefaultTransforms(result);
 	return result;
 }
@@ -261,6 +264,25 @@ ParsedGrammarRule ParsedGrammar::ParseSingleRule(const string &rule_definition) 
 	return ParsedGrammarRule(entry.first, std::move(entry.second));
 }
 
+void ParsedGrammar::InheritLiteralSuggestions(PEGRule &rule) {
+	for (auto &token : rule.tokens) {
+		if (token.type != PEGTokenType::LITERAL) {
+			continue;
+		}
+		for (auto &rule_entry : rules) {
+			for (auto &existing_token : rule_entry.second->recipe.tokens) {
+				if (existing_token.type != PEGTokenType::LITERAL ||
+				    !StringUtil::CIEquals(existing_token.text.GetString(), token.text.GetString())) {
+					continue;
+				}
+				token.suggestion_score_bonus = existing_token.suggestion_score_bonus;
+				token.suggestion_extra_char = existing_token.suggestion_extra_char;
+				break;
+			}
+		}
+	}
+}
+
 void ParsedGrammar::RegisterStrings(PEGRule &rule) {
 	string_map_t<idx_t> parameters;
 	for (auto &entry : rule.parameters) {
@@ -269,6 +291,18 @@ void ParsedGrammar::RegisterStrings(PEGRule &rule) {
 	rule.parameters = std::move(parameters);
 	for (auto &token : rule.tokens) {
 		token.text = string_heap.AddString(token.text);
+	}
+}
+
+void ParsedGrammar::SetLiteralSuggestion(const string &literal, int32_t score_bonus, char extra_char) {
+	for (auto &entry : rules) {
+		for (auto &token : entry.second->recipe.tokens) {
+			if (token.type != PEGTokenType::LITERAL || !StringUtil::CIEquals(token.text.GetString(), literal)) {
+				continue;
+			}
+			token.suggestion_score_bonus = score_bonus;
+			token.suggestion_extra_char = extra_char;
+		}
 	}
 }
 
@@ -284,6 +318,7 @@ void ParsedGrammar::AddParsedRule(ParsedGrammarRule rule) {
 void ParsedGrammar::AddRule(const string &rule_definition, grammar_transform_function_t transform,
                             grammar_transform_function_t trampoline_transform) {
 	auto rule = ParseSingleRule(rule_definition);
+	InheritLiteralSuggestions(rule.recipe);
 	rule.transform = std::move(transform);
 	rule.trampoline_transform = trampoline_transform ? std::move(trampoline_transform) : rule.transform;
 	rule.semantic = bool(rule.transform);
@@ -297,6 +332,7 @@ void ParsedGrammar::ReplaceRule(const string &rule_definition, grammar_transform
 	if (entry == rules.end()) {
 		throw InvalidInputException("Grammar rule '%s' does not exist", rule.name);
 	}
+	InheritLiteralSuggestions(rule.recipe);
 	RegisterStrings(rule.recipe);
 	rule.transform = std::move(transform);
 	rule.trampoline_transform = trampoline_transform ? std::move(trampoline_transform) : rule.transform;

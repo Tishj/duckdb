@@ -1073,14 +1073,13 @@ public:
 
 private:
 	// Base primitives
-	Matcher &Keyword(const string &keyword) const;
+	Matcher &Keyword(const PEGToken &token) const;
 	Matcher &List() const;
 	Matcher &List(vector<reference<Matcher>> matchers) const;
 	Matcher &Choice(vector<reference<Matcher>> matchers) const;
 	Matcher &Optional(Matcher &matcher) const;
 	Matcher &Repeat(Matcher &matcher) const;
 
-	void AddKeywordOverride(const char *name, int32_t score, char extra_char = ' ');
 	void AddRuleOverride(const char *name, Matcher &matcher);
 	void AddPackratMemoizedRule(const char *name);
 	void SuppressSuggestions(const char *name);
@@ -1091,17 +1090,13 @@ private:
 	const ParsedGrammar &grammar;
 	PEGMatcher &compiled;
 	string_map_t<reference<Matcher>> matchers;
-	case_insensitive_map_t<reference<Matcher>> keyword_overrides;
 	string_set_t no_suggestion_rules;
 	string_set_t packrat_memoized_rules;
 };
 
-Matcher &MatcherFactory::Keyword(const string &keyword) const {
-	auto entry = keyword_overrides.find(keyword);
-	if (entry != keyword_overrides.end()) {
-		return entry->second.get();
-	}
-	return allocator.Allocate(make_uniq<KeywordMatcher>(keyword, 0, ' '));
+Matcher &MatcherFactory::Keyword(const PEGToken &token) const {
+	return allocator.Allocate(
+	    make_uniq<KeywordMatcher>(token.text.GetString(), token.suggestion_score_bonus, token.suggestion_extra_char));
 }
 
 Matcher &MatcherFactory::List() const {
@@ -1261,7 +1256,7 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 		switch (token.type) {
 		case PEGTokenType::LITERAL:
 			// literal - push the keyword
-			list.AddMatcher(Keyword(token.text.GetString()));
+			list.AddMatcher(Keyword(token));
 			break;
 		case PEGTokenType::REFERENCE: {
 			// check if we are referring to a keyword
@@ -1394,11 +1389,6 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 	return matcher;
 }
 
-void MatcherFactory::AddKeywordOverride(const char *name, int32_t score, char extra_char) {
-	auto &keyword_matcher = allocator.Allocate(make_uniq<KeywordMatcher>(name, score, extra_char));
-	keyword_overrides.insert(make_pair(name, reference<Matcher>(keyword_matcher)));
-}
-
 void MatcherFactory::AddRuleOverride(const char *name, Matcher &matcher) {
 	if (packrat_memoized_rules.count(name)) {
 		matcher.SetPackratMemoized();
@@ -1418,10 +1408,6 @@ void MatcherFactory::SuppressSuggestions(const char *name) {
 }
 
 Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
-	// keyword overrides
-	AddKeywordOverride("TABLE", 1, ' ');
-	AddKeywordOverride(".", 0, '\0');
-	AddKeywordOverride("(", 0, '\0');
 	// packrat memoized rules
 	//===--------------------------------------------------------------------===//
 	// START GENERATED PACKRAT MEMOIZED RULES

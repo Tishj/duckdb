@@ -22,6 +22,8 @@ enum class PEGTokenType {
 struct PEGToken {
 	PEGTokenType type;
 	string_t text;
+	int32_t suggestion_score_bonus = 0;
+	char suggestion_extra_char = ' ';
 };
 
 struct PEGRule {
