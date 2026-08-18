@@ -1014,6 +1014,7 @@ String:
     - ColumnNameKeyword
     - FuncNameKeyword
     - TypeNameKeyword
+    - TypeFuncKeyword
     - IndexName
     - Identifier
     - ExportSource
@@ -1694,27 +1695,32 @@ matcher_rule_overrides:
     allow_type_overlap: true
     matcher: identifier
     suggestion: SUGGEST_VARIABLE
+    allowed_keyword_category: COL_NAME
   ReservedIdentifier:
     matcher: reserved_identifier
     suggestion: SUGGEST_VARIABLE
   CatalogName:
     matcher: identifier
     suggestion: SUGGEST_CATALOG_NAME
+    allowed_keyword_category: COL_NAME
   SchemaName:
     matcher: identifier
     suggestion: SUGGEST_SCHEMA_NAME
+    allowed_keyword_category: COL_NAME
   ReservedSchemaName:
     matcher: reserved_identifier
     suggestion: SUGGEST_SCHEMA_NAME
   TableName:
     matcher: identifier
     suggestion: SUGGEST_TABLE_NAME
+    allowed_keyword_category: COL_NAME
   ReservedTableName:
     matcher: reserved_identifier
     suggestion: SUGGEST_TABLE_NAME
   ColumnName:
     matcher: identifier
     suggestion: SUGGEST_COLUMN_NAME
+    allowed_keyword_category: COL_NAME
   ReservedColumnName:
     matcher: reserved_identifier
     suggestion: SUGGEST_COLUMN_NAME
@@ -1722,6 +1728,7 @@ matcher_rule_overrides:
     allow_type_overlap: true
     matcher: identifier
     suggestion: SUGGEST_VARIABLE
+    allowed_keyword_category: COL_NAME
   ReservedIndexName:
     matcher: reserved_identifier
     suggestion: SUGGEST_VARIABLE
@@ -1729,9 +1736,11 @@ matcher_rule_overrides:
     allow_type_overlap: true
     matcher: identifier
     suggestion: SUGGEST_VARIABLE
+    allowed_keyword_category: COL_NAME
   FunctionName:
     matcher: identifier
     suggestion: SUGGEST_SCALAR_FUNCTION_NAME
+    allowed_keyword_category: TYPE_FUNC
   ReservedFunctionName:
     matcher: reserved_identifier
     suggestion: SUGGEST_SCALAR_FUNCTION_NAME
@@ -1741,18 +1750,22 @@ matcher_rule_overrides:
   TableFunctionName:
     matcher: identifier
     suggestion: SUGGEST_TABLE_FUNCTION_NAME
+    allowed_keyword_category: TYPE_FUNC
   TypeName:
     matcher: identifier
     suggestion: SUGGEST_TYPE_NAME
+    allowed_keyword_category: TYPE_NAME
   ReservedTypeName:
     matcher: reserved_identifier
     suggestion: SUGGEST_TYPE_NAME
   PragmaName:
     matcher: identifier
     suggestion: SUGGEST_PRAGMA_NAME
+    allowed_keyword_category: COL_NAME
   SettingName:
     matcher: identifier
     suggestion: SUGGEST_SETTING_NAME
+    allowed_keyword_category: COL_NAME
   CopyOptionName:
     matcher: reserved_identifier
     suggestion: SUGGEST_VARIABLE

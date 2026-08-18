@@ -5994,6 +5994,8 @@ public:
 	                                                                       ParseResult &parse_result);
 	static unique_ptr<TransformResultValue> TransformTypeFuncNameInternal(PEGTransformer &transformer,
 	                                                                      ParseResult &parse_result);
+	static unique_ptr<TransformResultValue> TransformTypeFuncKeywordInternal(PEGTransformer &transformer,
+	                                                                         ParseResult &parse_result);
 	static unique_ptr<TransformResultValue> TransformColLabelInternal(PEGTransformer &transformer,
 	                                                                  ParseResult &parse_result);
 	static unique_ptr<TransformResultValue> TransformColLabelOrStringInternal(PEGTransformer &transformer,

@@ -1202,10 +1202,11 @@ def _matcher_override_expr(rule_name, override):
     matcher = override.get("matcher")
     suggestion = override.get("suggestion")
     if matcher == "identifier":
-        if suggestion:
+        allowed_keyword_category = override.get("allowed_keyword_category")
+        if suggestion and allowed_keyword_category:
             return (
                 f"allocator.Allocate(make_uniq<IdentifierMatcher>(SuggestionState::{suggestion}, "
-                "compiled.GetKeywordHelper()))"
+                f"KeywordCategoryName::{allowed_keyword_category}, compiled.GetKeywordHelper()))"
             )
     if matcher == "reserved_identifier":
         if suggestion:
