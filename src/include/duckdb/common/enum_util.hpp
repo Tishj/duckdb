@@ -380,8 +380,6 @@ enum class OrdinalityType : uint8_t;
 
 enum class OutputStream : uint8_t;
 
-enum class PEGKeywordCategory : uint8_t;
-
 enum class ParseInfoType : uint8_t;
 
 enum class ParseResultType : uint8_t;
@@ -1144,9 +1142,6 @@ const char* EnumUtil::ToChars<OrdinalityType>(OrdinalityType value);
 
 template<>
 const char* EnumUtil::ToChars<OutputStream>(OutputStream value);
-
-template<>
-const char* EnumUtil::ToChars<PEGKeywordCategory>(PEGKeywordCategory value);
 
 template<>
 const char* EnumUtil::ToChars<ParseInfoType>(ParseInfoType value);
@@ -2030,9 +2025,6 @@ OrdinalityType EnumUtil::FromString<OrdinalityType>(const char *value);
 
 template<>
 OutputStream EnumUtil::FromString<OutputStream>(const char *value);
-
-template<>
-PEGKeywordCategory EnumUtil::FromString<PEGKeywordCategory>(const char *value);
 
 template<>
 ParseInfoType EnumUtil::FromString<ParseInfoType>(const char *value);

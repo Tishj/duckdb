@@ -11,16 +11,12 @@ public:
 	explicit ParsedGrammarKeywordHelper(const ParsedGrammar &grammar);
 
 public:
-	bool KeywordCategoryType(const string &text, PEGKeywordCategory type) const override;
+	bool KeywordCategoryType(const string &text, const string &category) const override;
 	bool IsKeyword(const string &text) const override;
 	vector<ParserKeyword> KeywordList() const override;
 
 private:
-	case_insensitive_set_t reserved_keyword_map;
-	case_insensitive_set_t unreserved_keyword_map;
-	case_insensitive_set_t colname_keyword_map;
-	case_insensitive_set_t typefunc_keyword_map;
-	case_insensitive_set_t typename_keyword_map;
+	unordered_map<string, case_insensitive_set_t> keyword_maps;
 };
 
 } // namespace duckdb

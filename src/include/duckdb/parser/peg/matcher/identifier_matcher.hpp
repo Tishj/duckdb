@@ -11,8 +11,10 @@ public:
 	static constexpr MatcherType TYPE = MatcherType::VARIABLE;
 
 public:
-	IdentifierMatcher(SuggestionState suggestion_type, const PEGKeywordHelper &keyword_helper_p)
-	    : Matcher(TYPE), suggestion_type(suggestion_type), keyword_helper(keyword_helper_p) {
+	IdentifierMatcher(SuggestionState suggestion_type, string allowed_keyword_category_p,
+	                  const PEGKeywordHelper &keyword_helper_p)
+	    : Matcher(TYPE), suggestion_type(suggestion_type),
+	      allowed_keyword_category(std::move(allowed_keyword_category_p)), keyword_helper(keyword_helper_p) {
 	}
 
 	bool IsQuoted(const string &text) const {
@@ -114,18 +116,6 @@ public:
 		}
 	}
 
-	PEGKeywordCategory GetAllowedCategory() const {
-		switch (suggestion_type) {
-		case SuggestionState::SUGGEST_TYPE_NAME:
-			return PEGKeywordCategory::KEYWORD_TYPE_NAME;
-		case SuggestionState::SUGGEST_SCALAR_FUNCTION_NAME:
-		case SuggestionState::SUGGEST_TABLE_FUNCTION_NAME:
-			return PEGKeywordCategory::KEYWORD_TYPE_FUNC;
-		default:
-			return PEGKeywordCategory::KEYWORD_COL_NAME;
-		}
-	}
-
 	SuggestionType AddSuggestionInternal(MatchState &state) const override {
 		state.AddSuggestion(MatcherSuggestion(suggestion_type));
 		return SuggestionType::MANDATORY;
@@ -167,10 +157,10 @@ private:
 		if (!keyword_helper.IsKeyword(token_text)) {
 			return true;
 		}
-		if (keyword_helper.KeywordCategoryType(token_text, PEGKeywordCategory::KEYWORD_UNRESERVED)) {
+		if (keyword_helper.KeywordCategoryType(token_text, KeywordCategoryName::UNRESERVED)) {
 			return true;
 		}
-		return keyword_helper.KeywordCategoryType(token_text, GetAllowedCategory());
+		return keyword_helper.KeywordCategoryType(token_text, allowed_keyword_category);
 	}
 
 	bool MatchIdentifier(MatchState &state) const {
@@ -188,6 +178,7 @@ private:
 	}
 
 	SuggestionState suggestion_type;
+	string allowed_keyword_category;
 	const PEGKeywordHelper &keyword_helper;
 };
 
@@ -197,7 +188,7 @@ public:
 
 public:
 	ReservedIdentifierMatcher(SuggestionState suggestion_type, const PEGKeywordHelper &keyword_helper)
-	    : IdentifierMatcher(suggestion_type, keyword_helper) {
+	    : IdentifierMatcher(suggestion_type, KeywordCategoryName::COL_NAME, keyword_helper) {
 	}
 
 	MatchResultType Match(MatchState &state) const override {

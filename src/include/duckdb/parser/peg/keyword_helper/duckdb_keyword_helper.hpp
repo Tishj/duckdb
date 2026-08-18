@@ -12,7 +12,7 @@ public:
 	static const DuckDBKeywordHelper &Instance();
 
 public:
-	bool KeywordCategoryType(const std::string &text, const PEGKeywordCategory type) const override;
+	bool KeywordCategoryType(const string &text, const string &category) const override;
 	bool IsKeyword(const string &text) const override;
 	vector<ParserKeyword> KeywordList() const override;
 

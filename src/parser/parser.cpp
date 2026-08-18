@@ -550,16 +550,16 @@ vector<SimplifiedToken> Parser::TokenizeError(const string &error_msg) {
 KeywordCategory Parser::ToKeywordCategory(const string &text) {
 	auto &helper = DuckDBKeywordHelper::Instance();
 
-	if (helper.KeywordCategoryType(text, PEGKeywordCategory::KEYWORD_RESERVED)) {
+	if (helper.KeywordCategoryType(text, KeywordCategoryName::RESERVED)) {
 		return KeywordCategory::KEYWORD_RESERVED;
 	}
-	if (helper.KeywordCategoryType(text, PEGKeywordCategory::KEYWORD_UNRESERVED)) {
+	if (helper.KeywordCategoryType(text, KeywordCategoryName::UNRESERVED)) {
 		return KeywordCategory::KEYWORD_UNRESERVED;
 	}
-	if (helper.KeywordCategoryType(text, PEGKeywordCategory::KEYWORD_TYPE_FUNC)) {
+	if (helper.KeywordCategoryType(text, KeywordCategoryName::TYPE_FUNC)) {
 		return KeywordCategory::KEYWORD_TYPE_FUNC;
 	}
-	if (helper.KeywordCategoryType(text, PEGKeywordCategory::KEYWORD_COL_NAME)) {
+	if (helper.KeywordCategoryType(text, KeywordCategoryName::COL_NAME)) {
 		return KeywordCategory::KEYWORD_COL_NAME;
 	}
 	return KeywordCategory::KEYWORD_NONE;

@@ -14,13 +14,12 @@
 namespace duckdb {
 struct ParserCache;
 
-enum class PEGKeywordCategory : uint8_t {
-	KEYWORD_NONE,
-	KEYWORD_UNRESERVED,
-	KEYWORD_RESERVED,
-	KEYWORD_TYPE_FUNC,
-	KEYWORD_COL_NAME,
-	KEYWORD_TYPE_NAME
+struct KeywordCategoryName {
+	static constexpr const char *RESERVED = "reserved";
+	static constexpr const char *UNRESERVED = "unreserved";
+	static constexpr const char *TYPE_FUNC = "type_function";
+	static constexpr const char *COL_NAME = "column_name";
+	static constexpr const char *TYPE_NAME = "type_name";
 };
 
 class PEGKeywordHelper {
@@ -28,7 +27,7 @@ public:
 	virtual ~PEGKeywordHelper() = default;
 
 public:
-	virtual bool KeywordCategoryType(const string &text, PEGKeywordCategory type) const = 0;
+	virtual bool KeywordCategoryType(const string &text, const string &category) const = 0;
 	virtual bool IsKeyword(const string &text) const = 0;
 	virtual vector<ParserKeyword> KeywordList() const = 0;
 };
