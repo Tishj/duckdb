@@ -8,9 +8,9 @@
 
 namespace duckdb {
 
-CompiledGrammar::CompiledGrammar(ParserCache &cache, const ParsedGrammar &grammar)
+CompiledGrammar::CompiledGrammar(ParserCache &cache, const ParsedGrammar &grammar, bool has_grammar_changes_p)
     : owned_keyword_helper(make_uniq<ParsedGrammarKeywordHelper>(grammar)), keyword_helper(*owned_keyword_helper),
-      tokenizer(keyword_helper), version(cache.LatestParserVersion()) {
+      tokenizer(keyword_helper), has_grammar_changes(has_grammar_changes_p), version(cache.LatestParserVersion()) {
 }
 
 idx_t CompiledGrammar::Version() const {
@@ -55,10 +55,12 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<ClientContext> 
 
 		auto parser_version = LatestParserVersion();
 		auto grammar = ParsedGrammar::CreateDefault();
+		bool has_grammar_changes = false;
 		if (callback_manager) {
 			for (auto &change : callback_manager->ParserChanges()) {
 				switch (change->type) {
 				case ParserChangeType::GRAMMAR:
+					has_grammar_changes = true;
 					change->Apply(grammar);
 					break;
 				default:
@@ -83,7 +85,7 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<ClientContext> 
 			}
 		}
 
-		auto new_matcher = shared_ptr<CompiledGrammar>(new CompiledGrammar(*this, grammar));
+		auto new_matcher = shared_ptr<CompiledGrammar>(new CompiledGrammar(*this, grammar, has_grammar_changes));
 		for (auto &entry : grammar.rules) {
 			auto &rule = *entry.second;
 			new_matcher->rules.emplace(rule.name, make_uniq<CompiledGrammarRule>(rule.name, rule.transform));

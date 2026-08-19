@@ -4,6 +4,7 @@
 #include "duckdb/main/config.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/parser_change.hpp"
+#include "duckdb/parser/peg/compiled_grammar.hpp"
 #include "duckdb/parser/peg/parsed_grammar.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
@@ -90,10 +91,12 @@ TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser
 	DuckDB db(nullptr);
 	Connection con(db);
 	REQUIRE_NO_FAIL(*con.Query("SELECT 1"));
+	REQUIRE_FALSE(CompiledGrammar::Get(*db.instance)->HasGrammarChanges());
 
 	auto &config = DBConfig::GetConfig(*db.instance);
 	RegisterParserChangeTestSyntax(config);
 	CheckParserChangeTestSyntax(con);
+	REQUIRE(CompiledGrammar::Get(*db.instance)->HasGrammarChanges());
 }
 
 class AddInvalidParserChangeTestRule final : public ParserChange {
