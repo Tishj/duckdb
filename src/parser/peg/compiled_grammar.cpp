@@ -3,6 +3,8 @@
 #include "duckdb/parser/peg/keyword_helper/parsed_grammar_keyword_helper.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/client_config.hpp"
+#include "duckdb/main/extension_callback_manager.hpp"
+#include "duckdb/parser/parser_change.hpp"
 
 namespace duckdb {
 
@@ -43,49 +45,68 @@ static void ValidateParsedGrammarRoots(const ParsedGrammar &grammar) {
 }
 
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<ClientContext> context) {
-	{
+	while (true) {
+		{
+			std::unique_lock<std::mutex> lock(mutex);
+			if (matcher) {
+				return matcher;
+			}
+		}
+
+		auto parser_version = LatestParserVersion();
+		auto grammar = ParsedGrammar::CreateDefault();
+		if (callback_manager) {
+			for (auto &change : callback_manager->ParserChanges()) {
+				switch (change->type) {
+				case ParserChangeType::GRAMMAR:
+					change->Apply(grammar);
+					break;
+				default:
+					throw InternalException("Unsupported parser change type");
+				}
+			}
+		}
+		ValidateParsedGrammarRoots(grammar);
+		for (auto &entry : grammar.rules) {
+			auto &rule = *entry.second;
+			for (auto &token : rule.recipe.tokens) {
+				if (token.type != PEGTokenType::REFERENCE && token.type != PEGTokenType::FUNCTION_CALL) {
+					continue;
+				}
+				if (token.type == PEGTokenType::REFERENCE && rule.recipe.parameters.count(token.text)) {
+					continue;
+				}
+				if (!grammar.GetRule(token.text.GetString())) {
+					throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", rule.name,
+					                            token.text.GetString());
+				}
+			}
+		}
+
+		auto new_matcher = shared_ptr<CompiledGrammar>(new CompiledGrammar(*this, grammar));
+		for (auto &entry : grammar.rules) {
+			auto &rule = *entry.second;
+			auto transform_data = std::move(rule.transform_data);
+			if (!transform_data) {
+				transform_data.emplace();
+			}
+			new_matcher->rules.emplace(rule.name,
+			                           make_uniq<CompiledGrammarRule>(rule.name, std::move(*transform_data)));
+		}
+		MatcherFactory factory(new_matcher->allocator, grammar, *new_matcher);
+		new_matcher->program_matcher = factory.CreateRootMatcher("Program");
+		new_matcher->top_level_statement_matcher = factory.GetMatcher("TopLevelStatement");
+
 		std::unique_lock<std::mutex> lock(mutex);
 		if (matcher) {
 			return matcher;
 		}
-	}
-
-	auto grammar = ParsedGrammar::CreateDefault();
-	ValidateParsedGrammarRoots(grammar);
-	for (auto &entry : grammar.rules) {
-		auto &rule = *entry.second;
-		for (auto &token : rule.recipe.tokens) {
-			if (token.type != PEGTokenType::REFERENCE && token.type != PEGTokenType::FUNCTION_CALL) {
-				continue;
-			}
-			if (token.type == PEGTokenType::REFERENCE && rule.recipe.parameters.count(token.text)) {
-				continue;
-			}
-			if (!grammar.GetRule(token.text.GetString())) {
-				throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", rule.name,
-				                            token.text.GetString());
-			}
+		if (version != parser_version) {
+			continue;
 		}
-	}
-
-	auto new_matcher = shared_ptr<CompiledGrammar>(new CompiledGrammar(*this, grammar));
-	for (auto &entry : grammar.rules) {
-		auto &rule = *entry.second;
-		auto transform_data = std::move(rule.transform_data);
-		if (!transform_data) {
-			transform_data.emplace();
-		}
-		new_matcher->rules.emplace(rule.name, make_uniq<CompiledGrammarRule>(rule.name, std::move(*transform_data)));
-	}
-	MatcherFactory factory(new_matcher->allocator, grammar, *new_matcher);
-	new_matcher->program_matcher = factory.CreateRootMatcher("Program");
-	new_matcher->top_level_statement_matcher = factory.GetMatcher("TopLevelStatement");
-
-	std::unique_lock<std::mutex> lock(mutex);
-	if (!matcher) {
 		matcher = std::move(new_matcher);
+		return matcher;
 	}
-	return matcher;
 }
 
 optional_ptr<const CompiledGrammarRule> CompiledGrammar::GetRule(const string &rule_name) const {
@@ -104,6 +125,10 @@ void ParserCache::Invalidate() {
 	std::unique_lock<std::mutex> lock(mutex);
 	matcher = nullptr;
 	++version;
+}
+
+void ParserCache::BindExtensionCallbackManager(const ExtensionCallbackManager &manager) {
+	callback_manager = manager;
 }
 
 } // namespace duckdb

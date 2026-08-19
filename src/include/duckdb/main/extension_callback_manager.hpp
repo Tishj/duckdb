@@ -21,7 +21,9 @@ class DialectExtension;
 class ExtensionCallback;
 class OperatorExtension;
 class OptimizerExtension;
+class ParserChange;
 class ParserExtension;
+struct ParserCache;
 class PlannerExtension;
 class ProfilerExtension;
 class StorageExtension;
@@ -43,6 +45,7 @@ public:
 	static const ExtensionCallbackManager &Get(const ClientContext &context);
 
 	void Register(ParserExtension extension);
+	void Register(shared_ptr<ParserChange> change);
 	void Register(DialectExtension extension);
 	void Register(PlannerExtension extension);
 	void Register(OptimizerExtension extension);
@@ -54,6 +57,7 @@ public:
 	ExtensionCallbackIteratorHelper<shared_ptr<OperatorExtension>> OperatorExtensions() const;
 	ExtensionCallbackIteratorHelper<OptimizerExtension> OptimizerExtensions() const;
 	ExtensionCallbackIteratorHelper<ParserExtension> ParserExtensions() const;
+	ExtensionCallbackIteratorHelper<shared_ptr<ParserChange>> ParserChanges() const;
 	ExtensionCallbackIteratorHelper<DialectExtension> DialectExtensions() const;
 	ExtensionCallbackIteratorHelper<PlannerExtension> PlannerExtensions() const;
 	ExtensionCallbackIteratorHelper<shared_ptr<ExtensionCallback>> ExtensionCallbacks() const;
@@ -61,11 +65,13 @@ public:
 	optional_ptr<ProfilerExtension> FindProfilerExtension(const string &name) const;
 	bool HasParserExtensions() const;
 	bool HasDialectExtension(const string &name) const;
+	void BindParserCache(ParserCache &cache);
 
 private:
 	mutex registry_lock;
 	shared_ptr<ExtensionCallbackRegistry> callback_registry;
 	vector<string> extension_schemas;
+	optional_ptr<ParserCache> parser_cache;
 };
 
 template <class T>

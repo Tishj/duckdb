@@ -546,6 +546,8 @@ void DatabaseInstance::Configure(DBConfig &new_config, const char *database_path
 		config.callback_manager = std::move(new_config.callback_manager);
 		new_config.callback_manager = make_uniq<ExtensionCallbackManager>();
 	}
+	parser_cache->BindExtensionCallbackManager(*config.callback_manager);
+	config.callback_manager->BindParserCache(*parser_cache);
 	// This is used to open e.g. parquet files. See DBPathAndType::CheckMagicBytes
 	config.callback_manager->Register("__open_file__", OpenFileStorageExtension::Create());
 

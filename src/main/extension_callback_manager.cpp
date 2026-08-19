@@ -1,5 +1,7 @@
 #include "duckdb/main/extension_callback_manager.hpp"
 #include "duckdb/parser/parser_extension.hpp"
+#include "duckdb/parser/parser_change.hpp"
+#include "duckdb/parser/peg/compiled_grammar.hpp"
 #include "duckdb/parser/dialect_extension.hpp"
 #include "duckdb/optimizer/optimizer_extension.hpp"
 #include "duckdb/planner/operator_extension.hpp"
@@ -16,6 +18,8 @@ struct ExtensionCallbackRegistry {
 	vector<DialectExtension> dialect_extensions;
 	//! Extensions made to the parser
 	vector<ParserExtension> parser_extensions;
+	//! Ordered changes applied to the PEG grammar
+	vector<shared_ptr<ParserChange>> parser_changes;
 	//! Extensions made to the planner
 	vector<PlannerExtension> planner_extensions;
 	//! Extensions made to the optimizer
@@ -61,6 +65,19 @@ void ExtensionCallbackManager::Register(ParserExtension extension) {
 	auto new_registry = make_shared_ptr<ExtensionCallbackRegistry>(*callback_registry);
 	new_registry->parser_extensions.push_back(std::move(extension));
 	callback_registry.atomic_store(new_registry);
+}
+
+void ExtensionCallbackManager::Register(shared_ptr<ParserChange> change) {
+	if (!change) {
+		throw InvalidInputException("Cannot register a null parser change");
+	}
+	lock_guard<mutex> guard(registry_lock);
+	auto new_registry = make_shared_ptr<ExtensionCallbackRegistry>(*callback_registry);
+	new_registry->parser_changes.push_back(std::move(change));
+	callback_registry.atomic_store(new_registry);
+	if (parser_cache) {
+		parser_cache->Invalidate();
+	}
 }
 
 void ExtensionCallbackManager::Register(DialectExtension extension) {
@@ -148,6 +165,12 @@ ExtensionCallbackIteratorHelper<ParserExtension> ExtensionCallbackManager::Parse
 	return ExtensionCallbackIteratorHelper<ParserExtension>(parser_extensions, std::move(registry));
 }
 
+ExtensionCallbackIteratorHelper<shared_ptr<ParserChange>> ExtensionCallbackManager::ParserChanges() const {
+	auto registry = callback_registry.atomic_load();
+	auto &parser_changes = registry->parser_changes;
+	return ExtensionCallbackIteratorHelper<shared_ptr<ParserChange>>(parser_changes, std::move(registry));
+}
+
 ExtensionCallbackIteratorHelper<DialectExtension> ExtensionCallbackManager::DialectExtensions() const {
 	auto registry = callback_registry.atomic_load();
 	auto &dialect_extensions = registry->dialect_extensions;
@@ -199,12 +222,21 @@ bool ExtensionCallbackManager::HasDialectExtension(const string &name) const {
 	return false;
 }
 
+void ExtensionCallbackManager::BindParserCache(ParserCache &cache) {
+	lock_guard<mutex> guard(registry_lock);
+	parser_cache = cache;
+}
+
 void OptimizerExtension::Register(DBConfig &config, OptimizerExtension extension) {
 	config.GetCallbackManager().Register(std::move(extension));
 }
 
 void ParserExtension::Register(DBConfig &config, ParserExtension extension) {
 	config.GetCallbackManager().Register(std::move(extension));
+}
+
+void ParserChange::Register(DBConfig &config, shared_ptr<ParserChange> change) {
+	config.GetCallbackManager().Register(std::move(change));
 }
 
 void DialectExtension::Register(DBConfig &config, DialectExtension extension) {
@@ -244,6 +276,7 @@ template class ExtensionCallbackIteratorHelper<shared_ptr<ExtensionCallback>>;
 template class ExtensionCallbackIteratorHelper<shared_ptr<OperatorExtension>>;
 template class ExtensionCallbackIteratorHelper<OptimizerExtension>;
 template class ExtensionCallbackIteratorHelper<ParserExtension>;
+template class ExtensionCallbackIteratorHelper<shared_ptr<ParserChange>>;
 template class ExtensionCallbackIteratorHelper<DialectExtension>;
 template class ExtensionCallbackIteratorHelper<PlannerExtension>;
 

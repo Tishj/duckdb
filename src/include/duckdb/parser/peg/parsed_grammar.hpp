@@ -12,6 +12,7 @@
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/types/string_heap.hpp"
 #include "duckdb/parser/peg/peg_parser.hpp"
+#include "duckdb/parser/peg/keyword_helper.hpp"
 #include "duckdb/parser/peg/transformer/transform_result.hpp"
 
 #include <functional>
@@ -56,12 +57,14 @@ public:
 	DUCKDB_API void ReplaceRule(const string &rule_definition,
 	                            optional<RuleTransformData> transform_data = std::nullopt);
 	DUCKDB_API void SetTransform(const string &rule_name, RuleTransformData &&transform_data);
+	DUCKDB_API void AddKeyword(const string &keyword, PEGKeywordCategory category);
 	void SetTrampolineOps(const string &rule_name, const TransformFrameOps &ops);
 
 private:
 	friend class MatcherFactory;
 	friend struct ParserCache;
 	friend class PEGTransformerFactory;
+	friend class ParsedGrammarKeywordHelper;
 
 	void AddParsedRule(ParsedGrammarRule rule);
 	void RegisterStrings(PEGRule &rule);
@@ -70,6 +73,7 @@ private:
 
 	StringHeap string_heap;
 	case_insensitive_map_t<unique_ptr<ParsedGrammarRule>> rules;
+	vector<pair<string, PEGKeywordCategory>> additional_keywords;
 };
 
 //! Immutable semantic data referenced directly by matchers and parse results.

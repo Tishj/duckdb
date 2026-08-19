@@ -8,7 +8,8 @@
 
 namespace duckdb {
 
-ParsedGrammar::ParsedGrammar(ParsedGrammar &&other) noexcept : rules(std::move(other.rules)) {
+ParsedGrammar::ParsedGrammar(ParsedGrammar &&other) noexcept
+    : rules(std::move(other.rules)), additional_keywords(std::move(other.additional_keywords)) {
 	string_heap.Move(other.string_heap);
 }
 
@@ -18,6 +19,7 @@ ParsedGrammar &ParsedGrammar::operator=(ParsedGrammar &&other) noexcept {
 		string_heap.Destroy();
 		string_heap.Move(other.string_heap);
 		rules = std::move(other.rules);
+		additional_keywords = std::move(other.additional_keywords);
 	}
 	return *this;
 }
@@ -116,6 +118,13 @@ void ParsedGrammar::ReplaceRule(const string &rule_definition, optional<RuleTran
 void ParsedGrammar::SetTransform(const string &rule_name, RuleTransformData &&transform_data) {
 	auto &rule = GetMutableRule(rule_name);
 	rule.transform_data = std::move(transform_data);
+}
+
+void ParsedGrammar::AddKeyword(const string &keyword, PEGKeywordCategory category) {
+	if (category == PEGKeywordCategory::KEYWORD_NONE) {
+		throw InvalidInputException("Cannot add keyword '%s' without a keyword category", keyword);
+	}
+	additional_keywords.emplace_back(keyword, category);
 }
 
 void ParsedGrammar::SetTrampolineOps(const string &rule_name, const TransformFrameOps &ops) {
