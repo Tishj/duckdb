@@ -39,7 +39,7 @@ ParserCache &Parser::GetCache() {
 CompiledGrammar &Parser::GetGrammar() {
 	if (!compiled_grammar) {
 		auto &cache = GetCache();
-		compiled_grammar = cache.GetMatcher(nullptr);
+		compiled_grammar = cache.GetMatcher(options.context);
 	}
 	return *compiled_grammar;
 }

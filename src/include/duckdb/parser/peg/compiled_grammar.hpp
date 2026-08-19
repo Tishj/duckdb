@@ -8,13 +8,12 @@ namespace duckdb {
 
 struct ParserCache;
 class ClientContext;
-class ExtensionCallbackManager;
 
 struct CompiledGrammar {
 	friend struct ParserCache;
 
 private:
-	CompiledGrammar(ParserCache &cache, const ParsedGrammar &grammar, bool has_grammar_changes);
+	CompiledGrammar(const ParsedGrammar &grammar, bool has_grammar_changes, idx_t version);
 
 public:
 	const Matcher &ProgramMatcher() const {
@@ -36,7 +35,6 @@ public:
 
 public:
 	static shared_ptr<CompiledGrammar> Get(ClientContext &context);
-	static shared_ptr<CompiledGrammar> Get(DatabaseInstance &db);
 
 public:
 	idx_t Version() const;
@@ -63,9 +61,8 @@ public:
 	ParserCache();
 
 public:
-	shared_ptr<CompiledGrammar> GetMatcher(optional_ptr<ClientContext> context);
+	shared_ptr<CompiledGrammar> GetMatcher(optional_ptr<const ClientContext> context = nullptr);
 	void Invalidate();
-	void BindExtensionCallbackManager(const ExtensionCallbackManager &manager);
 
 public:
 	idx_t LatestParserVersion() const;
@@ -74,7 +71,6 @@ private:
 	atomic<idx_t> version;
 	std::mutex mutex;
 	shared_ptr<CompiledGrammar> matcher;
-	optional_ptr<const ExtensionCallbackManager> callback_manager;
 };
 
 } // namespace duckdb
