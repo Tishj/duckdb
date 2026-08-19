@@ -44,13 +44,9 @@ public:
 		atom_transform.trampoline_transform = TransformParserChangeTestAtom;
 		grammar.AddRule("ParserChangeTestAtom <- ParserChangeTestValue", std::move(atom_transform));
 
-		auto select_atom = grammar.GetRule("SelectAtom");
-		if (!select_atom) {
-			throw InternalException("SelectAtom rule is missing");
-		}
-		auto transform_data = select_atom->transform_data;
-		grammar.ReplaceRule("SelectAtom <- ParserChangeTestAtom / SelectParens / SelectStatementType",
-		                    std::move(transform_data));
+		grammar.PrependChoice("SelectAtom", "ParserChangeTestAtom", [](const PEGToken &token) {
+			return token.type == PEGTokenType::REFERENCE && token.text.GetString() == "SelectParens";
+		});
 	}
 };
 
@@ -72,6 +68,26 @@ TEST_CASE("Parser changes apply in registration order", "[api][parser_change]") 
 	DuckDB db(nullptr, &config);
 	Connection con(db);
 	CheckParserChangeTestSyntax(con);
+}
+
+TEST_CASE("Grammar choices support cursor placement", "[api][parser_change]") {
+	auto grammar = ParsedGrammar::Parse("CursorRule <- 'first' / 'last'");
+	grammar.AddChoice("CursorRule", "'second'", [](const PEGToken &token) {
+		return token.type == PEGTokenType::LITERAL && token.text.GetString() == "first";
+	});
+	grammar.PrependChoice("CursorRule", "'third'", [](const PEGToken &token) {
+		return token.type == PEGTokenType::LITERAL && token.text.GetString() == "last";
+	});
+
+	vector<string> choices;
+	auto rule = grammar.GetRule("CursorRule");
+	REQUIRE(rule);
+	for (auto &token : rule->recipe.tokens) {
+		if (token.type == PEGTokenType::LITERAL) {
+			choices.push_back(token.text.GetString());
+		}
+	}
+	REQUIRE(choices == vector<string> {"first", "second", "third", "last"});
 }
 
 TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser_change]") {

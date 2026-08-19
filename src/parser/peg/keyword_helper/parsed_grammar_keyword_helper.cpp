@@ -57,27 +57,6 @@ ParsedGrammarKeywordHelper::ParsedGrammarKeywordHelper(const ParsedGrammar &gram
 		case_insensitive_set_t active_rules;
 		PopulateKeywordMap(grammar, entry.first, entry.first, entry.second.get(), active_rules);
 	}
-	for (auto &entry : grammar.additional_keywords) {
-		switch (entry.second) {
-		case PEGKeywordCategory::KEYWORD_RESERVED:
-			reserved_keyword_map.insert(entry.first);
-			break;
-		case PEGKeywordCategory::KEYWORD_UNRESERVED:
-			unreserved_keyword_map.insert(entry.first);
-			break;
-		case PEGKeywordCategory::KEYWORD_TYPE_FUNC:
-			typefunc_keyword_map.insert(entry.first);
-			break;
-		case PEGKeywordCategory::KEYWORD_COL_NAME:
-			colname_keyword_map.insert(entry.first);
-			break;
-		case PEGKeywordCategory::KEYWORD_TYPE_NAME:
-			typename_keyword_map.insert(entry.first);
-			break;
-		default:
-			throw InternalException("Unsupported additional keyword category");
-		}
-	}
 }
 
 bool ParsedGrammarKeywordHelper::KeywordCategoryType(const string &text, PEGKeywordCategory type) const {

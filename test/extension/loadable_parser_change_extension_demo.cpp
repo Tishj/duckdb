@@ -167,7 +167,7 @@ public:
 	}
 
 	void Apply(ParsedGrammar &grammar) const override {
-		grammar.AddKeyword("EXTEND", PEGKeywordCategory::KEYWORD_RESERVED);
+		grammar.AddChoice("ReservedKeyword", "'EXTEND'");
 		RuleTransformData pipe_transform;
 		pipe_transform.transform = TransformPipeSelectAtom;
 		pipe_transform.trampoline_transform = TransformPipeSelectAtom;
@@ -186,11 +186,7 @@ public:
 		grammar.AddRule("PipeAggregate <- 'AGGREGATE' TargetList GroupByClause?");
 		grammar.AddRule("PipeAggregateGroupOnly <- 'AGGREGATE' GroupByClause");
 
-		auto select_atom = grammar.GetRule("SelectAtom");
-		D_ASSERT(select_atom);
-		auto transform_data = select_atom->transform_data;
-		grammar.ReplaceRule("SelectAtom <- PipeSelectAtom / SelectParens / SelectStatementType",
-		                    std::move(transform_data));
+		grammar.PrependChoice("SelectAtom", "PipeSelectAtom");
 	}
 };
 

@@ -1,4 +1,5 @@
 #include "duckdb/parser/peg/parsed_grammar.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/parser/peg/transformer/peg_transformer.hpp"
 #ifdef PEG_PARSER_SOURCE_FILE
 #include <fstream>
@@ -8,8 +9,7 @@
 
 namespace duckdb {
 
-ParsedGrammar::ParsedGrammar(ParsedGrammar &&other) noexcept
-    : rules(std::move(other.rules)), additional_keywords(std::move(other.additional_keywords)) {
+ParsedGrammar::ParsedGrammar(ParsedGrammar &&other) noexcept : rules(std::move(other.rules)) {
 	string_heap.Move(other.string_heap);
 }
 
@@ -19,7 +19,6 @@ ParsedGrammar &ParsedGrammar::operator=(ParsedGrammar &&other) noexcept {
 		string_heap.Destroy();
 		string_heap.Move(other.string_heap);
 		rules = std::move(other.rules);
-		additional_keywords = std::move(other.additional_keywords);
 	}
 	return *this;
 }
@@ -104,6 +103,82 @@ void ParsedGrammar::AddRule(const string &rule_definition, optional<RuleTransfor
 	AddParsedRule(std::move(rule));
 }
 
+static idx_t FindChoiceCursor(const ParsedGrammarRule &rule, const grammar_cursor_function_t &find_cursor,
+                              bool prepend) {
+	if (!find_cursor) {
+		return prepend ? 0 : rule.recipe.tokens.size();
+	}
+
+	vector<bool> choice_separator(rule.recipe.tokens.size(), false);
+	idx_t depth = 0;
+	for (idx_t token_idx = 0; token_idx < rule.recipe.tokens.size(); token_idx++) {
+		auto &token = rule.recipe.tokens[token_idx];
+		if (token.type == PEGTokenType::FUNCTION_CALL ||
+		    (token.type == PEGTokenType::OPERATOR && token.text.GetString() == "(")) {
+			depth++;
+		} else if (token.type == PEGTokenType::OPERATOR && token.text.GetString() == ")") {
+			D_ASSERT(depth > 0);
+			depth--;
+		} else if (depth == 0 && token.type == PEGTokenType::OPERATOR && token.text.GetString() == "/") {
+			choice_separator[token_idx] = true;
+		}
+	}
+
+	for (idx_t token_idx = 0; token_idx < rule.recipe.tokens.size(); token_idx++) {
+		auto &token = rule.recipe.tokens[token_idx];
+		if (!find_cursor(token)) {
+			continue;
+		}
+		if (prepend && token_idx != 0 && !choice_separator[token_idx - 1]) {
+			throw InvalidInputException("PrependChoice cursor for rule '%s' must select the first token of a choice",
+			                            rule.name);
+		}
+		if (!prepend && token_idx + 1 != rule.recipe.tokens.size() && !choice_separator[token_idx + 1]) {
+			throw InvalidInputException("AddChoice cursor for rule '%s' must select the final token of a choice",
+			                            rule.name);
+		}
+		return prepend ? token_idx : token_idx + 1;
+	}
+	throw InvalidInputException("Could not find a choice cursor in grammar rule '%s'", rule.name);
+}
+
+void ParsedGrammar::InsertChoice(const string &rule_name, const string &choice, grammar_cursor_function_t find_cursor,
+                                 bool prepend) {
+	auto choice_definition = StringUtil::Format("Choice <- %s", choice);
+	auto choice_rule = ParseSingleRule(choice_definition);
+	auto &rule = GetMutableRule(rule_name);
+	RegisterStrings(choice_rule.recipe);
+	auto cursor = FindChoiceCursor(rule, find_cursor, prepend);
+
+	vector<PEGToken> tokens;
+	tokens.reserve(rule.recipe.tokens.size() + choice_rule.recipe.tokens.size() + 1);
+	for (idx_t token_idx = 0; token_idx < cursor; token_idx++) {
+		tokens.push_back(rule.recipe.tokens[token_idx]);
+	}
+	if (!prepend && !rule.recipe.tokens.empty()) {
+		tokens.push_back({PEGTokenType::OPERATOR, string_heap.AddString("/")});
+	}
+	for (auto &token : choice_rule.recipe.tokens) {
+		tokens.push_back(std::move(token));
+	}
+	if (prepend && !rule.recipe.tokens.empty()) {
+		tokens.push_back({PEGTokenType::OPERATOR, string_heap.AddString("/")});
+	}
+	for (idx_t token_idx = cursor; token_idx < rule.recipe.tokens.size(); token_idx++) {
+		tokens.push_back(rule.recipe.tokens[token_idx]);
+	}
+	rule.recipe.tokens = std::move(tokens);
+}
+
+void ParsedGrammar::AddChoice(const string &rule_name, const string &choice, grammar_cursor_function_t find_cursor) {
+	InsertChoice(rule_name, choice, std::move(find_cursor), false);
+}
+
+void ParsedGrammar::PrependChoice(const string &rule_name, const string &choice,
+                                  grammar_cursor_function_t find_cursor) {
+	InsertChoice(rule_name, choice, std::move(find_cursor), true);
+}
+
 void ParsedGrammar::ReplaceRule(const string &rule_definition, optional<RuleTransformData> transform_data) {
 	auto rule = ParseSingleRule(rule_definition);
 	auto entry = rules.find(rule.name);
@@ -118,13 +193,6 @@ void ParsedGrammar::ReplaceRule(const string &rule_definition, optional<RuleTran
 void ParsedGrammar::SetTransform(const string &rule_name, RuleTransformData &&transform_data) {
 	auto &rule = GetMutableRule(rule_name);
 	rule.transform_data = std::move(transform_data);
-}
-
-void ParsedGrammar::AddKeyword(const string &keyword, PEGKeywordCategory category) {
-	if (category == PEGKeywordCategory::KEYWORD_NONE) {
-		throw InvalidInputException("Cannot add keyword '%s' without a keyword category", keyword);
-	}
-	additional_keywords.emplace_back(keyword, category);
 }
 
 void ParsedGrammar::SetTrampolineOps(const string &rule_name, const TransformFrameOps &ops) {
