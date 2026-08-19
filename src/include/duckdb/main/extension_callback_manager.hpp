@@ -23,7 +23,6 @@ class OperatorExtension;
 class OptimizerExtension;
 class ParserChange;
 class ParserExtension;
-struct ParserCache;
 class PlannerExtension;
 class ProfilerExtension;
 class StorageExtension;
@@ -65,13 +64,11 @@ public:
 	optional_ptr<ProfilerExtension> FindProfilerExtension(const string &name) const;
 	bool HasParserExtensions() const;
 	bool HasDialectExtension(const string &name) const;
-	void BindParserCache(ParserCache &cache);
 
 private:
 	mutex registry_lock;
 	shared_ptr<ExtensionCallbackRegistry> callback_registry;
 	vector<string> extension_schemas;
-	optional_ptr<ParserCache> parser_cache;
 };
 
 template <class T>

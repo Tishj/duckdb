@@ -1,6 +1,5 @@
 #include "duckdb.hpp"
 #include "duckdb/common/enums/expression_type.hpp"
-#include "duckdb/main/config.hpp"
 #include "duckdb/parser/expression/conjunction_expression.hpp"
 #include "duckdb/parser/expression/star_expression.hpp"
 #include "duckdb/parser/parser_change.hpp"
@@ -190,7 +189,6 @@ public:
 extern "C" {
 
 DUCKDB_CPP_EXTENSION_ENTRY(loadable_parser_change_extension_demo, loader) {
-	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
-	ParserChange::Register(config, make_shared_ptr<PipeSQLGrammarChange>());
+	ParserChange::Register(loader.GetDatabaseInstance(), make_shared_ptr<PipeSQLGrammarChange>());
 }
 }

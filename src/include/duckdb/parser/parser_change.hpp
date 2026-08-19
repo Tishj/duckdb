@@ -13,7 +13,7 @@
 namespace duckdb {
 
 class ParsedGrammar;
-struct DBConfig;
+class DatabaseInstance;
 
 enum class ParserChangeType : uint8_t { GRAMMAR };
 
@@ -27,7 +27,7 @@ public:
 
 	virtual void Apply(ParsedGrammar &grammar) const = 0;
 
-	DUCKDB_API static void Register(DBConfig &config, shared_ptr<ParserChange> change);
+	DUCKDB_API static void Register(DatabaseInstance &db, shared_ptr<ParserChange> change);
 
 public:
 	const ParserChangeType type;

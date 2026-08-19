@@ -10,6 +10,7 @@
 #include "duckdb/planner/extension_callback.hpp"
 #include "duckdb/main/profiler_extension.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/main/database.hpp"
 
 namespace duckdb {
 
@@ -75,9 +76,6 @@ void ExtensionCallbackManager::Register(shared_ptr<ParserChange> change) {
 	auto new_registry = make_shared_ptr<ExtensionCallbackRegistry>(*callback_registry);
 	new_registry->parser_changes.push_back(std::move(change));
 	callback_registry.atomic_store(new_registry);
-	if (parser_cache) {
-		parser_cache->Invalidate();
-	}
 }
 
 void ExtensionCallbackManager::Register(DialectExtension extension) {
@@ -222,11 +220,6 @@ bool ExtensionCallbackManager::HasDialectExtension(const string &name) const {
 	return false;
 }
 
-void ExtensionCallbackManager::BindParserCache(ParserCache &cache) {
-	lock_guard<mutex> guard(registry_lock);
-	parser_cache = cache;
-}
-
 void OptimizerExtension::Register(DBConfig &config, OptimizerExtension extension) {
 	config.GetCallbackManager().Register(std::move(extension));
 }
@@ -235,8 +228,9 @@ void ParserExtension::Register(DBConfig &config, ParserExtension extension) {
 	config.GetCallbackManager().Register(std::move(extension));
 }
 
-void ParserChange::Register(DBConfig &config, shared_ptr<ParserChange> change) {
-	config.GetCallbackManager().Register(std::move(change));
+void ParserChange::Register(DatabaseInstance &db, shared_ptr<ParserChange> change) {
+	DBConfig::GetConfig(db).GetCallbackManager().Register(std::move(change));
+	db.GetParserCache().Invalidate();
 }
 
 void DialectExtension::Register(DBConfig &config, DialectExtension extension) {

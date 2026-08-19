@@ -1,7 +1,6 @@
 #include "catch.hpp"
 #include "test_helpers.hpp"
 
-#include "duckdb/main/config.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/parser_change.hpp"
 #include "duckdb/parser/peg/compiled_grammar.hpp"
@@ -47,9 +46,9 @@ public:
 	}
 };
 
-static void RegisterParserChangeTestSyntax(DBConfig &config) {
-	ParserChange::Register(config, make_shared_ptr<AddParserChangeTestValue>());
-	ParserChange::Register(config, make_shared_ptr<AddParserChangeTestAtom>());
+static void RegisterParserChangeTestSyntax(DatabaseInstance &db) {
+	ParserChange::Register(db, make_shared_ptr<AddParserChangeTestValue>());
+	ParserChange::Register(db, make_shared_ptr<AddParserChangeTestAtom>());
 }
 
 static void CheckParserChangeTestSyntax(Connection &con) {
@@ -59,10 +58,8 @@ static void CheckParserChangeTestSyntax(Connection &con) {
 }
 
 TEST_CASE("Parser changes apply in registration order", "[api][parser_change]") {
-	DBConfig config;
-	RegisterParserChangeTestSyntax(config);
-
-	DuckDB db(nullptr, &config);
+	DuckDB db(nullptr);
+	RegisterParserChangeTestSyntax(*db.instance);
 	Connection con(db);
 	CheckParserChangeTestSyntax(con);
 }
@@ -93,8 +90,7 @@ TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser
 	REQUIRE_NO_FAIL(*con.Query("SELECT 1"));
 	REQUIRE_FALSE(CompiledGrammar::Get(*db.instance)->HasGrammarChanges());
 
-	auto &config = DBConfig::GetConfig(*db.instance);
-	RegisterParserChangeTestSyntax(config);
+	RegisterParserChangeTestSyntax(*db.instance);
 	CheckParserChangeTestSyntax(con);
 	REQUIRE(CompiledGrammar::Get(*db.instance)->HasGrammarChanges());
 }
@@ -110,9 +106,9 @@ public:
 };
 
 TEST_CASE("Invalid parser changes fail grammar compilation", "[api][parser_change]") {
-	DBConfig config;
-	ParserChange::Register(config, make_shared_ptr<AddInvalidParserChangeTestRule>());
-	REQUIRE_THROWS(DuckDB(nullptr, &config));
+	DuckDB db(nullptr);
+	ParserChange::Register(*db.instance, make_shared_ptr<AddInvalidParserChangeTestRule>());
+	REQUIRE_THROWS(CompiledGrammar::Get(*db.instance));
 }
 
 #ifndef DUCKDB_NO_THREADS
@@ -156,12 +152,12 @@ TEST_CASE("Parser cache does not publish a stale concurrent build", "[api][parse
 	REQUIRE_NO_FAIL(*con.Query("SELECT 1"));
 
 	auto blocker = make_shared_ptr<BlockingParserChange>();
-	ParserChange::Register(DBConfig::GetConfig(*db.instance), blocker);
+	ParserChange::Register(*db.instance, blocker);
 	unique_ptr<MaterializedQueryResult> result;
 	std::thread parser_thread([&]() { result = con.Query("ANSWER"); });
 
 	blocker->WaitUntilEntered();
-	RegisterParserChangeTestSyntax(DBConfig::GetConfig(*db.instance));
+	RegisterParserChangeTestSyntax(*db.instance);
 	blocker->Release();
 	parser_thread.join();
 
