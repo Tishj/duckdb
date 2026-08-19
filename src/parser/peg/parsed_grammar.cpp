@@ -155,6 +155,40 @@ void ParsedGrammar::PrependChoice(const string &rule_name, const string &choice,
 	InsertChoice(rule_name, choice, std::move(find_cursor), true);
 }
 
+void ParsedGrammar::RemoveChoice(const string &rule_name, grammar_cursor_function_t find_cursor) {
+	if (!find_cursor) {
+		throw InvalidInputException("RemoveChoice requires a choice cursor");
+	}
+	auto &rule = GetMutableRule(rule_name);
+	if (!rule.recipe.root) {
+		throw InvalidInputException("Cannot remove a choice from empty grammar rule '%s'", rule_name);
+	}
+
+	if (rule.recipe.root->GetType() != PEGNodeType::CHOICE) {
+		if (find_cursor(*rule.recipe.root)) {
+			throw InvalidInputException("Cannot remove the final choice from grammar rule '%s'", rule_name);
+		}
+		throw InvalidInputException("Could not find a choice cursor in grammar rule '%s'", rule_name);
+	}
+
+	auto &children = rule.recipe.root->Cast<PEGChoiceNode>().children;
+	for (idx_t choice_idx = 0; choice_idx < children.size(); choice_idx++) {
+		if (!find_cursor(*children[choice_idx])) {
+			continue;
+		}
+		if (children.size() == 1) {
+			throw InvalidInputException("Cannot remove the final choice from grammar rule '%s'", rule_name);
+		}
+		children.erase(children.begin() + choice_idx);
+		if (children.size() == 1) {
+			auto remaining_choice = std::move(children[0]);
+			rule.recipe.root = std::move(remaining_choice);
+		}
+		return;
+	}
+	throw InvalidInputException("Could not find a choice cursor in grammar rule '%s'", rule_name);
+}
+
 void ParsedGrammar::ReplaceRule(const string &rule_definition, grammar_transform_function_t transform) {
 	auto rule = ParseSingleRule(rule_definition);
 	auto entry = rules.find(rule.name);

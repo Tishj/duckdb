@@ -4,6 +4,7 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/parser_change.hpp"
 #include "duckdb/parser/peg/compiled_grammar.hpp"
+#include "duckdb/parser/peg/keyword_helper/parsed_grammar_keyword_helper.hpp"
 #include "duckdb/parser/peg/parsed_grammar.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
@@ -129,6 +130,29 @@ TEST_CASE("Grammar nodes support structured modification", "[api][parser_change]
 	REQUIRE(choices[0]->Cast<PEGOptionalNode>().child->Cast<PEGReferenceNode>().text == "Replacement");
 	REQUIRE(choices[1]->Cast<PEGLiteralNode>().text == "literal");
 	REQUIRE(copy->Cast<PEGChoiceNode>().children[0]->Cast<PEGReferenceNode>().text == "First");
+}
+
+TEST_CASE("Grammar keyword choices can be removed", "[api][parser_change]") {
+	auto grammar = ParsedGrammar::CreateDefault();
+	ParsedGrammarKeywordHelper initial_keywords(grammar);
+	REQUIRE(initial_keywords.KeywordCategoryType("ATTACH", PEGKeywordCategory::KEYWORD_UNRESERVED));
+
+	grammar.RemoveChoice("UnreservedKeyword", [](const PEGNode &node) {
+		return node.GetType() == PEGNodeType::LITERAL && node.Cast<PEGLiteralNode>().text == "ATTACH";
+	});
+	ParsedGrammarKeywordHelper modified_keywords(grammar);
+	REQUIRE_FALSE(modified_keywords.IsKeyword("ATTACH"));
+
+	auto single_choice = ParsedGrammar::Parse("KeywordRule <- 'FIRST' / 'SECOND'");
+	single_choice.RemoveChoice("KeywordRule", [](const PEGNode &node) {
+		return node.GetType() == PEGNodeType::LITERAL && node.Cast<PEGLiteralNode>().text == "SECOND";
+	});
+	auto rule = single_choice.GetRule("KeywordRule");
+	REQUIRE(rule);
+	REQUIRE(rule->recipe.root->Cast<PEGLiteralNode>().text == "FIRST");
+	REQUIRE_THROWS(single_choice.RemoveChoice("KeywordRule", [](const PEGNode &node) {
+		return node.GetType() == PEGNodeType::LITERAL && node.Cast<PEGLiteralNode>().text == "FIRST";
+	}));
 }
 
 TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser_change]") {
