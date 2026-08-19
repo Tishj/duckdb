@@ -39,6 +39,26 @@ static void ValidateParsedGrammarRoots(const ParsedGrammar &grammar) {
 	}
 }
 
+static void CheckReference(const ParsedGrammar &grammar, const ParsedGrammarRule &parsed_rule,
+                           const PEGExpression &expression) {
+	do {
+		if (expression.kind != PEGExpression::Kind::REFERENCE &&
+		    expression.kind != PEGExpression::Kind::FUNCTION_CALL) {
+			break;
+		}
+		if (expression.kind == PEGExpression::Kind::REFERENCE && parsed_rule.recipe.parameters.count(expression.text)) {
+			break;
+		}
+		if (!grammar.GetRule(expression.text.GetString())) {
+			throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", parsed_rule.name,
+			                            expression.text.GetString());
+		}
+	} while (false);
+	for (auto &child : expression.children) {
+		CheckReference(grammar, parsed_rule, child);
+	}
+}
+
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
 	idx_t parser_version;
 	{
@@ -70,19 +90,9 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientCon
 	}
 	ValidateParsedGrammarRoots(grammar);
 	for (auto &entry : grammar.rules) {
-		auto &rule = *entry.second;
-		for (auto &token : rule.recipe.tokens) {
-			if (token.type != PEGTokenType::REFERENCE && token.type != PEGTokenType::FUNCTION_CALL) {
-				continue;
-			}
-			if (token.type == PEGTokenType::REFERENCE && rule.recipe.parameters.count(token.text)) {
-				continue;
-			}
-			if (!grammar.GetRule(token.text.GetString())) {
-				throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", rule.name,
-				                            token.text.GetString());
-			}
-		}
+		auto &parsed_rule = *entry.second;
+		auto &expression = entry.second->recipe.expression;
+		CheckReference(grammar, parsed_rule, expression);
 	}
 
 	auto new_matcher = shared_ptr<CompiledGrammar>(new CompiledGrammar(grammar, has_grammar_changes, parser_version));

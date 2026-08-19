@@ -71,6 +71,8 @@ private:
 	void AddPackratMemoizedRule(const char *name);
 	void SuppressSuggestions(const char *name);
 	Matcher &CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters);
+	Matcher &CreateMatcherFromExpression(const PEGExpression &expression, const PEGRule &rule,
+	                                     vector<reference<Matcher>> &parameters);
 
 private:
 	MatcherAllocator &allocator;

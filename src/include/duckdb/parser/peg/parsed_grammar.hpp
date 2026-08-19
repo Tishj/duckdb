@@ -20,7 +20,7 @@ class ParseResult;
 class PEGTransformer;
 
 using grammar_transform_function_t = std::function<unique_ptr<TransformResultValue>(PEGTransformer &, ParseResult &)>;
-using grammar_cursor_function_t = std::function<bool(const PEGToken &)>;
+using grammar_cursor_function_t = std::function<bool(const PEGExpression &)>;
 
 struct ParsedGrammarRule {
 	ParsedGrammarRule(string name_p, PEGRule recipe_p) : name(std::move(name_p)), recipe(std::move(recipe_p)) {
