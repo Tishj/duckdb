@@ -22,27 +22,30 @@ static void PopulateKeywordMap(const ParsedGrammar &grammar, const string &root_
 		                            rule_name);
 	}
 
-	bool expect_keyword = true;
-	for (auto &token : rule.recipe.tokens) {
-		if (expect_keyword) {
-			switch (token.type) {
-			case PEGTokenType::LITERAL:
-				keyword_map.insert(StringUtil::Lower(token.text.GetString()));
-				break;
-			case PEGTokenType::REFERENCE:
-				PopulateKeywordMap(grammar, root_rule_name, token.text.GetString(), keyword_map, active_rules);
-				break;
-			default:
-				throw InvalidInputException("Keyword grammar rule '%s' contains unsupported token '%s' in rule '%s'",
-				                            root_rule_name, token.text.GetString(), rule_name);
-			}
-		} else if (token.type != PEGTokenType::OPERATOR || token.text.GetString() != "/") {
-			throw InvalidInputException("Keyword grammar rule '%s' must contain only alternatives", root_rule_name);
-		}
-		expect_keyword = !expect_keyword;
+	if (!rule.recipe.root) {
+		throw InvalidInputException("Keyword grammar rule '%s' is empty", root_rule_name);
 	}
-	if (expect_keyword) {
-		throw InvalidInputException("Keyword grammar rule '%s' ends with an incomplete alternative", root_rule_name);
+	vector<reference<const PEGNode>> choices;
+	if (rule.recipe.root->GetType() == PEGNodeType::CHOICE) {
+		for (auto &child : rule.recipe.root->Cast<PEGChoiceNode>().children) {
+			choices.push_back(*child);
+		}
+	} else {
+		choices.push_back(*rule.recipe.root);
+	}
+	for (auto &choice : choices) {
+		switch (choice.get().GetType()) {
+		case PEGNodeType::LITERAL:
+			keyword_map.insert(StringUtil::Lower(choice.get().Cast<PEGLiteralNode>().text));
+			break;
+		case PEGNodeType::REFERENCE:
+			PopulateKeywordMap(grammar, root_rule_name, choice.get().Cast<PEGReferenceNode>().text, keyword_map,
+			                   active_rules);
+			break;
+		default:
+			throw InvalidInputException("Keyword grammar rule '%s' must contain only literal or reference alternatives",
+			                            root_rule_name);
+		}
 	}
 	active_rules.erase(rule_name);
 }

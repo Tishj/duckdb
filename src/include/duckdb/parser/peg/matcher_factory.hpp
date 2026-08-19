@@ -11,34 +11,6 @@ class MatcherFactory;
 
 //! Class for building matchers
 class MatcherFactory {
-private:
-	struct MatcherList {
-	public:
-		struct Entry {
-			explicit Entry(Matcher &matcher) : matcher(matcher), function_name() {
-			}
-			Entry(Matcher &matcher, string_t function_name_p) : matcher(matcher), function_name(function_name_p) {
-			}
-
-			Matcher &matcher;
-			//! Left empty for non-function entries
-			optional<string_t> function_name;
-		};
-
-	public:
-		explicit MatcherList(MatcherFactory &factory);
-		void AddMatcher(Matcher &matcher);
-		void AddRootMatcher(Matcher &matcher);
-		idx_t GetRootMatcherCount() const;
-		void BeginFunction(string_t function_name);
-		void CloseBracket();
-		MatcherList::Entry &GetLastRootMatcher();
-
-	private:
-		MatcherFactory &factory;
-		vector<MatcherList::Entry> matchers;
-	};
-
 public:
 	MatcherFactory(MatcherAllocator &allocator, const ParsedGrammar &grammar_p, CompiledGrammar &compiled_p);
 	virtual ~MatcherFactory() = default;
@@ -71,6 +43,9 @@ private:
 	void AddPackratMemoizedRule(const char *name);
 	void SuppressSuggestions(const char *name);
 	Matcher &CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters);
+	Matcher &CreateMatcher(const PEGNode &node, const PEGRule &rule, vector<reference<Matcher>> &parameters);
+	void AddSequence(ListMatcher &list, const PEGNode &node, const PEGRule &rule,
+	                 vector<reference<Matcher>> &parameters);
 
 private:
 	MatcherAllocator &allocator;

@@ -37,8 +37,8 @@ public:
 
 	void Apply(ParsedGrammar &grammar) const override {
 		grammar.AddRule("ParserChangeTestAtom <- ParserChangeTestValue", TransformParserChangeTestAtom);
-		grammar.PrependChoice("SelectAtom", "ParserChangeTestAtom", [](const PEGToken &token) {
-			return token.type == PEGTokenType::REFERENCE && token.text.GetString() == "SelectParens";
+		grammar.PrependChoice("SelectAtom", "ParserChangeTestAtom", [](const PEGNode &node) {
+			return node.GetType() == PEGNodeType::REFERENCE && node.Cast<PEGReferenceNode>().text == "SelectParens";
 		});
 	}
 };
@@ -62,23 +62,73 @@ TEST_CASE("Parser changes apply in registration order", "[api][parser_change]") 
 }
 
 TEST_CASE("Grammar choices support cursor placement", "[api][parser_change]") {
-	auto grammar = ParsedGrammar::Parse("CursorRule <- 'first' / 'last'");
-	grammar.AddChoice("CursorRule", "'second'", [](const PEGToken &token) {
-		return token.type == PEGTokenType::LITERAL && token.text.GetString() == "first";
+	auto grammar = ParsedGrammar::Parse("CursorRule <- First('first' / 'one')? FirstTail / Last('last')* LastTail");
+	grammar.AddChoice("CursorRule", "Second", [](const PEGNode &node) {
+		if (node.GetType() != PEGNodeType::SEQUENCE) {
+			return false;
+		}
+		auto &sequence = node.Cast<PEGSequenceNode>();
+		if (sequence.children.size() != 2 || sequence.children[0]->GetType() != PEGNodeType::OPTIONAL) {
+			return false;
+		}
+		auto &function = *sequence.children[0]->Cast<PEGOptionalNode>().child;
+		return function.GetType() == PEGNodeType::FUNCTION && function.Cast<PEGFunctionNode>().name == "First" &&
+		       function.Cast<PEGFunctionNode>().child->GetType() == PEGNodeType::CHOICE &&
+		       sequence.children[1]->GetType() == PEGNodeType::REFERENCE &&
+		       sequence.children[1]->Cast<PEGReferenceNode>().text == "FirstTail";
 	});
-	grammar.PrependChoice("CursorRule", "'third'", [](const PEGToken &token) {
-		return token.type == PEGTokenType::LITERAL && token.text.GetString() == "last";
+	grammar.PrependChoice("CursorRule", "Third", [](const PEGNode &node) {
+		if (node.GetType() != PEGNodeType::SEQUENCE) {
+			return false;
+		}
+		auto &sequence = node.Cast<PEGSequenceNode>();
+		if (sequence.children.size() != 2 || sequence.children[0]->GetType() != PEGNodeType::OPTIONAL) {
+			return false;
+		}
+		auto &repeat = *sequence.children[0]->Cast<PEGOptionalNode>().child;
+		return repeat.GetType() == PEGNodeType::REPEAT &&
+		       repeat.Cast<PEGRepeatNode>().child->GetType() == PEGNodeType::FUNCTION &&
+		       repeat.Cast<PEGRepeatNode>().child->Cast<PEGFunctionNode>().name == "Last" &&
+		       sequence.children[1]->GetType() == PEGNodeType::REFERENCE &&
+		       sequence.children[1]->Cast<PEGReferenceNode>().text == "LastTail";
 	});
 
 	vector<string> choices;
 	auto rule = grammar.GetRule("CursorRule");
 	REQUIRE(rule);
-	for (auto &token : rule->recipe.tokens) {
-		if (token.type == PEGTokenType::LITERAL) {
-			choices.push_back(token.text.GetString());
+	REQUIRE(rule->recipe.root->GetType() == PEGNodeType::CHOICE);
+	for (auto &choice : rule->recipe.root->Cast<PEGChoiceNode>().children) {
+		auto node = choice.get();
+		if (node->GetType() == PEGNodeType::SEQUENCE) {
+			node = node->Cast<PEGSequenceNode>().children[0].get();
+		}
+		while (node->GetType() == PEGNodeType::OPTIONAL || node->GetType() == PEGNodeType::REPEAT) {
+			node = static_cast<PEGUnaryNode *>(node)->child.get();
+		}
+		if (node->GetType() == PEGNodeType::FUNCTION) {
+			choices.push_back(node->Cast<PEGFunctionNode>().name);
+		} else {
+			REQUIRE(node->GetType() == PEGNodeType::REFERENCE);
+			choices.push_back(node->Cast<PEGReferenceNode>().text);
 		}
 	}
-	REQUIRE(choices == vector<string> {"first", "second", "third", "last"});
+	REQUIRE(choices == vector<string> {"First", "Second", "Third", "Last"});
+}
+
+TEST_CASE("Grammar nodes support structured modification", "[api][parser_change]") {
+	auto grammar = ParsedGrammar::Parse("MutableRule <- First / Second");
+	auto rule = grammar.GetRule("MutableRule");
+	REQUIRE(rule);
+	auto copy = rule->recipe.root->Copy();
+	auto &choices = rule->recipe.root->Cast<PEGChoiceNode>().children;
+	choices.erase(choices.begin());
+	choices[0] = make_uniq<PEGOptionalNode>(make_uniq<PEGReferenceNode>("Replacement"));
+	choices.push_back(make_uniq<PEGLiteralNode>("literal"));
+
+	REQUIRE(choices.size() == 2);
+	REQUIRE(choices[0]->Cast<PEGOptionalNode>().child->Cast<PEGReferenceNode>().text == "Replacement");
+	REQUIRE(choices[1]->Cast<PEGLiteralNode>().text == "literal");
+	REQUIRE(copy->Cast<PEGChoiceNode>().children[0]->Cast<PEGReferenceNode>().text == "First");
 }
 
 TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser_change]") {

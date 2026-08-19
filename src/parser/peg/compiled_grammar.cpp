@@ -39,6 +39,57 @@ static void ValidateParsedGrammarRoots(const ParsedGrammar &grammar) {
 	}
 }
 
+static void ValidateParsedGrammarNode(const ParsedGrammar &grammar, const ParsedGrammarRule &rule,
+                                      const PEGNode &node) {
+	switch (node.GetType()) {
+	case PEGNodeType::REFERENCE: {
+		auto &name = node.Cast<PEGReferenceNode>().text;
+		if (!rule.recipe.parameters.count(name) && !grammar.GetRule(name)) {
+			throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", rule.name, name);
+		}
+		return;
+	}
+	case PEGNodeType::FUNCTION: {
+		auto &function = node.Cast<PEGFunctionNode>();
+		if (!grammar.GetRule(function.name)) {
+			throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", rule.name, function.name);
+		}
+		if (!function.child) {
+			throw InvalidInputException("Grammar rule '%s' contains a function without an argument", rule.name);
+		}
+		ValidateParsedGrammarNode(grammar, rule, *function.child);
+		return;
+	}
+	case PEGNodeType::SEQUENCE:
+	case PEGNodeType::CHOICE: {
+		auto &children = static_cast<const PEGContainerNode &>(node).children;
+		if (children.empty()) {
+			throw InvalidInputException("Grammar rule '%s' contains an empty sequence or choice", rule.name);
+		}
+		for (auto &child : children) {
+			if (!child) {
+				throw InvalidInputException("Grammar rule '%s' contains an empty node", rule.name);
+			}
+			ValidateParsedGrammarNode(grammar, rule, *child);
+		}
+		return;
+	}
+	case PEGNodeType::GROUP:
+	case PEGNodeType::OPTIONAL:
+	case PEGNodeType::REPEAT:
+	case PEGNodeType::NEGATIVE_LOOKAHEAD: {
+		auto &child = static_cast<const PEGUnaryNode &>(node).child;
+		if (!child) {
+			throw InvalidInputException("Grammar rule '%s' contains an empty unary node", rule.name);
+		}
+		ValidateParsedGrammarNode(grammar, rule, *child);
+		return;
+	}
+	default:
+		return;
+	}
+}
+
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
 	idx_t parser_version;
 	{
@@ -71,17 +122,8 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientCon
 	ValidateParsedGrammarRoots(grammar);
 	for (auto &entry : grammar.rules) {
 		auto &rule = *entry.second;
-		for (auto &token : rule.recipe.tokens) {
-			if (token.type != PEGTokenType::REFERENCE && token.type != PEGTokenType::FUNCTION_CALL) {
-				continue;
-			}
-			if (token.type == PEGTokenType::REFERENCE && rule.recipe.parameters.count(token.text)) {
-				continue;
-			}
-			if (!grammar.GetRule(token.text.GetString())) {
-				throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", rule.name,
-				                            token.text.GetString());
-			}
+		if (rule.recipe.root) {
+			ValidateParsedGrammarNode(grammar, rule, *rule.recipe.root);
 		}
 	}
 

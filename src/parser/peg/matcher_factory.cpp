@@ -5,80 +5,6 @@
 
 namespace duckdb {
 
-MatcherFactory::MatcherList::MatcherList(MatcherFactory &factory) : factory(factory) {
-}
-
-void MatcherFactory::MatcherList::AddMatcher(Matcher &matcher) {
-	auto &root_matcher = matchers.back().matcher;
-	switch (root_matcher.Type()) {
-	case MatcherType::LIST: {
-		auto &root_list = root_matcher.Cast<ListMatcher>();
-		root_list.matchers.push_back(matcher);
-		break;
-	}
-	case MatcherType::CHOICE:
-		// for a choice matcher we need to pop the choice matcher from the stack afterwards
-		if (matchers.size() <= 1) {
-			throw InternalException("Choice matcher should never be the root in the matcher stack");
-		}
-		root_matcher.Cast<ChoiceMatcher>().matchers.push_back(matcher);
-		if (!matchers.empty()) {
-			matchers.pop_back();
-		}
-		break;
-	default:
-		throw InternalException("Cannot add matcher to root matcher of this type");
-	}
-}
-
-void MatcherFactory::MatcherList::AddRootMatcher(Matcher &matcher) {
-	matchers.emplace_back(matcher);
-}
-
-idx_t MatcherFactory::MatcherList::GetRootMatcherCount() const {
-	return matchers.size();
-}
-
-void MatcherFactory::MatcherList::BeginFunction(string_t function_name) {
-	auto &parameter_list = factory.List();
-	matchers.emplace_back(parameter_list, function_name);
-}
-
-void MatcherFactory::MatcherList::CloseBracket() {
-	if (matchers.size() <= 1) {
-		throw InternalException("PEG matcher create error - found too many close brackets");
-	}
-	auto &root_bracket_matcher = matchers.back();
-	if (!root_bracket_matcher.function_name) {
-		// not a function
-		auto &bracket_matcher = root_bracket_matcher.matcher;
-		// remove the last matcher from the stack
-		matchers.pop_back();
-		// push it into the last matcher
-		AddMatcher(bracket_matcher);
-	} else {
-		// function matcher
-		auto &function_name = *root_bracket_matcher.function_name;
-		auto &function_parameters = root_bracket_matcher.matcher.Cast<ListMatcher>();
-
-		// wrap the parameters in a list if there is more than one
-		auto &parameter = function_parameters.matchers.size() == 1 ? function_parameters.matchers[0].get()
-		                                                           : factory.List(function_parameters.matchers);
-		vector<reference<Matcher>> parameters;
-		parameters.push_back(parameter);
-		// do the substitution of the function call
-		auto &function_call = factory.CreateMatcher(function_name, parameters);
-		// remove the last matcher from the stack
-		matchers.pop_back();
-		// push it into the last matcher
-		AddMatcher(function_call);
-	}
-}
-
-MatcherFactory::MatcherList::Entry &MatcherFactory::MatcherList::GetLastRootMatcher() {
-	return matchers.back();
-}
-
 Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters) {
 	bool is_function_call = !parameters.empty();
 	if (!is_function_call) {
@@ -101,8 +27,6 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 		matchers.insert(make_pair(string_t(entry->second->name), reference<Matcher>(matcher)));
 	}
 
-	MatcherList list(*this);
-	list.AddRootMatcher(matcher);
 	// fill the matcher from the given set of rules
 	auto &rule = entry->second->recipe;
 	if (rule.parameters.size() > 1) {
@@ -112,134 +36,10 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 		throw InternalException("Parameter count mismatch (rule %s expected %d parameters but got %d)",
 		                        rule_name.GetString(), rule.parameters.size(), parameters.size());
 	}
-	for (idx_t token_idx = 0; token_idx < rule.tokens.size(); token_idx++) {
-		auto &token = rule.tokens[token_idx];
-		switch (token.type) {
-		case PEGTokenType::LITERAL:
-			// literal - push the keyword
-			list.AddMatcher(Keyword(token.text.GetString()));
-			break;
-		case PEGTokenType::REFERENCE: {
-			// check if we are referring to a keyword
-			auto param_entry = rule.parameters.find(token.text);
-			if (param_entry != rule.parameters.end()) {
-				// refers to a parameter - refer to it directly
-				list.AddMatcher(parameters[param_entry->second].get());
-			} else {
-				// refers to a different rule - create the matcher for that rule
-				list.AddMatcher(CreateMatcher(token.text));
-			}
-			break;
-		}
-		case PEGTokenType::FUNCTION_CALL: {
-			// function call - get the name of the function
-			list.BeginFunction(token.text);
-			break;
-		}
-		case PEGTokenType::OPERATOR: {
-			// tokens need to be one byte
-			auto op_type = token.text.GetData()[0];
-			switch (op_type) {
-			case '?':
-			case '*': {
-				// optional/repeat - make the last rule optional/repeat
-				auto &last_matcher = list.GetLastRootMatcher().matcher;
-				if (last_matcher.Type() != MatcherType::LIST) {
-					throw InternalException("Optional/Repeat expected a list matcher");
-				}
-				auto &list_matcher = last_matcher.Cast<ListMatcher>();
-				if (list_matcher.matchers.empty()) {
-					throw InternalException("Optional/Repeat rule found as first token");
-				}
-				auto &final_matcher = list_matcher.matchers.back();
-				if (op_type == '*') {
-					// * is Optional(Repeat(CHILD))
-					final_matcher = Repeat(final_matcher.get());
-				}
-				auto &replaced_matcher = Optional(final_matcher);
-				if (!list_matcher.matchers.empty()) {
-					list_matcher.matchers.pop_back();
-				}
-				list_matcher.matchers.push_back(replaced_matcher);
-				break;
-			}
-			case '+': {
-				// Similar to '*' except it's not optional and just repeat (match at least once)
-				auto &last_matcher = list.GetLastRootMatcher().matcher;
-				if (last_matcher.Type() != MatcherType::LIST) {
-					throw InternalException("Repeat expected a list matcher");
-				}
-				auto &list_matcher = last_matcher.Cast<ListMatcher>();
-				if (list_matcher.matchers.empty()) {
-					throw InternalException("Repeat rule found as first token");
-				}
-				auto &final_matcher = list_matcher.matchers.back();
-				final_matcher = Repeat(final_matcher.get());
-				if (!list_matcher.matchers.empty()) {
-					list_matcher.matchers.pop_back();
-				}
-				list_matcher.matchers.push_back(final_matcher);
-				break;
-			}
-			case '/': {
-				// OR operator - this signifies a choice between the last rule and the next rule
-				auto &last_root_matcher = list.GetLastRootMatcher().matcher;
-				if (last_root_matcher.Type() != MatcherType::LIST) {
-					throw InternalException("OR expected a list matcher");
-				}
-				auto &list_matcher = last_root_matcher.Cast<ListMatcher>();
-				if (list_matcher.matchers.empty()) {
-					throw InternalException("OR rule found as first token");
-				}
-				auto &previous_matcher = list_matcher.matchers.back();
-
-				if (previous_matcher.get().Type() == MatcherType::CHOICE) {
-					list.AddRootMatcher(previous_matcher);
-				} else {
-					vector<reference<Matcher>> choice_options;
-					choice_options.push_back(previous_matcher);
-					auto &new_choice_matcher = Choice(std::move(choice_options));
-
-					if (!list_matcher.matchers.empty()) {
-						list_matcher.matchers.pop_back();
-					}
-					list_matcher.matchers.push_back(new_choice_matcher);
-
-					list.AddRootMatcher(new_choice_matcher);
-				}
-				break;
-			}
-			case '(': {
-				// bracket open - push a new list matcher onto the stack
-				auto &bracket_matcher = List();
-				list.AddRootMatcher(bracket_matcher);
-				break;
-			}
-			case ')': {
-				list.CloseBracket();
-				break;
-			}
-			case '!': {
-				// throw InternalException("NOT operator not supported in PEG grammar (found in rule %s)",
-				// rule_name.GetString());
-				// FIXME: we just ignore NOT operators here
-				break;
-			}
-			default:
-				throw InternalException("unrecognized peg operator type");
-			}
-			break;
-		}
-		case PEGTokenType::REGEX:
-			throw InternalException("REGEX operator not supported in PEG grammar (found in rule %s)",
-			                        rule_name.GetString());
-		default:
-			throw InternalException("unrecognized peg token type");
-		}
+	if (!rule.root) {
+		throw InternalException("Cannot create a matcher for empty rule '%s'", rule_name.GetString());
 	}
-	if (list.GetRootMatcherCount() != 1) {
-		throw InternalException("PEG matcher create error - unclosed bracket found");
-	}
+	AddSequence(matcher, *rule.root, rule, parameters);
 
 	auto rule_name_str = rule_name.GetString();
 	auto rule_p = compiled.GetRule(rule_name_str);
@@ -256,6 +56,67 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 		matcher.Cast<ListMatcher>().suppress_suggestions = true;
 	}
 	return matcher;
+}
+
+void MatcherFactory::AddSequence(ListMatcher &list, const PEGNode &node, const PEGRule &rule,
+                                 vector<reference<Matcher>> &parameters) {
+	if (node.GetType() == PEGNodeType::SEQUENCE) {
+		for (auto &child : node.Cast<PEGSequenceNode>().children) {
+			list.matchers.push_back(CreateMatcher(*child, rule, parameters));
+		}
+	} else {
+		list.matchers.push_back(CreateMatcher(node, rule, parameters));
+	}
+}
+
+Matcher &MatcherFactory::CreateMatcher(const PEGNode &node, const PEGRule &rule,
+                                       vector<reference<Matcher>> &parameters) {
+	switch (node.GetType()) {
+	case PEGNodeType::LITERAL:
+		return Keyword(node.Cast<PEGLiteralNode>().text);
+	case PEGNodeType::REFERENCE: {
+		auto &name = node.Cast<PEGReferenceNode>().text;
+		auto parameter = rule.parameters.find(name);
+		if (parameter != rule.parameters.end()) {
+			return parameters[parameter->second].get();
+		}
+		return CreateMatcher(name);
+	}
+	case PEGNodeType::SEQUENCE: {
+		auto &result = List();
+		AddSequence(result, node, rule, parameters);
+		return result;
+	}
+	case PEGNodeType::CHOICE: {
+		vector<reference<Matcher>> choices;
+		for (auto &child : node.Cast<PEGChoiceNode>().children) {
+			choices.push_back(CreateMatcher(*child, rule, parameters));
+		}
+		return Choice(std::move(choices));
+	}
+	case PEGNodeType::GROUP: {
+		auto &result = List();
+		AddSequence(result, *node.Cast<PEGGroupNode>().child, rule, parameters);
+		return result;
+	}
+	case PEGNodeType::FUNCTION: {
+		auto &function = node.Cast<PEGFunctionNode>();
+		vector<reference<Matcher>> function_parameters;
+		function_parameters.push_back(CreateMatcher(*function.child, rule, parameters));
+		return CreateMatcher(function.name, function_parameters);
+	}
+	case PEGNodeType::OPTIONAL:
+		return Optional(CreateMatcher(*node.Cast<PEGOptionalNode>().child, rule, parameters));
+	case PEGNodeType::REPEAT:
+		return Repeat(CreateMatcher(*node.Cast<PEGRepeatNode>().child, rule, parameters));
+	case PEGNodeType::NEGATIVE_LOOKAHEAD:
+		// FIXME: negative lookahead is not supported by the matcher yet.
+		return CreateMatcher(*node.Cast<PEGNegativeLookaheadNode>().child, rule, parameters);
+	case PEGNodeType::REGEX:
+		throw InternalException("REGEX operator not supported in PEG grammar");
+	default:
+		throw InternalException("Unrecognized PEG node type");
+	}
 }
 
 void MatcherFactory::AddKeywordOverride(const char *name, KeywordInfo info) {
