@@ -39,11 +39,7 @@ public:
 	}
 
 	void Apply(ParsedGrammar &grammar) const override {
-		RuleTransformData atom_transform;
-		atom_transform.transform = TransformParserChangeTestAtom;
-		atom_transform.trampoline_transform = TransformParserChangeTestAtom;
-		grammar.AddRule("ParserChangeTestAtom <- ParserChangeTestValue", std::move(atom_transform));
-
+		grammar.AddRule("ParserChangeTestAtom <- ParserChangeTestValue", TransformParserChangeTestAtom);
 		grammar.PrependChoice("SelectAtom", "ParserChangeTestAtom", [](const PEGToken &token) {
 			return token.type == PEGTokenType::REFERENCE && token.text.GetString() == "SelectParens";
 		});
