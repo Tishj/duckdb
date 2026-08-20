@@ -1,5 +1,6 @@
 #include "duckdb/parser/peg/parsed_grammar.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/parser/peg/matcher.hpp"
 #include "duckdb/parser/peg/transformer/peg_transformer.hpp"
 #ifdef PEG_PARSER_SOURCE_FILE
 #include <fstream>
@@ -9,16 +10,20 @@
 
 namespace duckdb {
 
-ParsedGrammar::ParsedGrammar(ParsedGrammar &&other) noexcept : rules(std::move(other.rules)) {
+ParsedGrammar::ParsedGrammar(ParsedGrammar &&other) noexcept
+    : rules(std::move(other.rules)),
+      terminal_rule_override_callbacks(std::move(other.terminal_rule_override_callbacks)) {
 	string_heap.Move(other.string_heap);
 }
 
 ParsedGrammar &ParsedGrammar::operator=(ParsedGrammar &&other) noexcept {
 	if (this != &other) {
 		rules.clear();
+		terminal_rule_override_callbacks.clear();
 		string_heap.Destroy();
 		string_heap.Move(other.string_heap);
 		rules = std::move(other.rules);
+		terminal_rule_override_callbacks = std::move(other.terminal_rule_override_callbacks);
 	}
 	return *this;
 }
@@ -190,6 +195,28 @@ void ParsedGrammar::ReplaceRule(const string &rule_definition, grammar_transform
 void ParsedGrammar::SetTransform(const string &rule_name, grammar_transform_function_t transform) {
 	auto &rule = GetMutableRule(rule_name);
 	rule.transform = std::move(transform);
+}
+
+void ParsedGrammar::AddTerminalRuleOverride(const string &rule_name, terminal_rule_matcher_factory_t matcher_factory) {
+	if (!matcher_factory) {
+		throw InvalidInputException("Cannot add an empty terminal rule matcher factory for '%s'", rule_name);
+	}
+	terminal_rule_override_callbacks.emplace_back(
+	    [rule_name, matcher_factory = std::move(matcher_factory)](const PEGKeywordHelper &keyword_helper,
+	                                                              terminal_rule_overrides_t &overrides) {
+		    AddTerminalRuleOverride(overrides, rule_name, matcher_factory(keyword_helper));
+	    });
+}
+
+void ParsedGrammar::AddTerminalRuleOverride(terminal_rule_overrides_t &overrides, const string &rule_name,
+                                            unique_ptr<Matcher> matcher) {
+	if (!matcher) {
+		throw InvalidInputException("Cannot add an empty terminal rule override for '%s'", rule_name);
+	}
+	if (overrides.count(rule_name)) {
+		throw InvalidInputException("Terminal rule override for '%s' already exists", rule_name);
+	}
+	overrides.emplace(rule_name, std::move(matcher));
 }
 
 } // namespace duckdb

@@ -4,6 +4,8 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/parser_change.hpp"
 #include "duckdb/parser/peg/compiled_grammar.hpp"
+#include "duckdb/parser/peg/matcher/identifier_matcher.hpp"
+#include "duckdb/parser/peg/matcher/keyword_matcher.hpp"
 #include "duckdb/parser/peg/parsed_grammar.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
@@ -26,7 +28,14 @@ public:
 	}
 
 	void Apply(ParsedGrammar &grammar) const override {
-		grammar.AddRule("ParserChangeTestValue <- 'ANSWER'");
+		grammar.AddRule("ParserChangeTestValue <- 'WRONG'");
+		grammar.AddChoice("UnreservedKeyword", "'ANSWER'");
+		grammar.AddTerminalRuleOverride("ParserChangeTestValue", [](const PEGKeywordHelper &keyword_helper) {
+			if (!keyword_helper.KeywordCategoryType("ANSWER", PEGKeywordCategory::KEYWORD_UNRESERVED)) {
+				throw InternalException("Parser change keyword is missing from the compiled keyword helper");
+			}
+			return make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper);
+		});
 	}
 };
 
@@ -103,6 +112,25 @@ TEST_CASE("Grammar choices can be removed", "[api][parser_change]") {
 	});
 	REQUIRE(rule->recipe.expression.kind == PEGExpression::Kind::LITERAL);
 	REQUIRE(rule->recipe.expression.text.GetString() == "last");
+}
+
+class OverrideDefaultTerminalRule final : public ParserChange {
+public:
+	OverrideDefaultTerminalRule() : ParserChange(ParserChangeType::GRAMMAR) {
+	}
+
+	void Apply(ParsedGrammar &grammar) const override {
+		grammar.AddTerminalRuleOverride("identifier", [](const PEGKeywordHelper &) {
+			return make_uniq<KeywordMatcher>("replacement", KeywordInfo(0, ' '));
+		});
+	}
+};
+
+TEST_CASE("Default terminal rule overrides are registered before additions", "[api][parser_change]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	ParserChange::Register(*db.instance, make_shared_ptr<OverrideDefaultTerminalRule>());
+	REQUIRE_THROWS(CompiledGrammar::Get(*con.context));
 }
 
 TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser_change]") {

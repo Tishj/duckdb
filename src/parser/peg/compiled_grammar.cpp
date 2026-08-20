@@ -62,6 +62,69 @@ static void CheckReference(const ParsedGrammar &grammar, const ParsedGrammarRule
 	}
 }
 
+terminal_rule_overrides_t ParsedGrammar::BuildTerminalRuleOverrides(const PEGKeywordHelper &keyword_helper) const {
+	terminal_rule_overrides_t overrides;
+	//===--------------------------------------------------------------------===//
+	// START GENERATED RULE OVERRIDES
+	//===--------------------------------------------------------------------===//
+	AddTerminalRuleOverride(overrides, "Identifier",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedIdentifier",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(overrides, "CatalogName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_CATALOG_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "SchemaName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_SCHEMA_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedSchemaName",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_SCHEMA_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "TableName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_TABLE_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedTableName",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_TABLE_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ColumnName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_COLUMN_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedColumnName",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_COLUMN_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "IndexName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedIndexName",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(overrides, "SequenceName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(
+	    overrides, "FunctionName",
+	    make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_SCALAR_FUNCTION_NAME, keyword_helper));
+	AddTerminalRuleOverride(
+	    overrides, "ReservedFunctionName",
+	    make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_SCALAR_FUNCTION_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedKeyword",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(overrides, "TableFunctionName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_TABLE_FUNCTION_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "TypeName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_TYPE_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "ReservedTypeName",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_TYPE_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "PragmaName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_PRAGMA_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "SettingName",
+	                        make_uniq<IdentifierMatcher>(SuggestionState::SUGGEST_SETTING_NAME, keyword_helper));
+	AddTerminalRuleOverride(overrides, "CopyOptionName",
+	                        make_uniq<ReservedIdentifierMatcher>(SuggestionState::SUGGEST_VARIABLE, keyword_helper));
+	AddTerminalRuleOverride(overrides, "NumberLiteral", make_uniq<NumberLiteralMatcher>());
+	AddTerminalRuleOverride(overrides, "StringLiteral", make_uniq<StringLiteralMatcher>());
+	AddTerminalRuleOverride(overrides, "OperatorLiteral", make_uniq<OperatorMatcher>());
+	//===--------------------------------------------------------------------===//
+	// END GENERATED RULE OVERRIDES
+	//===--------------------------------------------------------------------===//
+
+	AddTerminalRuleOverride(overrides, "EndOfInput", make_uniq<EndOfInputMatcher>());
+	for (auto &callback : terminal_rule_override_callbacks) {
+		callback(keyword_helper, overrides);
+	}
+	return overrides;
+}
+
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
 	idx_t parser_version;
 	{
@@ -103,7 +166,8 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientCon
 		auto &rule = *entry.second;
 		new_matcher->rules.emplace(rule.name, make_uniq<CompiledGrammarRule>(rule.name, rule.transform));
 	}
-	MatcherFactory factory(new_matcher->allocator, grammar, *new_matcher);
+	auto terminal_rule_overrides = grammar.BuildTerminalRuleOverrides(new_matcher->GetKeywordHelper());
+	MatcherFactory factory(new_matcher->allocator, grammar, *new_matcher, std::move(terminal_rule_overrides));
 	new_matcher->program_matcher = factory.CreateRootMatcher("Program");
 	new_matcher->top_level_statement_matcher = factory.GetMatcher("TopLevelStatement");
 
