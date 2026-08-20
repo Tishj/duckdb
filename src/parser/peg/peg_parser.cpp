@@ -118,7 +118,12 @@ private:
 				throw InternalException("Expected closing ')' in PEG rule");
 			}
 			Advance();
-			return inner;
+			if (inner.kind == PEGExpression::Kind::SEQUENCE) {
+				return inner;
+			}
+			PEGExpression group(PEGExpression::Kind::SEQUENCE);
+			group.children.push_back(std::move(inner));
+			return group;
 		}
 		if (IsOp('!')) {
 			// FIXME: NOT operator still ignored, same as the original code
