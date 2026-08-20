@@ -5,12 +5,18 @@
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/extension_callback_manager.hpp"
 #include "duckdb/parser/parser_change.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
-CompiledGrammar::CompiledGrammar(const ParsedGrammar &grammar, bool has_grammar_changes_p, idx_t version_p)
-    : owned_keyword_helper(make_uniq<ParsedGrammarKeywordHelper>(grammar)), keyword_helper(*owned_keyword_helper),
-      tokenizer(keyword_helper), has_grammar_changes(has_grammar_changes_p), version(version_p) {
+CompiledGrammar::CompiledGrammar(MatcherAllocator &&allocator_p, unique_ptr<PEGKeywordHelper> &&keyword_helper_p,
+                                 unique_ptr<Tokenizer> &&tokenizer_p, compiled_rules_map_t &&rules_p,
+                                 const Matcher &program_matcher, const Matcher &top_level_statement_matcher,
+                                 bool has_grammar_changes_p, idx_t version_p)
+    : allocator(std::move(allocator_p)), keyword_helper(std::move(keyword_helper_p)), tokenizer(std::move(tokenizer_p)),
+      rules(std::move(rules_p)), program_matcher(program_matcher),
+      top_level_statement_matcher(top_level_statement_matcher), has_grammar_changes(has_grammar_changes_p),
+      version(version_p) {
 }
 
 idx_t CompiledGrammar::Version() const {
@@ -126,6 +132,17 @@ terminal_rule_overrides_t ParsedGrammar::BuildTerminalRuleOverrides(const PEGKey
 }
 
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
+	if (context) {
+		Value val;
+		if (context->TryGetCurrentSetting("current_dialect", val)) {
+			auto dialect = val.GetValue<string>();
+			auto dialect_extension = ExtensionCallbackManager::Get(*context).GetDialectExtension(dialect);
+			if (!dialect_extension) {
+				throw InternalException("Dialect '%s' was not registered in the database", dialect);
+			}
+		}
+	}
+
 	idx_t parser_version;
 	{
 		std::unique_lock<std::mutex> lock(mutex);
@@ -161,15 +178,24 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientCon
 		CheckReference(grammar, parsed_rule, expression);
 	}
 
-	auto new_matcher = shared_ptr<CompiledGrammar>(new CompiledGrammar(grammar, has_grammar_changes, parser_version));
+	auto keyword_helper = make_uniq<ParsedGrammarKeywordHelper>(grammar);
+	auto tokenizer = make_uniq<Tokenizer>(*keyword_helper);
+	compiled_rules_map_t rules;
 	for (auto &entry : grammar.rules) {
 		auto &rule = *entry.second;
-		new_matcher->rules.emplace(rule.name, make_uniq<CompiledGrammarRule>(rule.name, rule.transform));
+		rules.emplace(rule.name, make_uniq<CompiledGrammarRule>(rule.name, rule.transform));
 	}
-	auto terminal_rule_overrides = grammar.BuildTerminalRuleOverrides(new_matcher->GetKeywordHelper());
-	MatcherFactory factory(new_matcher->allocator, grammar, *new_matcher, std::move(terminal_rule_overrides));
-	new_matcher->program_matcher = factory.CreateRootMatcher("Program");
-	new_matcher->top_level_statement_matcher = factory.GetMatcher("TopLevelStatement");
+
+	MatcherAllocator allocator;
+	auto terminal_rule_overrides = grammar.BuildTerminalRuleOverrides(*keyword_helper);
+	MatcherFactory factory(allocator, grammar, rules, std::move(terminal_rule_overrides));
+
+	auto &program_matcher = factory.CreateRootMatcher("Program");
+	auto &top_level_statement_matcher = factory.GetMatcher("TopLevelStatement");
+
+	auto new_matcher = shared_ptr<CompiledGrammar>(
+	    new CompiledGrammar(std::move(allocator), std::move(keyword_helper), std::move(tokenizer), std::move(rules),
+	                        program_matcher, top_level_statement_matcher, has_grammar_changes, parser_version));
 
 	std::unique_lock<std::mutex> lock(mutex);
 	if (version == parser_version) {

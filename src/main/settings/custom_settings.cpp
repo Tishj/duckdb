@@ -44,6 +44,7 @@
 #include "duckdb/common/type_visitor.hpp"
 #include "duckdb/function/variant/variant_shredding.hpp"
 #include "duckdb/storage/block_allocator.hpp"
+#include "duckdb/parser/peg/dialect_extension.hpp"
 
 #include "mbedtls_wrapper.hpp"
 
@@ -1657,11 +1658,11 @@ void CurrentDialectSetting::OnSet(SettingCallbackInfo &info, Value &input) {
 		throw InvalidInputException("current_dialect setting cannot be NULL");
 	}
 	auto dialect_name = input.GetValue<string>();
-	if (!info.config.GetCallbackManager().HasDialectExtension(dialect_name)) {
+	auto dialect_extension_p = info.config.GetCallbackManager().GetDialectExtension(dialect_name);
+	if (!dialect_extension_p) {
 		throw InvalidInputException("Dialect \"%s\" is not installed", dialect_name);
 	}
-	if (info.db) {
-		info.db->GetParserCache().Invalidate();
-	}
+	auto &dialect_extension = *dialect_extension_p;
+	dialect_extension.GetCompiledGrammar();
 }
 } // namespace duckdb

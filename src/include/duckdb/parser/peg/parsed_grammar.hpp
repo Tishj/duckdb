@@ -19,6 +19,7 @@ namespace duckdb {
 class ParseResult;
 class PEGTransformer;
 class PEGKeywordHelper;
+class DialectExtension;
 class Matcher;
 
 using grammar_transform_function_t = std::function<unique_ptr<TransformResultValue>(PEGTransformer &, ParseResult &)>;
@@ -60,6 +61,7 @@ public:
 	DUCKDB_API void AddTerminalRuleOverride(const string &rule_name, terminal_rule_matcher_factory_t matcher_factory);
 
 private:
+	friend class DialectExtension;
 	friend class MatcherFactory;
 	friend struct ParserCache;
 	friend class PEGTransformerFactory;
