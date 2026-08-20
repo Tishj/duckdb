@@ -131,11 +131,11 @@ private:
 		auto &token = Advance();
 		switch (token.type) {
 		case PEGTokenType::LITERAL:
-			return PEGExpression(PEGExpression::Kind::LITERAL, token.text.GetString());
+			return PEGExpression(PEGExpression::Kind::LITERAL, token.text);
 		case PEGTokenType::REFERENCE:
-			return PEGExpression(PEGExpression::Kind::REFERENCE, token.text.GetString());
+			return PEGExpression(PEGExpression::Kind::REFERENCE, token.text);
 		case PEGTokenType::FUNCTION_CALL: {
-			PEGExpression fn(PEGExpression::Kind::FUNCTION_CALL, token.text.GetString());
+			PEGExpression fn(PEGExpression::Kind::FUNCTION_CALL, token.text);
 			auto body = ParseChoice(); // same "consume until close" as '(' does
 			if (!IsOp(')')) {
 				throw InternalException("Expected closing ')' after function call '%s'", token.text.GetString());
@@ -145,8 +145,7 @@ private:
 			return fn;
 		}
 		case PEGTokenType::REGEX:
-			throw InternalException("REGEX operator not supported in PEG grammar (found in rule %s)",
-			                        token.text.GetString());
+			return PEGExpression(PEGExpression::Kind::REGEX, token.text);
 		default:
 			throw InternalException("unrecognized peg token type");
 		}

@@ -17,6 +17,7 @@ struct PEGExpression {
 		OPTIONAL,        // child?
 		REPEAT,          // child+  (one or more)
 		OPTIONAL_REPEAT, // child*  (zero or more)
+		REGEX,           // regex
 		END_OF_INPUT     // end of input
 	};
 
