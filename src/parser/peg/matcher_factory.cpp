@@ -276,6 +276,11 @@ Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
 
 	// suppress suggestions for catch-all rules that would pollute statement-level autocomplete
 	SuppressSuggestions("ExpressionStatement");
+	// Using SHOW to describe a table/query is deprecated - parse these forms but do not autocomplete them after SHOW
+	// (only setting names and the special SHOW forms are offered). DESCRIBE/SUMMARIZE still complete tables and
+	// queries.
+	SuppressSuggestions("ShowDeprecatedQualifiedTableName");
+	SuppressSuggestions("ShowDeprecatedSelect");
 
 	// Register all named rules before constructing any children. Grammar changes can introduce cycles through
 	// parameterized rules, so registering only the current recursive path is insufficient.
