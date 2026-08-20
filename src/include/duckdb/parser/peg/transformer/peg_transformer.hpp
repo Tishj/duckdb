@@ -120,8 +120,8 @@ struct TransformStackFrame {
 		if (slot >= child_results.size() || !child_results[slot]) {
 			throw InternalException("Missing trampoline transformer result for slot %llu in rule '%s'", slot, ops.name);
 		}
-		auto *result_value = TryGetTransformResult<T>(*child_results[slot]);
-		if (!result_value) {
+		auto *typed_result = TryCastTransformResult<T>(child_results[slot].get());
+		if (!typed_result) {
 			auto bridged = TryBridgeTransformResultValue<T>(*child_results[slot]);
 			if (bridged) {
 				auto bridged_result = std::move(bridged->value);
@@ -131,7 +131,7 @@ struct TransformStackFrame {
 			throw InternalException("Unexpected trampoline transformer result type for slot %llu in rule '%s'", slot,
 			                        ops.name);
 		}
-		auto result = std::move(*result_value);
+		auto result = std::move(typed_result->value);
 		child_results[slot].reset();
 		return result;
 	}
@@ -141,12 +141,12 @@ struct TransformStackFrame {
 		if (slot >= child_results.size() || !child_results[slot]) {
 			throw InternalException("Missing trampoline transformer result for slot %llu in rule '%s'", slot, ops.name);
 		}
-		auto *result_value = TryGetTransformResult<T>(*child_results[slot]);
-		if (!result_value) {
+		auto *typed_result = TryCastTransformResult<T>(child_results[slot].get());
+		if (!typed_result) {
 			throw InternalException("Unexpected trampoline transformer result type for slot %llu in rule '%s'", slot,
 			                        ops.name);
 		}
-		return *result_value;
+		return typed_result->value;
 	}
 
 	const transform_frame_index_t frame_index;
@@ -168,11 +168,11 @@ public:
 	template <class T>
 	T Execute(ParseResult &parse_result, const TransformFrameOps &ops) {
 		auto base_result = ExecuteInternal(parse_result, ops);
-		auto *result_value = TryGetTransformResult<T>(*base_result);
-		if (!result_value) {
+		auto *typed_result = TryCastTransformResult<T>(base_result.get());
+		if (!typed_result) {
 			throw InternalException("Unexpected trampoline transformer result type for root rule '%s'", ops.name);
 		}
-		return std::move(*result_value);
+		return std::move(typed_result->value);
 	}
 
 	TransformStackFrame &GetFrame(transform_frame_index_t frame_index);
@@ -220,8 +220,8 @@ public:
 			throw InternalException("Transformer for rule '%s' returned a nullptr.", parse_result.name);
 		}
 
-		auto *result_value = TryGetTransformResult<T>(*base_result);
-		if (!result_value) {
+		auto *typed_result_ptr = TryCastTransformResult<T>(base_result.get());
+		if (!typed_result_ptr) {
 			// allow transparent bridging between string-typed and Identifier-typed rules
 			auto bridged = TryBridgeTransformResult<T>(*base_result);
 			if (bridged) {
@@ -232,7 +232,7 @@ public:
 			throw InternalException("Transformer for rule '" + parse_result.name + "' returned an unexpected type.");
 		}
 
-		auto result = std::move(*result_value);
+		auto result = std::move(typed_result_ptr->value);
 		SetResultLocation(result, parse_result.GetLocation());
 		return result;
 	}
@@ -342,8 +342,8 @@ inline unique_ptr<TypedTransformResult<T>> TryBridgeTransformResultValue(Transfo
 template <>
 inline unique_ptr<TypedTransformResult<string>>
 TryBridgeTransformResultValue<string>(TransformResultValue &base_result) {
-	if (auto *ident = TryGetTransformResult<Identifier>(base_result)) {
-		return make_uniq<TypedTransformResult<string>>(ident->GetIdentifierName());
+	if (auto *ident = TryCastTransformResult<Identifier>(base_result)) {
+		return make_uniq<TypedTransformResult<string>>(ident->value.GetIdentifierName());
 	}
 	return nullptr;
 }
@@ -351,8 +351,8 @@ TryBridgeTransformResultValue<string>(TransformResultValue &base_result) {
 template <>
 inline unique_ptr<TypedTransformResult<Identifier>>
 TryBridgeTransformResultValue<Identifier>(TransformResultValue &base_result) {
-	if (auto *str = TryGetTransformResult<string>(base_result)) {
-		return make_uniq<TypedTransformResult<Identifier>>(Identifier(*str));
+	if (auto *str = TryCastTransformResult<string>(base_result)) {
+		return make_uniq<TypedTransformResult<Identifier>>(Identifier(str->value));
 	}
 	return nullptr;
 }
@@ -360,8 +360,8 @@ TryBridgeTransformResultValue<Identifier>(TransformResultValue &base_result) {
 template <>
 inline unique_ptr<TypedTransformResult<vector<string>>>
 TryBridgeTransformResultValue<vector<string>>(TransformResultValue &base_result) {
-	if (auto *idents = TryGetTransformResult<vector<Identifier>>(base_result)) {
-		return make_uniq<TypedTransformResult<vector<string>>>(IdentifiersToStrings(*idents));
+	if (auto *idents = TryCastTransformResult<vector<Identifier>>(base_result)) {
+		return make_uniq<TypedTransformResult<vector<string>>>(IdentifiersToStrings(idents->value));
 	}
 	return nullptr;
 }
@@ -369,8 +369,8 @@ TryBridgeTransformResultValue<vector<string>>(TransformResultValue &base_result)
 template <>
 inline unique_ptr<TypedTransformResult<vector<Identifier>>>
 TryBridgeTransformResultValue<vector<Identifier>>(TransformResultValue &base_result) {
-	if (auto *strs = TryGetTransformResult<vector<string>>(base_result)) {
-		return make_uniq<TypedTransformResult<vector<Identifier>>>(StringsToIdentifiers(*strs));
+	if (auto *strs = TryCastTransformResult<vector<string>>(base_result)) {
+		return make_uniq<TypedTransformResult<vector<Identifier>>>(StringsToIdentifiers(strs->value));
 	}
 	return nullptr;
 }
@@ -2074,22 +2074,49 @@ public:
 	                                                  TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue>
 	FinalizeDescribeStatementTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
-	static void InitializeShowSelectTrampoline(PEGTransformer &transformer, TransformStack &stack,
-	                                           TransformStackFrame &frame);
+	static void InitializeShowDeprecatedSelectTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                                     TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue> FinalizeShowDeprecatedSelectTrampoline(PEGTransformer &transformer,
+	                                                                               TransformStack &stack,
+	                                                                               TransformStackFrame &frame);
+	static void InitializeDescribeSelectTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                               TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue>
-	FinalizeShowSelectTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
+	FinalizeDescribeSelectTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
 	static void InitializeShowAllTablesTrampoline(PEGTransformer &transformer, TransformStack &stack,
 	                                              TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue>
 	FinalizeShowAllTablesTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
-	static void InitializeShowQualifiedNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
-	                                                  TransformStackFrame &frame);
-	static unique_ptr<TransformResultValue>
-	FinalizeShowQualifiedNameTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
 	static void InitializeShowTablesTrampoline(PEGTransformer &transformer, TransformStack &stack,
 	                                           TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue>
 	FinalizeShowTablesTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
+	static void InitializeShowByNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                           TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue>
+	FinalizeShowByNameTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
+	static void InitializeDescribeByNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                               TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue>
+	FinalizeDescribeByNameTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
+	static void InitializeDescribeOrSummarizeTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                                    TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue> FinalizeDescribeOrSummarizeTrampoline(PEGTransformer &transformer,
+	                                                                              TransformStack &stack,
+	                                                                              TransformStackFrame &frame);
+	static void InitializeShowTargetTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                           TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue>
+	FinalizeShowTargetTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
+	static void InitializeShowDeprecatedQualifiedTableNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                                                 TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue>
+	FinalizeShowDeprecatedQualifiedTableNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                                   TransformStackFrame &frame);
+	static void InitializeShowSettingNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                                TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue>
+	FinalizeShowSettingNameTrampoline(PEGTransformer &transformer, TransformStack &stack, TransformStackFrame &frame);
 	static void InitializeDescribeTargetTrampoline(PEGTransformer &transformer, TransformStack &stack,
 	                                               TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue>
@@ -2104,11 +2131,6 @@ public:
 	static unique_ptr<TransformResultValue> FinalizeDescribeStringLiteralTrampoline(PEGTransformer &transformer,
 	                                                                                TransformStack &stack,
 	                                                                                TransformStackFrame &frame);
-	static void InitializeShowOrDescribeOrSummarizeTrampoline(PEGTransformer &transformer, TransformStack &stack,
-	                                                          TransformStackFrame &frame);
-	static unique_ptr<TransformResultValue> FinalizeShowOrDescribeOrSummarizeTrampoline(PEGTransformer &transformer,
-	                                                                                    TransformStack &stack,
-	                                                                                    TransformStackFrame &frame);
 	static void InitializeSummarizeTrampoline(PEGTransformer &transformer, TransformStack &stack,
 	                                          TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue>
@@ -4078,6 +4100,11 @@ public:
 	static unique_ptr<TransformResultValue> FinalizeUnqualifiedBaseTableNameTrampoline(PEGTransformer &transformer,
 	                                                                                   TransformStack &stack,
 	                                                                                   TransformStackFrame &frame);
+	static void InitializeQualifiedTableNameTrampoline(PEGTransformer &transformer, TransformStack &stack,
+	                                                   TransformStackFrame &frame);
+	static unique_ptr<TransformResultValue> FinalizeQualifiedTableNameTrampoline(PEGTransformer &transformer,
+	                                                                             TransformStack &stack,
+	                                                                             TransformStackFrame &frame);
 	static void InitializeSchemaReservedTableTrampoline(PEGTransformer &transformer, TransformStack &stack,
 	                                                    TransformStackFrame &frame);
 	static unique_ptr<TransformResultValue> FinalizeSchemaReservedTableTrampoline(PEGTransformer &transformer,
@@ -6172,24 +6199,43 @@ public:
 	                                                                           ParseResult &parse_result);
 	static unique_ptr<SelectStatement> TransformDescribeStatement(PEGTransformer &transformer,
 	                                                              unique_ptr<QueryNode> child);
-	static unique_ptr<TransformResultValue> TransformShowSelectInternal(PEGTransformer &transformer,
-	                                                                    ParseResult &parse_result);
-	static unique_ptr<QueryNode> TransformShowSelect(PEGTransformer &transformer,
-	                                                 const ShowType &show_or_describe_or_summarize,
-	                                                 unique_ptr<SelectStatement> select_statement_internal);
+	static unique_ptr<TransformResultValue> TransformShowDeprecatedSelectInternal(PEGTransformer &transformer,
+	                                                                              ParseResult &parse_result);
+	static unique_ptr<QueryNode> TransformShowDeprecatedSelect(PEGTransformer &transformer, const ShowType &show_rule,
+	                                                           unique_ptr<SelectStatement> select_statement_internal);
+	static unique_ptr<TransformResultValue> TransformDescribeSelectInternal(PEGTransformer &transformer,
+	                                                                        ParseResult &parse_result);
+	static unique_ptr<QueryNode> TransformDescribeSelect(PEGTransformer &transformer,
+	                                                     const ShowType &describe_or_summarize,
+	                                                     unique_ptr<SelectStatement> select_statement_internal);
 	static unique_ptr<TransformResultValue> TransformShowAllTablesInternal(PEGTransformer &transformer,
 	                                                                       ParseResult &parse_result);
 	static unique_ptr<QueryNode> TransformShowAllTables(PEGTransformer &transformer, const ShowType &show_or_describe,
 	                                                    const bool &has_result);
-	static unique_ptr<TransformResultValue> TransformShowQualifiedNameInternal(PEGTransformer &transformer,
-	                                                                           ParseResult &parse_result);
-	static unique_ptr<QueryNode> TransformShowQualifiedName(PEGTransformer &transformer,
-	                                                        const ShowType &show_or_describe_or_summarize,
-	                                                        optional<DescribeTarget> describe_target);
 	static unique_ptr<TransformResultValue> TransformShowTablesInternal(PEGTransformer &transformer,
 	                                                                    ParseResult &parse_result);
 	static unique_ptr<QueryNode> TransformShowTables(PEGTransformer &transformer, const ShowType &show_or_describe,
 	                                                 const QualifiedName &qualified_name);
+	static unique_ptr<TransformResultValue> TransformShowByNameInternal(PEGTransformer &transformer,
+	                                                                    ParseResult &parse_result);
+	static unique_ptr<QueryNode> TransformShowByName(PEGTransformer &transformer, const ShowType &show_rule,
+	                                                 optional<DescribeTarget> show_target);
+	static unique_ptr<TransformResultValue> TransformDescribeByNameInternal(PEGTransformer &transformer,
+	                                                                        ParseResult &parse_result);
+	static unique_ptr<QueryNode> TransformDescribeByName(PEGTransformer &transformer,
+	                                                     const ShowType &describe_or_summarize,
+	                                                     optional<DescribeTarget> describe_target);
+	static unique_ptr<TransformResultValue> TransformDescribeOrSummarizeInternal(PEGTransformer &transformer,
+	                                                                             ParseResult &parse_result);
+	static unique_ptr<TransformResultValue> TransformShowTargetInternal(PEGTransformer &transformer,
+	                                                                    ParseResult &parse_result);
+	static unique_ptr<TransformResultValue>
+	TransformShowDeprecatedQualifiedTableNameInternal(PEGTransformer &transformer, ParseResult &parse_result);
+	static DescribeTarget TransformShowDeprecatedQualifiedTableName(PEGTransformer &transformer,
+	                                                                unique_ptr<BaseTableRef> qualified_table_name);
+	static unique_ptr<TransformResultValue> TransformShowSettingNameInternal(PEGTransformer &transformer,
+	                                                                         ParseResult &parse_result);
+	static DescribeTarget TransformShowSettingName(PEGTransformer &transformer, const Identifier &setting_name);
 	static unique_ptr<TransformResultValue> TransformDescribeTargetInternal(PEGTransformer &transformer,
 	                                                                        ParseResult &parse_result);
 	static unique_ptr<TransformResultValue> TransformDescribeBaseTableNameInternal(PEGTransformer &transformer,
@@ -6199,8 +6245,6 @@ public:
 	static unique_ptr<TransformResultValue> TransformDescribeStringLiteralInternal(PEGTransformer &transformer,
 	                                                                               ParseResult &parse_result);
 	static DescribeTarget TransformDescribeStringLiteral(PEGTransformer &transformer, const string &string_literal);
-	static unique_ptr<TransformResultValue> TransformShowOrDescribeOrSummarizeInternal(PEGTransformer &transformer,
-	                                                                                   ParseResult &parse_result);
 	static unique_ptr<TransformResultValue> TransformSummarizeInternal(PEGTransformer &transformer,
 	                                                                   ParseResult &parse_result);
 	static ShowType TransformSummarize(PEGTransformer &transformer, const ShowType &summarize_rule);
@@ -7899,6 +7943,8 @@ public:
 	                                                                                  ParseResult &parse_result);
 	static unique_ptr<BaseTableRef> TransformUnqualifiedBaseTableName(PEGTransformer &transformer,
 	                                                                  const Identifier &table_name);
+	static unique_ptr<TransformResultValue> TransformQualifiedTableNameInternal(PEGTransformer &transformer,
+	                                                                            ParseResult &parse_result);
 	static unique_ptr<TransformResultValue> TransformSchemaReservedTableInternal(PEGTransformer &transformer,
 	                                                                             ParseResult &parse_result);
 	static unique_ptr<BaseTableRef> TransformSchemaReservedTable(PEGTransformer &transformer,
