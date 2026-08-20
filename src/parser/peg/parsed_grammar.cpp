@@ -108,20 +108,23 @@ void ParsedGrammar::AddRule(const string &rule_definition, grammar_transform_fun
 	AddParsedRule(std::move(rule));
 }
 
-static idx_t FindChoiceCursor(const ParsedGrammarRule &rule, const grammar_cursor_function_t &find_cursor,
-                              bool prepend) {
-	if (!find_cursor) {
-		return prepend ? 0 : rule.recipe.expression.children.size();
-	}
-
+static idx_t FindChoice(const ParsedGrammarRule &rule, const grammar_cursor_function_t &find_cursor) {
 	for (idx_t child_idx = 0; child_idx < rule.recipe.expression.children.size(); child_idx++) {
 		auto &expression = rule.recipe.expression.children[child_idx];
 		if (!find_cursor(expression)) {
 			continue;
 		}
-		return prepend ? child_idx : child_idx + 1;
+		return child_idx;
 	}
 	throw InvalidInputException("Could not find a choice cursor in grammar rule '%s'", rule.name);
+}
+
+static idx_t FindChoiceCursor(const ParsedGrammarRule &rule, const grammar_cursor_function_t &find_cursor,
+                              bool prepend) {
+	if (!find_cursor) {
+		return prepend ? 0 : rule.recipe.expression.children.size();
+	}
+	return FindChoice(rule, find_cursor) + (prepend ? 0 : 1);
 }
 
 void ParsedGrammar::InsertChoice(const string &rule_name, const string &choice, grammar_cursor_function_t find_cursor,
@@ -157,6 +160,23 @@ void ParsedGrammar::AddChoice(const string &rule_name, const string &choice, gra
 void ParsedGrammar::PrependChoice(const string &rule_name, const string &choice,
                                   grammar_cursor_function_t find_cursor) {
 	InsertChoice(rule_name, choice, std::move(find_cursor), true);
+}
+
+void ParsedGrammar::RemoveChoice(const string &rule_name, grammar_cursor_function_t find_cursor) {
+	if (!find_cursor) {
+		throw InvalidInputException("RemoveChoice requires a choice cursor");
+	}
+	auto &rule = GetMutableRule(rule_name);
+	if (rule.recipe.expression.kind != PEGExpression::Kind::CHOICE) {
+		throw InvalidInputException("Grammar rule '%s' does not contain a choice", rule.name);
+	}
+	auto &children = rule.recipe.expression.children;
+	auto cursor = FindChoice(rule, find_cursor);
+	children.erase_at(cursor);
+	if (children.size() == 1) {
+		auto remaining_choice = std::move(children[0]);
+		rule.recipe.expression = std::move(remaining_choice);
+	}
 }
 
 void ParsedGrammar::ReplaceRule(const string &rule_definition, grammar_transform_function_t transform) {

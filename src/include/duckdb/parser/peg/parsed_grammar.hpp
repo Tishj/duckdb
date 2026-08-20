@@ -49,6 +49,7 @@ public:
 	                          grammar_cursor_function_t find_cursor = nullptr);
 	DUCKDB_API void PrependChoice(const string &rule_name, const string &choice,
 	                              grammar_cursor_function_t find_cursor = nullptr);
+	DUCKDB_API void RemoveChoice(const string &rule_name, grammar_cursor_function_t find_cursor);
 	DUCKDB_API void ReplaceRule(const string &rule_definition, grammar_transform_function_t transform = nullptr);
 	DUCKDB_API void SetTransform(const string &rule_name, grammar_transform_function_t transform);
 

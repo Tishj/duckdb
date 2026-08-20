@@ -81,6 +81,30 @@ TEST_CASE("Grammar choices support cursor placement", "[api][parser_change]") {
 	REQUIRE(choices == vector<string> {"first", "second", "third", "last"});
 }
 
+TEST_CASE("Grammar choices can be removed", "[api][parser_change]") {
+	auto grammar = ParsedGrammar::Parse("CursorRule <- 'first' / 'second' / 'last'");
+	grammar.RemoveChoice("CursorRule", [](const PEGExpression &expression) {
+		return expression.kind == PEGExpression::Kind::LITERAL && expression.text.GetString() == "second";
+	});
+
+	auto rule = grammar.GetRule("CursorRule");
+	REQUIRE(rule);
+	REQUIRE(rule->recipe.expression.kind == PEGExpression::Kind::CHOICE);
+	REQUIRE(rule->recipe.expression.children.size() == 2);
+	REQUIRE(rule->recipe.expression.children[0].text.GetString() == "first");
+	REQUIRE(rule->recipe.expression.children[1].text.GetString() == "last");
+
+	REQUIRE_THROWS(grammar.RemoveChoice("CursorRule", [](const PEGExpression &expression) {
+		return expression.kind == PEGExpression::Kind::LITERAL && expression.text.GetString() == "missing";
+	}));
+
+	grammar.RemoveChoice("CursorRule", [](const PEGExpression &expression) {
+		return expression.kind == PEGExpression::Kind::LITERAL && expression.text.GetString() == "first";
+	});
+	REQUIRE(rule->recipe.expression.kind == PEGExpression::Kind::LITERAL);
+	REQUIRE(rule->recipe.expression.text.GetString() == "last");
+}
+
 TEST_CASE("Parser changes invalidate an initialized parser cache", "[api][parser_change]") {
 	DuckDB db(nullptr);
 	Connection con(db);
