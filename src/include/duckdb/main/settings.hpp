@@ -463,9 +463,11 @@ struct CurrentDialectSetting {
 	static constexpr const char *Name = "current_dialect";
 	static constexpr const char *Description = "The SQL dialect used by the parser";
 	static constexpr const char *InputType = "VARCHAR";
-	static constexpr SettingScopeTarget Scope = SettingScopeTarget::GLOBAL_ONLY;
-	static constexpr idx_t SettingIndex = NEXT_SETTING_INDEX();
-	static void OnSet(SettingCallbackInfo &info, Value &input);
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static bool OnLocalSet(ClientContext &context, const Value &input);
+	static bool OnLocalReset(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
 };
 
 struct CurrentTransactionInvalidationPolicySetting {

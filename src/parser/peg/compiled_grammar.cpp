@@ -5,6 +5,7 @@
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/extension_callback_manager.hpp"
 #include "duckdb/parser/parser_change.hpp"
+#include "duckdb/parser/peg/dialect_extension.hpp"
 #include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
@@ -134,12 +135,13 @@ terminal_rule_overrides_t ParsedGrammar::BuildTerminalRuleOverrides(const PEGKey
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
 	if (context) {
 		Value val;
-		if (context->TryGetCurrentSetting("current_dialect", val)) {
+		if (context->TryGetCurrentSetting("current_dialect", val) && !val.IsNull()) {
 			auto dialect = val.GetValue<string>();
 			auto dialect_extension = ExtensionCallbackManager::Get(*context).GetDialectExtension(dialect);
 			if (!dialect_extension) {
 				throw InternalException("Dialect '%s' was not registered in the database", dialect);
 			}
+			return dialect_extension->GetCompiledGrammar();
 		}
 	}
 

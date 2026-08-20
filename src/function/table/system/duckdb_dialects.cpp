@@ -21,7 +21,7 @@ static unique_ptr<FunctionData> DuckDBDialectsBind(ClientContext &context, Table
 static unique_ptr<GlobalTableFunctionState> DuckDBDialectsInit(ClientContext &context, TableFunctionInitInput &input) {
 	auto result = make_uniq<DuckDBDialectsData>();
 	for (auto &dialect : ExtensionCallbackManager::Get(context).DialectExtensions()) {
-		result->dialects.push_back(dialect->name);
+		result->dialects.push_back(dialect->Name());
 	}
 	return std::move(result);
 }

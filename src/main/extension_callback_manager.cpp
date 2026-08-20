@@ -81,14 +81,14 @@ void ExtensionCallbackManager::Register(shared_ptr<DialectExtension> extension) 
 	if (!extension) {
 		throw InvalidInputException("Cannot register a NULL dialect extension");
 	}
-	if (extension->name.empty()) {
+	if (extension->Name().empty()) {
 		throw InvalidInputException("Dialect name cannot be empty");
 	}
 	lock_guard<mutex> guard(registry_lock);
 	auto new_registry = make_shared_ptr<ExtensionCallbackRegistry>(*callback_registry);
 	for (auto &existing : new_registry->dialect_extensions) {
-		if (StringUtil::CIEquals(existing->name, extension->name)) {
-			throw InvalidInputException("Dialect \"%s\" is already registered", extension->name);
+		if (StringUtil::CIEquals(existing->Name(), extension->Name())) {
+			throw InvalidInputException("Dialect \"%s\" is already registered", extension->Name());
 		}
 	}
 	new_registry->dialect_extensions.push_back(std::move(extension));
@@ -215,7 +215,7 @@ bool ExtensionCallbackManager::HasParserExtensions() const {
 optional_ptr<DialectExtension> ExtensionCallbackManager::GetDialectExtension(const string &name) const {
 	auto registry = callback_registry.atomic_load();
 	for (auto &dialect : registry->dialect_extensions) {
-		if (StringUtil::CIEquals(dialect->name, name)) {
+		if (StringUtil::CIEquals(dialect->Name(), name)) {
 			return dialect.get();
 		}
 	}

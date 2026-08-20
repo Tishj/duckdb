@@ -47,12 +47,11 @@ public:
 
 private:
 	MatcherAllocator allocator;
-	const Matcher &program_matcher;
-	const Matcher &top_level_statement_matcher;
-
 	unique_ptr<PEGKeywordHelper> keyword_helper;
 	unique_ptr<Tokenizer> tokenizer;
 	case_insensitive_map_t<unique_ptr<CompiledGrammarRule>> rules;
+	const Matcher &program_matcher;
+	const Matcher &top_level_statement_matcher;
 
 private:
 	const bool has_grammar_changes;

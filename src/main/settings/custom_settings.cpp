@@ -1653,16 +1653,47 @@ void CurrentTransactionInvalidationPolicySetting::OnSet(SettingCallbackInfo &inf
 	    EnumUtil::FromString<TransactionInvalidationPolicy>(input.GetValue<string>()));
 }
 
-void CurrentDialectSetting::OnSet(SettingCallbackInfo &info, Value &input) {
+void CurrentDialectSetting::SetLocal(ClientContext &context, const Value &input) {
+	if (!OnLocalSet(context, input)) {
+		return;
+	}
 	if (input.IsNull()) {
 		throw InvalidInputException("current_dialect setting cannot be NULL");
 	}
 	auto dialect_name = input.GetValue<string>();
-	auto dialect_extension_p = info.config.GetCallbackManager().GetDialectExtension(dialect_name);
+	auto &config = DatabaseInstance::GetDatabase(context).config;
+	auto dialect_extension_p = config.GetCallbackManager().GetDialectExtension(dialect_name);
 	if (!dialect_extension_p) {
 		throw InvalidInputException("Dialect \"%s\" is not installed", dialect_name);
 	}
 	auto &dialect_extension = *dialect_extension_p;
-	dialect_extension.GetCompiledGrammar();
+	ClientConfig::GetConfig(context).cached_grammar = dialect_extension.GetCompiledGrammar();
+}
+
+void CurrentDialectSetting::ResetLocal(ClientContext &context) {
+	if (!OnLocalReset(context)) {
+		return;
+	}
+	ClientConfig::GetConfig(context).cached_grammar.reset();
+}
+
+bool CurrentDialectSetting::OnLocalSet(ClientContext &context, const Value &input) {
+	return true;
+}
+
+bool CurrentDialectSetting::OnLocalReset(ClientContext &context) {
+	return true;
+}
+
+Value CurrentDialectSetting::GetSetting(const ClientContext &context) {
+	auto &client_config = ClientConfig::GetConfig(context);
+	if (client_config.cached_grammar) {
+		for (auto &dialect : ExtensionCallbackManager::Get(context).DialectExtensions()) {
+			if (dialect->GetCompiledGrammar() == client_config.cached_grammar) {
+				return Value(dialect->Name());
+			}
+		}
+	}
+	return Value();
 }
 } // namespace duckdb
