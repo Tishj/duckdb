@@ -235,7 +235,7 @@ void ParserChange::Register(DatabaseInstance &db, shared_ptr<ParserChange> chang
 	db.GetParserCache().Invalidate();
 }
 
-void DialectExtension::Register(DBConfig &config, unique_ptr<DialectExtension> extension) {
+void DialectExtension::Register(DBConfig &config, shared_ptr<DialectExtension> extension) {
 	config.GetCallbackManager().Register(std::move(extension));
 }
 

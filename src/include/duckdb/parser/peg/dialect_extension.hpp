@@ -35,6 +35,7 @@ struct CreateMatcherFactoryInput {
 	MatcherAllocator &allocator;
 	const ParsedGrammar &parsed_grammar;
 	const compiled_rules_map_t &rules;
+	const PEGKeywordHelper &keyword_helper;
 	terminal_rule_overrides_t terminal_rules;
 };
 
@@ -50,7 +51,7 @@ public:
 	virtual ~DialectExtension() = default;
 
 public:
-	static void Register(DBConfig &config, unique_ptr<DialectExtension> extension);
+	static void Register(DBConfig &config, shared_ptr<DialectExtension> extension);
 
 public:
 	shared_ptr<CompiledGrammar> GetCompiledGrammar();

@@ -27,6 +27,16 @@ idx_t CompiledGrammar::Version() const {
 shared_ptr<CompiledGrammar> CompiledGrammar::Get(ClientContext &context) {
 	auto &db = DatabaseInstance::GetDatabase(context);
 	auto &client_config = ClientConfig::GetConfig(context);
+
+	if (client_config.current_dialect) {
+		auto dialect = *client_config.current_dialect;
+		auto dialect_extension = ExtensionCallbackManager::Get(context).GetDialectExtension(dialect);
+		if (!dialect_extension) {
+			throw InternalException("Dialect '%s' was not registered in the database", dialect);
+		}
+		return dialect_extension->GetCompiledGrammar();
+	}
+
 	auto &cache = db.GetParserCache();
 	if (!client_config.cached_grammar || client_config.cached_grammar->Version() != cache.LatestParserVersion()) {
 		client_config.cached_grammar = cache.GetMatcher(context);
@@ -134,9 +144,9 @@ terminal_rule_overrides_t ParsedGrammar::BuildTerminalRuleOverrides(const PEGKey
 
 shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
 	if (context) {
-		Value val;
-		if (context->TryGetCurrentSetting("current_dialect", val) && !val.IsNull()) {
-			auto dialect = val.GetValue<string>();
+		auto &client_config = ClientConfig::GetConfig(*context);
+		if (client_config.current_dialect) {
+			auto dialect = *client_config.current_dialect;
 			auto dialect_extension = ExtensionCallbackManager::Get(*context).GetDialectExtension(dialect);
 			if (!dialect_extension) {
 				throw InternalException("Dialect '%s' was not registered in the database", dialect);

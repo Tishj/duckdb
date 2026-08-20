@@ -38,7 +38,7 @@ shared_ptr<CompiledGrammar> DialectExtension::GetCompiledGrammar() {
 		rules.emplace(rule.name, make_uniq<CompiledGrammarRule>(rule.name, rule.transform));
 	}
 	auto terminal_rule_overrides = parsed_grammar.BuildTerminalRuleOverrides(*keyword_helper);
-	CreateMatcherFactoryInput matcher_factory_input {allocator, parsed_grammar, rules,
+	CreateMatcherFactoryInput matcher_factory_input {allocator, parsed_grammar, rules, *keyword_helper,
 	                                                 std::move(terminal_rule_overrides)};
 	auto matcher_factory = CreateMatcherFactory(matcher_factory_input);
 

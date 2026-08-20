@@ -1657,24 +1657,30 @@ void CurrentDialectSetting::SetLocal(ClientContext &context, const Value &input)
 	if (!OnLocalSet(context, input)) {
 		return;
 	}
+	auto &client_config = ClientConfig::GetConfig(context);
+
 	if (input.IsNull()) {
-		throw InvalidInputException("current_dialect setting cannot be NULL");
+		client_config.current_dialect = std::nullopt;
+		return;
 	}
 	auto dialect_name = input.GetValue<string>();
+
 	auto &config = DatabaseInstance::GetDatabase(context).config;
 	auto dialect_extension_p = config.GetCallbackManager().GetDialectExtension(dialect_name);
 	if (!dialect_extension_p) {
 		throw InvalidInputException("Dialect \"%s\" is not installed", dialect_name);
 	}
 	auto &dialect_extension = *dialect_extension_p;
-	ClientConfig::GetConfig(context).cached_grammar = dialect_extension.GetCompiledGrammar();
+	//! The grammar gets lazily compiled, load it if it wasn't compiled yet
+	(void)dialect_extension.GetCompiledGrammar();
+	client_config.current_dialect = dialect_name;
 }
 
 void CurrentDialectSetting::ResetLocal(ClientContext &context) {
 	if (!OnLocalReset(context)) {
 		return;
 	}
-	ClientConfig::GetConfig(context).cached_grammar.reset();
+	ClientConfig::GetConfig(context).current_dialect = std::nullopt;
 }
 
 bool CurrentDialectSetting::OnLocalSet(ClientContext &context, const Value &input) {
@@ -1687,12 +1693,8 @@ bool CurrentDialectSetting::OnLocalReset(ClientContext &context) {
 
 Value CurrentDialectSetting::GetSetting(const ClientContext &context) {
 	auto &client_config = ClientConfig::GetConfig(context);
-	if (client_config.cached_grammar) {
-		for (auto &dialect : ExtensionCallbackManager::Get(context).DialectExtensions()) {
-			if (dialect->GetCompiledGrammar() == client_config.cached_grammar) {
-				return Value(dialect->Name());
-			}
-		}
+	if (client_config.current_dialect) {
+		return Value(*client_config.current_dialect);
 	}
 	return Value();
 }
