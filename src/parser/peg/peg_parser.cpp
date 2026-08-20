@@ -126,7 +126,7 @@ private:
 			return group;
 		}
 		if (IsOp('!')) {
-			// FIXME: NOT operator still ignored, same as the original code
+			// FIXME: NOT ignored when parsing
 			Advance();
 			return ParsePrimary();
 		}
