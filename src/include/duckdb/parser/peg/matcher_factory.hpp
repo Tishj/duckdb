@@ -32,11 +32,8 @@ public:
 	virtual ~MatcherFactory() = default;
 
 public:
-	//! Create a matcher from a PEG grammar
-	Matcher &CreateMatcher(string_t root_rule);
 	Matcher &CreateRootMatcher(const string &root_rule);
-	//! Look up a matcher for a rule that was already built (as a sub-rule of a previous
-	//! CreateMatcher call). Throws if the rule has not been built.
+	//! Look up a matcher for a rule that was built by CreateRootMatcher. Throws if the rule has not been built.
 	Matcher &GetMatcher(const string &rule_name);
 
 private:
@@ -58,6 +55,7 @@ private:
 	void AddRuleOverride(const char *name, Matcher &matcher);
 	void AddPackratMemoizedRule(const char *name);
 	void SuppressSuggestions(const char *name);
+	Matcher &CreateMatcher(string_t rule_name);
 	Matcher &CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters);
 	Matcher &CreateMatcher(const PEGExpression &expression, const string_map_t<idx_t> &parameter_map,
 	                       vector<reference<Matcher>> &parameters);

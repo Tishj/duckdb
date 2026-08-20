@@ -96,36 +96,35 @@ Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const st
 
 Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters) {
 	bool is_function_call = !parameters.empty();
-	auto matcher_entry = matchers.end();
-	if (!is_function_call) {
-		matcher_entry = matchers.find(rule_name);
-		if (matcher_entry != matchers.end()) {
-			if (!construction_state.Begin(rule_name)) {
-				//! Already constructed, return the cached matcher
-				return matcher_entry->second.get();
-			}
-		}
-	}
 	// look up the rule
 	auto entry = grammar.rules.find(rule_name.GetString());
 	if (entry == grammar.rules.end()) {
-		throw InternalException("Failed to create matcher for rule %s - rule is missing", rule_name.GetString());
+		throw InvalidConfigurationException("Failed to create matcher for rule %s - rule is missing",
+		                                    rule_name.GetString());
 	}
-	auto registered_rule_name = string_t(entry->second->name);
+	auto matcher_entry = matchers.end();
+	if (!is_function_call) {
+		matcher_entry = matchers.find(rule_name);
+		if (matcher_entry == matchers.end()) {
+			throw InvalidConfigurationException("Matcher for rule %s was not registered before construction",
+			                                    rule_name.GetString());
+		}
+		if (!construction_state.Begin(rule_name)) {
+			//! Already constructed, return the cached matcher
+			return matcher_entry->second.get();
+		}
+	}
 	// Named matchers are registered before any bodies are constructed so recursive references can resolve immediately.
-	auto &matcher = matcher_entry == matchers.end() ? List() : matcher_entry->second.get().Cast<ListMatcher>();
-	if (!is_function_call && matcher_entry == matchers.end()) {
-		matchers.emplace(registered_rule_name, reference<Matcher>(matcher));
-	}
+	auto &matcher = is_function_call ? List() : matcher_entry->second.get().Cast<ListMatcher>();
 
 	// fill the matcher from the given set of rules
 	auto &rule = entry->second->recipe;
 	if (rule.parameters.size() > 1) {
-		throw InternalException("Only functions with a single parameter are supported");
+		throw InvalidConfigurationException("Only functions with a single parameter are supported");
 	}
 	if (parameters.size() != rule.parameters.size()) {
-		throw InternalException("Parameter count mismatch (rule %s expected %d parameters but got %d)",
-		                        rule_name.GetString(), rule.parameters.size(), parameters.size());
+		throw InvalidConfigurationException("Parameter count mismatch (rule %s expected %d parameters but got %d)",
+		                                    rule_name.GetString(), rule.parameters.size(), parameters.size());
 	}
 	auto &expression_matcher = CreateMatcher(rule.expression, rule.parameters, parameters);
 	if (rule.expression.kind == PEGExpression::Kind::SEQUENCE) {
@@ -281,7 +280,7 @@ Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
 	// Register all named rules before constructing any children. Grammar changes can introduce cycles through
 	// parameterized rules, so registering only the current recursive path is insufficient.
 	for (auto &entry : grammar.rules) {
-		if (entry.second->recipe.parameters.empty()) {
+		if (!entry.second->recipe.parameters.empty()) {
 			//! Parameterized rule, can't cache
 			continue;
 		}
