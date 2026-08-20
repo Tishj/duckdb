@@ -2,6 +2,7 @@
 
 #include "duckdb/common/string_map_set.hpp"
 #include "duckdb/common/optional.hpp"
+#include "duckdb/common/queue.hpp"
 #include "duckdb/parser/peg/matcher/list.hpp"
 
 namespace duckdb {
@@ -12,6 +13,20 @@ class MatcherFactory;
 
 //! Class for building matchers
 class MatcherFactory {
+private:
+	struct MatcherConstructionState {
+		void Register(string_t rule_name);
+		void Schedule(string_t rule_name);
+		bool Begin(string_t rule_name);
+		bool HasScheduled() const;
+		string_t TakeNext();
+
+	private:
+		string_set_t unconstructed;
+		string_set_t scheduled;
+		queue<string_t> pending;
+	};
+
 public:
 	MatcherFactory(MatcherAllocator &allocator, const ParsedGrammar &grammar_p, CompiledGrammar &compiled_p);
 	virtual ~MatcherFactory() = default;
@@ -52,9 +67,7 @@ private:
 	const ParsedGrammar &grammar;
 	CompiledGrammar &compiled;
 	string_map_t<reference<Matcher>> matchers;
-	string_set_t unconstructed_matchers;
-	string_set_t queued_matchers;
-	vector<string_t> matcher_construction_queue;
+	MatcherConstructionState construction_state;
 	mutable case_insensitive_map_t<reference<KeywordMatcher>> keywords;
 	case_insensitive_map_t<KeywordInfo> keyword_overrides;
 	string_set_t no_suggestion_rules;

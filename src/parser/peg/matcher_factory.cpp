@@ -5,6 +5,31 @@
 
 namespace duckdb {
 
+void MatcherFactory::MatcherConstructionState::Register(string_t rule_name) {
+	unconstructed.insert(rule_name);
+}
+
+void MatcherFactory::MatcherConstructionState::Schedule(string_t rule_name) {
+	if (unconstructed.count(rule_name) && scheduled.insert(rule_name).second) {
+		pending.push(rule_name);
+	}
+}
+
+bool MatcherFactory::MatcherConstructionState::Begin(string_t rule_name) {
+	return unconstructed.erase(rule_name);
+}
+
+bool MatcherFactory::MatcherConstructionState::HasScheduled() const {
+	return !pending.empty();
+}
+
+string_t MatcherFactory::MatcherConstructionState::TakeNext() {
+	auto rule_name = std::move(pending.front());
+	pending.pop();
+	scheduled.erase(rule_name);
+	return rule_name;
+}
+
 Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const string_map_t<idx_t> &parameter_map,
                                        vector<reference<Matcher>> &parameters) {
 	switch (expression.kind) {
@@ -17,11 +42,7 @@ Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const st
 		}
 		auto matcher = matchers.find(expression.text);
 		if (matcher != matchers.end()) {
-			if (unconstructed_matchers.count(expression.text) && queued_matchers.insert(expression.text).second) {
-				//! The matcher isn't constructed yet, and hasn't been added to the queue yet, add it to the queue and
-				//! return
-				matcher_construction_queue.push_back(expression.text);
-			}
+			construction_state.Schedule(expression.text);
 			return matcher->second.get();
 		}
 		return CreateMatcher(expression.text);
@@ -78,11 +99,12 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 	auto matcher_entry = matchers.end();
 	if (!is_function_call) {
 		matcher_entry = matchers.find(rule_name);
-		if (matcher_entry != matchers.end() && !unconstructed_matchers.erase(rule_name)) {
-			//! The matcher was both added and already constructed, can directly return it
-			return matcher_entry->second.get();
+		if (matcher_entry != matchers.end()) {
+			if (!construction_state.Begin(rule_name)) {
+				//! Already constructed, return the cached matcher
+				return matcher_entry->second.get();
+			}
 		}
-		queued_matchers.erase(rule_name);
 	}
 	// look up the rule
 	auto entry = grammar.rules.find(rule_name.GetString());
@@ -93,7 +115,7 @@ Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matc
 	// Named matchers are registered before any bodies are constructed so recursive references can resolve immediately.
 	auto &matcher = matcher_entry == matchers.end() ? List() : matcher_entry->second.get().Cast<ListMatcher>();
 	if (!is_function_call && matcher_entry == matchers.end()) {
-		matchers.insert(make_pair(registered_rule_name, reference<Matcher>(matcher)));
+		matchers.emplace(registered_rule_name, reference<Matcher>(matcher));
 	}
 
 	// fill the matcher from the given set of rules
@@ -145,7 +167,7 @@ void MatcherFactory::AddRuleOverride(const char *name, Matcher &matcher) {
 		auto &rule = *rule_p;
 		matcher.SetRule(rule);
 	}
-	matchers.insert(make_pair(name, reference<Matcher>(matcher)));
+	matchers.emplace(name, reference<Matcher>(matcher));
 }
 
 void MatcherFactory::AddPackratMemoizedRule(const char *name) {
@@ -259,20 +281,25 @@ Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
 	// Register all named rules before constructing any children. Grammar changes can introduce cycles through
 	// parameterized rules, so registering only the current recursive path is insufficient.
 	for (auto &entry : grammar.rules) {
-		if (entry.second->recipe.parameters.empty() && !matchers.count(entry.first)) {
-			auto &matcher = List();
-			auto rule_name = string_t(entry.second->name);
-			matchers.insert(make_pair(rule_name, reference<Matcher>(matcher)));
-			unconstructed_matchers.insert(rule_name);
+		if (entry.second->recipe.parameters.empty()) {
+			//! Parameterized rule, can't cache
+			continue;
 		}
+		if (matchers.count(entry.first)) {
+			//! Pre-made rule, doesn't get built by the matcher factory
+			continue;
+		}
+		auto &matcher = List();
+		auto rule_name = string_t(entry.second->name);
+		matchers.emplace(rule_name, reference<Matcher>(matcher));
+		construction_state.Register(rule_name);
 	}
 
 	// Populate the reachable rules without recursively constructing referenced bodies. The queue grows as references
 	// are encountered and therefore also handles cycles that pass through parameterized rules.
-	CreateMatcher(string_t(root_rule));
-	for (idx_t rule_idx = 0; rule_idx < matcher_construction_queue.size(); rule_idx++) {
-		auto rule_name = matcher_construction_queue[rule_idx];
-		CreateMatcher(rule_name);
+	CreateMatcher(root_rule);
+	while (construction_state.HasScheduled()) {
+		CreateMatcher(construction_state.TakeNext());
 	}
 	return GetMatcher(root_rule);
 }
