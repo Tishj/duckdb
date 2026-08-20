@@ -15,6 +15,15 @@ Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const st
 		if (parameter != parameter_map.end()) {
 			return parameters[parameter->second].get();
 		}
+		auto matcher = matchers.find(expression.text);
+		if (matcher != matchers.end()) {
+			if (unconstructed_matchers.count(expression.text) && queued_matchers.insert(expression.text).second) {
+				//! The matcher isn't constructed yet, and hasn't been added to the queue yet, add it to the queue and
+				//! return
+				matcher_construction_queue.push_back(expression.text);
+			}
+			return matcher->second.get();
+		}
 		return CreateMatcher(expression.text);
 	}
 	case PEGExpression::Kind::FUNCTION_CALL: {
@@ -66,24 +75,25 @@ Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const st
 
 Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters) {
 	bool is_function_call = !parameters.empty();
+	auto matcher_entry = matchers.end();
 	if (!is_function_call) {
-		// check if the matcher has already been created first
-		auto matcher_entry = matchers.find(rule_name);
-		if (matcher_entry != matchers.end()) {
-			// return the created matcher
+		matcher_entry = matchers.find(rule_name);
+		if (matcher_entry != matchers.end() && !unconstructed_matchers.erase(rule_name)) {
+			//! The matcher was both added and already constructed, can directly return it
 			return matcher_entry->second.get();
 		}
+		queued_matchers.erase(rule_name);
 	}
 	// look up the rule
 	auto entry = grammar.rules.find(rule_name.GetString());
 	if (entry == grammar.rules.end()) {
 		throw InternalException("Failed to create matcher for rule %s - rule is missing", rule_name.GetString());
 	}
-	// create a matcher and cache it
-	// since matchers can be recursive we need to cache it prior to recursively constructing the other rules
-	auto &matcher = List();
-	if (!is_function_call) {
-		matchers.insert(make_pair(string_t(entry->second->name), reference<Matcher>(matcher)));
+	auto registered_rule_name = string_t(entry->second->name);
+	// Named matchers are registered before any bodies are constructed so recursive references can resolve immediately.
+	auto &matcher = matcher_entry == matchers.end() ? List() : matcher_entry->second.get().Cast<ListMatcher>();
+	if (!is_function_call && matcher_entry == matchers.end()) {
+		matchers.insert(make_pair(registered_rule_name, reference<Matcher>(matcher)));
 	}
 
 	// fill the matcher from the given set of rules
@@ -246,8 +256,25 @@ Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
 	// suppress suggestions for catch-all rules that would pollute statement-level autocomplete
 	SuppressSuggestions("ExpressionStatement");
 
-	// now create the matchers for each of the rules recursively - starting at the root rule
-	return CreateMatcher(string_t(root_rule));
+	// Register all named rules before constructing any children. Grammar changes can introduce cycles through
+	// parameterized rules, so registering only the current recursive path is insufficient.
+	for (auto &entry : grammar.rules) {
+		if (entry.second->recipe.parameters.empty() && !matchers.count(entry.first)) {
+			auto &matcher = List();
+			auto rule_name = string_t(entry.second->name);
+			matchers.insert(make_pair(rule_name, reference<Matcher>(matcher)));
+			unconstructed_matchers.insert(rule_name);
+		}
+	}
+
+	// Populate the reachable rules without recursively constructing referenced bodies. The queue grows as references
+	// are encountered and therefore also handles cycles that pass through parameterized rules.
+	CreateMatcher(string_t(root_rule));
+	for (idx_t rule_idx = 0; rule_idx < matcher_construction_queue.size(); rule_idx++) {
+		auto rule_name = matcher_construction_queue[rule_idx];
+		CreateMatcher(rule_name);
+	}
+	return GetMatcher(root_rule);
 }
 
 unique_ptr<KeywordMatcher> MatcherFactory::CreateKeyword(const string &keyword, const KeywordInfo &info) const {

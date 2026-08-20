@@ -52,6 +52,9 @@ private:
 	const ParsedGrammar &grammar;
 	CompiledGrammar &compiled;
 	string_map_t<reference<Matcher>> matchers;
+	string_set_t unconstructed_matchers;
+	string_set_t queued_matchers;
+	vector<string_t> matcher_construction_queue;
 	mutable case_insensitive_map_t<reference<KeywordMatcher>> keywords;
 	case_insensitive_map_t<KeywordInfo> keyword_overrides;
 	string_set_t no_suggestion_rules;
