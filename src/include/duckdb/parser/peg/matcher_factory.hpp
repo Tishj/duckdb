@@ -52,7 +52,7 @@ private:
 	virtual unique_ptr<OptionalMatcher> CreateOptional(Matcher &matcher) const;
 	virtual unique_ptr<RepeatMatcher> CreateRepeat(Matcher &matcher) const;
 
-	virtual void SetRuleOverrides();
+	void SetRuleOverrides();
 
 	void AddKeywordOverride(const char *name, KeywordInfo keyword_info);
 	void AddRuleOverride(const char *name, unique_ptr<Matcher> &&matcher_p);

@@ -183,12 +183,6 @@ MatcherFactory::MatcherFactory(MatcherAllocator &allocator, const ParsedGrammar 
       terminal_rule_overrides(std::move(terminal_rule_overrides_p)) {
 }
 
-void MatcherFactory::SetRuleOverrides() {
-	for (auto &entry : terminal_rule_overrides) {
-		AddRuleOverride(entry.first.c_str(), std::move(entry.second));
-	}
-}
-
 Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
 	// keyword overrides
 	AddKeywordOverride("TABLE", KeywordInfo(1, ' '));
@@ -224,7 +218,9 @@ Matcher &MatcherFactory::CreateRootMatcher(const string &root_rule) {
 	// END GENERATED PACKRAT MEMOIZED RULES
 	//===--------------------------------------------------------------------===//
 
-	SetRuleOverrides();
+	for (auto &entry : terminal_rule_overrides) {
+		AddRuleOverride(entry.first.c_str(), std::move(entry.second));
+	}
 
 	// suppress suggestions for catch-all rules that would pollute statement-level autocomplete
 	SuppressSuggestions("ExpressionStatement");
