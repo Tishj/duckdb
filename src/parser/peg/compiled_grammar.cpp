@@ -49,6 +49,9 @@ static void CheckReference(const ParsedGrammar &grammar, const ParsedGrammarRule
 		if (expression.kind == PEGExpression::Kind::REFERENCE && parsed_rule.recipe.parameters.count(expression.text)) {
 			break;
 		}
+		if (StringUtil::CIEquals(expression.text.GetString(), "EndOfInput")) {
+			break;
+		}
 		if (!grammar.GetRule(expression.text.GetString())) {
 			throw InvalidInputException("Grammar rule '%s' references missing rule '%s'", parsed_rule.name,
 			                            expression.text.GetString());

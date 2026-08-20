@@ -17,8 +17,7 @@ struct PEGExpression {
 		OPTIONAL,        // child?
 		REPEAT,          // child+  (one or more)
 		OPTIONAL_REPEAT, // child*  (zero or more)
-		REGEX,           // regex
-		END_OF_INPUT     // end of input
+		REGEX            // regex
 	};
 
 public:
@@ -39,8 +38,6 @@ struct PEGRule {
 public:
 	PEGRule(string_map_t<idx_t> &&parameters, PEGExpression &&expression)
 	    : parameters(std::move(parameters)), expression(std::move(expression)) {
-	}
-	PEGRule() : expression(PEGExpression(PEGExpression::Kind::END_OF_INPUT)) {
 	}
 
 public:

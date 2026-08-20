@@ -45,9 +45,6 @@ ParsedGrammar ParsedGrammar::CreateDefault() {
 	const char *grammar = const_char_ptr_cast(INLINED_PEG_GRAMMAR);
 #endif
 	auto result = Parse(grammar);
-	if (!result.GetRule("EndOfInput")) {
-		result.AddParsedRule(ParsedGrammarRule("EndOfInput", PEGRule()));
-	}
 	PEGTransformerFactory::RegisterDefaultTransforms(result);
 	return result;
 }

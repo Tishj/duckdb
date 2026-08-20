@@ -87,8 +87,6 @@ Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const st
 	}
 	case PEGExpression::Kind::REGEX:
 		throw InternalException("REGEX operator not supported in PEG grammar");
-	case PEGExpression::Kind::END_OF_INPUT:
-		throw InternalException("End-of-input expression must have a matcher override");
 	default:
 		throw InternalException("Unrecognized PEG expression kind");
 	}
@@ -96,28 +94,29 @@ Matcher &MatcherFactory::CreateMatcher(const PEGExpression &expression, const st
 
 Matcher &MatcherFactory::CreateMatcher(string_t rule_name, vector<reference<Matcher>> &parameters) {
 	bool is_function_call = !parameters.empty();
-	// look up the rule
-	auto entry = grammar.rules.find(rule_name.GetString());
-	if (entry == grammar.rules.end()) {
-		throw InvalidConfigurationException("Failed to create matcher for rule %s - rule is missing",
-		                                    rule_name.GetString());
-	}
-	auto matcher_entry = matchers.end();
+	auto matcher_entry = matchers.find(rule_name);
 	if (!is_function_call) {
-		matcher_entry = matchers.find(rule_name);
 		if (matcher_entry == matchers.end()) {
-			throw InvalidConfigurationException("Matcher for rule %s was not registered before construction",
+			throw InvalidConfigurationException("Recipe reference rule %s, which doesn't exist in the grammar",
 			                                    rule_name.GetString());
 		}
 		if (!construction_state.Begin(rule_name)) {
 			//! Already constructed, return the cached matcher
 			return matcher_entry->second.get();
 		}
+	} else {
+		matcher_entry = matchers.end();
 	}
 	// Named matchers are registered before any bodies are constructed so recursive references can resolve immediately.
 	auto &matcher = is_function_call ? List() : matcher_entry->second.get().Cast<ListMatcher>();
 
 	// fill the matcher from the given set of rules
+	// look up the rule
+	auto entry = grammar.rules.find(rule_name.GetString());
+	if (entry == grammar.rules.end()) {
+		throw InvalidConfigurationException("Failed to create matcher for rule %s - rule is missing",
+		                                    rule_name.GetString());
+	}
 	auto &rule = entry->second->recipe;
 	if (rule.parameters.size() > 1) {
 		throw InvalidConfigurationException("Only functions with a single parameter are supported");
