@@ -8,8 +8,10 @@
 namespace duckdb {
 struct CompiledGrammar;
 struct PEGExpression;
-
 class MatcherFactory;
+struct CompiledGrammarRule;
+
+using compiled_rules_map_t = case_insensitive_map_t<unique_ptr<CompiledGrammarRule>>;
 
 //! Class for building matchers
 class MatcherFactory {
