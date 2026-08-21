@@ -245,11 +245,15 @@ bool Tokenizer::TokenizeInput(TokenizerBehavior &behavior) const {
 	auto &sql = behavior.sql;
 	auto &tokens = behavior.tokens;
 	if (TokenizeInputInternal(behavior)) {
-		tokens.emplace_back("", sql.size(), behavior.GetTerminator());
+		auto terminator = behavior.GetTerminator();
+		tokens.emplace_back("", sql.size(), terminator);
+		if (terminator == TokenType::END_OF_INPUT_AUTOCOMPLETE) {
+			return true;
+		}
 	} else {
 		tokens.emplace_back("", sql.size(), TokenType::END_OF_INPUT);
 	}
-	return !tokens.empty() && tokens.back().type == TokenType::END_OF_INPUT_AUTOCOMPLETE;
+	return false;
 }
 
 bool Tokenizer::TokenizeInputInternal(TokenizerBehavior &behavior) const {
