@@ -379,13 +379,17 @@ public:
 		// To be a proper TopLevelStatement (`Statement? (';'+ / EndOfInput)`), the quack run must
 		// be followed by ';' or end-of-input. If a real token (e.g. SELECT) follows without a
 		// separator, decline so the original PEG syntax error surfaces.
-		if (quacks < tokens.size() && tokens[quacks].type != TokenType::TERMINATOR) {
+		const bool at_end_of_input = quacks < tokens.size();
+		if (at_end_of_input && tokens[quacks].type != TokenType::TERMINATOR) {
 			return ParserExtensionParseResult();
 		}
 		// The QUACK row count is the number of quack words.
 		auto result = ParserExtensionParseResult(make_uniq<QuackExtensionData>(quacks));
 		// Consume a terminator token too, if present, so the QUACK statement owns its terminator.
-		result.consumed_tokens = NumericCast<int64_t>(quacks + (quacks < tokens.size() ? 1 : 0));
+		result.consumed_tokens = NumericCast<int64_t>(quacks);
+		if (!at_end_of_input) {
+			result.consumed_tokens++;
+		}
 		return result;
 	}
 
