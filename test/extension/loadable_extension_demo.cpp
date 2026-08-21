@@ -379,8 +379,8 @@ public:
 		// To be a proper TopLevelStatement (`Statement? (';'+ / EndOfInput)`), the quack run must
 		// be followed by ';' or end-of-input. If a real token (e.g. SELECT) follows without a
 		// separator, decline so the original PEG syntax error surfaces.
-		const bool at_end_of_input = quacks < tokens.size();
-		if (at_end_of_input && tokens[quacks].type != TokenType::TERMINATOR) {
+		const bool at_end_of_input = quacks >= tokens.size();
+		if (!at_end_of_input && tokens[quacks].type != TokenType::TERMINATOR) {
 			return ParserExtensionParseResult();
 		}
 		// The QUACK row count is the number of quack words.
