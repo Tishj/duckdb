@@ -32,8 +32,6 @@ static tokenType convertToken(TokenType token_type) {
 		return tokenType::TOKEN_COMMENT;
 	case TokenType::TOKEN_ERROR:
 		return tokenType::TOKEN_ERROR;
-	case TokenType::END_OF_INPUT:
-		return tokenType::TOKEN_OPERATOR;
 	default:
 		throw duckdb::InternalException("Unrecognized token type");
 	}

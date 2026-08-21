@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-//! Consumes the END_OF_INPUT sentinel; wired into the grammar's EndOfInput rule.
+//! Matches the iterator's end-of-input state; wired into the grammar's EndOfInput rule.
 class EndOfInputMatcher : public Matcher {
 public:
 	static constexpr MatcherType TYPE = MatcherType::END_OF_INPUT;
@@ -15,7 +15,7 @@ public:
 
 	MatchResultType Match(MatchState &state) const override {
 		if (state.token_iterator.AtEndOfInput()) {
-			state.token_iterator.Advance();
+			state.token_iterator.ConsumeEndOfInput();
 			state.UpdateMaxTokenIndex();
 			return MatchResultType::SUCCESS;
 		}
@@ -24,7 +24,7 @@ public:
 
 	optional_ptr<ParseResult> MatchParseResultInternal(MatchState &state) const override {
 		if (state.token_iterator.AtEndOfInput()) {
-			state.token_iterator.Advance();
+			state.token_iterator.ConsumeEndOfInput();
 			state.UpdateMaxTokenIndex();
 			return state.allocator.Allocate(make_uniq<EndOfInputParseResult>());
 		}

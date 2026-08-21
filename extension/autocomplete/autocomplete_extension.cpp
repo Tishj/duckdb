@@ -558,7 +558,7 @@ static duckdb::unique_ptr<FunctionData> CheckPEGParserBind(ClientContext &contex
 	if (match_result != MatchResultType::SUCCESS || state.token_iterator.Position() < token_iterator.Size()) {
 		auto error_token = string("<eof>");
 		auto current = state.token_iterator.Current();
-		if (current && current->type != TokenType::END_OF_INPUT) {
+		if (current) {
 			error_token = current->text;
 		}
 		string token_list;

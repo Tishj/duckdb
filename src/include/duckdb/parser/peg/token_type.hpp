@@ -29,9 +29,7 @@ enum class TokenType {
 	PRAGMA_FUNCTION,
 	SETTING_NAME,
 	//! Named TOKEN_ERROR (not ERROR) to avoid colliding with the Win32 `ERROR` macro.
-	TOKEN_ERROR,
-	//! Sentinel for real end of input — consumed by EndOfInputMatcher.
-	END_OF_INPUT
+	TOKEN_ERROR
 };
 
 } // namespace duckdb

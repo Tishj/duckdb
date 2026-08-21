@@ -69,7 +69,10 @@ TEST_CASE("Token iterator supplies contextual end-of-input", "[api][tokenizer]")
 	parse_iterator.Advance(parse_tokens.size());
 	REQUIRE(parse_iterator.AtEndOfInput());
 	REQUIRE(!parse_iterator.AtAutocompleteCursor());
-	REQUIRE(parse_iterator.Current()->type == TokenType::END_OF_INPUT);
+	REQUIRE(!parse_iterator.Current());
+	parse_iterator.ConsumeEndOfInput();
+	REQUIRE(parse_iterator.AtEnd());
+	REQUIRE(!parse_iterator.AtEndOfInput());
 
 	MatcherTokenStream autocomplete_tokens(MatcherTokenStreamMode::AUTOCOMPLETE);
 	TokenizerBehavior autocomplete_behavior(input, autocomplete_tokens);
@@ -78,7 +81,7 @@ TEST_CASE("Token iterator supplies contextual end-of-input", "[api][tokenizer]")
 	autocomplete_iterator.Advance(autocomplete_tokens.size());
 	REQUIRE(!autocomplete_iterator.AtEndOfInput());
 	REQUIRE(autocomplete_iterator.AtAutocompleteCursor());
-	REQUIRE(autocomplete_iterator.Current()->type == TokenType::END_OF_INPUT);
+	REQUIRE(!autocomplete_iterator.Current());
 
 	string unterminated_input = "/* comment";
 	MatcherTokenStream unterminated_tokens(MatcherTokenStreamMode::AUTOCOMPLETE);

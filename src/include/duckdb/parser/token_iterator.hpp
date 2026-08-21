@@ -29,6 +29,7 @@ public:
 	DUCKDB_API bool AtEnd() const;
 	DUCKDB_API bool AtEndOfInput() const;
 	DUCKDB_API bool AtAutocompleteCursor() const;
+	DUCKDB_API void ConsumeEndOfInput();
 	DUCKDB_API bool HasMoreStatements() const;
 	DUCKDB_API idx_t Position() const;
 	DUCKDB_API idx_t Size() const;
@@ -52,8 +53,9 @@ private:
 private:
 	unique_ptr<MatcherTokenStream> owned_tokens;
 	MatcherTokenStream &tokens;
-	MatcherToken end_of_input;
 	idx_t position = 0;
+	//! EndOfInput is zero-width in the token stream, but a grammar rule can consume it only once.
+	bool end_of_input_consumed = false;
 };
 
 } // namespace duckdb

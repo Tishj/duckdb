@@ -51,8 +51,6 @@ inline string TokenTypeToString(TokenType type) {
 		return "PRAGMA_FUNCTION";
 	case TokenType::SETTING_NAME:
 		return "SETTING_NAME";
-	case TokenType::END_OF_INPUT:
-		return "END_OF_INPUT";
 	default:
 		return "UNKNOWN";
 	}

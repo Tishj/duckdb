@@ -117,9 +117,7 @@ bool ParseIterator::Peek() {
 			idx_t stmt_loc = stmt->stmt_location.offset;
 			idx_t end_loc = sql.size();
 			if (auto current = token_iterator->Current()) {
-				if (current->type != TokenType::END_OF_INPUT) {
-					end_loc = current->offset;
-				}
+				end_loc = current->offset;
 			}
 			stmt->query = sql.substr(stmt_loc, end_loc - stmt_loc);
 			stmt->stmt_location = QueryLocation(0, stmt->query.size());
