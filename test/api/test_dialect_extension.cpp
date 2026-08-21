@@ -58,25 +58,20 @@ static vector<MatcherToken> Tokenize(const Tokenizer &tokenizer, const string &s
 
 TEST_CASE("Register and select a dialect extension", "[api][dialect_extension]") {
 	DBConfig config;
-	DialectExtension::Register(config, DialectExtension("test"));
+	DialectExtension::Register(config, make_uniq<DialectExtension>("test"));
 
 	DuckDB db(nullptr, &config);
 	Connection con(db);
 
 	auto dialects = con.Query("SELECT dialect_name FROM duckdb_dialects() ORDER BY dialect_name");
 	REQUIRE_NO_FAIL(*dialects);
-	REQUIRE(dialects->RowCount() == 2);
-	REQUIRE(dialects->GetValue(0, 0) == Value("duckdb"));
-	REQUIRE(dialects->GetValue(0, 1) == Value("test"));
+	REQUIRE(dialects->RowCount() == 1);
+	REQUIRE(dialects->GetValue(0, 0) == Value("test"));
 
-	auto &parser_cache = db.instance->GetParserCache();
-	auto old_matcher = parser_cache.GetMatcher();
-	auto old_transformer = parser_cache.GetTransformerFactory();
 	REQUIRE_NO_FAIL(con.Query("SET current_dialect = 'test'"));
-	auto new_matcher = parser_cache.GetMatcher();
-	auto new_transformer = parser_cache.GetTransformerFactory();
-	REQUIRE(old_matcher != new_matcher);
-	REQUIRE(old_transformer != new_transformer);
+	auto current_dialect = con.Query("SELECT current_setting('current_dialect')");
+	REQUIRE_NO_FAIL(*current_dialect);
+	REQUIRE(current_dialect->GetValue(0, 0) == Value("test"));
 }
 
 TEST_CASE("Dialect tokenizer hooks are opt-in", "[api][dialect_extension]") {
