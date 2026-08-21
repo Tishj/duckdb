@@ -62,6 +62,11 @@ public:
 	//! Tokenize the behavior's input and return whether autocomplete can be offered.
 	virtual bool TokenizeInput(TokenizerBehavior &behavior) const;
 
+protected:
+	virtual bool BackslashEscapesStringLiterals() const;
+	virtual bool IsQuotedIdentifierDelimiter(char character) const;
+	virtual void PushOperatorToken(TokenizerBehavior &behavior, const string &sql, idx_t start, idx_t end) const;
+
 private:
 	//! Core tokenization loop. Returns true on a clean exit, false if the input ended inside an
 	//! unterminated comment / dollar-quoted string. Does NOT append the trailing sentinel —
