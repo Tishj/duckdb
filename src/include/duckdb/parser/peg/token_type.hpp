@@ -27,9 +27,7 @@ enum class TokenType {
 	SCALAR_FUNCTION,
 	TABLE_FUNCTION,
 	PRAGMA_FUNCTION,
-	SETTING_NAME,
-	//! Named TOKEN_ERROR (not ERROR) to avoid colliding with the Win32 `ERROR` macro.
-	TOKEN_ERROR
+	SETTING_NAME
 };
 
 } // namespace duckdb
