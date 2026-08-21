@@ -7,7 +7,7 @@ static bool IsEmptyQuotedIdentifier(const string &sql, idx_t start, idx_t end, T
 	return type == TokenType::IDENTIFIER && end == start + 2 && sql.substr(start, 2) == "\"\"";
 }
 
-ParserTokenizerBehavior::ParserTokenizerBehavior(const string &sql, vector<MatcherToken> &tokens)
+ParserTokenizerBehavior::ParserTokenizerBehavior(const string &sql, MatcherTokenStream &tokens)
     : TokenizerBehavior(sql, tokens) {
 }
 

@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-TokenizerBehavior::TokenizerBehavior(const string &sql, vector<MatcherToken> &tokens) : sql(sql), tokens(tokens) {
+TokenizerBehavior::TokenizerBehavior(const string &sql, MatcherTokenStream &tokens) : sql(sql), tokens(tokens) {
 }
 
 Tokenizer::Tokenizer(const PEGKeywordHelper &keyword_helper_p) : keyword_helper(keyword_helper_p) {
@@ -244,16 +244,9 @@ bool Tokenizer::IsUnterminatedState(TokenizeState state) {
 bool Tokenizer::TokenizeInput(TokenizerBehavior &behavior) const {
 	auto &sql = behavior.sql;
 	auto &tokens = behavior.tokens;
-	if (TokenizeInputInternal(behavior)) {
-		auto terminator = behavior.GetTerminator();
-		tokens.emplace_back("", sql.size(), terminator);
-		if (terminator == TokenType::END_OF_INPUT_AUTOCOMPLETE) {
-			return true;
-		}
-	} else {
-		tokens.emplace_back("", sql.size(), TokenType::END_OF_INPUT);
-	}
-	return false;
+	auto clean_end = TokenizeInputInternal(behavior);
+	tokens.SetEnd(sql.size(), clean_end);
+	return clean_end;
 }
 
 bool Tokenizer::TokenizeInputInternal(TokenizerBehavior &behavior) const {

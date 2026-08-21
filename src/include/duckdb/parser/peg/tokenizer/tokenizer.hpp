@@ -10,7 +10,7 @@
 
 #include "duckdb/parser/peg/keyword_helper.hpp"
 #include "duckdb/parser/peg/token_type.hpp"
-#include "duckdb/parser/peg/matcher_token.hpp"
+#include "duckdb/parser/peg/matcher_token_stream.hpp"
 
 namespace duckdb {
 
@@ -32,7 +32,7 @@ class Tokenizer;
 
 class TokenizerBehavior {
 public:
-	TokenizerBehavior(const string &sql, vector<MatcherToken> &tokens);
+	TokenizerBehavior(const string &sql, MatcherTokenStream &tokens);
 	virtual ~TokenizerBehavior() = default;
 
 public:
@@ -40,16 +40,9 @@ public:
 	virtual void OnStatementEnd(idx_t pos);
 	virtual void OnLastToken(const Tokenizer &tokenizer, TokenizeState state, string last_word, idx_t last_pos);
 
-	//! Sentinel appended at the end of the token vector on a clean exit. Override to return
-	//! `END_OF_INPUT_AUTOCOMPLETE` for autocomplete behavior. Dirty exits (unterminated comment /
-	//! dollar-quote) always append `END_OF_INPUT` regardless of this hook.
-	virtual TokenType GetTerminator() const {
-		return TokenType::END_OF_INPUT;
-	}
-
 protected:
 	const string &sql;
-	vector<MatcherToken> &tokens;
+	MatcherTokenStream &tokens;
 	friend class Tokenizer;
 };
 
@@ -59,7 +52,7 @@ public:
 	explicit Tokenizer(const PEGKeywordHelper &keyword_helper);
 
 public:
-	//! Tokenize the behavior's input and return whether autocomplete can be offered.
+	//! Tokenize the behavior's input and return whether tokenization ended cleanly.
 	virtual bool TokenizeInput(TokenizerBehavior &behavior) const;
 
 protected:
@@ -71,9 +64,7 @@ protected:
 
 private:
 	//! Core tokenization loop. Returns true on a clean exit, false if the input ended inside an
-	//! unterminated comment / dollar-quoted string. Does NOT append the trailing sentinel —
-	//! `TokenizeInput()` is the one that appends `GetTerminator()` (clean) or `END_OF_INPUT`
-	//! (dirty) based on the return value.
+	//! unterminated comment / dollar-quoted string.
 	bool TokenizeInputInternal(TokenizerBehavior &behavior) const;
 
 public:

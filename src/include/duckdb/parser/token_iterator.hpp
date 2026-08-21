@@ -10,8 +10,7 @@
 
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/common/unique_ptr.hpp"
-#include "duckdb/common/vector.hpp"
-#include "duckdb/parser/peg/matcher_token.hpp"
+#include "duckdb/parser/peg/matcher_token_stream.hpp"
 
 namespace duckdb {
 struct SimpleToken;
@@ -20,14 +19,16 @@ struct SimpleToken;
 //! reference the same tokens and carry an independent position for speculative parsing.
 class TokenIterator {
 public:
-	DUCKDB_API explicit TokenIterator(unique_ptr<vector<MatcherToken>> owned_tokens);
-	DUCKDB_API explicit TokenIterator(vector<MatcherToken> &tokens);
+	DUCKDB_API explicit TokenIterator(unique_ptr<MatcherTokenStream> owned_tokens);
+	DUCKDB_API explicit TokenIterator(MatcherTokenStream &tokens);
 	DUCKDB_API TokenIterator(TokenIterator &other);
 	DUCKDB_API TokenIterator(TokenIterator &&other) noexcept;
 	TokenIterator &operator=(const TokenIterator &) = delete;
 	TokenIterator &operator=(TokenIterator &&) = delete;
 
 	DUCKDB_API bool AtEnd() const;
+	DUCKDB_API bool AtEndOfInput() const;
+	DUCKDB_API bool AtAutocompleteCursor() const;
 	DUCKDB_API bool HasMoreStatements() const;
 	DUCKDB_API idx_t Position() const;
 	DUCKDB_API idx_t Size() const;
@@ -46,8 +47,12 @@ public:
 	DUCKDB_API string ToString() const;
 
 private:
-	unique_ptr<vector<MatcherToken>> owned_tokens;
-	vector<MatcherToken> &tokens;
+	static MatcherTokenStream &RequireOwnedTokens(const unique_ptr<MatcherTokenStream> &owned_tokens);
+
+private:
+	unique_ptr<MatcherTokenStream> owned_tokens;
+	MatcherTokenStream &tokens;
+	MatcherToken end_of_input;
 	idx_t position = 0;
 };
 

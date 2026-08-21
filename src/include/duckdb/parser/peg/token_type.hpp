@@ -31,9 +31,7 @@ enum class TokenType {
 	//! Named TOKEN_ERROR (not ERROR) to avoid colliding with the Win32 `ERROR` macro.
 	TOKEN_ERROR,
 	//! Sentinel for real end of input — consumed by EndOfInputMatcher.
-	END_OF_INPUT,
-	//! Sentinel for cursor position in autocomplete mode — List/Repeat fire suggestion walk.
-	END_OF_INPUT_AUTOCOMPLETE
+	END_OF_INPUT
 };
 
 } // namespace duckdb

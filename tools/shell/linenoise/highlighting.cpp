@@ -33,7 +33,6 @@ static tokenType convertToken(TokenType token_type) {
 	case TokenType::TOKEN_ERROR:
 		return tokenType::TOKEN_ERROR;
 	case TokenType::END_OF_INPUT:
-	case TokenType::END_OF_INPUT_AUTOCOMPLETE:
 		return tokenType::TOKEN_OPERATOR;
 	default:
 		throw duckdb::InternalException("Unrecognized token type");
@@ -43,7 +42,7 @@ static tokenType convertToken(TokenType token_type) {
 static vector<highlightToken> GetParseTokens(char *buf, size_t len) {
 	string sql(buf, len);
 	vector<highlightToken> tokens;
-	vector<MatcherToken> matcher_tokens;
+	MatcherTokenStream matcher_tokens;
 	HighlightTokenizerBehavior behavior(sql, matcher_tokens);
 	auto &keyword_helper = DuckDBKeywordHelper::Instance();
 	Tokenizer tokenizer(keyword_helper);

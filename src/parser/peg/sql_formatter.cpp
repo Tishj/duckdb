@@ -89,22 +89,16 @@ SQLFormatter::SQLFormatter(const FormatterConfig &config) : config(config) {
 
 string SQLFormatter::Format(const string &sql) {
 	auto &keyword_helper = DuckDBKeywordHelper::Instance();
-	vector<MatcherToken> tokens;
+	MatcherTokenStream tokens;
 	HighlightTokenizerBehavior behavior(sql, tokens);
 	Tokenizer tokenizer(keyword_helper);
 	tokenizer.TokenizeInput(behavior);
-	if (!tokens.empty()) {
-		auto back_type = tokens.back().type;
-		if (back_type == TokenType::END_OF_INPUT || back_type == TokenType::END_OF_INPUT_AUTOCOMPLETE) {
-			tokens.pop_back();
-		}
-	}
 
 	if (tokens.empty()) {
 		return sql;
 	}
 
-	string multiline = FormatMultiline(sql, tokens);
+	string multiline = FormatMultiline(sql, tokens.GetTokens());
 	string struct_inlined = InlineStructLiterals(multiline);
 	string merged = MergeShortClauses(struct_inlined);
 	string collapsed = CollapseFirstCondition(merged);

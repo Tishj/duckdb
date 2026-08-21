@@ -2,6 +2,7 @@
 #include "test_helpers.hpp"
 
 #include "duckdb/main/config.hpp"
+#include "duckdb/parser/token_iterator.hpp"
 #include "duckdb/parser/peg/dialect_extension.hpp"
 #include "duckdb/parser/peg/matcher.hpp"
 #include "duckdb/parser/peg/tokenizer/tokenizer.hpp"
@@ -50,10 +51,43 @@ private:
 };
 
 static vector<MatcherToken> Tokenize(const Tokenizer &tokenizer, const string &sql) {
-	vector<MatcherToken> tokens;
+	MatcherTokenStream tokens;
 	TokenizerBehavior behavior(sql, tokens);
 	tokenizer.TokenizeInput(behavior);
-	return tokens;
+	return std::move(tokens.GetTokens());
+}
+
+TEST_CASE("Token iterator supplies contextual end-of-input", "[api][tokenizer]") {
+	EmptyKeywordHelper helper;
+	Tokenizer tokenizer(helper);
+
+	string input = "token";
+	MatcherTokenStream parse_tokens;
+	TokenizerBehavior parse_behavior(input, parse_tokens);
+	REQUIRE(tokenizer.TokenizeInput(parse_behavior));
+	TokenIterator parse_iterator(parse_tokens);
+	parse_iterator.Advance(parse_tokens.size());
+	REQUIRE(parse_iterator.AtEndOfInput());
+	REQUIRE(!parse_iterator.AtAutocompleteCursor());
+	REQUIRE(parse_iterator.Current()->type == TokenType::END_OF_INPUT);
+
+	MatcherTokenStream autocomplete_tokens(MatcherTokenStreamMode::AUTOCOMPLETE);
+	TokenizerBehavior autocomplete_behavior(input, autocomplete_tokens);
+	REQUIRE(tokenizer.TokenizeInput(autocomplete_behavior));
+	TokenIterator autocomplete_iterator(autocomplete_tokens);
+	autocomplete_iterator.Advance(autocomplete_tokens.size());
+	REQUIRE(!autocomplete_iterator.AtEndOfInput());
+	REQUIRE(autocomplete_iterator.AtAutocompleteCursor());
+	REQUIRE(autocomplete_iterator.Current()->type == TokenType::END_OF_INPUT);
+
+	string unterminated_input = "/* comment";
+	MatcherTokenStream unterminated_tokens(MatcherTokenStreamMode::AUTOCOMPLETE);
+	TokenizerBehavior unterminated_behavior(unterminated_input, unterminated_tokens);
+	REQUIRE(!tokenizer.TokenizeInput(unterminated_behavior));
+	TokenIterator unterminated_iterator(unterminated_tokens);
+	unterminated_iterator.Advance(unterminated_tokens.size());
+	REQUIRE(unterminated_iterator.AtEndOfInput());
+	REQUIRE(!unterminated_iterator.AtAutocompleteCursor());
 }
 
 TEST_CASE("Register and select a dialect extension", "[api][dialect_extension]") {

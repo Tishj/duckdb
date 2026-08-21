@@ -27,9 +27,7 @@ public:
 			// update the token index we propagate upwards
 			state.token_iterator.SetPosition(repeat_state.token_iterator);
 
-			auto current = repeat_state.token_iterator.Current();
-			bool at_autocomplete_cursor = current && current->type == TokenType::END_OF_INPUT_AUTOCOMPLETE;
-			if (at_autocomplete_cursor) {
+			if (repeat_state.token_iterator.AtAutocompleteCursor()) {
 				element.AddSuggestion(state);
 				return MatchResultType::SUCCESS;
 			}
@@ -66,8 +64,7 @@ public:
 			// Propagate the new state upwards.
 			state.token_iterator.SetPosition(repeat_state.token_iterator);
 
-			auto current = repeat_state.token_iterator.Current();
-			if (current && current->type == TokenType::END_OF_INPUT_AUTOCOMPLETE) {
+			if (repeat_state.token_iterator.AtAutocompleteCursor()) {
 				break;
 			}
 

@@ -53,8 +53,6 @@ inline string TokenTypeToString(TokenType type) {
 		return "SETTING_NAME";
 	case TokenType::END_OF_INPUT:
 		return "END_OF_INPUT";
-	case TokenType::END_OF_INPUT_AUTOCOMPLETE:
-		return "END_OF_INPUT_AUTOCOMPLETE";
 	default:
 		return "UNKNOWN";
 	}

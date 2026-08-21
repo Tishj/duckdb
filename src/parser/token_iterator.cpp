@@ -5,34 +5,46 @@
 
 namespace duckdb {
 
-TokenIterator::TokenIterator(unique_ptr<vector<MatcherToken>> owned_tokens_p)
-    : owned_tokens(std::move(owned_tokens_p)), tokens(*owned_tokens) {
+MatcherTokenStream &TokenIterator::RequireOwnedTokens(const unique_ptr<MatcherTokenStream> &owned_tokens) {
 	if (!owned_tokens) {
 		throw InternalException("Cannot construct an owning TokenIterator without tokens");
 	}
+	return *owned_tokens;
 }
 
-TokenIterator::TokenIterator(vector<MatcherToken> &tokens_p) : tokens(tokens_p) {
+TokenIterator::TokenIterator(unique_ptr<MatcherTokenStream> owned_tokens_p)
+    : owned_tokens(std::move(owned_tokens_p)), tokens(RequireOwnedTokens(owned_tokens)),
+      end_of_input("", tokens.EndOffset(), TokenType::END_OF_INPUT) {
 }
 
-TokenIterator::TokenIterator(TokenIterator &other) : tokens(other.tokens), position(other.position) {
+TokenIterator::TokenIterator(MatcherTokenStream &tokens_p)
+    : tokens(tokens_p), end_of_input("", tokens.EndOffset(), TokenType::END_OF_INPUT) {
+}
+
+TokenIterator::TokenIterator(TokenIterator &other)
+    : tokens(other.tokens), end_of_input(other.end_of_input), position(other.position) {
 }
 
 TokenIterator::TokenIterator(TokenIterator &&other) noexcept
-    : owned_tokens(std::move(other.owned_tokens)), tokens(other.tokens), position(other.position) {
+    : owned_tokens(std::move(other.owned_tokens)), tokens(other.tokens), end_of_input(std::move(other.end_of_input)),
+      position(other.position) {
 }
 
 bool TokenIterator::AtEnd() const {
-	auto current = Current();
-	return !current || current->type == TokenType::END_OF_INPUT;
+	return !Current() || AtEndOfInput();
+}
+
+bool TokenIterator::AtEndOfInput() const {
+	return position == tokens.size() && !tokens.CanAutocomplete();
+}
+
+bool TokenIterator::AtAutocompleteCursor() const {
+	return position == tokens.size() && tokens.CanAutocomplete();
 }
 
 bool TokenIterator::HasMoreStatements() const {
 	for (idx_t index = position; index < tokens.size(); index++) {
 		auto type = tokens[index].type;
-		if (type == TokenType::END_OF_INPUT) {
-			return false;
-		}
 		if (type != TokenType::TERMINATOR) {
 			return true;
 		}
@@ -45,20 +57,19 @@ idx_t TokenIterator::Position() const {
 }
 
 idx_t TokenIterator::Size() const {
-	return tokens.size();
+	return tokens.size() + 1;
 }
 
 idx_t TokenIterator::EndOffset() const {
-	if (tokens.empty()) {
-		return 0;
-	}
-	auto &last_token = tokens.back();
-	return last_token.offset + last_token.length;
+	return tokens.EndOffset();
 }
 
 optional_ptr<const MatcherToken> TokenIterator::Current() const {
-	if (position >= tokens.size()) {
+	if (position > tokens.size()) {
 		return nullptr;
+	}
+	if (position == tokens.size()) {
+		return end_of_input;
 	}
 	return tokens[position];
 }
@@ -71,23 +82,26 @@ const MatcherToken &TokenIterator::Previous() const {
 }
 
 const MatcherToken &TokenIterator::GetToken(idx_t index) const {
-	if (index >= tokens.size()) {
-		throw InternalException("Token index %llu is out of range (size %llu)", index, tokens.size());
+	if (index >= Size()) {
+		throw InternalException("Token index %llu is out of range (size %llu)", index, Size());
+	}
+	if (index == tokens.size()) {
+		return end_of_input;
 	}
 	return tokens[index];
 }
 
 void TokenIterator::Advance(idx_t count) {
-	if (count > tokens.size() - position) {
+	if (count > Size() - position) {
 		throw InternalException("Cannot advance TokenIterator by %llu tokens from position %llu (size %llu)", count,
-		                        position, tokens.size());
+		                        position, Size());
 	}
 	position += count;
 }
 
 void TokenIterator::SetPosition(idx_t position_p) {
-	if (position_p > tokens.size()) {
-		throw InternalException("Token position %llu is out of range (size %llu)", position_p, tokens.size());
+	if (position_p > Size()) {
+		throw InternalException("Token position %llu is out of range (size %llu)", position_p, Size());
 	}
 	position = position_p;
 }
@@ -103,14 +117,18 @@ void TokenIterator::SetPreviousTokenType(TokenType type) {
 	if (position == 0) {
 		throw InternalException("TokenIterator has no previous token to annotate");
 	}
+	if (position > tokens.size()) {
+		throw InternalException("Cannot annotate the end-of-input token");
+	}
 	tokens[position - 1].type = type;
 }
 
 vector<SimpleToken> TokenIterator::RemainingTokens() const {
 	vector<SimpleToken> result;
-	result.reserve(tokens.size() - position);
-	for (idx_t index = position; index < tokens.size(); index++) {
-		result.emplace_back(tokens[index].text, tokens[index].type);
+	result.reserve(Size() - position);
+	for (idx_t index = position; index < Size(); index++) {
+		auto &token = GetToken(index);
+		result.emplace_back(token.text, token.type);
 	}
 	return result;
 }

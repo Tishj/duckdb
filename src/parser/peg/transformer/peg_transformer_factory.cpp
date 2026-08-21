@@ -102,9 +102,7 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformTopLevelStatement(Token
 			error_token_idx = token_iterator.Size() - 1;
 		}
 		// Walk back past the EOI sentinel so the error message names a real token.
-		if (error_token_idx > 0 &&
-		    (token_iterator.GetToken(error_token_idx).type == TokenType::END_OF_INPUT ||
-		     token_iterator.GetToken(error_token_idx).type == TokenType::END_OF_INPUT_AUTOCOMPLETE)) {
+		if (error_token_idx > 0 && token_iterator.GetToken(error_token_idx).type == TokenType::END_OF_INPUT) {
 			error_token_idx--;
 		}
 		auto &error_token = token_iterator.GetToken(error_token_idx);

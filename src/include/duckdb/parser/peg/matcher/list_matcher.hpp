@@ -20,9 +20,7 @@ public:
 		auto saved_suggestion_size = suppress_suggestions ? list_state.suggestions.size() : 0;
 		for (idx_t child_idx = 0; child_idx < matchers.size(); child_idx++) {
 			auto &child_matcher = matchers[child_idx].get();
-			auto current = list_state.token_iterator.Current();
-			bool at_autocomplete_cursor = current && current->type == TokenType::END_OF_INPUT_AUTOCOMPLETE;
-			if (at_autocomplete_cursor) {
+			if (list_state.token_iterator.AtAutocompleteCursor()) {
 				if (suppress_suggestions) {
 					// this rule should not contribute autocomplete suggestions
 					// discard any suggestions added by earlier children

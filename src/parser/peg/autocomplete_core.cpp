@@ -163,14 +163,10 @@ bool ReplaceUnicodeSpaces(const string &query, string &new_query, const vector<U
 
 class AutoCompleteTokenizerBehavior : public TokenizerBehavior {
 public:
-	AutoCompleteTokenizerBehavior(const string &sql, vector<MatcherToken> &tokens,
+	AutoCompleteTokenizerBehavior(const string &sql, MatcherTokenStream &tokens,
 	                              vector<MatcherSuggestion> &suggestions_p)
 	    : TokenizerBehavior(sql, tokens), suggestions(suggestions_p) {
 		last_pos = 0;
-	}
-
-	TokenType GetTerminator() const override {
-		return TokenType::END_OF_INPUT_AUTOCOMPLETE;
 	}
 
 	void OnLastToken(const Tokenizer &, TokenizeState state, string last_word_p, idx_t last_pos_p) override {
@@ -198,7 +194,7 @@ vector<AutoCompleteSuggestion> GenerateAutoCompleteSuggestions(AutoCompleteCatal
                                                                AutoCompleteParameters &parameters) {
 	// tokenize the input
 	auto compiled_grammar = provider.GetCompiledGrammar();
-	vector<MatcherToken> tokens;
+	MatcherTokenStream tokens(MatcherTokenStreamMode::AUTOCOMPLETE);
 	vector<MatcherSuggestion> suggestions;
 	ParseResultAllocator parse_allocator;
 	idx_t max_token_index = 0;
