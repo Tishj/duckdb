@@ -31,8 +31,6 @@ inline string TokenTypeToString(TokenType type) {
 		return "COMMENT";
 	case TokenType::TERMINATOR:
 		return "TERMINATOR";
-	case TokenType::TOKEN_ERROR:
-		return "ERROR";
 	case TokenType::CATALOG_NAME:
 		return "CATALOG_NAME";
 	case TokenType::SCHEMA_NAME:
