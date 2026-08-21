@@ -18,6 +18,12 @@ bool Tokenizer::IsQuotedIdentifierDelimiter(char character) const {
 	return character == '"';
 }
 
+void Tokenizer::HandleLastToken(TokenizerBehavior &behavior, TokenizeState state, const string &sql,
+                                idx_t last_pos) const {
+	string last_word = sql.substr(last_pos, sql.size() - last_pos);
+	behavior.OnLastToken(*this, state, last_word, last_pos);
+}
+
 void Tokenizer::PushOperatorToken(TokenizerBehavior &behavior, const string &sql, idx_t start, idx_t end) const {
 	behavior.PushToken(start, end, TokenType::OPERATOR);
 }
@@ -565,12 +571,7 @@ bool Tokenizer::TokenizeInputInternal(TokenizerBehavior &behavior) const {
 	default:
 		break;
 	}
-	string last_word = sql.substr(last_pos, sql.size() - last_pos);
-	if (state == TokenizeState::OPERATOR) {
-		PushOperatorToken(behavior, sql, last_pos, sql.size());
-		return true;
-	}
-	behavior.OnLastToken(*this, state, std::move(last_word), last_pos);
+	HandleLastToken(behavior, state, sql, last_pos);
 	return true;
 }
 
@@ -582,8 +583,8 @@ void TokenizerBehavior::OnLastToken(const Tokenizer &tokenizer, TokenizeState st
 	if (last_word.empty()) {
 		return;
 	}
-	if (state == TokenizeState::KEYWORD) {
-		state = tokenizer.keyword_helper.IsKeyword(last_word) ? TokenizeState::KEYWORD : TokenizeState::STANDARD;
+	if (state == TokenizeState::KEYWORD && !tokenizer.keyword_helper.IsKeyword(last_word)) {
+		state = TokenizeState::STANDARD;
 	}
 
 	bool is_unterminated = Tokenizer::IsUnterminatedState(state);
