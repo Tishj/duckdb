@@ -10,6 +10,10 @@ const string &DialectExtension::Name() const {
 	return name;
 }
 
+const optional<DialectCompatibilityMode> &DialectExtension::GetCompatibilityMode() const {
+	return compatibility_mode;
+}
+
 shared_ptr<CompiledGrammar> DialectExtension::GetCompiledGrammar() {
 	{
 		lock_guard<mutex> guard(lock);

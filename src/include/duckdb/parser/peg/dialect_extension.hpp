@@ -10,6 +10,7 @@
 
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/mutex.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
 namespace duckdb {
@@ -46,7 +47,8 @@ struct CreateKeywordHelperInput {
 //! A named SQL dialect that can customize the PEG parser.
 class DialectExtension {
 public:
-	explicit DialectExtension(string name_p) : name(std::move(name_p)) {
+	explicit DialectExtension(string name_p, optional<DialectCompatibilityMode> compatibility_mode = std::nullopt)
+	    : name(std::move(name_p)), compatibility_mode(std::move(compatibility_mode)) {
 	}
 	virtual ~DialectExtension() = default;
 
@@ -56,6 +58,7 @@ public:
 public:
 	shared_ptr<CompiledGrammar> GetCompiledGrammar();
 	const string &Name() const;
+	const optional<DialectCompatibilityMode> &GetCompatibilityMode() const;
 
 public:
 	virtual void ApplyGrammarChanges(ParsedGrammar &grammar);
@@ -64,7 +67,10 @@ public:
 	virtual unique_ptr<PEGKeywordHelper> CreateKeywordHelper(CreateKeywordHelperInput &input);
 
 private:
+	//! The name to reference this dialect with the 'current_dialect' setting.
 	string name;
+	//! If set, the name of the 'dialect_compatibility_mode' setting to use upon selection.
+	optional<DialectCompatibilityMode> compatibility_mode;
 	mutex lock;
 	//! Cache the compiled grammar, since it never needs to be invalidated
 	shared_ptr<CompiledGrammar> cache;

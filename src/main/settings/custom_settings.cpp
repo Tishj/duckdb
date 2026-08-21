@@ -1700,6 +1700,11 @@ void CurrentDialectSetting::SetLocal(ClientContext &context, const Value &input)
 	//! The grammar gets lazily compiled, load it if it wasn't compiled yet
 	(void)dialect_extension.GetCompiledGrammar();
 	client_config.current_dialect = dialect_name;
+	auto &compatibility_mode = dialect_extension.GetCompatibilityMode();
+	if (compatibility_mode) {
+		Settings::Set<DialectCompatibilityModeSetting>(context, SetScope::LOCAL,
+		                                               Value(EnumUtil::ToString(*compatibility_mode)));
+	}
 }
 
 void CurrentDialectSetting::ResetLocal(ClientContext &context) {
