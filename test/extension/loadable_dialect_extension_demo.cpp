@@ -17,9 +17,9 @@ public:
 	LoadableDialectExtensionDemo() : DialectExtension("loadable_dialect_extension_demo") {
 	}
 
-	void ApplyGrammarChanges(ParsedGrammar &grammar) override {
-		grammar.AddRule("DialectDemoExpression <- 'DIALECT_DEMO'", TransformDialectDemoExpression);
-		grammar.PrependChoice("SingleExpression", "DialectDemoExpression");
+	void ApplyGrammarChanges(GrammarChangesInput &input) override {
+		input.parsed_grammar.AddRule("DialectDemoExpression <- 'DIALECT_DEMO'", TransformDialectDemoExpression);
+		input.parsed_grammar.PrependChoice("SingleExpression", "DialectDemoExpression");
 	}
 };
 

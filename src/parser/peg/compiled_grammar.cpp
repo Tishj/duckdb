@@ -34,7 +34,7 @@ shared_ptr<CompiledGrammar> CompiledGrammar::Get(ClientContext &context) {
 		if (!dialect_extension) {
 			throw InternalException("Dialect '%s' was not registered in the database", dialect);
 		}
-		return dialect_extension->GetCompiledGrammar();
+		return dialect_extension->GetCompiledGrammar(context);
 	}
 
 	auto &cache = db.GetParserCache();
@@ -151,7 +151,7 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientCon
 			if (!dialect_extension) {
 				throw InternalException("Dialect '%s' was not registered in the database", dialect);
 			}
-			return dialect_extension->GetCompiledGrammar();
+			return dialect_extension->GetCompiledGrammar(*context);
 		}
 	}
 

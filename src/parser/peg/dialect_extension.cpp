@@ -14,7 +14,7 @@ const optional<DialectCompatibilityMode> &DialectExtension::GetCompatibilityMode
 	return compatibility_mode;
 }
 
-shared_ptr<CompiledGrammar> DialectExtension::GetCompiledGrammar() {
+shared_ptr<CompiledGrammar> DialectExtension::GetCompiledGrammar(const ClientContext &context) {
 	{
 		lock_guard<mutex> guard(lock);
 		if (cache) {
@@ -24,7 +24,8 @@ shared_ptr<CompiledGrammar> DialectExtension::GetCompiledGrammar() {
 
 	//! Grammar changes
 	auto parsed_grammar = ParsedGrammar::CreateDefault();
-	ApplyGrammarChanges(parsed_grammar);
+	GrammarChangesInput grammar_change_input {parsed_grammar, context};
+	ApplyGrammarChanges(grammar_change_input);
 
 	//! Keyword Helper
 	CreateKeywordHelperInput keyword_helper_input {parsed_grammar};
@@ -60,7 +61,7 @@ shared_ptr<CompiledGrammar> DialectExtension::GetCompiledGrammar() {
 	return cache;
 }
 
-void DialectExtension::ApplyGrammarChanges(ParsedGrammar &) {
+void DialectExtension::ApplyGrammarChanges(GrammarChangesInput &) {
 	return;
 }
 

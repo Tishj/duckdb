@@ -13,6 +13,7 @@
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/enums/dialect_compatibility_mode.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 struct DBConfig;
@@ -45,6 +46,11 @@ struct CreateKeywordHelperInput {
 	const ParsedGrammar &grammar;
 };
 
+struct GrammarChangesInput {
+	ParsedGrammar &parsed_grammar;
+	const ClientContext &context;
+};
+
 //! A named SQL dialect that can customize the PEG parser.
 class DialectExtension {
 public:
@@ -57,12 +63,12 @@ public:
 	static void Register(DBConfig &config, shared_ptr<DialectExtension> extension);
 
 public:
-	shared_ptr<CompiledGrammar> GetCompiledGrammar();
+	shared_ptr<CompiledGrammar> GetCompiledGrammar(const ClientContext &context);
 	const string &Name() const;
 	const optional<DialectCompatibilityMode> &GetCompatibilityMode() const;
 
 public:
-	virtual void ApplyGrammarChanges(ParsedGrammar &grammar);
+	virtual void ApplyGrammarChanges(GrammarChangesInput &input);
 	virtual unique_ptr<MatcherFactory> CreateMatcherFactory(CreateMatcherFactoryInput &input);
 	virtual unique_ptr<Tokenizer> CreateTokenizer(CreateTokenizerInput &input);
 	virtual unique_ptr<PEGKeywordHelper> CreateKeywordHelper(CreateKeywordHelperInput &input);

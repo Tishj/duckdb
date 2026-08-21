@@ -1698,7 +1698,7 @@ void CurrentDialectSetting::SetLocal(ClientContext &context, const Value &input)
 	}
 	auto &dialect_extension = *dialect_extension_p;
 	//! The grammar gets lazily compiled, load it if it wasn't compiled yet
-	(void)dialect_extension.GetCompiledGrammar();
+	(void)dialect_extension.GetCompiledGrammar(context);
 	client_config.current_dialect = dialect_name;
 	auto &compatibility_mode = dialect_extension.GetCompatibilityMode();
 	if (compatibility_mode) {
