@@ -9,6 +9,7 @@ namespace duckdb {
 struct ParserCache;
 class ClientContext;
 class DialectExtension;
+class GrammarExtension;
 
 using compiled_rules_map_t = case_insensitive_map_t<unique_ptr<CompiledGrammarRule>>;
 
@@ -20,6 +21,10 @@ private:
 	CompiledGrammar(MatcherAllocator &&allocator, unique_ptr<PEGKeywordHelper> &&keyword_helper,
 	                unique_ptr<Tokenizer> &&tokenizer, compiled_rules_map_t &&rules, const Matcher &program_matcher,
 	                const Matcher &top_level_statement_matcher, bool has_grammar_changes, idx_t version);
+	static shared_ptr<CompiledGrammar> Create(const vector<shared_ptr<GrammarExtension>> &grammar_extensions,
+	                                          idx_t parser_version);
+	static shared_ptr<CompiledGrammar> Create(const ClientContext &context,
+	                                          const case_insensitive_set_t &active_extensions, idx_t parser_version);
 
 public:
 	const Matcher &ProgramMatcher() const {
@@ -41,6 +46,9 @@ public:
 
 public:
 	static shared_ptr<CompiledGrammar> Get(ClientContext &context);
+	//! Compile a grammar for the selected extensions without changing the client configuration.
+	static shared_ptr<CompiledGrammar> Create(const ClientContext &context,
+	                                          const case_insensitive_set_t &active_extensions);
 
 public:
 	idx_t Version() const;

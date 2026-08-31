@@ -3,10 +3,10 @@
 #include "duckdb/parser/peg/keyword_helper/parsed_grammar_keyword_helper.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/client_config.hpp"
-#include "duckdb/main/extension_callback_manager.hpp"
-#include "duckdb/parser/parser_change.hpp"
-#include "duckdb/parser/peg/dialect_extension.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/extension_callback_manager.hpp"
+#include "duckdb/parser/peg/dialect_extension.hpp"
+#include "duckdb/parser/grammar_extension.hpp"
 
 namespace duckdb {
 
@@ -26,22 +26,7 @@ idx_t CompiledGrammar::Version() const {
 
 shared_ptr<CompiledGrammar> CompiledGrammar::Get(ClientContext &context) {
 	auto &db = DatabaseInstance::GetDatabase(context);
-	auto &client_config = ClientConfig::GetConfig(context);
-
-	if (client_config.current_dialect) {
-		auto dialect = *client_config.current_dialect;
-		auto dialect_extension = ExtensionCallbackManager::Get(context).GetDialectExtension(dialect);
-		if (!dialect_extension) {
-			throw InternalException("Dialect '%s' was not registered in the database", dialect);
-		}
-		return dialect_extension->GetCompiledGrammar(context);
-	}
-
-	auto &cache = db.GetParserCache();
-	if (!client_config.cached_grammar || client_config.cached_grammar->Version() != cache.LatestParserVersion()) {
-		client_config.cached_grammar = cache.GetMatcher(context);
-	}
-	return client_config.cached_grammar;
+	return db.GetParserCache().GetMatcher(context);
 }
 
 ParserCache::ParserCache() : version(0) {
@@ -142,45 +127,13 @@ terminal_rule_overrides_t ParsedGrammar::BuildTerminalRuleOverrides(const PEGKey
 	return overrides;
 }
 
-shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
-	if (context) {
-		auto &client_config = ClientConfig::GetConfig(*context);
-		if (client_config.current_dialect) {
-			auto dialect = *client_config.current_dialect;
-			auto dialect_extension = ExtensionCallbackManager::Get(*context).GetDialectExtension(dialect);
-			if (!dialect_extension) {
-				throw InternalException("Dialect '%s' was not registered in the database", dialect);
-			}
-			return dialect_extension->GetCompiledGrammar(*context);
-		}
-	}
-
-	idx_t parser_version;
-	{
-		std::unique_lock<std::mutex> lock(mutex);
-		if (matcher) {
-			return matcher;
-		}
-		parser_version = version;
-	}
-
-	vector<shared_ptr<ParserChange>> parser_changes;
-	if (context) {
-		for (auto &change : ExtensionCallbackManager::Get(*context).ParserChanges()) {
-			parser_changes.push_back(change);
-		}
-	}
-
+shared_ptr<CompiledGrammar> CompiledGrammar::Create(const vector<shared_ptr<GrammarExtension>> &grammar_extensions,
+                                                    idx_t parser_version) {
 	auto grammar = ParsedGrammar::CreateDefault();
-	bool has_grammar_changes = false;
-	for (auto &change : parser_changes) {
-		switch (change->type) {
-		case ParserChangeType::GRAMMAR:
-			has_grammar_changes = true;
-			change->Apply(grammar);
-			break;
-		default:
-			throw InternalException("Unsupported parser change type");
+	for (auto &extension : grammar_extensions) {
+		auto changes = extension->GetChanges();
+		for (auto &change : changes) {
+			change.Apply(grammar);
 		}
 	}
 	ValidateParsedGrammarRoots(grammar);
@@ -207,7 +160,57 @@ shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientCon
 
 	auto new_matcher = shared_ptr<CompiledGrammar>(
 	    new CompiledGrammar(std::move(allocator), std::move(keyword_helper), std::move(tokenizer), std::move(rules),
-	                        program_matcher, top_level_statement_matcher, has_grammar_changes, parser_version));
+	                        program_matcher, top_level_statement_matcher, !grammar_extensions.empty(), parser_version));
+	return new_matcher;
+}
+
+shared_ptr<CompiledGrammar> CompiledGrammar::Create(const ClientContext &context,
+                                                    const case_insensitive_set_t &active_extensions) {
+	return Create(context, active_extensions, context.db->GetParserCache().LatestParserVersion());
+}
+
+shared_ptr<CompiledGrammar> CompiledGrammar::Create(const ClientContext &context,
+                                                    const case_insensitive_set_t &active_extensions,
+                                                    idx_t parser_version) {
+	vector<shared_ptr<GrammarExtension>> selected_extensions;
+	for (auto &extension : ExtensionCallbackManager::Get(context).GrammarExtensions()) {
+		if (active_extensions.count(extension->Name())) {
+			selected_extensions.push_back(extension);
+		}
+	}
+	return Create(selected_extensions, parser_version);
+}
+
+shared_ptr<CompiledGrammar> ParserCache::GetMatcher(optional_ptr<const ClientContext> context) {
+	if (context) {
+		auto &client_config = ClientConfig::GetConfig(*context);
+		if (client_config.current_dialect) {
+			auto &dialect = *client_config.current_dialect;
+			auto dialect_extension = ExtensionCallbackManager::Get(*context).GetDialectExtension(dialect);
+			if (!dialect_extension) {
+				throw InternalException("Dialect '%s' was not registered in the database", dialect);
+			}
+			return dialect_extension->GetCompiledGrammar(*context);
+		}
+
+		auto parser_version = LatestParserVersion();
+		shared_ptr<CompiledGrammar> result = client_config.cached_grammar;
+		if (!result || result->Version() != parser_version) {
+			result = CompiledGrammar::Create(*context, client_config.active_grammar_extensions, parser_version);
+			client_config.cached_grammar = result;
+		}
+		return result;
+	}
+
+	idx_t parser_version;
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		if (matcher) {
+			return matcher;
+		}
+		parser_version = version;
+	}
+	auto new_matcher = CompiledGrammar::Create({}, parser_version);
 
 	std::unique_lock<std::mutex> lock(mutex);
 	if (version == parser_version) {

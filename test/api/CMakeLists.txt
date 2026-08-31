@@ -7,6 +7,7 @@ if(${DISABLE_THREADS})
 endif()
 
 add_subdirectory(capi)
+add_subdirectory(cpp)
 
 set(TEST_API_OBJECTS
     test_api.cpp
@@ -15,7 +16,9 @@ set(TEST_API_OBJECTS
     test_aggregate_state_bind_data.cpp
     test_config.cpp
     test_connection_secrets.cpp
+    test_copy_output_lifecycle.cpp
     test_custom_allocator.cpp
+    test_extension_repositories.cpp
     test_extension_setting_autoload.cpp
     test_instance_cache.cpp
     test_storage_extension_alias.cpp
@@ -37,8 +40,8 @@ set(TEST_API_OBJECTS
     test_dbdir.cpp
     test_pending_with_parameters.cpp
     test_parse_statement_iterator.cpp
-    test_parser_change.cpp
     test_dialect_extension.cpp
+    test_grammar_extension.cpp
     test_progress_bar.cpp
     test_uuid.cpp
     test_insertion_order_preserving_map.cpp
