@@ -34,9 +34,10 @@ protected:
 	bool IsQuotedIdentifierDelimiter(char character) const override {
 		return character == '"' || (backticks && character == '`');
 	}
-	void PushOperatorToken(TokenizerBehavior &behavior, const string &sql, idx_t start, idx_t end) const override {
+	void PushOperatorToken(TokenizerBehavior &behavior, idx_t start, idx_t end) const override {
+		auto &sql = behavior.sql;
 		if (!split_operators || end - start < 2 || sql[start] != '>') {
-			Tokenizer::PushOperatorToken(behavior, sql, start, end);
+			Tokenizer::PushOperatorToken(behavior, start, end);
 			return;
 		}
 		behavior.PushToken(start, start + 1, TokenType::OPERATOR);
@@ -82,11 +83,15 @@ TEST_CASE("Dialect tokenizer hooks are opt-in", "[api][dialect_extension]") {
 	auto default_backtick = Tokenize(default_tokenizer, "`a b`");
 	auto hooked_backtick = Tokenize(hook_tokenizer, "`a b`");
 	REQUIRE(default_backtick.size() > 2);
+	REQUIRE(hooked_backtick.size() >= 1);
+	REQUIRE(hooked_backtick[0].type == TokenType::IDENTIFIER);
 	REQUIRE(hooked_backtick[0].text == "`a b`");
 
 	auto default_operator = Tokenize(default_tokenizer, ">>=");
 	auto hooked_operator = Tokenize(hook_tokenizer, ">>=");
+	REQUIRE(default_operator.size() >= 1);
 	REQUIRE(default_operator[0].text == ">>=");
+	REQUIRE(default_operator.size() >= 2);
 	REQUIRE(hooked_operator[0].text == ">");
 	REQUIRE(hooked_operator[1].text == ">=");
 

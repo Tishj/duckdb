@@ -47,12 +47,11 @@ public:
 		return TokenType::END_OF_INPUT;
 	}
 
-protected:
+public:
 	const string &sql;
 	vector<MatcherToken> &tokens;
 	bool has_block_comment = false;
 	idx_t last_block_comment_position = 0;
-	friend class Tokenizer;
 };
 
 class Tokenizer {
@@ -67,7 +66,7 @@ public:
 protected:
 	virtual bool BackslashEscapesStringLiterals() const;
 	virtual bool IsQuotedIdentifierDelimiter(char character) const;
-	virtual void PushOperatorToken(TokenizerBehavior &behavior, const string &sql, idx_t start, idx_t end) const;
+	virtual void PushOperatorToken(TokenizerBehavior &behavior, idx_t start, idx_t end) const;
 	virtual void HandleLastToken(TokenizerBehavior &behavior, TokenizeState state, const string &sql,
 	                             idx_t last_pos) const;
 
