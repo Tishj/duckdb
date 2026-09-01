@@ -2,7 +2,6 @@
 
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "duckdb/parser/parser_options.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/logging/log_storage.hpp"
 #include "duckdb/parser/tableref/subqueryref.hpp"
@@ -86,7 +85,7 @@ unique_ptr<TableRef> DuckDBLogBindReplace(ClientContext &context, TableFunctionB
 	                          "timestamp, type, log_level, message"
 	                          " FROM (SELECT row_number() OVER () AS rowid, * FROM duckdb_logs()) as l JOIN "
 	                          "duckdb_log_contexts() as c ON l.context_id=c.context_id order by timestamp, l.rowid;";
-	Parser parser(context.GetParserOptions());
+	Parser parser(context);
 	parser.ParseQuery(sub_query_string);
 	auto select_stmt = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(parser.statements[0]));
 

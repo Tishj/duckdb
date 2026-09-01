@@ -25,6 +25,7 @@
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/database.hpp"
+#include "duckdb/main/connection.hpp"
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/common/tree_renderer.hpp"
 #include "duckdb/main/extension_helper.hpp"
@@ -717,7 +718,7 @@ void EnableLogging::ResetGlobal(DatabaseInstance *db_p, DBConfig &config) {
 // Force VARIANT Shredding
 //===----------------------------------------------------------------------===//
 
-void ForceVariantShredding::SetGlobal(DatabaseInstance *_, DBConfig &config, const Value &value) {
+void ForceVariantShredding::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &value) {
 	auto &force_variant_shredding = config.options.force_variant_shredding;
 
 	if (value.type().id() != LogicalTypeId::VARCHAR) {
@@ -725,7 +726,8 @@ void ForceVariantShredding::SetGlobal(DatabaseInstance *_, DBConfig &config, con
 		                            value.type().ToString());
 	}
 
-	auto logical_type = UnboundType::TryParseAndDefaultBind(value.GetValue<string>());
+	Connection connection(GetDB<ForceVariantShredding>(db));
+	auto logical_type = UnboundType::TryParseAndDefaultBind(value.GetValue<string>(), *connection.context);
 	if (logical_type.id() == LogicalTypeId::INVALID) {
 		throw InvalidInputException("Could not parse the argument '%s' to 'force_variant_shredding' as a built in type",
 		                            value.GetValue<string>());

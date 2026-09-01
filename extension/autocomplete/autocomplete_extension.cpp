@@ -376,7 +376,7 @@ private:
 
 static duckdb::unique_ptr<SQLAutoCompleteFunctionData> GenerateSuggestions(ClientContext &context, const string &sql,
                                                                            AutoCompleteParameters &parameters) {
-	parameters.use_heap_based_parser = context.GetParserOptions().debug_heap_based_parser;
+	parameters.use_heap_based_parser = Settings::Get<DebugHeapBasedParserSetting>(context);
 	ClientContextCatalogProvider provider(context);
 	auto result = GenerateAutoCompleteSuggestions(provider, sql, parameters);
 	return make_uniq<SQLAutoCompleteFunctionData>(std::move(result));
@@ -468,9 +468,9 @@ static unique_ptr<SQLTokenizeFunctionData> GenerateTokens(ClientContext &context
 	ParseResultAllocator parse_allocator;
 	idx_t max_token_index = 0;
 	TokenIterator token_iterator(tokens);
-	auto parser_options = context.GetParserOptions();
 	MatchState state(token_iterator, suggestions, parse_allocator, max_token_index, MatchMode::RECOGNIZE_ONLY,
-	                 parser_options.identifier_case_mode, parser_options.debug_heap_based_parser);
+	                 Settings::Get<PreserveIdentifierCaseSetting>(context),
+	                 Settings::Get<DebugHeapBasedParserSetting>(context));
 
 	compiled_grammar->ProgramMatcher().MatchParseResult(state);
 
@@ -559,9 +559,9 @@ static duckdb::unique_ptr<FunctionData> CheckPEGParserBind(ClientContext &contex
 	ParseResultAllocator parse_allocator;
 	idx_t max_token_index = 0;
 	TokenIterator token_iterator(root_tokens);
-	auto parser_options = context.GetParserOptions();
 	MatchState state(token_iterator, suggestions, parse_allocator, max_token_index, MatchMode::RECOGNIZE_ONLY,
-	                 parser_options.identifier_case_mode, parser_options.debug_heap_based_parser);
+	                 Settings::Get<PreserveIdentifierCaseSetting>(context),
+	                 Settings::Get<DebugHeapBasedParserSetting>(context));
 
 	auto match_result = compiled_grammar->ProgramMatcher().MatchParseResult(state);
 	// `+ 1` accounts for the EOI sentinel — the matcher walk may report success without

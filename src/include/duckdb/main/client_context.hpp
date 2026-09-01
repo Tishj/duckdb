@@ -52,7 +52,6 @@ class ClientContextLock;
 struct CreateScalarFunctionInfo;
 class ScalarFunctionCatalogEntry;
 struct ActiveQueryContext;
-struct ParserOptions;
 class SimpleBufferedData;
 class BufferedData;
 struct ClientData;
@@ -249,7 +248,6 @@ public:
 	DUCKDB_API SettingLookupResult TryGetCurrentUserSetting(idx_t setting_index, Value &result) const;
 
 	//! Returns the parser options for this client context
-	DUCKDB_API ParserOptions GetParserOptions();
 
 	//! Whether or not the given result object (streaming query result or pending query result) is active
 	DUCKDB_API bool IsActiveResult(ClientContextLock &lock, BaseQueryResult &result);

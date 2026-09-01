@@ -857,7 +857,7 @@ bool TryNegateLikeFunction(Identifier &function_name) {
 }
 
 static string RegexMatchOperatorFunctionName(PEGTransformer &transformer) {
-	if (transformer.options.regex_match_operator_semantics == RegexMatchOperatorSemantics::FULL) {
+	if (transformer.UseFullRegexMatch()) {
 		return "regexp_full_match";
 	}
 	return "regexp_matches";
@@ -1395,7 +1395,7 @@ unique_ptr<ParsedExpression> PEGTransformerFactory::TransformMultiplicativeExpre
 	auto mul_depth_guard = transformer.StackCheck(multiplicative_expression_tail->size());
 	for (auto &factor_expr : *multiplicative_expression_tail) {
 		auto factor = std::move(factor_expr.op);
-		if (factor == "/" && transformer.options.integer_division) {
+		if (factor == "/" && transformer.UseIntegerDivision()) {
 			factor = "//";
 		}
 		vector<unique_ptr<ParsedExpression>> factor_children;

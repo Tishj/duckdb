@@ -1058,7 +1058,7 @@ unique_ptr<FunctionData> DecodeSortKeyBind(BindScalarFunctionInput &input) {
 	for (idx_t i = 1; i < arguments.size(); i += 2) {
 		// Parse column definition
 		Value col = input.GetConstant(i);
-		const auto col_list = Parser::ParseColumnList(col.ToString());
+		const auto col_list = Parser::ParseColumnList(col.ToString(), context);
 		if (col_list.LogicalColumnCount() != 1) {
 			throw BinderException("decode_sort_key col must contain exactly one column");
 		}

@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "duckdb/parser/parser_options.hpp"
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/enums/statement_type.hpp"
@@ -18,6 +17,7 @@
 
 namespace duckdb {
 struct DBConfig;
+class ClientContext;
 
 //! A minimal token view handed to parser extensions: the token text together with its classified
 //! TokenType.
@@ -148,7 +148,7 @@ struct ParserOverrideResult {
 };
 
 typedef ParserOverrideResult (*parser_override_function_t)(ParserExtensionInfo *info, const string &query,
-                                                           ParserOptions &options);
+                                                           ClientContext &context);
 
 //===--------------------------------------------------------------------===//
 // ParserExtension

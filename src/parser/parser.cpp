@@ -3,6 +3,10 @@
 #include "duckdb/parser/peg/keyword_helper/duckdb_keyword_helper.hpp"
 
 #include "duckdb/main/extension_callback_manager.hpp"
+#include "duckdb/main/client_context.hpp"
+#include "duckdb/main/config.hpp"
+#include "duckdb/main/settings.hpp"
+#include "duckdb/common/enums/allow_parser_override.hpp"
 #include "duckdb/parser/group_by_node.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parser_extension.hpp"
@@ -21,18 +25,18 @@
 
 namespace duckdb {
 
-Parser::Parser(ParserOptions options_p) : options(options_p) {
+Parser::Parser(ClientContext &context_p) : Parser(context_p, Settings::Get<PreserveIdentifierCaseSetting>(context_p)) {
+}
+
+Parser::Parser(ClientContext &context_p, IdentifierCaseMode identifier_case_mode_p)
+    : context(context_p), identifier_case_mode(identifier_case_mode_p) {
 }
 
 Parser::~Parser() = default;
 
 CompiledGrammar &Parser::GetGrammar() {
 	if (!compiled_grammar) {
-		if (options.compiled_grammar) {
-			compiled_grammar = options.compiled_grammar;
-		} else {
-			compiled_grammar = CompiledGrammar::Create();
-		}
+		compiled_grammar = CompiledGrammar::Get(context);
 	}
 	return *compiled_grammar;
 }
@@ -238,22 +242,24 @@ string Parser::NormalizeSQLString(const string &query) {
 
 void Parser::ParseQuery(const string &query_p) {
 	const string query = NormalizeSQLString(query_p);
-	if (options.extensions) {
+	auto &extensions = DBConfig::GetConfig(context).GetCallbackManager();
+	auto parser_override_setting = Settings::Get<AllowParserOverrideExtensionSetting>(context);
+	if (extensions.HasParserExtensions()) {
 		bool has_strict_extension_error = false;
 		ErrorData last_strict_extension_error;
-		for (auto &ext : options.extensions->ParserExtensions()) {
+		for (auto &ext : extensions.ParserExtensions()) {
 			if (!ext.parser_override) {
 				continue;
 			}
-			if (options.parser_override_setting == AllowParserOverride::DEFAULT_OVERRIDE) {
+			if (parser_override_setting == AllowParserOverride::DEFAULT_OVERRIDE) {
 				continue;
 			}
-			auto result = ext.parser_override(ext.parser_info.get(), query, options);
+			auto result = ext.parser_override(ext.parser_info.get(), query, context);
 			if (result.type == ParserExtensionResultType::PARSE_SUCCESSFUL) {
 				statements = std::move(result.statements);
 				return;
 			}
-			if (options.parser_override_setting == AllowParserOverride::STRICT_OVERRIDE) {
+			if (parser_override_setting == AllowParserOverride::STRICT_OVERRIDE) {
 				if (result.type == ParserExtensionResultType::DISPLAY_EXTENSION_ERROR) {
 					has_strict_extension_error = true;
 					last_strict_extension_error = std::move(result.error);
@@ -263,7 +269,7 @@ void Parser::ParseQuery(const string &query_p) {
 				continue;
 			}
 		}
-		if (options.parser_override_setting == AllowParserOverride::STRICT_OVERRIDE && has_strict_extension_error) {
+		if (parser_override_setting == AllowParserOverride::STRICT_OVERRIDE && has_strict_extension_error) {
 			last_strict_extension_error.Throw();
 		}
 	}
@@ -309,7 +315,8 @@ void Parser::ParseQuery(const string &query_p) {
 }
 
 unique_ptr<SQLStatement> Parser::TryParseExtensionStatement(TokenIterator &token_iterator, const string &query) {
-	if (!options.extensions || !options.extensions->HasParserExtensions()) {
+	auto &extensions = DBConfig::GetConfig(context).GetCallbackManager();
+	if (!extensions.HasParserExtensions()) {
 		return nullptr;
 	}
 	auto current = token_iterator.Current();
@@ -318,7 +325,7 @@ unique_ptr<SQLStatement> Parser::TryParseExtensionStatement(TokenIterator &token
 	// dispatch on the token stream without re-tokenizing. The extension reports how many of these
 	// tokens it consumed.
 	auto simple_tokens = token_iterator.RemainingTokens();
-	for (auto &ext : options.extensions->ParserExtensions()) {
+	for (auto &ext : extensions.ParserExtensions()) {
 		if (!ext.parse_function) {
 			continue;
 		}
@@ -356,7 +363,8 @@ unique_ptr<SQLStatement> Parser::ParseTopLevelStatement(TokenIterator &token_ite
 		return nullptr;
 	}
 	auto &compiled_grammar = GetGrammar();
-	return PEGTransformerFactory::TransformTopLevelStatement(token_iterator, options, compiled_grammar);
+	return PEGTransformerFactory::TransformTopLevelStatement(token_iterator, context, identifier_case_mode,
+	                                                         compiled_grammar);
 }
 
 vector<SimplifiedToken> Parser::Tokenize(const string &query) {
@@ -566,11 +574,11 @@ vector<ParserKeyword> Parser::KeywordList() {
 	return keyword_helper.KeywordList();
 }
 
-vector<unique_ptr<ParsedExpression>> Parser::ParseExpressionList(const string &select_list, ParserOptions options) {
+vector<unique_ptr<ParsedExpression>> Parser::ParseExpressionList(const string &select_list, ClientContext &context) {
 	// construct a mock query prefixed with SELECT
 	string mock_query = "SELECT " + select_list;
 	// parse the query
-	Parser parser(options);
+	Parser parser(context);
 	parser.ParseQuery(mock_query);
 	// check the statements
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::SELECT_STATEMENT) {
@@ -602,11 +610,11 @@ vector<unique_ptr<ParsedExpression>> Parser::ParseExpressionList(const string &s
 	return std::move(select_node.select_list);
 }
 
-GroupByNode Parser::ParseGroupByList(const string &group_by, ParserOptions options) {
+GroupByNode Parser::ParseGroupByList(const string &group_by, ClientContext &context) {
 	// construct a mock SELECT query with our group_by expressions
 	string mock_query = StringUtil::Format("SELECT 42 GROUP BY %s", group_by);
 	// parse the query
-	Parser parser(options);
+	Parser parser(context);
 	parser.ParseQuery(mock_query);
 	// check the result
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::SELECT_STATEMENT) {
@@ -618,11 +626,11 @@ GroupByNode Parser::ParseGroupByList(const string &group_by, ParserOptions optio
 	return std::move(select_node.groups);
 }
 
-vector<OrderByNode> Parser::ParseOrderList(const string &select_list, ParserOptions options) {
+vector<OrderByNode> Parser::ParseOrderList(const string &select_list, ClientContext &context) {
 	// construct a mock query
 	string mock_query = "SELECT * FROM tbl ORDER BY " + select_list;
 	// parse the query
-	Parser parser(options);
+	Parser parser(context);
 	parser.ParseQuery(mock_query);
 	// check the statements
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::SELECT_STATEMENT) {
@@ -640,11 +648,11 @@ vector<OrderByNode> Parser::ParseOrderList(const string &select_list, ParserOpti
 }
 
 void Parser::ParseUpdateList(const string &update_list, vector<Identifier> &update_columns,
-                             vector<unique_ptr<ParsedExpression>> &expressions, ParserOptions options) {
+                             vector<unique_ptr<ParsedExpression>> &expressions, ClientContext &context) {
 	// construct a mock query
 	string mock_query = "UPDATE tbl SET " + update_list;
 	// parse the query
-	Parser parser(options);
+	Parser parser(context);
 	parser.ParseQuery(mock_query);
 	// check the statements
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::UPDATE_STATEMENT) {
@@ -655,11 +663,11 @@ void Parser::ParseUpdateList(const string &update_list, vector<Identifier> &upda
 	expressions = std::move(update.node->set_info->expressions);
 }
 
-vector<vector<unique_ptr<ParsedExpression>>> Parser::ParseValuesList(const string &value_list, ParserOptions options) {
+vector<vector<unique_ptr<ParsedExpression>>> Parser::ParseValuesList(const string &value_list, ClientContext &context) {
 	// construct a mock query
 	string mock_query = "VALUES " + value_list;
 	// parse the query
-	Parser parser(options);
+	Parser parser(context);
 	parser.ParseQuery(mock_query);
 	// check the statements
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::SELECT_STATEMENT) {
@@ -677,9 +685,9 @@ vector<vector<unique_ptr<ParsedExpression>>> Parser::ParseValuesList(const strin
 	return std::move(values_list.values);
 }
 
-ColumnList Parser::ParseColumnList(const string &column_list, ParserOptions options) {
+ColumnList Parser::ParseColumnList(const string &column_list, ClientContext &context) {
 	string mock_query = "CREATE TABLE tbl (" + column_list + ")";
-	Parser parser(options);
+	Parser parser(context);
 	parser.ParseQuery(mock_query);
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::CREATE_STATEMENT) {
 		throw ParserException("Expected a single CREATE statement");
@@ -692,8 +700,8 @@ ColumnList Parser::ParseColumnList(const string &column_list, ParserOptions opti
 	return std::move(info.columns);
 }
 
-ColumnDefinition Parser::ParseColumnDefinition(const string &column_definition, ParserOptions options) {
-	auto column_list = ParseColumnList(column_definition, options);
+ColumnDefinition Parser::ParseColumnDefinition(const string &column_definition, ClientContext &context) {
+	auto column_list = ParseColumnList(column_definition, context);
 	return column_list.GetColumn(LogicalIndex(0)).Copy();
 }
 

@@ -37,7 +37,7 @@
 #include "duckdb/function/macro_function.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/parser/query_node/set_operation_node.hpp"
-#include "duckdb/parser/parser_options.hpp"
+#include "duckdb/common/enums/identifier_case_mode.hpp"
 #include "duckdb/common/stack_checker.hpp"
 #include "duckdb/parser/expression/case_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
@@ -69,6 +69,7 @@ struct MatcherToken;
 struct GroupingExpressionMap;
 class Matcher;
 class TokenIterator;
+class ClientContext;
 
 enum class GroupByExpressionInfoType : uint8_t { EXPRESSION, EMPTY, CUBE, ROLLUP, GROUPING_SETS };
 
@@ -197,10 +198,8 @@ class PEGTransformer {
 public:
 	using AnyTransformFunction = grammar_transform_function_t;
 
-	PEGTransformer(ArenaAllocator &allocator, TokenIterator &token_iterator, ParserOptions &options_p,
-	               const CompiledGrammar &grammar_p)
-	    : allocator(allocator), token_iterator(token_iterator), options(options_p), grammar(grammar_p) {
-	}
+	PEGTransformer(ArenaAllocator &allocator, TokenIterator &token_iterator, ClientContext &context_p,
+	               const CompiledGrammar &grammar_p);
 
 public:
 	template <typename T>
@@ -279,6 +278,10 @@ public:
 	unique_ptr<WindowExpression> GetWindowClause(const Identifier &window_name);
 	void SetQueryLocation(ParsedExpression &expr, QueryLocation query_location);
 	void SetQueryLocation(TableRef &ref, QueryLocation query_location);
+	bool UseHeapBasedParser() const;
+	bool UseIntegerDivision() const;
+	bool UseFullRegexMatch() const;
+	idx_t MaxExpressionDepth() const;
 
 private:
 	template <typename T>
@@ -320,16 +323,17 @@ public:
 	idx_t stack_depth = 0;
 
 	StackChecker<PEGTransformer> StackCheck(idx_t extra_stack = 1) {
-		if (stack_depth + extra_stack >= options.max_expression_depth) {
+		auto max_expression_depth = MaxExpressionDepth();
+		if (stack_depth + extra_stack >= max_expression_depth) {
 			throw ParserException(
 			    "Max expression depth limit of %lld exceeded. Use \"SET max_expression_depth TO x\" to "
 			    "increase the maximum expression depth.",
-			    options.max_expression_depth);
+			    max_expression_depth);
 		}
 		return StackChecker<PEGTransformer>(*this, extra_stack);
 	}
 
-	ParserOptions options;
+	ClientContext &context;
 	const CompiledGrammar &grammar;
 };
 
@@ -391,7 +395,8 @@ public:
 	//! into a SQLStatement. Returns nullptr if the matched TLS was separator-only (no statement).
 	//! Throws on syntax error. `token_cursor` is in/out: it's the token index where matching
 	//! starts, and on return holds the token index immediately past the last consumed token.
-	static unique_ptr<SQLStatement> TransformTopLevelStatement(TokenIterator &token_iterator, ParserOptions &options,
+	static unique_ptr<SQLStatement> TransformTopLevelStatement(TokenIterator &token_iterator, ClientContext &context,
+	                                                           IdentifierCaseMode identifier_case_mode,
 	                                                           const CompiledGrammar &grammar);
 	static ParseResult &ExtractResultFromParens(ParseResult &parse_result);
 	static vector<reference<ParseResult>> ExtractParseResultsFromList(ParseResult &parse_result);

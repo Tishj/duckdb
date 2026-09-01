@@ -221,23 +221,15 @@ TEST_CASE("Active grammar extensions are cached on their connection", "[api][gra
 	REQUIRE(base_grammar == CompiledGrammar::Get(*enabled.context));
 }
 
-TEST_CASE("Parser options retain their compiled grammar", "[api][grammar_extension]") {
+TEST_CASE("Parser uses the connection's compiled grammar", "[api][grammar_extension]") {
 	DuckDB db(nullptr);
 	RegisterGrammarExtensionTestSyntax(*db.instance);
 	Connection con(db);
 	ActivateGrammarExtensionTestSyntax(con);
 
-	auto options = con.context->GetParserOptions();
-	REQUIRE(options.compiled_grammar == CompiledGrammar::Get(*con.context));
-	options.extensions = nullptr;
-
-	Parser parser(std::move(options));
+	Parser parser(*con.context);
 	REQUIRE_NOTHROW(parser.ParseQuery("ANSWER"));
 	REQUIRE(parser.statements.size() == 1);
-
-	Parser base_parser;
-	REQUIRE_NOTHROW(base_parser.ParseQuery("SELECT 42"));
-	REQUIRE(base_parser.statements.size() == 1);
 }
 
 class AddInvalidGrammarExtensionTestRule final : public GrammarExtension {

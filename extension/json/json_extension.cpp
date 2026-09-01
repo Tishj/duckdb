@@ -7,6 +7,7 @@
 #include "duckdb/catalog/default/default_functions.hpp"
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/main/database.hpp"
+#include "duckdb/main/connection.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/peg/compiled_grammar.hpp"
@@ -84,10 +85,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	geojson_copy_fun.SetName("geojsonl");
 	loader.RegisterFunction(geojson_copy_fun);
 
-	ParserOptions parser_options;
-	parser_options.compiled_grammar = loader.GetDatabaseInstance().GetParserCache().GetMatcher();
+	Connection connection(loader.GetDatabaseInstance());
 	for (idx_t index = 0; JSON_MACROS[index].name != nullptr; index++) {
-		auto info = DefaultFunctionGenerator::CreateInternalMacroInfo(JSON_MACROS[index], parser_options);
+		auto info = DefaultFunctionGenerator::CreateInternalMacroInfo(JSON_MACROS[index], *connection.context);
 		loader.RegisterFunction(*info);
 	}
 }

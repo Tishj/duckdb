@@ -3,6 +3,9 @@
 
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/extension_callback_manager.hpp"
+#include "duckdb/main/config.hpp"
+#include "duckdb/main/settings.hpp"
+#include "duckdb/common/enums/allow_parser_override.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/parser_extension.hpp"
 #include "duckdb/parser/token_iterator.hpp"
@@ -36,27 +39,28 @@ bool ParseIterator::Peek() {
 	if (exhausted) {
 		return false;
 	}
-	auto options = client_context.GetParserOptions();
+	auto &extensions = DBConfig::GetConfig(client_context).GetCallbackManager();
+	auto parser_override_setting = Settings::Get<AllowParserOverrideExtensionSetting>(client_context);
 	// On the very first Peek, give `parser_override` extensions a chance to claim the whole
 	// query. If one does, we yield its statements one at a time and skip the PEG path entirely.
 	if (!override_resolved) {
 		override_resolved = true;
-		if (options.extensions) {
+		if (extensions.HasParserExtensions()) {
 			bool has_strict_extension_error = false;
 			ErrorData last_strict_extension_error;
-			for (auto &ext : options.extensions->ParserExtensions()) {
+			for (auto &ext : extensions.ParserExtensions()) {
 				if (!ext.parser_override) {
 					continue;
 				}
-				if (options.parser_override_setting == AllowParserOverride::DEFAULT_OVERRIDE) {
+				if (parser_override_setting == AllowParserOverride::DEFAULT_OVERRIDE) {
 					continue;
 				}
-				auto result = ext.parser_override(ext.parser_info.get(), sql, options);
+				auto result = ext.parser_override(ext.parser_info.get(), sql, client_context);
 				if (result.type == ParserExtensionResultType::PARSE_SUCCESSFUL) {
 					overridden_statements = make_uniq<vector<unique_ptr<SQLStatement>>>(std::move(result.statements));
 					break;
 				}
-				if (options.parser_override_setting == AllowParserOverride::STRICT_OVERRIDE) {
+				if (parser_override_setting == AllowParserOverride::STRICT_OVERRIDE) {
 					if (result.type == ParserExtensionResultType::DISPLAY_EXTENSION_ERROR) {
 						has_strict_extension_error = true;
 						last_strict_extension_error = std::move(result.error);
@@ -66,7 +70,7 @@ bool ParseIterator::Peek() {
 					continue;
 				}
 			}
-			if (!overridden_statements && options.parser_override_setting == AllowParserOverride::STRICT_OVERRIDE &&
+			if (!overridden_statements && parser_override_setting == AllowParserOverride::STRICT_OVERRIDE &&
 			    has_strict_extension_error) {
 				last_strict_extension_error.Throw();
 			}
@@ -81,7 +85,7 @@ bool ParseIterator::Peek() {
 		return true;
 	}
 	if (!parser) {
-		parser = make_uniq<Parser>(options);
+		parser = make_uniq<Parser>(client_context);
 	}
 	EnsureTokenized();
 	// Walk the token cursor through the cached `tokens`, calling Parser::ParseTopLevelStatement

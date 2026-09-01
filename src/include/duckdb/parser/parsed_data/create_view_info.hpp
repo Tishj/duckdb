@@ -56,7 +56,7 @@ public:
 	DUCKDB_API static unique_ptr<CreateViewInfo> FromCreateView(ClientContext &context, SchemaCatalogEntry &schema,
 	                                                            const string &sql);
 	//! Parse a SELECT statement from a SQL string
-	DUCKDB_API static unique_ptr<SelectStatement> ParseSelect(const string &sql);
+	DUCKDB_API static unique_ptr<SelectStatement> ParseSelect(ClientContext &context, const string &sql);
 
 	DUCKDB_API void Serialize(Serializer &serializer) const override;
 	DUCKDB_API static unique_ptr<CreateInfo> Deserialize(Deserializer &deserializer);

@@ -1458,7 +1458,7 @@ void ClientContext::Append(TableDescription &description, ColumnDataCollection &
 	vector<Identifier> expected_names;
 	auto query = Appender::ConstructQuery(description, table_name, expected_names);
 	auto table_ref = BaseAppender::GetColumnDataTableRef(collection, table_name, expected_names);
-	auto stmt = BaseAppender::ParseStatement(std::move(table_ref), query, table_name.GetIdentifierName());
+	auto stmt = BaseAppender::ParseStatement(std::move(table_ref), query, table_name.GetIdentifierName(), *this);
 	Append(std::move(stmt));
 }
 
@@ -1598,19 +1598,6 @@ SettingLookupResult ClientContext::TryGetCurrentSetting(const Identifier &key, V
 SettingLookupResult ClientContext::TryGetCurrentUserSetting(idx_t setting_index, Value &result) const {
 	auto &db_config = DBConfig::GetConfig(*this);
 	return config.user_settings.TryGetSetting(db_config.user_settings, setting_index, result);
-}
-
-ParserOptions ClientContext::GetParserOptions() {
-	ParserOptions options;
-	options.identifier_case_mode = Settings::Get<PreserveIdentifierCaseSetting>(*this);
-	options.integer_division = Settings::Get<IntegerDivisionSetting>(*this);
-	options.debug_heap_based_parser = Settings::Get<DebugHeapBasedParserSetting>(*this);
-	options.regex_match_operator_semantics = Settings::Get<RegexMatchOperatorSemanticsSetting>(*this);
-	options.max_expression_depth = Settings::Get<MaxExpressionDepthSetting>(*this);
-	options.extensions = DBConfig::GetConfig(*this).GetCallbackManager();
-	options.parser_override_setting = Settings::Get<AllowParserOverrideExtensionSetting>(*this);
-	options.compiled_grammar = CompiledGrammar::Get(*this);
-	return options;
 }
 
 ClientProperties ClientContext::GetClientProperties() {

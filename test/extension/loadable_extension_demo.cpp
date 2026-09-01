@@ -405,7 +405,7 @@ public:
 		return result;
 	}
 
-	static ParserOverrideResult QuackParser(ParserExtensionInfo *info, const string &query, ParserOptions &options) {
+	static ParserOverrideResult QuackParser(ParserExtensionInfo *info, const string &query, ClientContext &context) {
 		vector<string> queries = StringUtil::Split(query, ";");
 		vector<unique_ptr<SQLStatement>> statements;
 		for (const auto &query_input : queries) {

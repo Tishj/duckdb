@@ -13,9 +13,9 @@
 #include "duckdb/parser/query_node.hpp"
 #include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/simplified_token.hpp"
-#include "duckdb/parser/parser_options.hpp"
 #include "duckdb/common/exception/parser_exception.hpp"
 #include "duckdb/parser/parser_extension.hpp"
+#include "duckdb/common/enums/identifier_case_mode.hpp"
 
 namespace duckdb {
 
@@ -23,6 +23,7 @@ struct CompiledGrammar;
 struct MatcherToken;
 class TokenIterator;
 class GroupByNode;
+class ClientContext;
 struct UnicodeSpace {
 	UnicodeSpace(idx_t pos, idx_t bytes) : pos(pos), bytes(bytes) {
 	}
@@ -36,7 +37,8 @@ struct UnicodeSpace {
 //! plan and executed.
 class Parser {
 public:
-	explicit Parser(ParserOptions options = ParserOptions());
+	explicit Parser(ClientContext &context);
+	Parser(ClientContext &context, IdentifierCaseMode identifier_case_mode);
 	~Parser();
 
 	//! The parsed SQL statements from an invocation to ParseQuery.
@@ -79,22 +81,20 @@ public:
 	static KeywordCategory ToKeywordCategory(const string &text);
 	//! Parses a list of expressions (i.e. the list found in a SELECT clause)
 	DUCKDB_API static vector<unique_ptr<ParsedExpression>> ParseExpressionList(const string &select_list,
-	                                                                           ParserOptions options = ParserOptions());
+	                                                                           ClientContext &context);
 	//! Parses a list of GROUP BY expressions
-	static GroupByNode ParseGroupByList(const string &group_by, ParserOptions options = ParserOptions());
+	static GroupByNode ParseGroupByList(const string &group_by, ClientContext &context);
 	//! Parses a list as found in an ORDER BY expression (i.e. including optional ASCENDING/DESCENDING modifiers)
-	static vector<OrderByNode> ParseOrderList(const string &select_list, ParserOptions options = ParserOptions());
+	static vector<OrderByNode> ParseOrderList(const string &select_list, ClientContext &context);
 	//! Parses an update list (i.e. the list found in the SET clause of an UPDATE statement)
 	static void ParseUpdateList(const string &update_list, vector<Identifier> &update_columns,
-	                            vector<unique_ptr<ParsedExpression>> &expressions,
-	                            ParserOptions options = ParserOptions());
+	                            vector<unique_ptr<ParsedExpression>> &expressions, ClientContext &context);
 	//! Parses a VALUES list (i.e. the list of expressions after a VALUES clause)
 	static vector<vector<unique_ptr<ParsedExpression>>> ParseValuesList(const string &value_list,
-	                                                                    ParserOptions options = ParserOptions());
+	                                                                    ClientContext &context);
 	//! Parses a column list (i.e. as found in a CREATE TABLE statement)
-	static ColumnList ParseColumnList(const string &column_list, ParserOptions options = ParserOptions());
-	static ColumnDefinition ParseColumnDefinition(const string &column_definition,
-	                                              ParserOptions options = ParserOptions());
+	static ColumnList ParseColumnList(const string &column_list, ClientContext &context);
+	static ColumnDefinition ParseColumnDefinition(const string &column_definition, ClientContext &context);
 
 	static bool StripUnicodeSpaces(const string &query_str, string &new_query);
 
@@ -107,7 +107,8 @@ public:
 private:
 	CompiledGrammar &GetGrammar();
 
-	ParserOptions options;
+	ClientContext &context;
+	IdentifierCaseMode identifier_case_mode;
 	shared_ptr<CompiledGrammar> compiled_grammar;
 };
 } // namespace duckdb

@@ -551,8 +551,7 @@ TEST_CASE("Test connection API", "[api]") {
 }
 
 TEST_CASE("Test parser tokenize", "[api]") {
-	Parser parser;
-	REQUIRE_NOTHROW(parser.Tokenize("SELECT * FROM table WHERE i+1=3 AND j='hello'; --tokenize example query"));
+	REQUIRE_NOTHROW(Parser::Tokenize("SELECT * FROM table WHERE i+1=3 AND j='hello'; --tokenize example query"));
 }
 
 TEST_CASE("Test opening an invalid database file", "[api]") {

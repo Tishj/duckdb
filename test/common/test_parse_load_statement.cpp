@@ -5,8 +5,8 @@
 
 using namespace duckdb;
 
-static duckdb::unique_ptr<LoadInfo> ParseLoad(const string &query) {
-	Parser parser;
+static duckdb::unique_ptr<LoadInfo> ParseLoad(ClientContext &context, const string &query) {
+	Parser parser(context);
 	parser.ParseQuery(query);
 	REQUIRE(parser.statements.size() == 1);
 	REQUIRE(parser.statements[0]->type == StatementType::LOAD_STATEMENT);
@@ -14,12 +14,14 @@ static duckdb::unique_ptr<LoadInfo> ParseLoad(const string &query) {
 }
 
 TEST_CASE("Parse INSTALL / FORCE INSTALL statements", "[parse_load]") {
-	REQUIRE(ParseLoad("INSTALL x")->load_type == LoadType::INSTALL);
-	REQUIRE(ParseLoad("FORCE INSTALL x")->load_type == LoadType::FORCE_INSTALL);
+	DuckDB db(nullptr);
+	Connection con(db);
+	REQUIRE(ParseLoad(*con.context, "INSTALL x")->load_type == LoadType::INSTALL);
+	REQUIRE(ParseLoad(*con.context, "FORCE INSTALL x")->load_type == LoadType::FORCE_INSTALL);
 
-	auto from_repo = ParseLoad("FORCE INSTALL x FROM 'some_repo'");
+	auto from_repo = ParseLoad(*con.context, "FORCE INSTALL x FROM 'some_repo'");
 	REQUIRE(from_repo->load_type == LoadType::FORCE_INSTALL);
 	REQUIRE(from_repo->repository == "some_repo");
 
-	REQUIRE(ParseLoad("LOAD x")->load_type == LoadType::LOAD);
+	REQUIRE(ParseLoad(*con.context, "LOAD x")->load_type == LoadType::LOAD);
 }
