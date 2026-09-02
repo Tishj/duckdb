@@ -20,9 +20,6 @@ namespace duckdb {
 
 unique_ptr<SQLStatement> PEGTransformerFactory::TransformStatement(PEGTransformer &transformer,
                                                                    ParseResult &parse_result) {
-	if (transformer.options.debug_heap_based_parser && !transformer.grammar.HasGrammarChanges()) {
-		return TransformStatementTrampoline(transformer, parse_result);
-	}
 	auto &list_pr = parse_result.Cast<ListParseResult>();
 	auto &choice_pr = list_pr.Child<ChoiceParseResult>(0);
 	auto result = transformer.Transform<unique_ptr<SQLStatement>>(choice_pr.GetResult());
@@ -34,28 +31,22 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformStatement(PEGTransforme
 	return result;
 }
 
-unique_ptr<SQLStatement> PEGTransformerFactory::TransformStatementTrampoline(PEGTransformer &transformer,
-                                                                             ParseResult &parse_result) {
-	auto &list_pr = parse_result.Cast<ListParseResult>();
-	auto &choice_pr = list_pr.Child<ChoiceParseResult>(0);
-	auto &choice_result = choice_pr.GetResult();
-
-	TransformStack stack(transformer);
-	auto result = stack.Execute<unique_ptr<SQLStatement>>(choice_result, GetTrampolineOps(choice_result));
-	if (!transformer.named_parameter_map.empty()) {
-		result->named_param_map = transformer.named_parameter_map;
+const TransformProcessInfo &PEGTransformerFactory::GetTrampolineOps(const ParseResult &parse_result) {
+	auto info = TryGetTransformProcessInfo(parse_result);
+	if (!info) {
+		throw NotImplementedException("No transformer process for rule '%s'", parse_result.name);
 	}
-	result->has_anonymous_parameters = transformer.has_anonymous_parameters;
-	return result;
+	return *info;
 }
 
-const TransformFrameOps &PEGTransformerFactory::GetTrampolineOps(const ParseResult &parse_result) {
+optional_ptr<const TransformProcessInfo>
+PEGTransformerFactory::TryGetTransformProcessInfo(const ParseResult &parse_result) {
 	auto &ops_map = GeneratedTrampolineOps();
 	auto ops_entry = ops_map.find(parse_result.name);
 	if (ops_entry == ops_map.end()) {
-		throw NotImplementedException("No trampoline transformer for rule '%s'", parse_result.name);
+		return nullptr;
 	}
-	return *ops_entry->second;
+	return ops_entry->second;
 }
 
 static unique_ptr<SQLStatement> ExtractAndTransformStatement(PEGTransformer &transformer,
