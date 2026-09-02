@@ -167,17 +167,6 @@ unique_ptr<TransformResultValue> PEGTransformer::TransformInternal(ParseResult &
 	if (!rule) {
 		throw InternalException("No registered data exists for rule '%s'", parse_result.name);
 	}
-	if (!grammar.HasGrammarChanges()) {
-		auto process_info = PEGTransformerFactory::TryGetTransformProcessInfo(parse_result);
-		if (process_info) {
-			TransformInput input {parse_result, *process_info};
-			if (options.debug_heap_based_parser) {
-				TransformStack stack(*this);
-				return stack.Execute(input);
-			}
-			return ExecuteRecursive(*this, input);
-		}
-	}
 	if (!rule->transform) {
 		throw NotImplementedException("No transformer function found for rule '%s'", parse_result.name);
 	}
