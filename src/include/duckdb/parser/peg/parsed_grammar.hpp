@@ -67,7 +67,6 @@ private:
 	friend class DialectExtension;
 	friend class MatcherFactory;
 	friend struct CompiledGrammar;
-	friend struct ParserCache;
 	friend class PEGTransformerFactory;
 	friend class GrammarChange;
 

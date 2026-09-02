@@ -1777,6 +1777,7 @@ void CurrentDialectSetting::SetLocal(ClientContext &context, const Value &input)
 		return;
 	}
 	auto &client_config = ClientConfig::GetConfig(context);
+	auto &config = DatabaseInstance::GetDatabase(context).config;
 
 	if (input.IsNull()) {
 		client_config.current_dialect = std::nullopt;
@@ -1784,7 +1785,6 @@ void CurrentDialectSetting::SetLocal(ClientContext &context, const Value &input)
 	}
 	auto dialect_name = input.GetValue<string>();
 
-	auto &config = DatabaseInstance::GetDatabase(context).config;
 	auto dialect_extension_p = config.GetCallbackManager().GetDialectExtension(dialect_name);
 	if (!dialect_extension_p) {
 		throw InvalidInputException("Dialect \"%s\" is not installed", dialect_name);
@@ -1830,15 +1830,13 @@ void ActiveGrammarExtensionsSetting::SetLocal(ClientContext &context, const Valu
 	auto &client_config = ClientConfig::GetConfig(context);
 
 	if (input.IsNull()) {
-		case_insensitive_set_t selected_extensions;
-		auto compiled_grammar = CompiledGrammar::Create(context, selected_extensions);
-		client_config.active_grammar_extensions = std::move(selected_extensions);
-		client_config.cached_grammar = std::move(compiled_grammar);
+		client_config.active_grammar_extensions.clear();
+		client_config.cached_grammar.reset();
 		return;
 	}
 
 	auto &config = DatabaseInstance::GetDatabase(context).config;
-	auto grammar_extensions = config.GetCallbackManager().GrammarExtensions();
+	auto &callback_manager = config.GetCallbackManager();
 	case_insensitive_set_t selected_extensions;
 	if (input.type().id() != LogicalTypeId::LIST) {
 		throw InvalidInputException("'active_grammar_extensions' setting value should be of type VARCHAR[], not %s",
@@ -1856,15 +1854,10 @@ void ActiveGrammarExtensionsSetting::SetLocal(ClientContext &context, const Valu
 		}
 	}
 
-	case_insensitive_set_t all_extensions;
-	for (auto &extension : grammar_extensions) {
-		auto &extension_name = extension->Name();
-		all_extensions.insert(extension_name);
-	}
-
 	vector<string> missing;
 	for (auto &ext : selected_extensions) {
-		if (!all_extensions.count(ext)) {
+		auto extension = callback_manager.FindGrammarExtension(ext);
+		if (!extension) {
 			missing.push_back(ext);
 		}
 	}
@@ -1872,6 +1865,11 @@ void ActiveGrammarExtensionsSetting::SetLocal(ClientContext &context, const Valu
 		auto missing_list = StringUtil::Join(missing, ",");
 		throw InvalidInputException("Can't set 'active_grammar_extensions', the following extensions don't exist: %s",
 		                            missing_list);
+	}
+	if (selected_extensions.empty()) {
+		client_config.active_grammar_extensions.clear();
+		client_config.cached_grammar.reset();
+		return;
 	}
 
 	auto compiled_grammar = CompiledGrammar::Create(context, selected_extensions);
@@ -1883,11 +1881,9 @@ void ActiveGrammarExtensionsSetting::ResetLocal(ClientContext &context) {
 	if (!OnLocalReset(context)) {
 		return;
 	}
-	case_insensitive_set_t selected_extensions;
-	auto compiled_grammar = CompiledGrammar::Create(context, selected_extensions);
 	auto &client_config = ClientConfig::GetConfig(context);
-	client_config.active_grammar_extensions = std::move(selected_extensions);
-	client_config.cached_grammar = std::move(compiled_grammar);
+	client_config.active_grammar_extensions.clear();
+	client_config.cached_grammar.reset();
 }
 
 bool ActiveGrammarExtensionsSetting::OnLocalSet(ClientContext &context, const Value &input) {

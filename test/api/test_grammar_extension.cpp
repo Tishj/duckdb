@@ -4,6 +4,7 @@
 #include "duckdb/main/settings.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/grammar_extension.hpp"
+#include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/peg/compiled_grammar.hpp"
 #include "duckdb/parser/peg/matcher/identifier_matcher.hpp"
 #include "duckdb/parser/peg/matcher/keyword_matcher.hpp"
@@ -187,30 +188,56 @@ TEST_CASE("Default terminal rule overrides are registered before additions", "[a
 	REQUIRE_FAIL(con.Query("SET active_grammar_extensions = ['default_terminal_rule']"));
 }
 
-TEST_CASE("Grammar extensions invalidate an initialized parser cache", "[api][grammar_extension]") {
+TEST_CASE("The parser cache only holds the base grammar", "[api][grammar_extension]") {
 	DuckDB db(nullptr);
 	Connection con(db);
 	REQUIRE_NO_FAIL(*con.Query("SELECT 1"));
-	REQUIRE_FALSE(CompiledGrammar::Get(*con.context)->HasGrammarChanges());
+	auto base_grammar = CompiledGrammar::Get(*con.context);
+	REQUIRE_FALSE(base_grammar->HasGrammarChanges());
+	REQUIRE(base_grammar == CompiledGrammar::Get(*con.context));
 
 	RegisterGrammarExtensionTestSyntax(*db.instance);
+	REQUIRE(base_grammar == CompiledGrammar::Get(*con.context));
 	ActivateGrammarExtensionTestSyntax(con);
 	CheckGrammarExtensionTestSyntax(con);
-	REQUIRE(CompiledGrammar::Get(*con.context)->HasGrammarChanges());
+	auto extension_grammar = CompiledGrammar::Get(*con.context);
+	REQUIRE(extension_grammar->HasGrammarChanges());
+	REQUIRE(extension_grammar == CompiledGrammar::Get(*con.context));
 }
 
-TEST_CASE("Active grammar extensions are cached per connection", "[api][grammar_extension]") {
+TEST_CASE("Active grammar extensions are cached on their connection", "[api][grammar_extension]") {
 	DuckDB db(nullptr);
 	RegisterGrammarExtensionTestSyntax(*db.instance);
 	Connection enabled(db);
 	Connection disabled(db);
 
+	auto base_grammar = CompiledGrammar::Get(*disabled.context);
 	ActivateGrammarExtensionTestSyntax(enabled);
 	CheckGrammarExtensionTestSyntax(enabled);
 	REQUIRE_FAIL(disabled.Query("ANSWER"));
 	CheckGrammarExtensionTestSyntax(enabled);
 	ActiveGrammarExtensionsSetting::SetLocal(*enabled.context, Value::LIST(LogicalType::VARCHAR, vector<Value> {}));
 	REQUIRE_FAIL(enabled.Query("ANSWER"));
+	REQUIRE(base_grammar == CompiledGrammar::Get(*enabled.context));
+}
+
+TEST_CASE("Parser options retain their compiled grammar", "[api][grammar_extension]") {
+	DuckDB db(nullptr);
+	RegisterGrammarExtensionTestSyntax(*db.instance);
+	Connection con(db);
+	ActivateGrammarExtensionTestSyntax(con);
+
+	auto options = con.context->GetParserOptions();
+	REQUIRE(options.compiled_grammar == CompiledGrammar::Get(*con.context));
+	options.extensions = nullptr;
+
+	Parser parser(std::move(options));
+	REQUIRE_NOTHROW(parser.ParseQuery("ANSWER"));
+	REQUIRE(parser.statements.size() == 1);
+
+	Parser base_parser;
+	REQUIRE_NOTHROW(base_parser.ParseQuery("SELECT 42"));
+	REQUIRE(base_parser.statements.size() == 1);
 }
 
 class AddInvalidGrammarExtensionTestRule final : public GrammarExtension {
