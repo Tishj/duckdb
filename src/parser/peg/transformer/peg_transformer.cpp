@@ -139,28 +139,22 @@ void TransformStack::InitializeFrame(TransformStackFrame &frame) {
 	frame.process = frame.rule->StartTransform(transformer, frame.parse_result);
 }
 
-void TransformStack::ExecuteFrame(TransformStackFrame &frame) {
+unique_ptr<TransformResultValue> TransformStack::ExecuteFrame(TransformStackFrame &frame) {
 	if (!frame.IsInitialized()) {
 		InitializeFrame(frame);
 		D_ASSERT(frame.IsInitialized());
 	}
 	if (frame.result) {
-		return;
+		return std::move(frame.result);
 	}
 	D_ASSERT(frame.process);
 	auto step = frame.process->Resume(std::move(frame.child_result));
 	auto child = step.GetChild();
 	if (!child) {
-		frame.result = step.TakeResult();
-		return;
+		return step.TakeResult();
 	}
 	PushFrame(*child);
-}
-
-unique_ptr<TransformResultValue> TransformStack::FinalizeFrame(TransformStackFrame &frame) {
-	D_ASSERT(frame.result);
-	transformer.SetResultLocation(frame.parse_result, *frame.result);
-	return std::move(frame.result);
+	return nullptr;
 }
 
 unique_ptr<TransformResultValue> TransformStack::Execute(TransformInput input) {
@@ -171,11 +165,11 @@ unique_ptr<TransformResultValue> TransformStack::Execute(TransformInput input) {
 	PushFrame(input);
 	while (!frames.empty()) {
 		auto &frame = *frames.back();
-		ExecuteFrame(frame);
-		if (!frame.result) {
+		auto result = ExecuteFrame(frame);
+		if (!result) {
 			continue;
 		}
-		auto result = FinalizeFrame(frame);
+		transformer.SetResultLocation(frame.parse_result, *result);
 		frames.pop_back();
 		if (frames.empty()) {
 			return result;
