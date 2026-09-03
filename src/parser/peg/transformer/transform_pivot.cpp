@@ -150,8 +150,8 @@ unique_ptr<SelectStatement> PEGTransformerFactory::TransformPivotStatement(PEGTr
 	return select_statement;
 }
 
-void PEGTransformerFactory::InitializePivotStatementTrampoline(PEGTransformer &transformer,
-                                                               GeneratedTransformProcess &process) {
+void PEGTransformerFactory::PreparePivotStatementTransform(PEGTransformer &transformer,
+                                                           GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	process.manual_state = transformer.ParamCount();
 	process.ReserveChildSlots(5);
@@ -159,8 +159,7 @@ void PEGTransformerFactory::InitializePivotStatementTrampoline(PEGTransformer &t
 }
 
 unique_ptr<TransformResultValue>
-PEGTransformerFactory::FinalizePivotStatementTrampoline(PEGTransformer &transformer,
-                                                        GeneratedTransformProcess &process) {
+PEGTransformerFactory::ReducePivotStatementTransform(PEGTransformer &transformer, GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	if (!process.child_results[4]) {
 		bool has_parameters = transformer.ParamCount() > process.manual_state;
@@ -354,8 +353,8 @@ unique_ptr<SelectStatement> PEGTransformerFactory::TransformUnpivotStatement(PEG
 	return result;
 }
 
-void PEGTransformerFactory::InitializeUnpivotStatementTrampoline(PEGTransformer &transformer,
-                                                                 GeneratedTransformProcess &process) {
+void PEGTransformerFactory::PrepareUnpivotStatementTransform(PEGTransformer &transformer,
+                                                             GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	process.manual_state = transformer.ParamCount();
 	process.ReserveChildSlots(4);
@@ -363,8 +362,8 @@ void PEGTransformerFactory::InitializeUnpivotStatementTrampoline(PEGTransformer 
 }
 
 unique_ptr<TransformResultValue>
-PEGTransformerFactory::FinalizeUnpivotStatementTrampoline(PEGTransformer &transformer,
-                                                          GeneratedTransformProcess &process) {
+PEGTransformerFactory::ReduceUnpivotStatementTransform(PEGTransformer &transformer,
+                                                       GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	if (!process.child_results[3]) {
 		bool has_parameters = transformer.ParamCount() > process.manual_state;

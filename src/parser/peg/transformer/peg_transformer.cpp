@@ -30,9 +30,10 @@ unique_ptr<TransformResultValue> TransformStep::TakeResult() {
 GeneratedTransformProcess::GeneratedTransformProcess(PEGTransformer &transformer_p, TransformInput input,
                                                      const TransformProcessInfo &info_p)
     : parse_result(input.parse_result), info(info_p), transformer(transformer_p) {
-	if (!info.initialize || !info.finalize) {
+	if (!info.prepare || !info.reduce) {
 		throw InternalException("Incomplete transformer process for rule '%s'", info.name);
 	}
+	info.prepare(transformer, *this);
 }
 
 void GeneratedTransformProcess::ReserveChildSlots(idx_t count) {
@@ -66,7 +67,7 @@ TransformStep GeneratedTransformProcess::NextStep() {
 		child_result_slot = child.slot;
 		return TransformStep::Child(child.input);
 	}
-	auto result = info.finalize(transformer, *this);
+	auto result = info.reduce(transformer, *this);
 	if (result) {
 		completed = true;
 		return TransformStep::Complete(std::move(result));
@@ -112,10 +113,6 @@ TransformStep GeneratedTransformProcess::Resume(unique_ptr<TransformResultValue>
 	if (child_result) {
 		SetChildResult(child_result_slot.GetIndex(), std::move(child_result));
 		child_result_slot = optional_idx();
-	}
-	if (!initialized) {
-		info.initialize(transformer, *this);
-		initialized = true;
 	}
 	return NextStep();
 }
