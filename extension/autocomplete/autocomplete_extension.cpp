@@ -80,7 +80,7 @@ static vector<shared_ptr<AttachedDatabase>> GetAllCatalogs(ClientContext &contex
 }
 
 static vector<reference<SchemaCatalogEntry>> GetAllSchemas(ClientContext &context) {
-	return Catalog::GetAllSchemas(context);
+	return Catalog::GetAllSchemas(context, CatalogEntryScanLevel::SCHEMA);
 }
 
 static vector<reference<CatalogEntry>> GetAllTables(ClientContext &context, bool for_table_names) {
@@ -88,10 +88,11 @@ static vector<reference<CatalogEntry>> GetAllTables(ClientContext &context, bool
 	// scan all the schemas for tables and collect them and collect them
 	// for column names we avoid adding internal entries, because it pollutes the auto-complete too much
 	// for table names this is generally fine, however
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto scan_level = for_table_names ? CatalogEntryScanLevel::TABLE : CatalogEntryScanLevel::COLUMN;
+	auto schemas = Catalog::GetAllSchemas(context, scan_level);
 	for (auto &schema_ref : schemas) {
 		auto &schema = schema_ref.get();
-		schema.Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::TABLE_ENTRY, scan_level, [&](CatalogEntry &entry) {
 			if (!entry.internal || for_table_names) {
 				result.push_back(entry);
 			}
@@ -100,13 +101,13 @@ static vector<reference<CatalogEntry>> GetAllTables(ClientContext &context, bool
 	if (for_table_names) {
 		for (auto &schema_ref : schemas) {
 			auto &schema = schema_ref.get();
-			schema.Scan(context, CatalogType::TABLE_FUNCTION_ENTRY,
+			schema.Scan(context, CatalogType::TABLE_FUNCTION_ENTRY, scan_level,
 			            [&](CatalogEntry &entry) { result.push_back(entry); });
 		};
 	} else {
 		for (auto &schema_ref : schemas) {
 			auto &schema = schema_ref.get();
-			schema.Scan(context, CatalogType::SCALAR_FUNCTION_ENTRY,
+			schema.Scan(context, CatalogType::SCALAR_FUNCTION_ENTRY, scan_level,
 			            [&](CatalogEntry &entry) { result.push_back(entry); });
 		};
 	}
@@ -116,10 +117,11 @@ static vector<reference<CatalogEntry>> GetAllTables(ClientContext &context, bool
 static vector<reference<CatalogEntry>> GetAllTypes(ClientContext &context) {
 	vector<reference<CatalogEntry>> result;
 	// scan all the schemas for types and collect them
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::TABLE);
 	for (auto &schema_ref : schemas) {
 		auto &schema = schema_ref.get();
-		schema.Scan(context, CatalogType::TYPE_ENTRY, [&](CatalogEntry &entry) { result.push_back(entry); });
+		schema.Scan(context, CatalogType::TYPE_ENTRY, CatalogEntryScanLevel::TABLE,
+		            [&](CatalogEntry &entry) { result.push_back(entry); });
 	};
 	return result;
 }
@@ -222,7 +224,8 @@ static bool KnownExtension(const string &fname) {
 
 static vector<AutoCompleteCandidate> SuggestPragmaName(ClientContext &context) {
 	vector<AutoCompleteCandidate> suggestions;
-	auto all_pragmas = Catalog::GetAllEntries(context, CatalogType::PRAGMA_FUNCTION_ENTRY);
+	auto all_pragmas =
+	    Catalog::GetAllEntries(context, CatalogType::PRAGMA_FUNCTION_ENTRY, CatalogEntryScanLevel::TABLE);
 	for (const auto &pragma : all_pragmas) {
 		AutoCompleteCandidate candidate(pragma.get().name.GetIdentifierName(), SuggestionState::SUGGEST_PRAGMA_NAME, 0);
 		suggestions.push_back(std::move(candidate));
@@ -252,7 +255,8 @@ static vector<AutoCompleteCandidate> SuggestSettingName(ClientContext &context) 
 
 static vector<AutoCompleteCandidate> SuggestScalarFunctionName(ClientContext &context) {
 	vector<AutoCompleteCandidate> suggestions;
-	auto scalar_functions = Catalog::GetAllEntries(context, CatalogType::SCALAR_FUNCTION_ENTRY);
+	auto scalar_functions =
+	    Catalog::GetAllEntries(context, CatalogType::SCALAR_FUNCTION_ENTRY, CatalogEntryScanLevel::TABLE);
 	for (const auto &scalar_function : scalar_functions) {
 		AutoCompleteCandidate candidate(scalar_function.get().name.GetIdentifierName(),
 		                                SuggestionState::SUGGEST_SCALAR_FUNCTION_NAME, 0);
@@ -264,7 +268,8 @@ static vector<AutoCompleteCandidate> SuggestScalarFunctionName(ClientContext &co
 
 static vector<AutoCompleteCandidate> SuggestTableFunctionName(ClientContext &context) {
 	vector<AutoCompleteCandidate> suggestions;
-	auto table_functions = Catalog::GetAllEntries(context, CatalogType::TABLE_FUNCTION_ENTRY);
+	auto table_functions =
+	    Catalog::GetAllEntries(context, CatalogType::TABLE_FUNCTION_ENTRY, CatalogEntryScanLevel::TABLE);
 	for (const auto &table_function : table_functions) {
 		AutoCompleteCandidate candidate(table_function.get().name.GetIdentifierName(),
 		                                SuggestionState::SUGGEST_TABLE_FUNCTION_NAME, 0);

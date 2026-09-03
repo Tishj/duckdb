@@ -120,6 +120,8 @@ enum class CacheValidationMode : uint8_t;
 
 enum class CachingMode : uint8_t;
 
+enum class CatalogEntryScanLevel : uint8_t;
+
 enum class CatalogLookupBehavior : uint8_t;
 
 enum class CatalogType : uint8_t;
@@ -772,6 +774,9 @@ const char* EnumUtil::ToChars<CacheValidationMode>(CacheValidationMode value);
 
 template<>
 const char* EnumUtil::ToChars<CachingMode>(CachingMode value);
+
+template<>
+const char* EnumUtil::ToChars<CatalogEntryScanLevel>(CatalogEntryScanLevel value);
 
 template<>
 const char* EnumUtil::ToChars<CatalogLookupBehavior>(CatalogLookupBehavior value);
@@ -1685,6 +1690,9 @@ CacheValidationMode EnumUtil::FromString<CacheValidationMode>(const char *value)
 
 template<>
 CachingMode EnumUtil::FromString<CachingMode>(const char *value);
+
+template<>
+CatalogEntryScanLevel EnumUtil::FromString<CatalogEntryScanLevel>(const char *value);
 
 template<>
 CatalogLookupBehavior EnumUtil::FromString<CatalogLookupBehavior>(const char *value);

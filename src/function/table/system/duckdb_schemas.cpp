@@ -55,7 +55,7 @@ unique_ptr<GlobalTableFunctionState> DuckDBSchemasInit(ClientContext &context, T
 	auto result = make_uniq<DuckDBSchemasData>();
 
 	// scan all the schemas and collect them
-	result->entries = Catalog::GetAllSchemas(context);
+	result->entries = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::SCHEMA);
 
 	return std::move(result);
 }

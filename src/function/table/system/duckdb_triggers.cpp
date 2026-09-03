@@ -71,10 +71,10 @@ static unique_ptr<FunctionData> DuckDBTriggersBind(ClientContext &context, Table
 unique_ptr<GlobalTableFunctionState> DuckDBTriggersInit(ClientContext &context, TableFunctionInitInput &input) {
 	auto result = make_uniq<DuckDBTriggersData>();
 
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::COLUMN);
 	vector<reference<DuckTableEntry>> tables;
 	for (auto &schema : schemas) {
-		schema.get().Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+		schema.get().Scan(context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.type != CatalogType::TABLE_ENTRY) {
 				return;
 			}

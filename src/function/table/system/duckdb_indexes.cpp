@@ -67,9 +67,9 @@ unique_ptr<GlobalTableFunctionState> DuckDBIndexesInit(ClientContext &context, T
 	auto result = make_uniq<DuckDBIndexesData>();
 
 	// scan all the schemas for tables and collect them
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::COLUMN);
 	for (auto &schema : schemas) {
-		schema.get().Scan(context, CatalogType::INDEX_ENTRY,
+		schema.get().Scan(context, CatalogType::INDEX_ENTRY, CatalogEntryScanLevel::COLUMN,
 		                  [&](CatalogEntry &entry) { result->entries.push_back(entry); });
 	};
 	return std::move(result);

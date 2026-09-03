@@ -1,0 +1,141 @@
+diff --git a/src/include/storage/uc_schema_entry.hpp b/src/include/storage/uc_schema_entry.hpp
+index d5131cc..359ad96 100644
+--- a/src/include/storage/uc_schema_entry.hpp
++++ b/src/include/storage/uc_schema_entry.hpp
+@@ -39,7 +39,8 @@ public:
+ 	optional_ptr<CatalogEntry> CreateCollation(CatalogTransaction transaction, CreateCollationInfo &info) override;
+ 	optional_ptr<CatalogEntry> CreateType(CatalogTransaction transaction, CreateTypeInfo &info) override;
+ 	void Alter(CatalogTransaction transaction, AlterInfo &info) override;
+-	void Scan(ClientContext &context, CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
++	void Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback) override;
+ 	void Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
+ 	void DropEntry(ClientContext &context, DropInfo &info) override;
+ 	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const EntryLookupInfo &lookup_info) override;
+diff --git a/src/include/storage/uc_schema_set.hpp b/src/include/storage/uc_schema_set.hpp
+index 4dd982d..f50b4fc 100644
+--- a/src/include/storage/uc_schema_set.hpp
++++ b/src/include/storage/uc_schema_set.hpp
+@@ -22,7 +22,8 @@ public:
+ 	optional_ptr<CatalogEntry> CreateSchema(ClientContext &context, CreateSchemaInfo &info);
+ 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const EntryLookupInfo &lookup);
+ 	virtual void DropEntry(ClientContext &context, DropInfo &info);
+-	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
++	void Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback);
+ 	virtual optional_ptr<CatalogEntry> CreateEntry(unique_ptr<CatalogEntry> entry);
+ 	void ClearEntries();
+ 
+diff --git a/src/include/storage/uc_table_set.hpp b/src/include/storage/uc_table_set.hpp
+index ef2b8fe..b7dba16 100644
+--- a/src/include/storage/uc_table_set.hpp
++++ b/src/include/storage/uc_table_set.hpp
+@@ -95,7 +95,8 @@ public:
+ 
+ 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const EntryLookupInfo &lookup);
+ 	void DropEntry(ClientContext &context, DropInfo &info);
+-	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
++	void Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback);
+ 	void ClearEntries();
+ 	void OnDetach(ClientContext &context);
+ 	// void Checkpoint(ClientContext &context, bool force); TODO: remove/update (see definition)
+diff --git a/src/include/storage/unity_catalog.hpp b/src/include/storage/unity_catalog.hpp
+index bf8d275..f18453a 100644
+--- a/src/include/storage/unity_catalog.hpp
++++ b/src/include/storage/unity_catalog.hpp
+@@ -63,7 +63,8 @@ public:
+ 
+ 	optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) override;
+ 
+-	void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) override;
++	void ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++	                 std::function<void(SchemaCatalogEntry &)> callback) override;
+ 
+ 	optional_ptr<SchemaCatalogEntry> LookupSchema(CatalogTransaction transaction, const EntryLookupInfo &schema_lookup,
+ 	                                              OnEntryNotFound if_not_found) override;
+diff --git a/src/storage/uc_schema_entry.cpp b/src/storage/uc_schema_entry.cpp
+index 6f6fbd9..c9bab58 100644
+--- a/src/storage/uc_schema_entry.cpp
++++ b/src/storage/uc_schema_entry.cpp
+@@ -121,12 +121,12 @@ bool CatalogTypeIsSupported(CatalogType type) {
+ 	}
+ }
+ 
+-void UCSchemaEntry::Scan(ClientContext &context, CatalogType type,
++void UCSchemaEntry::Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
+                          const std::function<void(CatalogEntry &)> &callback) {
+ 	if (!CatalogTypeIsSupported(type)) {
+ 		return;
+ 	}
+-	GetCatalogSet(type).Scan(context, callback);
++	GetCatalogSet(type).Scan(context, scan_level, callback);
+ }
+ void UCSchemaEntry::Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) {
+ 	throw NotImplementedException("Scan without context not supported");
+diff --git a/src/storage/uc_schema_set.cpp b/src/storage/uc_schema_set.cpp
+index e2518fc..4d8b73d 100644
+--- a/src/storage/uc_schema_set.cpp
++++ b/src/storage/uc_schema_set.cpp
+@@ -64,7 +64,8 @@ void UCSchemaSet::DropEntry(ClientContext &context, DropInfo &info) {
+ 	throw NotImplementedException("UCSchemaSet::DropEntry");
+ }
+ 
+-void UCSchemaSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
++void UCSchemaSet::Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++                       const std::function<void(CatalogEntry &)> &callback) {
+ 	if (!is_loaded) {
+ 		is_loaded = true;
+ 		LoadEntries(context);
+diff --git a/src/storage/uc_table_set.cpp b/src/storage/uc_table_set.cpp
+index a8bdd46..78a4466 100644
+--- a/src/storage/uc_table_set.cpp
++++ b/src/storage/uc_table_set.cpp
+@@ -425,7 +425,8 @@ void UCTableSet::DropEntry(ClientContext &context, DropInfo &info) {
+ 	throw NotImplementedException("UCTableSet::DropEntry");
+ }
+ 
+-void UCTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
++void UCTableSet::Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++                      const std::function<void(CatalogEntry &)> &callback) {
+ 	EnsureLoaded(context);
+ 	lock_guard<mutex> l(entry_lock);
+ 	for (auto &table : tables) {
+diff --git a/src/storage/uc_transaction_manager.cpp b/src/storage/uc_transaction_manager.cpp
+index d8b4eec..3d0fc67 100644
+--- a/src/storage/uc_transaction_manager.cpp
++++ b/src/storage/uc_transaction_manager.cpp
+@@ -37,7 +37,7 @@ void UCTransactionManager::RollbackTransaction(Transaction &transaction) {
+ void UCTransactionManager::Checkpoint(ClientContext &context, bool force) {
+ 	// TODO: remove or update syntax from DuckDB perspective
+ #if 0
+-	unity_catalog.ScanSchemas(context, [&](SchemaCatalogEntry &entry) {
++	unity_catalog.ScanSchemas(context, CatalogEntryScanLevel::SCHEMA, [&](SchemaCatalogEntry &entry) {
+ 		auto &schema = entry.Cast<UCSchemaEntry>();
+ 		schema.tables.Checkpoint(context, force);
+ 	});
+diff --git a/src/storage/unity_catalog.cpp b/src/storage/unity_catalog.cpp
+index 48c093e..5500c3d 100644
+--- a/src/storage/unity_catalog.cpp
++++ b/src/storage/unity_catalog.cpp
+@@ -42,8 +42,9 @@ void UnityCatalog::DropSchema(ClientContext &context, DropInfo &info) {
+ 	return schemas.DropEntry(context, info);
+ }
+ 
+-void UnityCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
+-	schemas.Scan(context, [&](CatalogEntry &schema) { callback(schema.Cast<UCSchemaEntry>()); });
++void UnityCatalog::ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++                               std::function<void(SchemaCatalogEntry &)> callback) {
++	schemas.Scan(context, scan_level, [&](CatalogEntry &schema) { callback(schema.Cast<UCSchemaEntry>()); });
+ }
+ 
+ optional_ptr<SchemaCatalogEntry> UnityCatalog::LookupSchema(CatalogTransaction transaction,
+@@ -82,7 +83,7 @@ optional<Identifier> UnityCatalog::GetDefaultSchema() const {
+ }
+ 
+ void UnityCatalog::OnDetach(ClientContext &context) {
+-	schemas.Scan(context, [&](CatalogEntry &entry) {
++	schemas.Scan(context, CatalogEntryScanLevel::SCHEMA, [&](CatalogEntry &entry) {
+ 		auto &schema = entry.Cast<UCSchemaEntry>();
+ 		auto &tables = schema.tables;
+ 		tables.OnDetach(context);

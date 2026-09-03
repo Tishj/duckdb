@@ -59,11 +59,11 @@ static unique_ptr<FunctionData> DuckDBCoordinateSystemsBind(ClientContext &conte
 static unique_ptr<GlobalTableFunctionState> DuckDBCoordinateSystemsInit(ClientContext &context,
                                                                         TableFunctionInitInput &input) {
 	auto result = make_uniq<DuckDBCoordinateSystemsData>();
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::COLUMN);
 	for (auto &schema : schemas) {
-		schema.get().Scan(context, CatalogType::COORDINATE_SYSTEM_ENTRY, [&](CatalogEntry &entry) {
-			result->entries.push_back(entry.Cast<CoordinateSystemCatalogEntry>());
-		});
+		schema.get().Scan(
+		    context, CatalogType::COORDINATE_SYSTEM_ENTRY, CatalogEntryScanLevel::COLUMN,
+		    [&](CatalogEntry &entry) { result->entries.push_back(entry.Cast<CoordinateSystemCatalogEntry>()); });
 	};
 	return std::move(result);
 }

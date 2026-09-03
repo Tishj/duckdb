@@ -97,12 +97,12 @@ unique_ptr<GlobalTableFunctionState> DuckDBConstraintsInit(ClientContext &contex
 	auto result = make_uniq<DuckDBConstraintsData>();
 
 	// scan all the schemas for tables and collect them
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::COLUMN);
 
 	for (auto &schema : schemas) {
 		vector<reference<CatalogEntry>> entries;
 
-		schema.get().Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+		schema.get().Scan(context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.type == CatalogType::TABLE_ENTRY) {
 				entries.push_back(entry);
 			}

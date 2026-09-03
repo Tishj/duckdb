@@ -11,6 +11,7 @@
 #include "duckdb/catalog/catalog_entry.hpp"
 #include "duckdb/catalog/catalog_set.hpp"
 #include "duckdb/catalog/entry_lookup_info.hpp"
+#include "duckdb/common/enums/catalog_entry_scan_level.hpp"
 
 namespace duckdb {
 class ClientContext;
@@ -61,7 +62,7 @@ public:
 	QualifiedName GetQualifiedName(const Identifier &entry_name) const;
 
 	//! Scan the specified catalog set, invoking the callback method for every entry
-	virtual void Scan(ClientContext &context, CatalogType type,
+	virtual void Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
 	                  const std::function<void(CatalogEntry &)> &callback) = 0;
 	//! Scan the specified catalog set, invoking the callback method for every committed entry
 	virtual void Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) = 0;

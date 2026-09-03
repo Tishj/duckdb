@@ -26,9 +26,9 @@ static unique_ptr<FunctionData> PragmaCollateBind(ClientContext &context, TableF
 unique_ptr<GlobalTableFunctionState> PragmaCollateInit(ClientContext &context, TableFunctionInitInput &input) {
 	auto result = make_uniq<PragmaCollateData>();
 
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::TABLE);
 	for (auto schema : schemas) {
-		schema.get().Scan(context, CatalogType::COLLATION_ENTRY,
+		schema.get().Scan(context, CatalogType::COLLATION_ENTRY, CatalogEntryScanLevel::TABLE,
 		                  [&](CatalogEntry &entry) { result->entries.push_back(entry.name.GetIdentifierName()); });
 	}
 	return std::move(result);

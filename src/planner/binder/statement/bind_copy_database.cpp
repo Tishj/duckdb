@@ -50,7 +50,7 @@ unique_ptr<LogicalOperator> Binder::BindCopyDatabaseSchema(Catalog &from_databas
 
 unique_ptr<LogicalOperator> Binder::BindCopyDatabaseData(Catalog &source_catalog,
                                                          const Identifier &target_database_name) {
-	auto source_schemas = source_catalog.GetSchemas(context);
+	auto source_schemas = source_catalog.GetSchemas(context, CatalogEntryScanLevel::COLUMN);
 
 	// We can just use ExtractEntries here because the order doesn't matter
 	ExportEntries entries;

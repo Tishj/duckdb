@@ -177,7 +177,8 @@ static void ScanNestedSchemas(SchemaCatalogEntry &schema, const std::function<vo
 	});
 }
 
-void DuckCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
+void DuckCatalog::ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
+                              std::function<void(SchemaCatalogEntry &)> callback) {
 	// obtain the transaction once (up front) so the nested scan does not re-acquire the meta-transaction lock while
 	// holding a catalog set lock
 	auto transaction = GetCatalogTransaction(context);

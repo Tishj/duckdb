@@ -21,6 +21,7 @@
 #include "duckdb/common/enums/allow_parser_override.hpp"
 #include "duckdb/common/enums/arrow_format_version.hpp"
 #include "duckdb/common/enums/cache_validation_mode.hpp"
+#include "duckdb/common/enums/catalog_entry_scan_level.hpp"
 #include "duckdb/common/enums/catalog_lookup_behavior.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/common/enums/checkpoint_abort.hpp"
@@ -1111,6 +1112,25 @@ const char* EnumUtil::ToChars<CachingMode>(CachingMode value) {
 template<>
 CachingMode EnumUtil::FromString<CachingMode>(const char *value) {
 	return static_cast<CachingMode>(StringUtil::StringToEnum(GetCachingModeValues(), 3, "CachingMode", value));
+}
+
+const StringUtil::EnumStringLiteral *GetCatalogEntryScanLevelValues() {
+	static constexpr StringUtil::EnumStringLiteral values[] {
+		{ static_cast<uint32_t>(CatalogEntryScanLevel::SCHEMA), "SCHEMA" },
+		{ static_cast<uint32_t>(CatalogEntryScanLevel::TABLE), "TABLE" },
+		{ static_cast<uint32_t>(CatalogEntryScanLevel::COLUMN), "COLUMN" }
+	};
+	return values;
+}
+
+template<>
+const char* EnumUtil::ToChars<CatalogEntryScanLevel>(CatalogEntryScanLevel value) {
+	return StringUtil::EnumToString(GetCatalogEntryScanLevelValues(), 3, "CatalogEntryScanLevel", static_cast<uint32_t>(value));
+}
+
+template<>
+CatalogEntryScanLevel EnumUtil::FromString<CatalogEntryScanLevel>(const char *value) {
+	return static_cast<CatalogEntryScanLevel>(StringUtil::StringToEnum(GetCatalogEntryScanLevelValues(), 3, "CatalogEntryScanLevel", value));
 }
 
 const StringUtil::EnumStringLiteral *GetCatalogLookupBehaviorValues() {

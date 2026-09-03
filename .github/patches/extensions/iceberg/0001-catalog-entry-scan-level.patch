@@ -1,0 +1,217 @@
+diff --git a/src/catalog/rest/catalog_entry/schema/iceberg_schema_entry.cpp b/src/catalog/rest/catalog_entry/schema/iceberg_schema_entry.cpp
+index 08c5346f..3020f1e3 100644
+--- a/src/catalog/rest/catalog_entry/schema/iceberg_schema_entry.cpp
++++ b/src/catalog/rest/catalog_entry/schema/iceberg_schema_entry.cpp
+@@ -803,12 +803,12 @@ static bool CatalogTypeIsSupported(CatalogType type) {
+ 	}
+ }
+ 
+-void IcebergSchemaEntry::Scan(ClientContext &context, CatalogType type,
++void IcebergSchemaEntry::Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
+                               const std::function<void(CatalogEntry &)> &callback) {
+ 	if (!CatalogTypeIsSupported(type)) {
+ 		return;
+ 	}
+-	GetCatalogSet(type).Scan(context, callback);
++	GetCatalogSet(type).Scan(context, scan_level, callback);
+ }
+ void IcebergSchemaEntry::Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) {
+ 	throw NotImplementedException("Scan without context not supported");
+diff --git a/src/catalog/rest/iceberg_catalog.cpp b/src/catalog/rest/iceberg_catalog.cpp
+index a6017524..824bdc3e 100644
+--- a/src/catalog/rest/iceberg_catalog.cpp
++++ b/src/catalog/rest/iceberg_catalog.cpp
+@@ -52,8 +52,9 @@ IcebergCatalog::~IcebergCatalog() = default;
+ void IcebergCatalog::Initialize(bool load_builtin) {
+ }
+ 
+-void IcebergCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
+-	schemas.Scan(context, [&](CatalogEntry &schema) { callback(schema.Cast<IcebergSchemaEntry>()); });
++void IcebergCatalog::ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++                                 std::function<void(SchemaCatalogEntry &)> callback) {
++	schemas.Scan(context, scan_level, [&](CatalogEntry &schema) { callback(schema.Cast<IcebergSchemaEntry>()); });
+ }
+ 
+ optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction transaction,
+diff --git a/src/catalog/rest/iceberg_schema_set.cpp b/src/catalog/rest/iceberg_schema_set.cpp
+index ff306c75..0bae9c5c 100644
+--- a/src/catalog/rest/iceberg_schema_set.cpp
++++ b/src/catalog/rest/iceberg_schema_set.cpp
+@@ -84,7 +84,8 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
+ 	return entry->second.get();
+ }
+ 
+-void IcebergSchemaSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
++void IcebergSchemaSet::Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++                            const std::function<void(CatalogEntry &)> &callback) {
+ 	auto schema_entries = GetEntries(context);
+ 	for (auto &entry : schema_entries) {
+ 		callback(*entry);
+diff --git a/src/catalog/rest/iceberg_table_set.cpp b/src/catalog/rest/iceberg_table_set.cpp
+index 4f4742ea..5b45c57d 100644
+--- a/src/catalog/rest/iceberg_table_set.cpp
++++ b/src/catalog/rest/iceberg_table_set.cpp
+@@ -53,17 +53,10 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
+ 	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
+ 	if (get_table_result.error_) {
+ 		if (get_table_result.status_ == HTTPStatusCode::NotFound_404) {
+-			// Glue returns 404 when a table is not an Iceberg Table with the error message
+-			// "input table is not an iceberg table" of type "NoSuchIcebergTableException"
+-			// Otherwise the error is a standard 404, we return false and duckdb will return
+-			// that the table does not exist.
+-			// see test/sql/cloud/test_glue_catalog_with_other_tables.test for testing
+-			if (get_table_result.error_->_error.type != "NoSuchIcebergTableException") {
+-				return false;
+-			}
++			// Glue reports both missing and non-Iceberg tables as 404.
++			return false;
+ 		}
+-		// surface all other errror messages. Not found will be returned as a catalog exception
+-		// User should not if they do not have permission or if they are not authorized (or 500)
++		// Surface authorization and server errors.
+ 		throw HTTPException(
+ 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
+ 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
+@@ -97,14 +90,22 @@ IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table
+ 	return *table_info.dummy_entry;
+ }
+ 
+-void IcebergTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
++void IcebergTableSet::Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++                           const std::function<void(CatalogEntry &)> &callback) {
+ 	annotated_lock_guard<annotated_mutex> lock(entry_lock);
+ 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+ 	LoadEntriesInternal(context);
+-	for (auto &entry : entries) {
++	for (auto entry_it = entries.begin(); entry_it != entries.end();) {
++		auto &entry = *entry_it;
+ 		auto &table_info = *entry.second;
+ 		auto table_key = table_info.GetTableKey();
+ 		iceberg_transaction.tables[table_key] = entry.second;
++		if (scan_level == CatalogEntryScanLevel::COLUMN && !FillEntry(context, table_info)) {
++			iceberg_transaction.tables.erase(table_key);
++			iceberg_transaction.SetLatestTableState(table_key, IcebergTableStatus::MISSING);
++			entry_it = entries.erase(entry_it);
++			continue;
++		}
+ 
+ 		if (!table_info.schema_versions.empty()) {
+ 			// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
+@@ -113,12 +114,14 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
+ 			auto resolved = table_info.GetLatestSchema();
+ 			if (resolved) {
+ 				callback(*resolved);
++				++entry_it;
+ 				continue;
+ 			}
+ 		}
+ 
+ 		auto &dummy = GetOrCreateDummy(table_info);
+ 		callback(dummy);
++		++entry_it;
+ 	}
+ }
+ 
+diff --git a/src/include/catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp b/src/include/catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp
+index 2572c78f..163a242f 100644
+--- a/src/include/catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp
++++ b/src/include/catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp
+@@ -38,7 +38,8 @@ public:
+ 	optional_ptr<CatalogEntry> CreateCollation(CatalogTransaction transaction, CreateCollationInfo &info) override;
+ 	optional_ptr<CatalogEntry> CreateType(CatalogTransaction transaction, CreateTypeInfo &info) override;
+ 	void Alter(CatalogTransaction transaction, AlterInfo &info) override;
+-	void Scan(ClientContext &context, CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
++	void Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback) override;
+ 	void Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
+ 	void DropEntry(ClientContext &context, DropInfo &info) override;
+ 	void DropEntry(ClientContext &context, DropInfo &info, bool delete_entry = false);
+diff --git a/src/include/catalog/rest/iceberg_catalog.hpp b/src/include/catalog/rest/iceberg_catalog.hpp
+index 0576e443..6e637880 100644
+--- a/src/include/catalog/rest/iceberg_catalog.hpp
++++ b/src/include/catalog/rest/iceberg_catalog.hpp
+@@ -138,7 +138,8 @@ public:
+ 	}
+ 	void DropSchema(ClientContext &context, DropInfo &info) override;
+ 	optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) override;
+-	void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) override;
++	void ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++	                 std::function<void(SchemaCatalogEntry &)> callback) override;
+ 	IcebergSchemaSet &GetSchemas();
+ 	optional_ptr<SchemaCatalogEntry> LookupSchema(CatalogTransaction transaction, const EntryLookupInfo &schema_lookup,
+ 	                                              OnEntryNotFound if_not_found) override;
+diff --git a/src/include/catalog/rest/iceberg_schema_set.hpp b/src/include/catalog/rest/iceberg_schema_set.hpp
+index 7f32b525..718a759b 100644
+--- a/src/include/catalog/rest/iceberg_schema_set.hpp
++++ b/src/include/catalog/rest/iceberg_schema_set.hpp
+@@ -19,7 +19,8 @@ public:
+ public:
+ 	void LoadEntries(ClientContext &context);
+ 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const string &name, OnEntryNotFound if_not_found);
+-	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
++	void Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback);
+ 	vector<shared_ptr<IcebergSchemaEntry>> GetEntries(ClientContext &context);
+ 	void AddEntry(const string &name, shared_ptr<IcebergSchemaEntry> entry);
+ 	void RemoveEntry(const string &name);
+diff --git a/src/include/catalog/rest/iceberg_table_set.hpp b/src/include/catalog/rest/iceberg_table_set.hpp
+index f11b2d65..431683eb 100644
+--- a/src/include/catalog/rest/iceberg_table_set.hpp
++++ b/src/include/catalog/rest/iceberg_table_set.hpp
+@@ -21,7 +21,8 @@ public:
+ 
+ public:
+ 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const EntryLookupInfo &lookup);
+-	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
++	void Scan(ClientContext &context, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback);
+ 	void ScanTables(ClientContext &context, const std::function<void(IcebergTable &)> &callback);
+ 	void DropEntry(ClientContext &context, DropInfo &info, bool delete_entry);
+ 	void RenameEntry(const string &name, const string &new_name, IcebergTable &&new_table);
+diff --git a/test/sql/local/catalog_test_config_setup/catalog_agnostic/test_column_doc_comment.test b/test/sql/local/catalog_test_config_setup/catalog_agnostic/test_column_doc_comment.test
+index f4c34f0f..979e2e0e 100644
+--- a/test/sql/local/catalog_test_config_setup/catalog_agnostic/test_column_doc_comment.test
++++ b/test/sql/local/catalog_test_config_setup/catalog_agnostic/test_column_doc_comment.test
+@@ -21,14 +21,37 @@ set enable_logging=true
+ statement ok
+ set logging_level='debug'
+ 
+-# Resolve the table so its full schema is loaded. Until a table is resolved the
+-# catalog only exposes a lazy placeholder column (see #515), so column comments
+-# are not available in a bare listing.
++# The Iceberg field 'doc' is mapped to the DuckDB column comment. Fields without
++# a 'doc' (e.g. 'name') have a NULL comment. This must work before the table has
++# been referenced directly.
++query II
++select column_name, comment from duckdb_columns()
++where database_name = 'my_datalake' and table_name = 'column_doc_comment'
++order by column_index;
++----
++id	Primary identifier
++population	Resident count, 2024 census
++name	NULL
++
++query III
++select column_name, ordinal_position, data_type from information_schema.columns
++where table_catalog = 'my_datalake' and table_name = 'column_doc_comment'
++order by ordinal_position;
++----
++id	1	BIGINT
++population	2	BIGINT
++name	3	VARCHAR
++
++query I
++select column_count from duckdb_tables()
++where database_name = 'my_datalake' and table_name = 'column_doc_comment';
++----
++3
++
++# Loading the table directly does not change the metadata results.
+ statement ok
+ describe my_datalake.default.column_doc_comment;
+ 
+-# The Iceberg field 'doc' is mapped to the DuckDB column comment. Fields without
+-# a 'doc' (e.g. 'name') have a NULL comment.
+ query II
+ select column_name, comment from duckdb_columns()
+ where database_name = 'my_datalake' and table_name = 'column_doc_comment'

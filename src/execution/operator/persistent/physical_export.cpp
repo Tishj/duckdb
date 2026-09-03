@@ -121,7 +121,7 @@ void PhysicalExport::ExtractEntries(ClientContext &context, vector<reference<Sch
 		if (!schema.internal) {
 			result.schemas.push_back(schema);
 		}
-		schema.Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.internal) {
 				return;
 			}
@@ -132,30 +132,30 @@ void PhysicalExport::ExtractEntries(ClientContext &context, vector<reference<Sch
 				result.tables.push_back(entry);
 			}
 		});
-		schema.Scan(context, CatalogType::SEQUENCE_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::SEQUENCE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.internal) {
 				return;
 			}
 			result.sequences.push_back(entry);
 		});
-		schema.Scan(context, CatalogType::TYPE_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::TYPE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.internal) {
 				return;
 			}
 			result.custom_types.push_back(entry);
 		});
-		schema.Scan(context, CatalogType::INDEX_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::INDEX_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.internal) {
 				return;
 			}
 			result.indexes.push_back(entry);
 		});
-		schema.Scan(context, CatalogType::MACRO_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::MACRO_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (!entry.internal && entry.type == CatalogType::MACRO_ENTRY) {
 				result.macros.push_back(entry);
 			}
 		});
-		schema.Scan(context, CatalogType::TABLE_MACRO_ENTRY, [&](CatalogEntry &entry) {
+		schema.Scan(context, CatalogType::TABLE_MACRO_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (!entry.internal && entry.type == CatalogType::TABLE_MACRO_ENTRY) {
 				result.macros.push_back(entry);
 			}
@@ -173,7 +173,7 @@ static void AddEntries(catalog_entry_vector_t &all_entries, catalog_entry_vector
 catalog_entry_vector_t PhysicalExport::GetNaiveExportOrder(ClientContext &context, Catalog &catalog) {
 	// gather all catalog types to export
 	ExportEntries entries;
-	auto schema_list = catalog.GetSchemas(context);
+	auto schema_list = catalog.GetSchemas(context, CatalogEntryScanLevel::COLUMN);
 	PhysicalExport::ExtractEntries(context, schema_list, entries);
 
 	ReorderTableEntries(entries.tables);

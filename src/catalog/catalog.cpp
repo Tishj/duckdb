@@ -797,7 +797,7 @@ CatalogException Catalog::CreateMissingEntryException(CatalogEntryRetriever &ret
 			break;
 		}
 		auto &catalog = database->GetCatalog();
-		auto current_schemas = catalog.GetSchemas(context);
+		auto current_schemas = catalog.GetSchemas(context, CatalogEntryScanLevel::SCHEMA);
 		for (auto &current_schema : current_schemas) {
 			if (unseen_schemas.size() >= max_schema_count) {
 				break;
@@ -1366,14 +1366,14 @@ optional_ptr<SchemaCatalogEntry> Catalog::GetSchema(ClientContext &context, cons
 	    if_not_found);
 }
 
-vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(ClientContext &context) {
+vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(ClientContext &context, CatalogEntryScanLevel scan_level) {
 	vector<reference<SchemaCatalogEntry>> schemas;
-	ScanSchemas(context, [&](SchemaCatalogEntry &entry) { schemas.push_back(entry); });
+	ScanSchemas(context, scan_level, [&](SchemaCatalogEntry &entry) { schemas.push_back(entry); });
 	return schemas;
 }
 
-vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(CatalogEntryRetriever &retriever,
-                                                          const string &catalog_name) {
+vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(CatalogEntryRetriever &retriever, const string &catalog_name,
+                                                          CatalogEntryScanLevel scan_level) {
 	vector<reference<Catalog>> catalogs;
 	if (IsInvalidCatalog(catalog_name)) {
 		reference_set_t<Catalog> inserted_catalogs;
@@ -1392,18 +1392,19 @@ vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(CatalogEntryRetriever 
 	}
 	vector<reference<SchemaCatalogEntry>> result;
 	for (auto catalog : catalogs) {
-		auto schemas = catalog.get().GetSchemas(retriever.GetContext());
+		auto schemas = catalog.get().GetSchemas(retriever.GetContext(), scan_level);
 		result.insert(result.end(), schemas.begin(), schemas.end());
 	}
 	return result;
 }
 
-vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(ClientContext &context, const string &catalog_name) {
+vector<reference<SchemaCatalogEntry>> Catalog::GetSchemas(ClientContext &context, const string &catalog_name,
+                                                          CatalogEntryScanLevel scan_level) {
 	CatalogEntryRetriever retriever(context);
-	return GetSchemas(retriever, catalog_name);
+	return GetSchemas(retriever, catalog_name, scan_level);
 }
 
-vector<reference<SchemaCatalogEntry>> Catalog::GetAllSchemas(ClientContext &context) {
+vector<reference<SchemaCatalogEntry>> Catalog::GetAllSchemas(ClientContext &context, CatalogEntryScanLevel scan_level) {
 	vector<reference<SchemaCatalogEntry>> result;
 
 	auto &db_manager = DatabaseManager::Get(context);
@@ -1413,7 +1414,7 @@ vector<reference<SchemaCatalogEntry>> Catalog::GetAllSchemas(ClientContext &cont
 			continue;
 		}
 		auto &catalog = database->GetCatalog();
-		auto new_schemas = catalog.GetSchemas(context);
+		auto new_schemas = catalog.GetSchemas(context, scan_level);
 		result.insert(result.end(), new_schemas.begin(), new_schemas.end());
 	}
 	sort(result.begin(), result.end(),
@@ -1432,12 +1433,13 @@ vector<reference<SchemaCatalogEntry>> Catalog::GetAllSchemas(ClientContext &cont
 	return result;
 }
 
-vector<reference<CatalogEntry>> Catalog::GetAllEntries(ClientContext &context, CatalogType catalog_type) {
+vector<reference<CatalogEntry>> Catalog::GetAllEntries(ClientContext &context, CatalogType catalog_type,
+                                                       CatalogEntryScanLevel scan_level) {
 	vector<reference<CatalogEntry>> result;
-	auto schemas = GetAllSchemas(context);
+	auto schemas = GetAllSchemas(context, scan_level);
 	for (const auto &schema_ref : schemas) {
 		auto &schema = schema_ref.get();
-		schema.Scan(context, catalog_type, [&](CatalogEntry &entry) { result.push_back(entry); });
+		schema.Scan(context, catalog_type, scan_level, [&](CatalogEntry &entry) { result.push_back(entry); });
 	}
 	return result;
 }

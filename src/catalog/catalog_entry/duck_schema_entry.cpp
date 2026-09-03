@@ -352,7 +352,7 @@ void DuckSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) {
 	}
 }
 
-void DuckSchemaEntry::Scan(ClientContext &context, CatalogType type,
+void DuckSchemaEntry::Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
                            const std::function<void(CatalogEntry &)> &callback) {
 	auto &set = GetCatalogSet(type);
 	set.Scan(GetCatalogTransaction(context), callback);

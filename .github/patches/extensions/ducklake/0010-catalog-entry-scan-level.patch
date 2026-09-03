@@ -1,0 +1,150 @@
+diff --git a/src/functions/ducklake_compaction_functions.cpp b/src/functions/ducklake_compaction_functions.cpp
+index d78c57a4..bd85e3c2 100644
+--- a/src/functions/ducklake_compaction_functions.cpp
++++ b/src/functions/ducklake_compaction_functions.cpp
+@@ -833,20 +833,22 @@ unique_ptr<LogicalOperator> BindCompaction(ClientContext &context, TableFunction
+ 
+ 	if (input.inputs.size() == 1) {
+ 		// No default schema/table, we will perform rewrites on deletes in the whole database
+-		auto schemas = ducklake_catalog.GetSchemas(context);
++		auto schemas = ducklake_catalog.GetSchemas(context, CatalogEntryScanLevel::COLUMN);
+ 		for (auto &cur_schema : schemas) {
+-			cur_schema.get().Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+-				if (entry.type == CatalogType::TABLE_ENTRY) {
+-					auto &dl_cur_schema = cur_schema.get().Cast<DuckLakeSchemaEntry>();
+-					auto &cur_table = entry.Cast<DuckLakeTableEntry>();
+-					if (ducklake_catalog.GetConfigOption<string>("auto_compact", dl_cur_schema.GetSchemaId(),
+-					                                             cur_table.GetTableId(), "true") == "true") {
+-						auto delete_threshold = GetDeleteThreshold(&dl_cur_schema, cur_table, ducklake_catalog, input);
+-						GenerateCompaction(context, transaction, ducklake_catalog, input, cur_table, type,
+-						                   delete_threshold, max_files, min_file_size, max_file_size, compactions);
+-					}
+-				}
+-			});
++			cur_schema.get().Scan(
++			    context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
++				    if (entry.type == CatalogType::TABLE_ENTRY) {
++					    auto &dl_cur_schema = cur_schema.get().Cast<DuckLakeSchemaEntry>();
++					    auto &cur_table = entry.Cast<DuckLakeTableEntry>();
++					    if (ducklake_catalog.GetConfigOption<string>("auto_compact", dl_cur_schema.GetSchemaId(),
++					                                                 cur_table.GetTableId(), "true") == "true") {
++						    auto delete_threshold =
++						        GetDeleteThreshold(&dl_cur_schema, cur_table, ducklake_catalog, input);
++						    GenerateCompaction(context, transaction, ducklake_catalog, input, cur_table, type,
++						                       delete_threshold, max_files, min_file_size, max_file_size, compactions);
++					    }
++				    }
++			    });
+ 		}
+ 		return GenerateCompactionOperator(input, bind_index, compactions);
+ 	} else if (input.inputs.size() == 2) {
+diff --git a/src/functions/ducklake_flush_inlined_data.cpp b/src/functions/ducklake_flush_inlined_data.cpp
+index 8f9c0881..a581ac9b 100644
+--- a/src/functions/ducklake_flush_inlined_data.cpp
++++ b/src/functions/ducklake_flush_inlined_data.cpp
+@@ -627,7 +627,7 @@ static unique_ptr<LogicalOperator> FlushInlinedDataBind(ClientContext &context,
+ 		vector<reference<SchemaCatalogEntry>> schemas;
+ 		if (schema.empty()) {
+ 			// no specific schema - fetch all schemas
+-			schemas = ducklake_catalog.GetSchemas(context);
++			schemas = ducklake_catalog.GetSchemas(context, CatalogEntryScanLevel::COLUMN);
+ 		} else {
+ 			// specific schema - fetch it
+ 			schemas.push_back(ducklake_catalog.GetSchema(context, Identifier(schema)));
+@@ -635,12 +635,13 @@ static unique_ptr<LogicalOperator> FlushInlinedDataBind(ClientContext &context,
+ 
+ 		// - scan all tables from the relevant schemas
+ 		for (auto &schema_catalog_entry : schemas) {
+-			schema_catalog_entry.get().Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+-				if (entry.type == CatalogType::TABLE_ENTRY) {
+-					auto &dl_schema = schema_catalog_entry.get().Cast<DuckLakeSchemaEntry>();
+-					schema_table_map[dl_schema.GetSchemaId().index].push_back(entry.Cast<DuckLakeTableEntry>());
+-				}
+-			});
++			schema_catalog_entry.get().Scan(
++			    context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
++				    if (entry.type == CatalogType::TABLE_ENTRY) {
++					    auto &dl_schema = schema_catalog_entry.get().Cast<DuckLakeSchemaEntry>();
++					    schema_table_map[dl_schema.GetSchemaId().index].push_back(entry.Cast<DuckLakeTableEntry>());
++				    }
++			    });
+ 		}
+ 	} else {
+ 		// specific table - fetch the table
+diff --git a/src/functions/ducklake_set_option.cpp b/src/functions/ducklake_set_option.cpp
+index 6cc41de3..58aeea06 100644
+--- a/src/functions/ducklake_set_option.cpp
++++ b/src/functions/ducklake_set_option.cpp
+@@ -23,7 +23,7 @@ static void ValidateTableScope(ClientContext &context, Catalog &catalog, const s
+ 
+ static void ValidateTablesInSchema(ClientContext &context, DuckLakeCatalog &duck_catalog,
+                                    DuckLakeSchemaEntry &schema_entry, SchemaIndex override_scope_id) {
+-	schema_entry.Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
++	schema_entry.Scan(context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
+ 		auto &ducklake_table = entry.Cast<DuckLakeTableEntry>();
+ 		string override_val;
+ 		if (duck_catalog.TryGetScopedConfigOption("data_inlining_row_limit", override_val, override_scope_id,
+@@ -44,7 +44,7 @@ static void ValidateSchemaScope(ClientContext &context, Catalog &catalog, const
+ 
+ static void ValidateGlobalScope(ClientContext &context, Catalog &catalog) {
+ 	auto &duck_catalog = catalog.Cast<DuckLakeCatalog>();
+-	duck_catalog.ScanSchemas(context, [&](SchemaCatalogEntry &schema) {
++	duck_catalog.ScanSchemas(context, CatalogEntryScanLevel::COLUMN, [&](SchemaCatalogEntry &schema) {
+ 		auto &schema_entry = schema.Cast<DuckLakeSchemaEntry>();
+ 		ValidateTablesInSchema(context, duck_catalog, schema_entry, schema_entry.GetSchemaId());
+ 	});
+diff --git a/src/include/storage/ducklake_catalog.hpp b/src/include/storage/ducklake_catalog.hpp
+index ce752724..42ca1d38 100644
+--- a/src/include/storage/ducklake_catalog.hpp
++++ b/src/include/storage/ducklake_catalog.hpp
+@@ -149,7 +149,8 @@ public:
+ 
+ 	optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) override;
+ 
+-	void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) override;
++	void ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++	                 std::function<void(SchemaCatalogEntry &)> callback) override;
+ 
+ 	optional_ptr<SchemaCatalogEntry> LookupSchema(CatalogTransaction transaction, const EntryLookupInfo &schema_lookup,
+ 	                                              OnEntryNotFound if_not_found) override;
+diff --git a/src/include/storage/ducklake_schema_entry.hpp b/src/include/storage/ducklake_schema_entry.hpp
+index 3a81d013..7dd596ec 100644
+--- a/src/include/storage/ducklake_schema_entry.hpp
++++ b/src/include/storage/ducklake_schema_entry.hpp
+@@ -53,7 +53,8 @@ public:
+ 	optional_ptr<CatalogEntry> CreateCollation(CatalogTransaction transaction, CreateCollationInfo &info) override;
+ 	optional_ptr<CatalogEntry> CreateType(CatalogTransaction transaction, CreateTypeInfo &info) override;
+ 	void Alter(CatalogTransaction transaction, AlterInfo &info) override;
+-	void Scan(ClientContext &context, CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
++	void Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback) override;
+ 	void Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
+ 	void Scan(CatalogType type, const std::function<void(const CatalogEntry &)> &callback) const;
+ 	void DropEntry(ClientContext &context, DropInfo &info) override;
+diff --git a/src/storage/ducklake_catalog.cpp b/src/storage/ducklake_catalog.cpp
+index 1cbce0f8..9aa0ecb8 100644
+--- a/src/storage/ducklake_catalog.cpp
++++ b/src/storage/ducklake_catalog.cpp
+@@ -300,7 +300,8 @@ void DuckLakeCatalog::DropSchema(ClientContext &context, DropInfo &info) {
+ 	transaction.DropEntry(*schema);
+ }
+ 
+-void DuckLakeCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
++void DuckLakeCatalog::ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++                                  std::function<void(SchemaCatalogEntry &)> callback) {
+ 	if (!initialized) {
+ 		return;
+ 	}
+diff --git a/src/storage/ducklake_schema_entry.cpp b/src/storage/ducklake_schema_entry.cpp
+index 4de3dba7..412849d2 100644
+--- a/src/storage/ducklake_schema_entry.cpp
++++ b/src/storage/ducklake_schema_entry.cpp
+@@ -329,7 +329,7 @@ void DuckLakeSchemaEntry::Alter(CatalogTransaction catalog_transaction, AlterInf
+ 	}
+ }
+ 
+-void DuckLakeSchemaEntry::Scan(ClientContext &context, CatalogType type,
++void DuckLakeSchemaEntry::Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
+                                const std::function<void(CatalogEntry &)> &callback) {
+ 	if (!CatalogTypeIsSupported(type)) {
+ 		return;

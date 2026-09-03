@@ -165,13 +165,13 @@ BoundStatement Binder::Bind(ExportStatement &stmt) {
 	// gather a list of all the tables
 	string catalog = stmt.database;
 	catalog_entry_vector_t tables;
-	auto schemas = Catalog::GetSchemas(context, catalog);
+	auto schemas = Catalog::GetSchemas(context, catalog, CatalogEntryScanLevel::COLUMN);
 	for (auto &schema : schemas) {
 		auto &schema_entry = schema.get();
 		if (schema_entry.ParentCatalog().IsTemporaryCatalog()) {
 			continue;
 		}
-		schema.get().Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry &entry) {
+		schema.get().Scan(context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN, [&](CatalogEntry &entry) {
 			if (entry.type == CatalogType::TABLE_ENTRY) {
 				tables.push_back(entry.Cast<TableCatalogEntry>());
 			}

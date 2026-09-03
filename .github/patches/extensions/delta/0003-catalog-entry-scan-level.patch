@@ -1,0 +1,55 @@
+diff --git a/src/include/storage/delta_catalog.hpp b/src/include/storage/delta_catalog.hpp
+index 25f1749..5df5a71 100644
+--- a/src/include/storage/delta_catalog.hpp
++++ b/src/include/storage/delta_catalog.hpp
+@@ -66,7 +66,8 @@ public:
+ 
+ 	optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) override;
+ 
+-	void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) override;
++	void ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++	                 std::function<void(SchemaCatalogEntry &)> callback) override;
+ 
+ 	optional_ptr<SchemaCatalogEntry> LookupSchema(CatalogTransaction transaction, const EntryLookupInfo &schema_lookup,
+ 	                                              OnEntryNotFound if_not_found) override;
+diff --git a/src/include/storage/delta_schema_entry.hpp b/src/include/storage/delta_schema_entry.hpp
+index 872b468..1808987 100644
+--- a/src/include/storage/delta_schema_entry.hpp
++++ b/src/include/storage/delta_schema_entry.hpp
+@@ -36,7 +36,8 @@ public:
+ 	optional_ptr<CatalogEntry> CreateCollation(CatalogTransaction transaction, CreateCollationInfo &info) override;
+ 	optional_ptr<CatalogEntry> CreateType(CatalogTransaction transaction, CreateTypeInfo &info) override;
+ 	void Alter(CatalogTransaction transaction, AlterInfo &info) override;
+-	void Scan(ClientContext &context, CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
++	void Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
++	          const std::function<void(CatalogEntry &)> &callback) override;
+ 	void Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) override;
+ 	void DropEntry(ClientContext &context, DropInfo &info) override;
+ 	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const EntryLookupInfo &lookup_info) override;
+diff --git a/src/storage/delta_catalog.cpp b/src/storage/delta_catalog.cpp
+index 883d3c8..07a3a62 100644
+--- a/src/storage/delta_catalog.cpp
++++ b/src/storage/delta_catalog.cpp
+@@ -44,7 +44,8 @@ void DeltaCatalog::DropSchema(ClientContext &context, DropInfo &info) {
+ 	throw BinderException("Delta tables do not support dropping schemas");
+ }
+ 
+-void DeltaCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
++void DeltaCatalog::ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
++                               std::function<void(SchemaCatalogEntry &)> callback) {
+ 	callback(*main_schema);
+ }
+ 
+diff --git a/src/storage/delta_schema_entry.cpp b/src/storage/delta_schema_entry.cpp
+index ee14ecf..c06c5f5 100644
+--- a/src/storage/delta_schema_entry.cpp
++++ b/src/storage/delta_schema_entry.cpp
+@@ -152,7 +152,7 @@ unique_ptr<DeltaTableEntry> DeltaSchemaEntry::CreateTableEntry(ClientContext &co
+ 	return table_entry;
+ }
+ 
+-void DeltaSchemaEntry::Scan(ClientContext &context, CatalogType type,
++void DeltaSchemaEntry::Scan(ClientContext &context, CatalogType type, CatalogEntryScanLevel scan_level,
+                             const std::function<void(CatalogEntry &)> &callback) {
+ 	if (CatalogTypeIsSupported(type)) {
+ 		auto transaction = catalog.GetCatalogTransaction(context);

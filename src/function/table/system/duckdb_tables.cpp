@@ -77,10 +77,10 @@ static unique_ptr<FunctionData> DuckDBTablesBind(ClientContext &context, TableFu
 unique_ptr<GlobalTableFunctionState> DuckDBTablesInit(ClientContext &context, TableFunctionInitInput &input) {
 	auto result = make_uniq<DuckDBTablesData>();
 
-	// scan all the schemas for tables and collect themand collect them
-	auto schemas = Catalog::GetAllSchemas(context);
+	// scan all the schemas for tables and collect them
+	auto schemas = Catalog::GetAllSchemas(context, CatalogEntryScanLevel::COLUMN);
 	for (auto &schema : schemas) {
-		schema.get().Scan(context, CatalogType::TABLE_ENTRY,
+		schema.get().Scan(context, CatalogType::TABLE_ENTRY, CatalogEntryScanLevel::COLUMN,
 		                  [&](CatalogEntry &entry) { result->entries.push_back(entry); });
 	};
 	return std::move(result);

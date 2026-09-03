@@ -12,6 +12,7 @@
 #include "duckdb/catalog/catalog_transaction.hpp"
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/enums/catalog_lookup_behavior.hpp"
+#include "duckdb/common/enums/catalog_entry_scan_level.hpp"
 #include "duckdb/common/enums/on_entry_not_found.hpp"
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/exception/catalog_exception.hpp"
@@ -288,7 +289,8 @@ public:
 	GetSchema(CatalogEntryRetriever &retriever, const Identifier &catalog_name, const EntryLookupInfo &schema_lookup,
 	          OnEntryNotFound if_not_found);
 	//! Scans all the schemas in the system one-by-one, invoking the callback for each entry
-	DUCKDB_API virtual void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) = 0;
+	DUCKDB_API virtual void ScanSchemas(ClientContext &context, CatalogEntryScanLevel scan_level,
+	                                    std::function<void(SchemaCatalogEntry &)> callback) = 0;
 
 	//! Gets the entry described by the (optionally catalog/schema-qualified) EntryLookupInfo. If the entry does not
 	//! exist behavior depends on OnEntryNotFound
@@ -470,14 +472,17 @@ public:
 		return GetEntry<T>(context, QualifiedName(catalog_name, schema_name, name), error_context);
 	}
 
-	DUCKDB_API vector<reference<SchemaCatalogEntry>> GetSchemas(ClientContext &context);
-	DUCKDB_API static vector<reference<SchemaCatalogEntry>> GetSchemas(ClientContext &context,
-	                                                                   const string &catalog_name);
-	DUCKDB_API static vector<reference<SchemaCatalogEntry>> GetSchemas(CatalogEntryRetriever &retriever,
-	                                                                   const string &catalog_name);
-	DUCKDB_API static vector<reference<SchemaCatalogEntry>> GetAllSchemas(ClientContext &context);
+	DUCKDB_API vector<reference<SchemaCatalogEntry>> GetSchemas(ClientContext &context,
+	                                                            CatalogEntryScanLevel scan_level);
+	DUCKDB_API static vector<reference<SchemaCatalogEntry>>
+	GetSchemas(ClientContext &context, const string &catalog_name, CatalogEntryScanLevel scan_level);
+	DUCKDB_API static vector<reference<SchemaCatalogEntry>>
+	GetSchemas(CatalogEntryRetriever &retriever, const string &catalog_name, CatalogEntryScanLevel scan_level);
+	DUCKDB_API static vector<reference<SchemaCatalogEntry>> GetAllSchemas(ClientContext &context,
+	                                                                      CatalogEntryScanLevel scan_level);
 
-	static vector<reference<CatalogEntry>> GetAllEntries(ClientContext &context, CatalogType catalog_type);
+	static vector<reference<CatalogEntry>> GetAllEntries(ClientContext &context, CatalogType catalog_type,
+	                                                     CatalogEntryScanLevel scan_level);
 
 	virtual void Verify();
 

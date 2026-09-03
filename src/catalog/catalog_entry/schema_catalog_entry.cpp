@@ -29,13 +29,14 @@ optional_ptr<CatalogEntry> SchemaCatalogEntry::CreateIndex(ClientContext &contex
 SimilarCatalogEntry SchemaCatalogEntry::GetSimilarEntry(CatalogTransaction transaction,
                                                         const EntryLookupInfo &lookup_info) {
 	SimilarCatalogEntry result;
-	Scan(transaction.GetContext(), lookup_info.GetCatalogType(), [&](CatalogEntry &entry) {
-		auto entry_score = StringUtil::SimilarityRating(entry.name.GetIdentifierName(), lookup_info.GetEntryName());
-		if (entry_score > result.score) {
-			result.score = entry_score;
-			result.name = Identifier(entry.name.GetIdentifierName());
-		}
-	});
+	Scan(
+	    transaction.GetContext(), lookup_info.GetCatalogType(), CatalogEntryScanLevel::TABLE, [&](CatalogEntry &entry) {
+		    auto entry_score = StringUtil::SimilarityRating(entry.name.GetIdentifierName(), lookup_info.GetEntryName());
+		    if (entry_score > result.score) {
+			    result.score = entry_score;
+			    result.name = Identifier(entry.name.GetIdentifierName());
+		    }
+	    });
 	return result;
 }
 
