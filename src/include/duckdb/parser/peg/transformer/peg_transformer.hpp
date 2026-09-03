@@ -220,13 +220,10 @@ private:
 struct TransformStackFrame {
 	explicit TransformStackFrame(TransformInput input);
 
-	bool IsInitialized() const;
-
 	optional_ptr<const CompiledGrammarRule> rule;
 	ParseResult &parse_result;
 	unique_ptr<TransformProcess> process;
 	unique_ptr<TransformResultValue> child_result;
-	unique_ptr<TransformResultValue> result;
 };
 
 class TransformStack {

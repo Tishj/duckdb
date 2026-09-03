@@ -121,10 +121,6 @@ TransformStackFrame::TransformStackFrame(TransformInput input)
     : rule(input.GetRule()), parse_result(input.parse_result) {
 }
 
-bool TransformStackFrame::IsInitialized() const {
-	return process || result;
-}
-
 TransformStack::TransformStack(PEGTransformer &transformer_p) : transformer(transformer_p) {
 }
 
@@ -140,12 +136,8 @@ void TransformStack::InitializeFrame(TransformStackFrame &frame) {
 }
 
 unique_ptr<TransformResultValue> TransformStack::ExecuteFrame(TransformStackFrame &frame) {
-	if (!frame.IsInitialized()) {
+	if (!frame.process) {
 		InitializeFrame(frame);
-		D_ASSERT(frame.IsInitialized());
-	}
-	if (frame.result) {
-		return std::move(frame.result);
 	}
 	D_ASSERT(frame.process);
 	auto step = frame.process->Resume(std::move(frame.child_result));
