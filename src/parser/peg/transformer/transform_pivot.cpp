@@ -150,15 +150,17 @@ unique_ptr<SelectStatement> PEGTransformerFactory::TransformPivotStatement(PEGTr
 	return select_statement;
 }
 
-void PEGTransformerFactory::InitializePivotStatementTrampoline(PEGTransformer &transformer, TransformProcess &process) {
+void PEGTransformerFactory::InitializePivotStatementTrampoline(PEGTransformer &transformer,
+                                                               GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	process.manual_state = transformer.ParamCount();
 	process.ReserveChildSlots(5);
-	process.PushChild({list_pr.GetChild(1), PEGTransformerFactory::GetTrampolineOps(list_pr.GetChild(1))}, 0);
+	process.PushChild({list_pr.GetChild(1)}, 0);
 }
 
-unique_ptr<TransformResultValue> PEGTransformerFactory::FinalizePivotStatementTrampoline(PEGTransformer &transformer,
-                                                                                         TransformProcess &process) {
+unique_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizePivotStatementTrampoline(PEGTransformer &transformer,
+                                                        GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	if (!process.child_results[4]) {
 		bool has_parameters = transformer.ParamCount() > process.manual_state;
@@ -168,19 +170,15 @@ unique_ptr<TransformResultValue> PEGTransformerFactory::FinalizePivotStatementTr
 		auto &pivot_group = list_pr.Child<OptionalParseResult>(4);
 		bool pushed_child = false;
 		if (pivot_group.HasResult()) {
-			process.PushChild(
-			    {pivot_group.GetResult(), PEGTransformerFactory::GetTrampolineOps(pivot_group.GetResult())}, 3);
+			process.PushChild({pivot_group.GetResult()}, 3);
 			pushed_child = true;
 		}
 		if (pivot_aggregates.HasResult()) {
-			process.PushChild(
-			    {pivot_aggregates.GetResult(), PEGTransformerFactory::GetTrampolineOps(pivot_aggregates.GetResult())},
-			    2);
+			process.PushChild({pivot_aggregates.GetResult()}, 2);
 			pushed_child = true;
 		}
 		if (pivot_columns.HasResult()) {
-			process.PushChild(
-			    {pivot_columns.GetResult(), PEGTransformerFactory::GetTrampolineOps(pivot_columns.GetResult())}, 1);
+			process.PushChild({pivot_columns.GetResult()}, 1);
 			pushed_child = true;
 		}
 		if (pushed_child) {
@@ -357,26 +355,25 @@ unique_ptr<SelectStatement> PEGTransformerFactory::TransformUnpivotStatement(PEG
 }
 
 void PEGTransformerFactory::InitializeUnpivotStatementTrampoline(PEGTransformer &transformer,
-                                                                 TransformProcess &process) {
+                                                                 GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	process.manual_state = transformer.ParamCount();
 	process.ReserveChildSlots(4);
-	process.PushChild({list_pr.GetChild(1), PEGTransformerFactory::GetTrampolineOps(list_pr.GetChild(1))}, 0);
+	process.PushChild({list_pr.GetChild(1)}, 0);
 }
 
-unique_ptr<TransformResultValue> PEGTransformerFactory::FinalizeUnpivotStatementTrampoline(PEGTransformer &transformer,
-                                                                                           TransformProcess &process) {
+unique_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeUnpivotStatementTrampoline(PEGTransformer &transformer,
+                                                          GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	if (!process.child_results[3]) {
 		bool has_parameters = transformer.ParamCount() > process.manual_state;
 		process.SetChildResult(3, make_uniq<TypedTransformResult<bool>>(has_parameters));
 		auto &unpivot_names_opt = list_pr.Child<OptionalParseResult>(4);
 		if (unpivot_names_opt.HasResult()) {
-			process.PushChild(
-			    {unpivot_names_opt.GetResult(), PEGTransformerFactory::GetTrampolineOps(unpivot_names_opt.GetResult())},
-			    2);
+			process.PushChild({unpivot_names_opt.GetResult()}, 2);
 		}
-		process.PushChild({list_pr.GetChild(3), PEGTransformerFactory::GetTrampolineOps(list_pr.GetChild(3))}, 1);
+		process.PushChild({list_pr.GetChild(3)}, 1);
 		return nullptr;
 	}
 	auto source = process.TakeResult<unique_ptr<TableRef>>(0);

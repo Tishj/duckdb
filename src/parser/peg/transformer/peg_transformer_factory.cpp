@@ -31,24 +31,6 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformStatement(PEGTransforme
 	return result;
 }
 
-const TransformProcessInfo &PEGTransformerFactory::GetTrampolineOps(const ParseResult &parse_result) {
-	auto info = TryGetTransformProcessInfo(parse_result);
-	if (!info) {
-		throw NotImplementedException("No transformer process for rule '%s'", parse_result.name);
-	}
-	return *info;
-}
-
-optional_ptr<const TransformProcessInfo>
-PEGTransformerFactory::TryGetTransformProcessInfo(const ParseResult &parse_result) {
-	auto &ops_map = GeneratedTrampolineOps();
-	auto ops_entry = ops_map.find(parse_result.name);
-	if (ops_entry == ops_map.end()) {
-		return nullptr;
-	}
-	return ops_entry->second;
-}
-
 static unique_ptr<SQLStatement> ExtractAndTransformStatement(PEGTransformer &transformer,
                                                              const TokenIterator &token_iterator, ParseResult &stmt_pr,
                                                              optional_idx terminator_offset) {
@@ -192,6 +174,14 @@ PEGTransformerFactory::PEGTransformerFactory(ParsedGrammar &grammar_p) : grammar
 	RegisterPivot();
 	RegisterSelect();
 	RegisterKeywordsAndIdentifiers();
+	for (auto &entry : GeneratedTransformProcessInfo()) {
+		auto process_info = entry.second;
+		grammar.SetTransformProcess(
+		    entry.first,
+		    [process_info](PEGTransformer &transformer, ParseResult &parse_result) -> unique_ptr<TransformProcess> {
+			    return make_uniq<GeneratedTransformProcess>(transformer, TransformInput {parse_result}, *process_info);
+		    });
+	}
 }
 
 void PEGTransformerFactory::RegisterDefaultTransforms(ParsedGrammar &grammar) {

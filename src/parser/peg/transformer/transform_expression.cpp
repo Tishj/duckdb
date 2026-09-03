@@ -1607,7 +1607,7 @@ unique_ptr<ParsedExpression> PEGTransformerFactory::TransformPrefixExpression(PE
 }
 
 void PEGTransformerFactory::InitializePrefixExpressionTrampoline(PEGTransformer &transformer,
-                                                                 TransformProcess &process) {
+                                                                 GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	auto &prefix_opt = list_pr.Child<OptionalParseResult>(0);
 	idx_t prefix_count = 0;
@@ -1618,18 +1618,17 @@ void PEGTransformerFactory::InitializePrefixExpressionTrampoline(PEGTransformer 
 		process.ReserveChildSlots(1 + prefix_count);
 		for (idx_t i = prefix_children.size(); i > 0; i--) {
 			auto child_idx = i - 1;
-			process.PushChild({prefix_children[child_idx].get(),
-			                   PEGTransformerFactory::GetTrampolineOps(prefix_children[child_idx].get())},
-			                  1 + child_idx);
+			process.PushChild({prefix_children[child_idx].get()}, 1 + child_idx);
 		}
 	} else {
 		process.ReserveChildSlots(1);
 	}
-	process.PushChild({list_pr.GetChild(1), PEGTransformerFactory::GetTrampolineOps(list_pr.GetChild(1))}, 0);
+	process.PushChild({list_pr.GetChild(1)}, 0);
 }
 
-unique_ptr<TransformResultValue> PEGTransformerFactory::FinalizePrefixExpressionTrampoline(PEGTransformer &transformer,
-                                                                                           TransformProcess &process) {
+unique_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizePrefixExpressionTrampoline(PEGTransformer &transformer,
+                                                          GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	auto &prefix_opt = list_pr.Child<OptionalParseResult>(0);
 	auto &base_expr_pr = list_pr.Child<ListParseResult>(1);
@@ -1783,12 +1782,13 @@ unique_ptr<ParsedExpression> PEGTransformerFactory::TransformLiteralExpression(P
 }
 
 void PEGTransformerFactory::InitializeLiteralExpressionTrampoline(PEGTransformer &transformer,
-                                                                  TransformProcess &process) {
+                                                                  GeneratedTransformProcess &process) {
 	process.ReserveChildSlots(0);
 }
 
-unique_ptr<TransformResultValue> PEGTransformerFactory::FinalizeLiteralExpressionTrampoline(PEGTransformer &transformer,
-                                                                                            TransformProcess &process) {
+unique_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeLiteralExpressionTrampoline(PEGTransformer &transformer,
+                                                           GeneratedTransformProcess &process) {
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	auto &choice_pr = list_pr.Child<ChoiceParseResult>(0);
 	auto &choice_result = choice_pr.GetResult();
@@ -2100,18 +2100,19 @@ unique_ptr<WindowExpression> PEGTransformerFactory::TransformOverClause(PEGTrans
 	return window_frame;
 }
 
-void PEGTransformerFactory::InitializeOverClauseTrampoline(PEGTransformer &transformer, TransformProcess &process) {
+void PEGTransformerFactory::InitializeOverClauseTrampoline(PEGTransformer &transformer,
+                                                           GeneratedTransformProcess &process) {
 	if (transformer.in_window_definition) {
 		throw ParserException("window functions are not allowed in window definitions");
 	}
 	auto &list_pr = process.parse_result.Cast<ListParseResult>();
 	transformer.in_window_definition = true;
 	process.ReserveChildSlots(1);
-	process.PushChild({list_pr.GetChild(1), PEGTransformerFactory::GetTrampolineOps(list_pr.GetChild(1))}, 0);
+	process.PushChild({list_pr.GetChild(1)}, 0);
 }
 
-unique_ptr<TransformResultValue> PEGTransformerFactory::FinalizeOverClauseTrampoline(PEGTransformer &transformer,
-                                                                                     TransformProcess &process) {
+unique_ptr<TransformResultValue>
+PEGTransformerFactory::FinalizeOverClauseTrampoline(PEGTransformer &transformer, GeneratedTransformProcess &process) {
 	auto result = process.TakeResult<unique_ptr<WindowExpression>>(0);
 	transformer.in_window_definition = false;
 	return make_uniq<TypedTransformResult<unique_ptr<WindowExpression>>>(std::move(result));
