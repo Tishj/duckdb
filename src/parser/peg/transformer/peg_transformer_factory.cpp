@@ -174,7 +174,7 @@ PEGTransformerFactory::PEGTransformerFactory(ParsedGrammar &grammar_p) : grammar
 	RegisterPivot();
 	RegisterSelect();
 	RegisterKeywordsAndIdentifiers();
-	for (auto &entry : GeneratedTrampolineOps()) {
+	for (auto &entry : GeneratedTransformFrameOps()) {
 		auto process_info = entry.second;
 		grammar.SetTransformProcess(
 		    entry.first,

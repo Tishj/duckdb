@@ -88,7 +88,7 @@ using transform_process_initialize_t = void (*)(PEGTransformer &transformer, Gen
 using transform_process_finalize_t = unique_ptr<TransformResultValue> (*)(PEGTransformer &transformer,
                                                                           GeneratedTransformProcess &process);
 
-struct TrampolineOps {
+struct TransformFrameOps {
 	const char *name;
 	transform_process_initialize_t initialize;
 	transform_process_finalize_t finalize;
@@ -143,7 +143,7 @@ public:
 
 class GeneratedTransformProcess final : public TransformProcess {
 public:
-	GeneratedTransformProcess(PEGTransformer &transformer, TransformInput input, const TrampolineOps &info);
+	GeneratedTransformProcess(PEGTransformer &transformer, TransformInput input, const TransformFrameOps &info);
 
 	void ReserveChildSlots(idx_t count);
 	void SetChildResult(idx_t slot, unique_ptr<TransformResultValue> result);
@@ -183,7 +183,7 @@ public:
 	}
 
 	ParseResult &parse_result;
-	const TrampolineOps &info;
+	const TransformFrameOps &info;
 	idx_t manual_state = 0;
 	vector<unique_ptr<TransformResultValue>> child_results;
 
@@ -3876,7 +3876,7 @@ public:
 	PEGTransformerFactory(const PEGTransformerFactory &) = delete;
 
 	static unique_ptr<SQLStatement> TransformStatement(PEGTransformer &, ParseResult &list);
-	static const case_insensitive_map_t<const TrampolineOps *> &GeneratedTrampolineOps();
+	static const case_insensitive_map_t<const TransformFrameOps *> &GeneratedTransformFrameOps();
 
 	// common.gram
 	static unique_ptr<ParsedExpression> TransformNumberLiteral(PEGTransformer &transformer, ParseResult &parse_result);

@@ -519,7 +519,7 @@ class UseGramPreviewEmitter:
         lines.append("")
         for rule_name in self.emitted_ops_rules():
             lines.append(
-                f"static const TrampolineOps {ops_name(rule_name)} = "
+                f"static const TransformFrameOps {ops_name(rule_name)} = "
                 f'{{"{rule_name}", &PEGTransformerFactory::{self.initialize_hook(rule_name)}, '
                 f"&PEGTransformerFactory::{self.finalize_hook(rule_name)}}};"
             )
@@ -559,9 +559,9 @@ class UseGramPreviewEmitter:
     def emit_ops_lookup(self):
         lines = []
         lines.append(
-            "const case_insensitive_map_t<const TrampolineOps *> &PEGTransformerFactory::GeneratedTrampolineOps() {"
+            "const case_insensitive_map_t<const TransformFrameOps *> &PEGTransformerFactory::GeneratedTransformFrameOps() {"
         )
-        lines.append("\tstatic const case_insensitive_map_t<const TrampolineOps *> result = {")
+        lines.append("\tstatic const case_insensitive_map_t<const TransformFrameOps *> result = {")
         for rule_name in self.emitted_ops_rules():
             lines.append(f'\t    {{"{rule_name}", &{ops_name(rule_name)}}},')
         lines.append("\t};")

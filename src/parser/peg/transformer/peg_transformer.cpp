@@ -28,7 +28,7 @@ unique_ptr<TransformResultValue> TransformStep::TakeResult() {
 }
 
 GeneratedTransformProcess::GeneratedTransformProcess(PEGTransformer &transformer_p, TransformInput input,
-                                                     const TrampolineOps &info_p)
+                                                     const TransformFrameOps &info_p)
     : parse_result(input.parse_result), info(info_p), transformer(transformer_p) {
 	if (!info.initialize || !info.finalize) {
 		throw InternalException("Incomplete transformer process for rule '%s'", info.name);
