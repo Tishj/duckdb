@@ -249,8 +249,7 @@ public:
 private:
 	void PushFrame(TransformInput input);
 	void InitializeFrame(TransformStackFrame &frame);
-	void ExecuteFrame(TransformStackFrame &frame);
-	unique_ptr<TransformResultValue> FinalizeFrame(TransformStackFrame &frame);
+	unique_ptr<TransformResultValue> ExecuteFrame(TransformStackFrame &frame);
 
 private:
 	PEGTransformer &transformer;
