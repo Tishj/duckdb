@@ -8,6 +8,7 @@
 #pragma once
 
 #include "duckdb/common/optional.hpp"
+#include "duckdb/common/stack.hpp"
 #include "duckdb/common/optional_idx.hpp"
 #include "duckdb/parser/peg/matcher.hpp"
 
@@ -42,6 +43,12 @@ public:
 	PackratMatchState packrat_state;
 };
 
+#ifdef DEBUG
+using match_frame_stack_t = InspectableStack<MatchStackFrame>;
+#else
+using match_frame_stack_t = stack<MatchStackFrame>;
+#endif
+
 class MatchStack {
 public:
 	MatcherResult Execute(MatchInput input);
@@ -54,7 +61,7 @@ private:
 	MatcherResult FinalizeFrame(MatchStackFrame &frame);
 
 private:
-	vector<unique_ptr<MatchStackFrame>> frames;
+	match_frame_stack_t frames;
 };
 
 } // namespace duckdb

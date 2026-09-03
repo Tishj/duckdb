@@ -227,25 +227,6 @@ struct TransformStackFrame {
 };
 
 #ifdef DEBUG
-template <typename T, typename Container = std::deque<T>>
-struct InspectableStack : public std::stack<T, Container> {
-	using std::stack<T, Container>::stack;
-
-	// expose the underlying container for iteration/inspection
-	auto begin() const {
-		return this->c.begin();
-	}
-	auto end() const {
-		return this->c.end();
-	}
-	auto size() const {
-		return this->c.size();
-	}
-
-	const T &operator[](typename Container::size_type i) const {
-		return this->c[i];
-	}
-};
 using frame_stack_t = InspectableStack<TransformStackFrame>;
 #else
 using frame_stack_t = stack<TransformStackFrame>;
