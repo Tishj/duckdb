@@ -1,4 +1,5 @@
 #include "duckdb/parser/peg/matcher_stack.hpp"
+#include "duckdb/common/optional.hpp"
 
 namespace duckdb {
 
@@ -60,7 +61,7 @@ MatcherResult MatchStack::ExecuteAtomicMatcher(MatchInput input) {
 
 void MatchStack::PushFrame(MatchInput input) {
 	input.state.rule = input.matcher.GetRule();
-	frames.push_back(make_uniq<MatchStackFrame>(input));
+	frames.emplace(input);
 }
 
 void MatchStack::InitializeFrame(MatchStackFrame &frame) {
@@ -85,7 +86,7 @@ void MatchStack::ExecuteFrame(MatchStackFrame &frame) {
 		return;
 	}
 	D_ASSERT(frame.process);
-	auto step = frame.process->Resume(std::move(frame.child_result));
+	auto step = frame.process->Resume(frame.child_result);
 	frame.child_result.reset();
 	auto child = step.GetChild();
 	if (!child) {
@@ -100,7 +101,9 @@ void MatchStack::ExecuteFrame(MatchStackFrame &frame) {
 }
 
 MatcherResult MatchStack::FinalizeFrame(MatchStackFrame &frame) {
-	D_ASSERT(frame.result);
+	if (!frame.result) {
+		throw InternalException("Trying to finalize a frame without a stored result");
+	}
 	auto result = *frame.result;
 	auto &matcher = frame.matcher;
 	auto &state = frame.match_state;
@@ -115,17 +118,17 @@ MatcherResult MatchStack::Execute(MatchInput input) {
 	}
 	PushFrame(input);
 	while (!frames.empty()) {
-		auto &frame = *frames.back();
+		auto &frame = frames.top();
 		ExecuteFrame(frame);
 		if (!frame.result) {
 			continue;
 		}
 		auto result = FinalizeFrame(frame);
-		frames.pop_back();
+		frames.pop();
 		if (frames.empty()) {
 			return result;
 		}
-		auto &parent = *frames.back();
+		auto &parent = frames.top();
 		D_ASSERT(!parent.child_result);
 		parent.child_result = result;
 	}
