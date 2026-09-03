@@ -125,7 +125,7 @@ TransformStack::TransformStack(PEGTransformer &transformer_p) : transformer(tran
 }
 
 void TransformStack::PushFrame(TransformInput input) {
-	frames.push_back(make_uniq<TransformStackFrame>(input));
+	frames.emplace(input);
 }
 
 void TransformStack::InitializeFrame(TransformStackFrame &frame) {
@@ -156,30 +156,31 @@ unique_ptr<TransformResultValue> TransformStack::Execute(TransformInput input) {
 	}
 	PushFrame(input);
 	while (!frames.empty()) {
-		auto &frame = *frames.back();
+		auto &frame = frames.top();
 		auto result = ExecuteFrame(frame);
 		if (!result) {
 			continue;
 		}
 		transformer.SetResultLocation(frame.parse_result, *result);
-		frames.pop_back();
+		frames.pop();
 		if (frames.empty()) {
 			return result;
 		}
-		auto &parent = *frames.back();
+		auto &parent = frames.top();
 		D_ASSERT(!parent.child_result);
 		parent.child_result = std::move(result);
 	}
 	throw InternalException("Transformer stack completed without a result");
 }
 
+#ifdef DEBUG
 string TransformStack::FormatStack() const {
 	stringstream result;
 	for (idx_t i = 0; i < frames.size(); i++) {
 		if (i > 0) {
 			result << "\n";
 		}
-		auto &parse_result = frames[i]->parse_result;
+		auto &parse_result = frames[i].parse_result;
 		result << "#" << i << " " << parse_result.name;
 		if (parse_result.offset.IsValid()) {
 			result << " offset=" << parse_result.offset.GetIndex();
@@ -187,6 +188,7 @@ string TransformStack::FormatStack() const {
 	}
 	return result.str();
 }
+#endif
 
 unique_ptr<TransformResultValue> PEGTransformer::ExecuteRecursive(TransformInput input) {
 	auto rule = input.GetRule();
