@@ -27,14 +27,14 @@ fi
 
 echo "Successfully generated transformer wrappers"
 
-GEN_PROCESS_FILE="scripts/parser/generate_transformer_process.py"
-if [[ ! -f "$GEN_PROCESS_FILE" ]]; then
-  echo "Error: $GEN_PROCESS_FILE not found"
+GEN_TRAMPOLINE_FILE="scripts/parser/generate_transformer_trampoline.py"
+if [[ ! -f "$GEN_TRAMPOLINE_FILE" ]]; then
+  echo "Error: $GEN_TRAMPOLINE_FILE not found"
   exit 1
 fi
 
-"$PYTHON_BIN" "$GEN_PROCESS_FILE" --write
+"$PYTHON_BIN" "$GEN_TRAMPOLINE_FILE" --write
 
-echo "Successfully generated process transformer wrappers"
+echo "Successfully generated trampoline transformer wrappers"
 
 make format-parser-grammar

@@ -28,12 +28,12 @@ unique_ptr<TransformResultValue> TransformStep::TakeResult() {
 }
 
 GeneratedTransformProcess::GeneratedTransformProcess(PEGTransformer &transformer_p, TransformInput input,
-                                                     const TransformProcessInfo &info_p)
+                                                     const TrampolineOps &info_p)
     : parse_result(input.parse_result), info(info_p), transformer(transformer_p) {
-	if (!info.prepare || !info.reduce) {
+	if (!info.initialize || !info.finalize) {
 		throw InternalException("Incomplete transformer process for rule '%s'", info.name);
 	}
-	info.prepare(transformer, *this);
+	info.initialize(transformer, *this);
 }
 
 void GeneratedTransformProcess::ReserveChildSlots(idx_t count) {
@@ -67,7 +67,7 @@ TransformStep GeneratedTransformProcess::NextStep() {
 		child_result_slot = child.slot;
 		return TransformStep::Child(child.input);
 	}
-	auto result = info.reduce(transformer, *this);
+	auto result = info.finalize(transformer, *this);
 	if (result) {
 		completed = true;
 		return TransformStep::Complete(std::move(result));
@@ -79,15 +79,15 @@ TransformStep GeneratedTransformProcess::NextStep() {
 	return NextStep();
 }
 
-ReduceTransformProcess::ReduceTransformProcess(PEGTransformer &transformer_p, ParseResult &parse_result_p,
-                                               transform_reduce_function_t reduce_p)
-    : transformer(transformer_p), parse_result(parse_result_p), reduce(std::move(reduce_p)) {
+FinalizeTransformProcess::FinalizeTransformProcess(PEGTransformer &transformer_p, ParseResult &parse_result_p,
+                                                   transform_finalize_function_t finalize_p)
+    : transformer(transformer_p), parse_result(parse_result_p), finalize(std::move(finalize_p)) {
 }
 
-TransformStep ReduceTransformProcess::Resume(unique_ptr<TransformResultValue> child_result) {
+TransformStep FinalizeTransformProcess::Resume(unique_ptr<TransformResultValue> child_result) {
 	D_ASSERT(!completed);
 	D_ASSERT(!child_result);
-	auto result = reduce(transformer, parse_result);
+	auto result = finalize(transformer, parse_result);
 	if (!result) {
 		throw InternalException("Transformer for rule '%s' returned a nullptr", parse_result.name);
 	}

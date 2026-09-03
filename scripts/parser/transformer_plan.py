@@ -367,10 +367,10 @@ class SequenceRulePlan:
     required_repeat_child: "RequiredRepeatStackChild | None"
     list_child: "ListStackChild | None"
     trailing_optional_stack_child: "TrailingOptionalStackChild | None"
-    reduce_args: List[object]
+    finalize_args: List[object]
 
 
-def _process_parse_expr(child_idx, child):
+def _trampoline_parse_expr(child_idx, child):
     parse_expr = f"list_pr.GetChild({child_idx})"
     while isinstance(child, ParensNode):
         parse_expr = f"ExtractResultFromParens({parse_expr})"
@@ -458,11 +458,11 @@ def _is_terminal_override(rule_name, matcher_overrides):
     return override is not None and override.is_terminal()
 
 
-def plan_process_sequence_rule(ast, matcher_overrides, syntax_only_rules=None):
-    return plan_process_sequence_rule_with_terminals(ast, matcher_overrides, syntax_only_rules)
+def plan_trampoline_sequence_rule(ast, matcher_overrides, syntax_only_rules=None):
+    return plan_trampoline_sequence_rule_with_terminals(ast, matcher_overrides, syntax_only_rules)
 
 
-def plan_process_sequence_rule_with_terminals(
+def plan_trampoline_sequence_rule_with_terminals(
     ast,
     matcher_overrides,
     syntax_only_rules=None,
@@ -483,11 +483,11 @@ def plan_process_sequence_rule_with_terminals(
     required_repeat_child = None
     list_child = None
     trailing_optional_stack_child = None
-    reduce_args = []
+    finalize_args = []
     next_slot = 0
     children = ast.children if isinstance(ast, SequenceNode) else [ast]
     for child_idx, child in enumerate(children):
-        parse_expr, child = _process_parse_expr(child_idx, child)
+        parse_expr, child = _trampoline_parse_expr(child_idx, child)
         has_dynamic_child = (
             list_child is not None
             or repeat_child is not None
@@ -500,7 +500,7 @@ def plan_process_sequence_rule_with_terminals(
             var_name = "has_result" if len(direct_optional_presence_args) == 0 else f"has_result_{child_idx}"
             arg = DirectOptionalPresenceArg(parse_expr, var_name)
             direct_optional_presence_args.append(arg)
-            reduce_args.append(arg)
+            finalize_args.append(arg)
             continue
         if isinstance(child, ReferenceNode):
             if _is_identifier_override(child.name, matcher_overrides):
@@ -518,7 +518,7 @@ def plan_process_sequence_rule_with_terminals(
                 arg = StackChild(parse_expr, child.name, next_slot, to_snake_case(child.name))
                 stack_children.append(arg)
                 next_slot += 1
-            reduce_args.append(arg)
+            finalize_args.append(arg)
             continue
         if isinstance(child, OptionalNode) and isinstance(child.child, ReferenceNode):
             if _is_identifier_override(child.child.name, matcher_overrides):
@@ -537,7 +537,7 @@ def plan_process_sequence_rule_with_terminals(
                             to_snake_case(child.child.name),
                         )
                         trailing_optional_stack_child = arg
-                        reduce_args.append(arg)
+                        finalize_args.append(arg)
                         continue
                     arg = OptionalStackChild(
                         parse_expr,
@@ -556,7 +556,7 @@ def plan_process_sequence_rule_with_terminals(
                     )
                     optional_stack_children.append(arg)
                     next_slot += 1
-            reduce_args.append(arg)
+            finalize_args.append(arg)
             continue
         optional_stack_plan = None
         if isinstance(child, OptionalNode):
@@ -572,7 +572,7 @@ def plan_process_sequence_rule_with_terminals(
                     to_snake_case(rule_name),
                     result_expr_template,
                 )
-                reduce_args.append(arg)
+                finalize_args.append(arg)
                 continue
             if has_dynamic_child:
                 if not allow_dynamic_stack_followers:
@@ -585,7 +585,7 @@ def plan_process_sequence_rule_with_terminals(
                         result_expr_template,
                     )
                     trailing_optional_stack_child = arg
-                    reduce_args.append(arg)
+                    finalize_args.append(arg)
                     continue
                 arg = OptionalStackChild(
                     parse_expr,
@@ -606,7 +606,7 @@ def plan_process_sequence_rule_with_terminals(
                 )
                 optional_stack_children.append(arg)
                 next_slot += 1
-            reduce_args.append(arg)
+            finalize_args.append(arg)
             continue
         transparent_child_plan = _single_semantic_child_plan(child, parse_expr, syntax_only_rules)
         if transparent_child_plan is not None and not isinstance(child, ReferenceNode):
@@ -626,7 +626,7 @@ def plan_process_sequence_rule_with_terminals(
                 arg = StackChild(child_parse_expr, rule_name, next_slot, to_snake_case(rule_name))
                 stack_children.append(arg)
                 next_slot += 1
-            reduce_args.append(arg)
+            finalize_args.append(arg)
             continue
         if isinstance(child, OptionalNode) and isinstance(child.child, RepeatNode):
             repeat_node = child.child.child
@@ -634,7 +634,7 @@ def plan_process_sequence_rule_with_terminals(
                 if _is_identifier_override(repeat_node.name, matcher_overrides):
                     arg = DirectRepeatArg(parse_expr, repeat_node.name, to_snake_case(repeat_node.name))
                     direct_repeat_args.append(arg)
-                    reduce_args.append(arg)
+                    finalize_args.append(arg)
                     continue
                 if _is_terminal_override(repeat_node.name, matcher_overrides):
                     raise NotImplementedError("terminal override repeat is currently unsupported")
@@ -647,7 +647,7 @@ def plan_process_sequence_rule_with_terminals(
                     to_snake_case(repeat_node.name),
                 )
                 next_slot += 1
-                reduce_args.append(repeat_child)
+                finalize_args.append(repeat_child)
                 continue
         if isinstance(child, OptionalNode) and isinstance(child.child, ListMacroNode):
             list_node = child.child.inner
@@ -664,7 +664,7 @@ def plan_process_sequence_rule_with_terminals(
                         result_expr_template,
                     )
                     direct_optional_list_args.append(arg)
-                    reduce_args.append(arg)
+                    finalize_args.append(arg)
                     continue
                 if _is_terminal_override(list_node.name, matcher_overrides):
                     arg = DirectOptionalListArg(
@@ -674,7 +674,7 @@ def plan_process_sequence_rule_with_terminals(
                         result_expr_template,
                     )
                     direct_optional_list_args.append(arg)
-                    reduce_args.append(arg)
+                    finalize_args.append(arg)
                     continue
                 if (
                     list_child is not None
@@ -691,7 +691,7 @@ def plan_process_sequence_rule_with_terminals(
                     result_expr_template,
                 )
                 next_slot += 1
-                reduce_args.append(optional_list_child)
+                finalize_args.append(optional_list_child)
                 continue
         if isinstance(child, OptionalNode):
             list_container, result_expr_template = _unwrap_parens_node(child.child, "{opt}.GetResult()")
@@ -705,7 +705,7 @@ def plan_process_sequence_rule_with_terminals(
                         result_expr_template,
                     )
                     direct_optional_list_args.append(arg)
-                    reduce_args.append(arg)
+                    finalize_args.append(arg)
                     continue
                 if _is_terminal_override(list_node.name, matcher_overrides):
                     arg = DirectOptionalListArg(
@@ -715,7 +715,7 @@ def plan_process_sequence_rule_with_terminals(
                         result_expr_template,
                     )
                     direct_optional_list_args.append(arg)
-                    reduce_args.append(arg)
+                    finalize_args.append(arg)
                     continue
                 if (
                     list_child is not None
@@ -732,7 +732,7 @@ def plan_process_sequence_rule_with_terminals(
                     result_expr_template,
                 )
                 next_slot += 1
-                reduce_args.append(optional_list_child)
+                finalize_args.append(optional_list_child)
                 continue
         if isinstance(child, RepeatNode) and isinstance(child.child, ReferenceNode):
             if len(children) == 1 and not allow_top_level_repeat:
@@ -752,18 +752,18 @@ def plan_process_sequence_rule_with_terminals(
                 parse_expr, child.child.name, next_slot, to_snake_case(child.child.name)
             )
             next_slot += 1
-            reduce_args.append(required_repeat_child)
+            finalize_args.append(required_repeat_child)
             continue
         if isinstance(child, ListMacroNode) and isinstance(child.inner, ReferenceNode):
             if _is_identifier_override(child.inner.name, matcher_overrides):
                 arg = DirectListArg(parse_expr, child.inner.name, to_snake_case(child.inner.name))
                 direct_list_args.append(arg)
-                reduce_args.append(arg)
+                finalize_args.append(arg)
                 continue
             if _is_terminal_override(child.inner.name, matcher_overrides):
                 arg = DirectListArg(parse_expr, child.inner.name, to_snake_case(child.inner.name))
                 direct_list_args.append(arg)
-                reduce_args.append(arg)
+                finalize_args.append(arg)
                 continue
             if (
                 list_child is not None
@@ -774,11 +774,11 @@ def plan_process_sequence_rule_with_terminals(
                 raise NotImplementedError("only one dynamic stack child is currently supported")
             list_child = ListStackChild(parse_expr, child.inner.name, next_slot, to_snake_case(child.inner.name))
             next_slot += 1
-            reduce_args.append(list_child)
+            finalize_args.append(list_child)
             continue
         raise NotImplementedError(f"unsupported semantic child shape: {type(child).__name__}")
     seen_arg_names = {}
-    for arg in reduce_args:
+    for arg in finalize_args:
         if not hasattr(arg, "var_name"):
             continue
         var_name = arg.var_name
@@ -801,7 +801,7 @@ def plan_process_sequence_rule_with_terminals(
         required_repeat_child,
         list_child,
         trailing_optional_stack_child,
-        reduce_args,
+        finalize_args,
     )
 
 

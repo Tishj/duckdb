@@ -149,7 +149,7 @@ static void ApplyPipeStage(PEGTransformer &transformer, ParseResult &parse_resul
 	}
 }
 
-static unique_ptr<TransformResultValue> ReducePipeSelectAtom(PEGTransformer &transformer, ParseResult &parse_result) {
+static unique_ptr<TransformResultValue> FinalizePipeSelectAtom(PEGTransformer &transformer, ParseResult &parse_result) {
 	auto &pipe = parse_result.Cast<ListParseResult>();
 	auto statement = TransformPipeSource(transformer, pipe.GetChild(0));
 	auto &stages = pipe.Child<RepeatParseResult>(1);
@@ -161,7 +161,7 @@ static unique_ptr<TransformResultValue> ReducePipeSelectAtom(PEGTransformer &tra
 
 static unique_ptr<TransformProcess> StartPipeSelectAtomTransform(PEGTransformer &transformer,
                                                                  ParseResult &parse_result) {
-	return make_uniq<ReduceTransformProcess>(transformer, parse_result, ReducePipeSelectAtom);
+	return make_uniq<FinalizeTransformProcess>(transformer, parse_result, FinalizePipeSelectAtom);
 }
 
 class PipeSQLGrammarChange final : public GrammarExtension {
