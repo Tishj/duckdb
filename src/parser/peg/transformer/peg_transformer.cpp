@@ -215,7 +215,7 @@ unique_ptr<TransformResultValue> PEGTransformer::TransformInternal(ParseResult &
 		throw InternalException("No registered data exists for rule '%s'", parse_result.name);
 	}
 	TransformInput input {*rule, parse_result};
-	if (options.debug_heap_based_parser) {
+	if (options.heap_based_parser) {
 		TransformStack stack(*this);
 		return stack.Execute(input);
 	}

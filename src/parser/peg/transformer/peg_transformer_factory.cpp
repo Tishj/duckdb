@@ -65,7 +65,7 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformTopLevelStatement(Token
 	ParserPackratCache packrat_cache;
 	idx_t max_token_index = token_iterator.Position();
 	MatchState state(token_iterator, suggestions, parse_result_allocator, max_token_index,
-	                 MatchMode::BUILD_PARSE_RESULT, options.identifier_case_mode, options.debug_heap_based_parser,
+	                 MatchMode::BUILD_PARSE_RESULT, options.identifier_case_mode, options.heap_based_parser,
 	                 &packrat_cache);
 	auto match_result = grammar.TopLevelStatementMatcher().MatchParseResult(state);
 	if (!match_result.IsSuccess()) {
