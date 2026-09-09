@@ -57,6 +57,21 @@ KeywordCategory DefaultKeywordMaps::GetKeywordCategory(LiteralInfo info) {
 	return KeywordCategory::KEYWORD_NONE;
 }
 
+case_insensitive_map_t<LiteralInfo> DefaultKeywordMaps::ToLiteralMap() const {
+	case_insensitive_map_t<LiteralInfo> result;
+	auto add_keywords = [&](const case_insensitive_set_t &words) {
+		for (auto &word : words) {
+			result.emplace(word, LookupKeyword(word));
+		}
+	};
+	add_keywords(reserved_keyword_map);
+	add_keywords(unreserved_keyword_map);
+	add_keywords(colname_keyword_map);
+	add_keywords(typefunc_keyword_map);
+	add_keywords(typename_keyword_map);
+	return result;
+}
+
 vector<ParserKeyword> DefaultKeywordMaps::ToList() const {
 	vector<ParserKeyword> result;
 	for (auto &kw : reserved_keyword_map) {

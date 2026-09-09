@@ -28,6 +28,10 @@ public:
 		return value & MAX_LITERAL_ID;
 	}
 
+	LiteralInfo WithLiteralId(uint32_t literal_id) const {
+		return LiteralInfo(literal_id, value & ~MAX_LITERAL_ID);
+	}
+
 	bool IsKeyword() const {
 		return (value & ~MAX_LITERAL_ID) != 0;
 	}

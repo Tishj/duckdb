@@ -7,17 +7,17 @@
 
 #pragma once
 
-#include "duckdb/parser/peg/keyword_helper.hpp"
+#include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/parser/peg/literal_info.hpp"
 
 namespace duckdb {
 
 class ParsedGrammar;
-class DefaultKeywordMaps;
 
 //! Immutable after construction, including literals only present in keyword-category rules.
 class GrammarLiteralTable {
 public:
-	DUCKDB_API GrammarLiteralTable(const ParsedGrammar &grammar, const DefaultKeywordMaps &keyword_maps);
+	DUCKDB_API GrammarLiteralTable(const ParsedGrammar &grammar, const case_insensitive_map_t<LiteralInfo> &keywords);
 	GrammarLiteralTable(const GrammarLiteralTable &) = delete;
 	GrammarLiteralTable &operator=(const GrammarLiteralTable &) = delete;
 
@@ -31,8 +31,7 @@ public:
 	}
 
 private:
-	void RegisterCategory(const case_insensitive_set_t &words);
-	void Register(const string &text);
+	void Register(const string &text, LiteralInfo info = LiteralInfo());
 
 private:
 	const uint64_t cache_id;

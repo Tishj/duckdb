@@ -63,7 +63,7 @@ static DefaultKeywordMaps BuildKeywordMaps(const ParsedGrammar &grammar) {
 }
 
 ParsedGrammarKeywordHelper::ParsedGrammarKeywordHelper(const ParsedGrammar &grammar)
-    : keyword_maps(BuildKeywordMaps(grammar)), literal_table(grammar, keyword_maps) {
+    : keyword_maps(BuildKeywordMaps(grammar)), literal_table(grammar, keyword_maps.ToLiteralMap()) {
 }
 
 LiteralInfo ParsedGrammarKeywordHelper::LookupKeyword(const string &text) const {

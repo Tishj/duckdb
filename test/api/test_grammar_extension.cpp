@@ -210,7 +210,7 @@ TEST_CASE("Grammar literal IDs include category-only words and overlapping categ
 	categories.reserved_keyword_map.insert("SELECT");
 	categories.typefunc_keyword_map.insert("category_only");
 	categories.typename_keyword_map.insert("CATEGORY_ONLY");
-	GrammarLiteralTable table(grammar, categories);
+	GrammarLiteralTable table(grammar, categories.ToLiteralMap());
 	REQUIRE(sizeof(LiteralInfo) == sizeof(uint32_t));
 	REQUIRE(table.Lookup("select") == table.Lookup("SELECT"));
 	REQUIRE(table.Lookup("SELECT").LiteralId() != 0);
@@ -228,6 +228,34 @@ TEST_CASE("Grammar literal IDs include category-only words and overlapping categ
 	REQUIRE_FALSE(table.Lookup("missing").IsKeyword());
 }
 
+TEST_CASE("Grammar literal tables preserve dialect-defined flags", "[api][grammar_extension]") {
+	auto grammar = ParsedGrammar::Parse("LiteralTest <- 'SHARED' / 'shared' / 'plain'");
+	const uint32_t first_flag = uint32_t(1) << 30;
+	const uint32_t second_flag = uint32_t(1) << 31;
+	case_insensitive_map_t<LiteralInfo> keywords;
+	keywords.emplace("shared", LiteralInfo(0, first_flag | second_flag));
+	keywords.emplace("category_only", LiteralInfo(0, second_flag));
+	GrammarLiteralTable table(grammar, keywords);
+
+	auto shared = table.Lookup("SHARED");
+	auto category_only = table.Lookup("CATEGORY_ONLY");
+	auto plain = table.Lookup("plain");
+	REQUIRE(shared == table.Lookup("shared"));
+	REQUIRE(shared.LiteralId() != 0);
+	REQUIRE(category_only.LiteralId() != 0);
+	REQUIRE(plain.LiteralId() != 0);
+	REQUIRE(shared.LiteralId() != category_only.LiteralId());
+	REQUIRE(shared.LiteralId() != plain.LiteralId());
+	REQUIRE(category_only.LiteralId() != plain.LiteralId());
+	REQUIRE(shared.HasAnyFlags(first_flag));
+	REQUIRE(shared.HasAnyFlags(second_flag));
+	REQUIRE(category_only.HasAnyFlags(second_flag));
+	REQUIRE_FALSE(category_only.HasAnyFlags(first_flag));
+	REQUIRE_FALSE(plain.IsKeyword());
+	REQUIRE_FALSE(plain.HasAnyFlags(first_flag | second_flag));
+	REQUIRE(table.Lookup("missing") == LiteralInfo());
+}
+
 TEST_CASE("Token literal caches follow grammar identity and token edits", "[api][grammar_extension]") {
 	auto grammar = ParsedGrammar::Parse("LiteralTest <- 'SELECT'");
 	DefaultKeywordMaps first_categories;
@@ -235,9 +263,9 @@ TEST_CASE("Token literal caches follow grammar identity and token edits", "[api]
 	DefaultKeywordMaps second_categories;
 	second_categories.unreserved_keyword_map.insert("SELECT");
 	second_categories.typename_keyword_map.insert("extension_word");
-	GrammarLiteralTable first(grammar, first_categories);
+	GrammarLiteralTable first(grammar, first_categories.ToLiteralMap());
 	optional<GrammarLiteralTable> second;
-	second.emplace(grammar, second_categories);
+	second.emplace(grammar, second_categories.ToLiteralMap());
 	vector<MatcherToken> tokens {MatcherToken("select", 0, TokenType::KEYWORD),
 	                             MatcherToken("extension_word", 7, TokenType::IDENTIFIER)};
 	TokenIterator iterator(tokens);
@@ -254,7 +282,7 @@ TEST_CASE("Token literal caches follow grammar identity and token edits", "[api]
 	iterator.CurrentLiteralInfo(*second);
 	auto old_cache_id = second->CacheId();
 	second.reset();
-	second.emplace(grammar, first_categories);
+	second.emplace(grammar, first_categories.ToLiteralMap());
 	REQUIRE(second->CacheId() != old_cache_id);
 	REQUIRE(iterator.CurrentLiteralInfo(*second) == first.Lookup("SELECT"));
 	tokens[0].text = "extension_word";

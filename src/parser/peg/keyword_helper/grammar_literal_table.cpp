@@ -2,7 +2,6 @@
 
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/parser/peg/keyword_helper/default_keyword_maps.hpp"
 #include "duckdb/parser/peg/parsed_grammar.hpp"
 
 namespace duckdb {
@@ -14,7 +13,8 @@ static uint64_t NextLiteralTableId() {
 	return result;
 }
 
-GrammarLiteralTable::GrammarLiteralTable(const ParsedGrammar &grammar, const DefaultKeywordMaps &keyword_maps)
+GrammarLiteralTable::GrammarLiteralTable(const ParsedGrammar &grammar,
+                                         const case_insensitive_map_t<LiteralInfo> &keywords)
     : cache_id(NextLiteralTableId()) {
 	vector<reference<const PEGExpression>> pending;
 	for (auto &entry : grammar.rules) {
@@ -30,30 +30,21 @@ GrammarLiteralTable::GrammarLiteralTable(const ParsedGrammar &grammar, const Def
 			pending.push_back(child);
 		}
 	}
-	RegisterCategory(keyword_maps.reserved_keyword_map);
-	RegisterCategory(keyword_maps.unreserved_keyword_map);
-	RegisterCategory(keyword_maps.colname_keyword_map);
-	RegisterCategory(keyword_maps.typefunc_keyword_map);
-	RegisterCategory(keyword_maps.typename_keyword_map);
-	for (auto &entry : literals) {
-		entry.second = keyword_maps.LookupKeyword(entry.first, entry.second.LiteralId());
+	for (auto &entry : keywords) {
+		Register(entry.first, entry.second);
 	}
 }
 
-void GrammarLiteralTable::RegisterCategory(const case_insensitive_set_t &words) {
-	for (auto &word : words) {
-		Register(word);
-	}
-}
-
-void GrammarLiteralTable::Register(const string &text) {
+void GrammarLiteralTable::Register(const string &text, LiteralInfo info) {
 	auto entry = literals.find(text);
 	if (entry == literals.end()) {
 		if (literals.size() >= LiteralInfo::MAX_LITERAL_ID) {
 			throw InvalidInputException("Grammar has too many distinct literals");
 		}
 		auto id = static_cast<uint32_t>(literals.size() + 1);
-		entry = literals.emplace(text, LiteralInfo(id)).first;
+		literals.emplace(text, info.WithLiteralId(id));
+	} else {
+		entry->second = info.WithLiteralId(entry->second.LiteralId());
 	}
 }
 
