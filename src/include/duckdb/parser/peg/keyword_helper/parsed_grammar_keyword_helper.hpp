@@ -13,8 +13,9 @@ public:
 	explicit ParsedGrammarKeywordHelper(const ParsedGrammar &grammar);
 
 public:
-	bool KeywordCategoryType(const string &text, PEGKeywordCategory type) const override;
-	bool IsKeyword(const string &text) const override;
+	LiteralInfo LookupKeyword(const string &text) const override;
+	uint32_t GetIdentifierMask(SuggestionState type) const override;
+	KeywordCategory GetKeywordCategory(const string &text) const override;
 	vector<ParserKeyword> KeywordList() const override;
 	optional_ptr<const GrammarLiteralTable> GetLiteralTable() const override {
 		return literal_table;

@@ -30,20 +30,23 @@ GrammarLiteralTable::GrammarLiteralTable(const ParsedGrammar &grammar, const Def
 			pending.push_back(child);
 		}
 	}
-	RegisterCategory(keyword_maps.reserved_keyword_map, PEGKeywordCategory::KEYWORD_RESERVED);
-	RegisterCategory(keyword_maps.unreserved_keyword_map, PEGKeywordCategory::KEYWORD_UNRESERVED);
-	RegisterCategory(keyword_maps.colname_keyword_map, PEGKeywordCategory::KEYWORD_COL_NAME);
-	RegisterCategory(keyword_maps.typefunc_keyword_map, PEGKeywordCategory::KEYWORD_TYPE_FUNC);
-	RegisterCategory(keyword_maps.typename_keyword_map, PEGKeywordCategory::KEYWORD_TYPE_NAME);
-}
-
-void GrammarLiteralTable::RegisterCategory(const case_insensitive_set_t &words, PEGKeywordCategory category) {
-	for (auto &word : words) {
-		Register(word, category);
+	RegisterCategory(keyword_maps.reserved_keyword_map);
+	RegisterCategory(keyword_maps.unreserved_keyword_map);
+	RegisterCategory(keyword_maps.colname_keyword_map);
+	RegisterCategory(keyword_maps.typefunc_keyword_map);
+	RegisterCategory(keyword_maps.typename_keyword_map);
+	for (auto &entry : literals) {
+		entry.second = keyword_maps.LookupKeyword(entry.first, entry.second.LiteralId());
 	}
 }
 
-void GrammarLiteralTable::Register(const string &text, PEGKeywordCategory category) {
+void GrammarLiteralTable::RegisterCategory(const case_insensitive_set_t &words) {
+	for (auto &word : words) {
+		Register(word);
+	}
+}
+
+void GrammarLiteralTable::Register(const string &text) {
 	auto entry = literals.find(text);
 	if (entry == literals.end()) {
 		if (literals.size() >= LiteralInfo::MAX_LITERAL_ID) {
@@ -52,7 +55,6 @@ void GrammarLiteralTable::Register(const string &text, PEGKeywordCategory catego
 		auto id = static_cast<uint32_t>(literals.size() + 1);
 		entry = literals.emplace(text, LiteralInfo(id)).first;
 	}
-	entry->second.AddCategory(category);
 }
 
 } // namespace duckdb

@@ -1,15 +1,18 @@
 #pragma once
 
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "duckdb/parser/peg/keyword_helper.hpp"
+#include "duckdb/parser/peg/literal_info.hpp"
 #include "duckdb/parser/simplified_token.hpp"
 
 namespace duckdb {
 
+enum class SuggestionState : uint8_t;
+
 class DefaultKeywordMaps {
 public:
-	bool IsKeywordOfCategory(const string &text, PEGKeywordCategory type) const;
-	bool IsKeyword(const string &text) const;
+	DUCKDB_API LiteralInfo LookupKeyword(const string &text, uint32_t literal_id = 0) const;
+	DUCKDB_API static uint32_t GetIdentifierMask(SuggestionState type);
+	DUCKDB_API static KeywordCategory GetKeywordCategory(LiteralInfo info);
 	vector<ParserKeyword> ToList() const;
 
 public:

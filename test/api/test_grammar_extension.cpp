@@ -214,14 +214,16 @@ TEST_CASE("Grammar literal IDs include category-only words and overlapping categ
 	REQUIRE(sizeof(LiteralInfo) == sizeof(uint32_t));
 	REQUIRE(table.Lookup("select") == table.Lookup("SELECT"));
 	REQUIRE(table.Lookup("SELECT").LiteralId() != 0);
-	REQUIRE(table.Lookup("SELECT").HasCategory(PEGKeywordCategory::KEYWORD_RESERVED));
+	REQUIRE(table.Lookup("SELECT").IsKeyword());
 	REQUIRE(table.Lookup("(").LiteralId() != 0);
 	REQUIRE_FALSE(table.Lookup("(").IsKeyword());
 	REQUIRE(table.Lookup("category_only").LiteralId() != 0);
-	REQUIRE(table.Lookup("category_only").HasCategory(PEGKeywordCategory::KEYWORD_TYPE_FUNC));
-	REQUIRE(table.Lookup("category_only").HasCategory(PEGKeywordCategory::KEYWORD_TYPE_NAME));
-	REQUIRE_FALSE(table.Lookup("category_only").HasCategory(PEGKeywordCategory::KEYWORD_RESERVED));
-	REQUIRE_FALSE(table.Lookup("category_only").HasCategory(PEGKeywordCategory::KEYWORD_NONE));
+	REQUIRE(table.Lookup("category_only")
+	            .HasAnyFlags(DefaultKeywordMaps::GetIdentifierMask(SuggestionState::SUGGEST_SCALAR_FUNCTION_NAME)));
+	REQUIRE(table.Lookup("category_only")
+	            .HasAnyFlags(DefaultKeywordMaps::GetIdentifierMask(SuggestionState::SUGGEST_TYPE_NAME)));
+	REQUIRE_FALSE(table.Lookup("category_only")
+	                  .HasAnyFlags(DefaultKeywordMaps::GetIdentifierMask(SuggestionState::SUGGEST_COLUMN_NAME)));
 	REQUIRE(table.Lookup("missing").LiteralId() == 0);
 	REQUIRE_FALSE(table.Lookup("missing").IsKeyword());
 }
@@ -239,22 +241,22 @@ TEST_CASE("Token literal caches follow grammar identity and token edits", "[api]
 	vector<MatcherToken> tokens {MatcherToken("select", 0, TokenType::KEYWORD),
 	                             MatcherToken("extension_word", 7, TokenType::IDENTIFIER)};
 	TokenIterator iterator(tokens);
-	REQUIRE(iterator.CurrentLiteralInfo(first).HasCategory(PEGKeywordCategory::KEYWORD_RESERVED));
+	REQUIRE(iterator.CurrentLiteralInfo(first) == first.Lookup("SELECT"));
 	TokenIterator branch(iterator);
 	branch.Advance();
 	branch.SetPreviousTokenType(TokenType::COLUMN_NAME);
-	REQUIRE(iterator.CurrentLiteralInfo(first).HasCategory(PEGKeywordCategory::KEYWORD_RESERVED));
-	REQUIRE(iterator.CurrentLiteralInfo(*second).HasCategory(PEGKeywordCategory::KEYWORD_UNRESERVED));
-	REQUIRE_FALSE(iterator.CurrentLiteralInfo(*second).HasCategory(PEGKeywordCategory::KEYWORD_RESERVED));
+	REQUIRE(iterator.CurrentLiteralInfo(first) == first.Lookup("SELECT"));
+	REQUIRE(iterator.CurrentLiteralInfo(*second) == second->Lookup("SELECT"));
+	REQUIRE_FALSE(iterator.CurrentLiteralInfo(*second) == first.Lookup("SELECT"));
 	REQUIRE(branch.CurrentLiteralInfo(first).LiteralId() == 0);
-	REQUIRE(branch.CurrentLiteralInfo(*second).HasCategory(PEGKeywordCategory::KEYWORD_TYPE_NAME));
+	REQUIRE(branch.CurrentLiteralInfo(*second) == second->Lookup("extension_word"));
 	REQUIRE(branch.CurrentLiteralInfo(first).LiteralId() == 0);
 	iterator.CurrentLiteralInfo(*second);
 	auto old_cache_id = second->CacheId();
 	second.reset();
 	second.emplace(grammar, first_categories);
 	REQUIRE(second->CacheId() != old_cache_id);
-	REQUIRE(iterator.CurrentLiteralInfo(*second).HasCategory(PEGKeywordCategory::KEYWORD_RESERVED));
+	REQUIRE(iterator.CurrentLiteralInfo(*second) == first.Lookup("SELECT"));
 	tokens[0].text = "extension_word";
 	TokenIterator edited(tokens);
 	REQUIRE(edited.CurrentLiteralInfo(*second).LiteralId() == 0);
@@ -264,11 +266,20 @@ TEST_CASE("Token literal caches follow grammar identity and token edits", "[api]
 
 class LiteralTestKeywordHelper final : public PEGKeywordHelper {
 public:
-	bool KeywordCategoryType(const string &text, PEGKeywordCategory category) const override {
-		return IsKeyword(text) && allow_identifier && category == PEGKeywordCategory::KEYWORD_UNRESERVED;
+	LiteralInfo LookupKeyword(const string &text) const override {
+		DefaultKeywordMaps maps;
+		if (allow_identifier) {
+			maps.unreserved_keyword_map.insert("custom_word");
+		} else {
+			maps.reserved_keyword_map.insert("custom_word");
+		}
+		return maps.LookupKeyword(text);
 	}
-	bool IsKeyword(const string &text) const override {
-		return StringUtil::CIEquals(text, "custom_word");
+	uint32_t GetIdentifierMask(SuggestionState type) const override {
+		return DefaultKeywordMaps::GetIdentifierMask(type);
+	}
+	KeywordCategory GetKeywordCategory(const string &text) const override {
+		return DefaultKeywordMaps::GetKeywordCategory(LookupKeyword(text));
 	}
 	vector<ParserKeyword> KeywordList() const override {
 		return {};
@@ -411,7 +422,7 @@ public:
 		changes.push_back(GrammarChange::AddChoice("UnreservedKeyword", "'ANSWER'"));
 		changes.push_back(GrammarChange::AddTerminalRuleOverride(
 		    "GrammarExtensionTestValue", [](const PEGKeywordHelper &keyword_helper) {
-			    if (!keyword_helper.KeywordCategoryType("ANSWER", PEGKeywordCategory::KEYWORD_UNRESERVED)) {
+			    if (keyword_helper.GetKeywordCategory("ANSWER") != KeywordCategory::KEYWORD_UNRESERVED) {
 				    throw InternalException("Parser change keyword is missing from the compiled keyword helper");
 			    }
 			    return make_uniq<GrammarExtensionTestMatcher>();
@@ -462,7 +473,8 @@ TEST_CASE("Literal caches respect active grammar extensions", "[api][grammar_ext
 	auto extended_table = extended->GetKeywordHelper().GetLiteralTable();
 	REQUIRE(extended_table);
 	REQUIRE(extended_table->CacheId() != base_table->CacheId());
-	REQUIRE(iterator.CurrentLiteralInfo(*extended_table).HasCategory(PEGKeywordCategory::KEYWORD_UNRESERVED));
+	REQUIRE(iterator.CurrentLiteralInfo(*extended_table)
+	            .HasAnyFlags(DefaultKeywordMaps::GetIdentifierMask(SuggestionState::SUGGEST_COLUMN_NAME)));
 	REQUIRE(iterator.CurrentLiteralInfo(*base_table).LiteralId() == 0);
 	KeywordMatcher keyword("ANSWER", KeywordInfo(), extended->GetKeywordHelper());
 	REQUIRE(MatchLiteralTestToken(keyword, "answer"));

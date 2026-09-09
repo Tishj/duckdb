@@ -13,8 +13,9 @@ public:
 	static const DuckDBKeywordHelper &Instance();
 
 public:
-	bool KeywordCategoryType(const std::string &text, const PEGKeywordCategory type) const override;
-	bool IsKeyword(const string &text) const override;
+	LiteralInfo LookupKeyword(const string &text) const override;
+	uint32_t GetIdentifierMask(SuggestionState type) const override;
+	KeywordCategory GetKeywordCategory(const string &text) const override;
 	vector<ParserKeyword> KeywordList() const override;
 
 private:

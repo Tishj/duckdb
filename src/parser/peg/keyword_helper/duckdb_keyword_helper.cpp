@@ -11,13 +11,17 @@ const DuckDBKeywordHelper &DuckDBKeywordHelper::Instance() {
 	return instance;
 }
 
-bool DuckDBKeywordHelper::KeywordCategoryType(const std::string &text, const PEGKeywordCategory category) const {
-	return keyword_maps.IsKeywordOfCategory(text, category);
+LiteralInfo DuckDBKeywordHelper::LookupKeyword(const string &text) const {
+	return keyword_maps.LookupKeyword(text);
 }
 
-bool DuckDBKeywordHelper::IsKeyword(const string &text) const {
-	return keyword_maps.IsKeyword(text);
-};
+uint32_t DuckDBKeywordHelper::GetIdentifierMask(SuggestionState type) const {
+	return DefaultKeywordMaps::GetIdentifierMask(type);
+}
+
+KeywordCategory DuckDBKeywordHelper::GetKeywordCategory(const string &text) const {
+	return DefaultKeywordMaps::GetKeywordCategory(LookupKeyword(text));
+}
 
 vector<ParserKeyword> DuckDBKeywordHelper::KeywordList() const {
 	return keyword_maps.ToList();
