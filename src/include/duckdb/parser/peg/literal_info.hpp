@@ -18,12 +18,15 @@ public:
 	static constexpr uint32_t MAX_LITERAL_ID = 0x00FFFFFF;
 
 public:
-	LiteralInfo() = default;
+	//! Zero denotes an unknown literal with no keyword flags, such as a non-keyword identifier.
+	LiteralInfo() : value(0) {
+	}
 	explicit LiteralInfo(uint32_t literal_id, uint32_t flags = 0) : value(literal_id | flags) {
 		D_ASSERT(literal_id <= MAX_LITERAL_ID);
 		D_ASSERT((flags & MAX_LITERAL_ID) == 0);
 	}
 
+	//! Zero means no grammar-local ID has been assigned; keyword flags may still be present.
 	uint32_t LiteralId() const {
 		return value & MAX_LITERAL_ID;
 	}
@@ -45,7 +48,8 @@ public:
 	}
 
 private:
-	uint32_t value = 0;
+	//! The zero sentinel keeps missing lookups compact and lets flag checks run without an absence branch.
+	uint32_t value;
 };
 
 } // namespace duckdb
