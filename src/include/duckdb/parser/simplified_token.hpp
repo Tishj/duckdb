@@ -41,7 +41,7 @@ enum class KeywordCategory : uint8_t {
 
 struct ParserKeyword {
 	string name;
-	KeywordCategory category;
+	string category;
 };
 
 } // namespace duckdb

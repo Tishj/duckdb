@@ -75,16 +75,16 @@ case_insensitive_map_t<LiteralInfo> DefaultKeywordMaps::ToLiteralMap() const {
 vector<ParserKeyword> DefaultKeywordMaps::ToList() const {
 	vector<ParserKeyword> result;
 	for (auto &kw : reserved_keyword_map) {
-		result.push_back({kw, KeywordCategory::KEYWORD_RESERVED});
+		result.push_back({kw, "reserved"});
 	}
 	for (auto &kw : unreserved_keyword_map) {
-		result.push_back({kw, KeywordCategory::KEYWORD_UNRESERVED});
+		result.push_back({kw, "unreserved"});
 	}
 	for (auto &kw : typefunc_keyword_map) {
-		result.push_back({kw, KeywordCategory::KEYWORD_TYPE_FUNC});
+		result.push_back({kw, "type_function"});
 	}
 	for (auto &kw : colname_keyword_map) {
-		result.push_back({kw, KeywordCategory::KEYWORD_COL_NAME});
+		result.push_back({kw, "column_name"});
 	}
 	return result;
 }
