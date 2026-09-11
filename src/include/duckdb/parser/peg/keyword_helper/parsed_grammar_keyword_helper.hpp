@@ -13,11 +13,10 @@ public:
 	explicit ParsedGrammarKeywordHelper(const ParsedGrammar &grammar);
 
 public:
-	LiteralInfo LookupKeyword(const string &text) const override;
 	uint32_t GetIdentifierMask(SuggestionState type) const override;
 	KeywordCategory GetKeywordCategory(const string &text) const override;
 	vector<ParserKeyword> KeywordList() const override;
-	optional_ptr<const GrammarLiteralTable> GetLiteralTable() const override {
+	const GrammarLiteralTable &GetLiteralTable() const override {
 		return literal_table;
 	}
 

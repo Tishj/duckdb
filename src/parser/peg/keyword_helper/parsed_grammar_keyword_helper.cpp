@@ -66,10 +66,6 @@ ParsedGrammarKeywordHelper::ParsedGrammarKeywordHelper(const ParsedGrammar &gram
     : keyword_maps(BuildKeywordMaps(grammar)), literal_table(grammar, keyword_maps.ToLiteralMap()) {
 }
 
-LiteralInfo ParsedGrammarKeywordHelper::LookupKeyword(const string &text) const {
-	return literal_table.Lookup(text);
-}
-
 uint32_t ParsedGrammarKeywordHelper::GetIdentifierMask(SuggestionState type) const {
 	return DefaultKeywordMaps::GetIdentifierMask(type);
 }

@@ -9,7 +9,7 @@
 #pragma once
 
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "duckdb/common/optional_ptr.hpp"
+#include "duckdb/parser/peg/grammar_literal_table.hpp"
 #include "duckdb/parser/simplified_token.hpp"
 #include "duckdb/parser/peg/literal_info.hpp"
 
@@ -24,7 +24,9 @@ public:
 	virtual ~PEGKeywordHelper() = default;
 
 public:
-	virtual LiteralInfo LookupKeyword(const string &text) const = 0;
+	LiteralInfo LookupKeyword(const string &text) const {
+		return GetLiteralTable().Lookup(text);
+	}
 	bool IsKeyword(const string &text) const {
 		return LookupKeyword(text).IsKeyword();
 	}
@@ -32,10 +34,8 @@ public:
 	virtual uint32_t GetIdentifierMask(SuggestionState type) const = 0;
 	virtual KeywordCategory GetKeywordCategory(const string &text) const = 0;
 	virtual vector<ParserKeyword> KeywordList() const = 0;
-	//! Opt in only when this immutable table agrees with the helper's keyword predicates.
-	virtual optional_ptr<const GrammarLiteralTable> GetLiteralTable() const {
-		return nullptr;
-	}
+	//! Every helper provides an immutable table containing its literals and keyword flags.
+	virtual const GrammarLiteralTable &GetLiteralTable() const = 0;
 };
 
 } // namespace duckdb

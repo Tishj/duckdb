@@ -90,9 +90,8 @@ TEST_CASE("Literal choice dispatch preserves ordered choice results", "[api][gra
 	auto &choice = root.matchers[0].get().Cast<ChoiceMatcher>();
 	vector<reference<Matcher>> children = choice.matchers;
 	ChoiceMatcher sequential(std::move(children));
-	auto table = compiled->GetKeywordHelper().GetLiteralTable();
-	REQUIRE(table);
-	REQUIRE(choice.matchers[0].get().Cast<KeywordMatcher>().GetDispatchLiteral(*table).IsValid());
+	auto &table = compiled->GetKeywordHelper().GetLiteralTable();
+	REQUIRE(choice.matchers[0].get().Cast<KeywordMatcher>().GetDispatchLiteral(table).IsValid());
 	for (auto &text : vector<string> {"WHERE", "unknown_literal"}) {
 		vector<MatcherToken> tokens {MatcherToken(text, 0, TokenType::KEYWORD)};
 		TokenIterator iterator(tokens);
@@ -294,14 +293,11 @@ TEST_CASE("Token literal caches follow grammar identity and token edits", "[api]
 
 class LiteralTestKeywordHelper final : public PEGKeywordHelper {
 public:
-	LiteralInfo LookupKeyword(const string &text) const override {
-		DefaultKeywordMaps maps;
-		if (allow_identifier) {
-			maps.unreserved_keyword_map.insert("custom_word");
-		} else {
-			maps.reserved_keyword_map.insert("custom_word");
-		}
-		return maps.LookupKeyword(text);
+	explicit LiteralTestKeywordHelper(bool allow_identifier = false)
+	    : literal_table(ParsedGrammar::Parse("LiteralTest <- 'custom_word'"), BuildKeywords(allow_identifier)) {
+	}
+	const GrammarLiteralTable &GetLiteralTable() const override {
+		return literal_table;
 	}
 	uint32_t GetIdentifierMask(SuggestionState type) const override {
 		return DefaultKeywordMaps::GetIdentifierMask(type);
@@ -313,7 +309,18 @@ public:
 		return {};
 	}
 
-	bool allow_identifier = false;
+private:
+	static case_insensitive_map_t<LiteralInfo> BuildKeywords(bool allow_identifier) {
+		DefaultKeywordMaps maps;
+		if (allow_identifier) {
+			maps.unreserved_keyword_map.insert("custom_word");
+		} else {
+			maps.reserved_keyword_map.insert("custom_word");
+		}
+		return maps.ToLiteralMap();
+	}
+
+	GrammarLiteralTable literal_table;
 };
 
 static bool MatchLiteralTestToken(const Matcher &matcher, const string &text) {
@@ -330,11 +337,12 @@ static bool MatchLiteralTestToken(const Matcher &matcher, const string &text) {
 
 TEST_CASE("Custom keyword helpers and standalone literal matchers keep their semantics", "[api][grammar_extension]") {
 	LiteralTestKeywordHelper helper;
-	REQUIRE_FALSE(helper.GetLiteralTable());
+	REQUIRE(helper.GetLiteralTable().Lookup("custom_word").LiteralId() != 0);
 	IdentifierMatcher identifier(SuggestionState::SUGGEST_COLUMN_NAME, helper);
 	REQUIRE_FALSE(MatchLiteralTestToken(identifier, "CUSTOM_WORD"));
-	helper.allow_identifier = true;
-	REQUIRE(MatchLiteralTestToken(identifier, "CUSTOM_WORD"));
+	LiteralTestKeywordHelper permissive_helper(true);
+	IdentifierMatcher permissive_identifier(SuggestionState::SUGGEST_COLUMN_NAME, permissive_helper);
+	REQUIRE(MatchLiteralTestToken(permissive_identifier, "CUSTOM_WORD"));
 	KeywordMatcher standalone("custom_word", KeywordInfo());
 	KeywordMatcher custom_helper("custom_word", KeywordInfo(), helper);
 	REQUIRE(MatchLiteralTestToken(standalone, "CUSTOM_WORD"));
@@ -490,20 +498,18 @@ TEST_CASE("Literal caches respect active grammar extensions", "[api][grammar_ext
 	DuckDB db(nullptr);
 	Connection con(db);
 	auto base = CompiledGrammar::Get(*con.context);
-	auto base_table = base->GetKeywordHelper().GetLiteralTable();
-	REQUIRE(base_table);
+	auto &base_table = base->GetKeywordHelper().GetLiteralTable();
 	vector<MatcherToken> tokens {MatcherToken("answer", 0, TokenType::IDENTIFIER)};
 	TokenIterator iterator(tokens);
-	REQUIRE(iterator.CurrentLiteralInfo(*base_table).LiteralId() == 0);
+	REQUIRE(iterator.CurrentLiteralInfo(base_table).LiteralId() == 0);
 	RegisterGrammarExtensionTestSyntax(*db.instance);
 	ActivateGrammarExtensionTestSyntax(con);
 	auto extended = CompiledGrammar::Get(*con.context);
-	auto extended_table = extended->GetKeywordHelper().GetLiteralTable();
-	REQUIRE(extended_table);
-	REQUIRE(extended_table->CacheId() != base_table->CacheId());
-	REQUIRE(iterator.CurrentLiteralInfo(*extended_table)
+	auto &extended_table = extended->GetKeywordHelper().GetLiteralTable();
+	REQUIRE(extended_table.CacheId() != base_table.CacheId());
+	REQUIRE(iterator.CurrentLiteralInfo(extended_table)
 	            .HasAnyFlags(DefaultKeywordMaps::GetIdentifierMask(SuggestionState::SUGGEST_COLUMN_NAME)));
-	REQUIRE(iterator.CurrentLiteralInfo(*base_table).LiteralId() == 0);
+	REQUIRE(iterator.CurrentLiteralInfo(base_table).LiteralId() == 0);
 	KeywordMatcher keyword("ANSWER", KeywordInfo(), extended->GetKeywordHelper());
 	REQUIRE(MatchLiteralTestToken(keyword, "answer"));
 	REQUIRE_FALSE(MatchLiteralTestToken(keyword, "missing"));
