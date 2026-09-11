@@ -2047,6 +2047,7 @@ static scalar_function_t DatePartUnaryCallback(DatePartSpecifier part_code, Logi
 	case DatePartSpecifier::INVALID:
 		throw NotImplementedException("Specifier type not implemented for DATEPART");
 	}
+	throw InternalException("Unrecognized DatePartSpecifier in DatePartUnaryCallback");
 }
 
 template <typename OP>
@@ -2126,6 +2127,7 @@ static function_statistics_t DatePartUnaryStatistics(DatePartSpecifier part_code
 	case DatePartSpecifier::INVALID:
 		throw NotImplementedException("Specifier type not implemented for DATEPART");
 	}
+	throw InternalException("Unrecognized DatePartSpecifier in DatePartUnaryStatistics");
 }
 
 unique_ptr<FunctionData> DatePartBind(BindScalarFunctionInput &input) {
@@ -2639,6 +2641,7 @@ ScalarFunctionSet LastDayFun::GetFunctions() {
 	last_day.AddFunction(ScalarFunction({LogicalType::TIMESTAMP}, LogicalType::DATE,
 	                                    DatePart::UnaryFunction<timestamp_t, date_t, LastDayOperator>));
 	last_day.SetFallible();
+	last_day.SetUnaryArgProperties(ArgProperties().NonDecreasing());
 	return last_day;
 }
 
