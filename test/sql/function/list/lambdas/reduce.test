@@ -103,12 +103,12 @@ statement ok
 INSERT INTO t1 VALUES ([-1, NULL, -2]);
 
 query I
-SELECT list_reduce(a, lambda x, y: x + y) FROM t1;
+SELECT list_reduce(a, lambda x, y: x + y) FROM t1 ORDER BY ALL;
 ----
 6
+99
 666
 NULL
-99
 NULL
 
 query I

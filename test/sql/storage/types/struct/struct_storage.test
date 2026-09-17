@@ -12,12 +12,12 @@ statement ok
 INSERT INTO a VALUES ({'i': 1, 'j': 2}), (NULL), ({'i': NULL, 'j': 2}), (ROW(1, NULL));
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 {'i': 1, 'j': 2}
-NULL
-{'i': NULL, 'j': 2}
 {'i': 1, 'j': NULL}
+{'i': NULL, 'j': 2}
+NULL
 
 query I
 SELECT COUNT(*) FROM a WHERE b IS NULL;
@@ -27,12 +27,12 @@ SELECT COUNT(*) FROM a WHERE b IS NULL;
 restart
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 {'i': 1, 'j': 2}
-NULL
-{'i': NULL, 'j': 2}
 {'i': 1, 'j': NULL}
+{'i': NULL, 'j': 2}
+NULL
 
 query I
 SELECT COUNT(*) FROM a WHERE b IS NULL;
@@ -46,18 +46,18 @@ DELETE FROM a WHERE (b).i=1
 2
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
-NULL
 {'i': NULL, 'j': 2}
+NULL
 
 restart
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
-NULL
 {'i': NULL, 'j': 2}
+NULL
 
 query I
 SELECT COUNT(*) FROM a WHERE b IS NULL;
@@ -71,7 +71,7 @@ UPDATE a SET b={i: 7, j: 9} WHERE b IS NULL
 1
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 {'i': 7, 'j': 9}
 {'i': NULL, 'j': 2}
@@ -84,7 +84,7 @@ SELECT COUNT(*) FROM a WHERE b IS NULL;
 restart
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 {'i': 7, 'j': 9}
 {'i': NULL, 'j': 2}

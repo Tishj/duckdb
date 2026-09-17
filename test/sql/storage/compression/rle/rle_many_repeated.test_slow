@@ -19,7 +19,7 @@ statement ok
 CHECKPOINT
 
 query II
-SELECT a, COUNT(*) FROM test_rle GROUP BY ALL
+SELECT a, COUNT(*) FROM test_rle GROUP BY ALL ORDER BY ALL
 ----
 3	65535
 4	100000

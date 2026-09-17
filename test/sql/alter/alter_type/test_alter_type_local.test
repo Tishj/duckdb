@@ -18,7 +18,7 @@ statement ok
 ALTER TABLE test ALTER i SET DATA TYPE BIGINT
 
 query II
-SELECT * FROM test
+SELECT * FROM test ORDER BY ALL
 ----
 1	1
 2	2
@@ -28,7 +28,7 @@ statement ok
 COMMIT
 
 query II
-SELECT * FROM test
+SELECT * FROM test ORDER BY ALL
 ----
 1	1
 2	2

@@ -143,7 +143,7 @@ SELECT * FROM vals1 WHERE i<=0 AND j<i
 ### j >= i followed by constant comparison [=, >, >=, <, <=]  #########################
 
 query II
-SELECT * FROM vals1 WHERE j>=i AND i=5
+SELECT * FROM vals1 WHERE j>=i AND i=5 ORDER BY ALL
 ----
 5	5
 5	6

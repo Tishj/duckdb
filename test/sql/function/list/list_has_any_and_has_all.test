@@ -42,16 +42,16 @@ statement ok
 INSERT INTO list_data VALUES ([1,2,3], [1,2,NULL]);
 
 query I
-select list_has_any(l1, l2) from list_data;
+select list_has_any(l1, l2) from list_data ORDER BY ALL;
 ----
-NULL
-NULL
-NULL
-1
-1
 0
 1
 1
+1
+1
+NULL
+NULL
+NULL
 
 query I
 select list_has_all(l1, l2) from list_data;

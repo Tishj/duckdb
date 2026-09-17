@@ -120,13 +120,13 @@ NULL
 NULL
 
 query I
-SELECT list_reduce(l, (x, y, i) -> x + y + i, initial) FROM t1;
+SELECT list_reduce(l, (x, y, i) -> x + y + i, initial) FROM t1 ORDER BY ALL;
 ----
+105
 112
 1667
 NULL
 NULL
-105
 NULL
 
 statement ok

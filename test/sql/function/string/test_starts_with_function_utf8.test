@@ -37,12 +37,12 @@ SELECT starts_with(s,'olá mundo') FROM strings
 
 # Test an entire UTF-8 word
 query T
-SELECT starts_with(s,'你好世界') FROM strings
+SELECT starts_with(s,'你好世界') FROM strings ORDER BY ALL
 ----
 0
 0
-1
 0
+1
 
 # Test a substring of the haystack from the beginning
 query T

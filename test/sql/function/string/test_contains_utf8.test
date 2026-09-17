@@ -46,7 +46,7 @@ SELECT contains(s,'你好世界') FROM strings
 
 # Test a substring of the haystack from the beginning
 query T
-SELECT contains(s,'two ñ thr') FROM strings
+SELECT contains(s,'two ñ thr') FROM strings ORDER BY ALL
 ----
 0
 0

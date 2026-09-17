@@ -113,11 +113,11 @@ insert into struct_cast_tbl select {'a': '[10, 6, 4, 8, 9, 10, 12]'};
 
 # Added a fallback for nested types as well
 query I
-select a::VARIANT::STRUCT(a INTEGER[]) from struct_cast_tbl;
+select a::VARIANT::STRUCT(a INTEGER[]) from struct_cast_tbl ORDER BY ALL;
 ----
+{'a': []}
 {'a': [1, 2, 3, 4]}
 {'a': [8, 7, 6]}
-{'a': []}
 {'a': [10, 6, 4, 8, 9, 10, 12]}
 
 statement ok

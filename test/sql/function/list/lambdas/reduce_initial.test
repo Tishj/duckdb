@@ -135,13 +135,13 @@ statement ok
 INSERT INTO t1 VALUES ([-1, NULL, -2], 4);
 
 query I
-SELECT list_reduce(l, lambda x, y: x + y, initial) FROM t1;
+SELECT list_reduce(l, lambda x, y: x + y, initial) FROM t1 ORDER BY ALL;
 ----
+102
 106
 1666
 NULL
 NULL
-102
 NULL
 
 query I
@@ -163,15 +163,15 @@ SELECT list_reduce(l, lambda x, y: x + y) FROM t1;
 Cannot perform list_reduce on an empty input list
 
 query I
-SELECT list_reduce(l, lambda x, y: x + y, initial) FROM t1;
+SELECT list_reduce(l, lambda x, y: x + y, initial) FROM t1 ORDER BY ALL;
 ----
+100
+102
 106
 1666
 NULL
 NULL
-102
 NULL
-100
 
 statement ok
 DROP TABLE t1;

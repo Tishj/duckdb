@@ -140,12 +140,12 @@ SELECT a[start:stop:step] FROM tbl;
 [1, 2, 3]
 
 query I
-select a[:stop:step] from tbl;
+select a[:stop:step] from tbl ORDER BY ALL;
 ----
-[1, 3]
-[1, 5]
-[1, 3, 5]
 [1, 2, 3]
+[1, 3]
+[1, 3, 5]
+[1, 5]
 
 query I
 select a[start:-:step] from tbl;

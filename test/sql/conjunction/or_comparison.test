@@ -36,7 +36,7 @@ statement ok
 INSERT INTO tab0 VALUES(9,95,14.31999969482421875,'vssyg',8,12.930000305175781605,'epgyr');
 
 query I
-SELECT pk FROM tab0 WHERE col0 < 84 OR col0 < 8 ;
+SELECT pk FROM tab0 WHERE col0 < 84 OR col0 < 8  ORDER BY ALL;
 ----
 1
 2

@@ -48,12 +48,12 @@ statement ok
 INSERT INTO tbl VALUES ([1,2,3,4,5], 1, 3, -1);
 
 query I
-SELECT a[start:stop:step] FROM tbl;
+SELECT a[start:stop:step] FROM tbl ORDER BY ALL;
 ----
 []
+[]
+[]
 [5, 1]
-[]
-[]
 
 query I
 select a[:stop:step] from tbl;

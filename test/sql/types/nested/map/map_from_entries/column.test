@@ -16,7 +16,7 @@ statement ok
 INSERT INTO t1 VALUES (ARRAY[(6, 'h'), (7,'g')])
 
 query I
-SELECT MAP_FROM_ENTRIES(list) FROM t1;
+SELECT MAP_FROM_ENTRIES(list) FROM t1 ORDER BY ALL;
 ----
 {1=x, 2=y, 4=s}
 {2=a, 3=b}
@@ -26,7 +26,7 @@ statement ok
 INSERT INTO t1 VALUES (NULL)
 
 query I
-SELECT MAP_FROM_ENTRIES(list) FROM t1;
+SELECT MAP_FROM_ENTRIES(list) FROM t1 ORDER BY ALL;
 ----
 {1=x, 2=y, 4=s}
 {2=a, 3=b}
@@ -37,10 +37,10 @@ statement ok
 INSERT INTO t1 VALUES (ARRAY[(6, 'h'), (7,'g')])
 
 query I
-SELECT MAP_FROM_ENTRIES(list) FROM t1;
+SELECT MAP_FROM_ENTRIES(list) FROM t1 ORDER BY ALL;
 ----
 {1=x, 2=y, 4=s}
 {2=a, 3=b}
 {6=h, 7=g}
-NULL
 {6=h, 7=g}
+NULL

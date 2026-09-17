@@ -24,7 +24,7 @@ statement ok
 ALTER TABLE test ADD COLUMN m INTEGER DEFAULT 3
 
 query IIIII
-SELECT * FROM test
+SELECT * FROM test ORDER BY ALL
 ----
 1
 1
@@ -46,7 +46,7 @@ statement ok
 ROLLBACK
 
 query II
-SELECT * FROM test
+SELECT * FROM test ORDER BY ALL
 ----
 1
 1

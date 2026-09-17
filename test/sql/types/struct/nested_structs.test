@@ -14,7 +14,7 @@ INSERT INTO a VALUES ({
 })
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'i': {'a': 3}, 'j': 4}
 
@@ -27,7 +27,7 @@ statement ok
 INSERT INTO a VALUES (NULL)
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'i': {'a': 3}, 'j': 4}
 NULL
@@ -49,13 +49,13 @@ statement ok
 INSERT INTO a VALUES (ROW(NULL, 1))
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
-{'i': {'a': 3}, 'j': 4}
-NULL
-{'i': {'a': NULL}, 'j': 1}
 {'i': {'a': 1}, 'j': NULL}
+{'i': {'a': 3}, 'j': 4}
+{'i': {'a': NULL}, 'j': 1}
 {'i': NULL, 'j': 1}
+NULL
 
 # create table as
 statement ok

@@ -39,12 +39,12 @@ NULL
 1
 
 query I
-SELECT list_bool_and(l) FROM bools;
+SELECT list_bool_and(l) FROM bools ORDER BY ALL;
 ----
+0
+0
+0
 1
-0
-0
 NULL
 NULL
 NULL
-0

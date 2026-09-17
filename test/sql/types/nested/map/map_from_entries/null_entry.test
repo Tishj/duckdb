@@ -31,9 +31,9 @@ INSERT INTO tbl VALUES([(5,3), (6,4), (7,3)]);
 INSERT INTO tbl VALUES([]);
 
 query I
-SELECT MAP_FROM_ENTRIES(input) FROM tbl
+SELECT MAP_FROM_ENTRIES(input) FROM tbl ORDER BY ALL
 ----
-NULL
-{5=3, 6=4, 7=3}
-{5=3, 6=4, 7=3}
 {}
+{5=3, 6=4, 7=3}
+{5=3, 6=4, 7=3}
+NULL

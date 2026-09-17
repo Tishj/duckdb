@@ -17,7 +17,7 @@ statement ok
 CREATE TABLE test AS FROM '{TEST_DIR}/many_small_batches.parquet' t(i) WHERE (i // 6144) % 3 = 0;
 
 query I
-SELECT * FROM test LIMIT 5 OFFSET 500000
+SELECT * FROM test ORDER BY i LIMIT 5 OFFSET 500000
 ----
 1495328
 1495329

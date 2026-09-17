@@ -27,11 +27,11 @@ statement ok
 INSERT INTO integers VALUES (NULL), ([NULL]), ([]);
 
 query I
-SELECT list_sum(i) FROM integers;
+SELECT list_sum(i) FROM integers ORDER BY ALL;
 ----
-499500
-0
 -499500
+0
+499500
 NULL
 NULL
 NULL

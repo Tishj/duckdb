@@ -23,7 +23,7 @@ CREATE TABLE a AS SELECT {
 } c
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': hello, 'b': 3}, 'r2': {'a': world, 'b': 17, 'c': NULL}}
 
@@ -38,7 +38,7 @@ statement ok
 PRAGMA force_compression='{compression}'
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': hello, 'b': 3}, 'r2': {'a': world, 'b': 17, 'c': NULL}}
 
@@ -62,7 +62,7 @@ UPDATE a SET c={
 }
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 
@@ -77,7 +77,7 @@ statement ok
 PRAGMA force_compression='{compression}'
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 
@@ -102,7 +102,7 @@ INSERT INTO a VALUES (
 })
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 {'r1': {'a': NULL, 'b': 3}, 'r2': {'a': NULL, 'b': 17, 'c': NULL}}
@@ -118,7 +118,7 @@ INSERT INTO a VALUES ({
 })
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 {'r1': {'a': NULL, 'b': 3}, 'r2': {'a': NULL, 'b': 17, 'c': NULL}}
@@ -131,7 +131,7 @@ INSERT INTO a VALUES ({
 })
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 {'r1': {'a': NULL, 'b': 3}, 'r2': {'a': NULL, 'b': 17, 'c': NULL}}
@@ -142,7 +142,7 @@ statement ok
 INSERT INTO a VALUES(NULL)
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 {'r1': {'a': NULL, 'b': 3}, 'r2': {'a': NULL, 'b': 17, 'c': NULL}}
@@ -156,7 +156,7 @@ statement ok
 PRAGMA force_compression='{compression}'
 
 query I
-SELECT * FROM a
+SELECT * FROM a ORDER BY ALL
 ----
 {'r1': {'a': blabla, 'b': 3}, 'r2': {'a': world, 'b': 18, 'c': NULL}}
 {'r1': {'a': NULL, 'b': 3}, 'r2': {'a': NULL, 'b': 17, 'c': NULL}}

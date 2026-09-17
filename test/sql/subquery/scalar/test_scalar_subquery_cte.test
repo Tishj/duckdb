@@ -117,7 +117,7 @@ require no_alternative_verify
 
 # correlated subqueries
 query IR
-SELECT a, (WITH cte AS (SELECT SUM(b) FROM test tsub WHERE test.a=tsub.a) SELECT * FROM cte) FROM test
+SELECT a, (WITH cte AS (SELECT SUM(b) FROM test tsub WHERE test.a=tsub.a) SELECT * FROM cte) FROM test ORDER BY ALL
 ----
 11	22.000000
 12	21.000000

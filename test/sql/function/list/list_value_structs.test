@@ -56,13 +56,13 @@ statement ok
 INSERT INTO tbl VALUES (NULL, {'a': 10, 'b': 'j'}, NULL);
 
 query I
-SELECT list_value(s1, s2, s3) AS res FROM tbl;
+SELECT list_value(s1, s2, s3) AS res FROM tbl ORDER BY ALL;
 ----
 [{'a': 1, 'b': a}, {'a': 2, 'b': b}, {'a': 3, 'b': c}]
 [{'a': 4, 'b': d}, NULL, {'a': 6, 'b': f}]
 [{'a': 7, 'b': g}, {'a': 8, 'b': NULL}, {'a': 9, 'b': i}]
-[NULL, NULL, NULL]
 [NULL, {'a': 10, 'b': j}, NULL]
+[NULL, NULL, NULL]
 
 statement ok
 DROP TABLE tbl;

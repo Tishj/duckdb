@@ -40,16 +40,16 @@ Elvis	NULL
 
 # and with multiple unnests
 query III
-SELECT name, UNNEST(address), UNNEST([1]) FROM people;
+SELECT name, UNNEST(address), UNNEST([1]) FROM people ORDER BY ALL;
 ----
-Zuckerberg	New York	1
-Bezos	Washington	1
 Bezos	Space	NULL
-Tim	NULL	1
+Bezos	Washington	1
 Elvis	NULL	1
 Elvis	NULL	NULL
 Elvis	NULL	NULL
 Mark	NULL	1
+Tim	NULL	1
+Zuckerberg	New York	1
 
 # related to issue 7391
 

@@ -355,26 +355,26 @@ endloop
 
 query II
 SELECT datepart, DATEDIFF(datepart, '2005-12-31 23:59:59.9999999'::TIMESTAMP, '2006-01-01 00:00:00.0000000'::TIMESTAMP)
-FROM parts;
+FROM parts ORDER BY ALL;
 ----
-NULL	NULL
-year	1
-quarter	1
-month	1
+century	0
 day	1
 dayofyear	1
-hour	1
-minute	1
-second	1
-millisecond	1
-microsecond	1
 decade	0
-century	0
-millennium	0
-week	0
-yearweek	0
+hour	1
 isoyear	0
 julian	1
+microsecond	1
+millennium	0
+millisecond	1
+minute	1
+month	1
+quarter	1
+second	1
+week	0
+year	1
+yearweek	0
+NULL	NULL
 
 statement ok
 INSERT into parts VALUES('duck');

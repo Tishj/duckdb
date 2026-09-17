@@ -36,12 +36,12 @@ SELECT POSITION('á' in s) FROM strings
 
 # Test a sentence with UTF-8
 query I
-SELECT INSTR(s,'olá mundo') FROM strings
+SELECT INSTR(s,'olá mundo') FROM strings ORDER BY ALL
 ----
 0
+0
+0
 1
-0
-0
 
 # Test an entire UTF-8 word
 query I

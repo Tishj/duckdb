@@ -6,7 +6,7 @@ statement ok
 CREATE TABLE a AS SELECT [{'a': 3, 'b': 'hello'}, NULL, {'a': NULL, 'b': 'thisisalongstring'}] l;
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 [{'a': 3, 'b': hello}, NULL, {'a': NULL, 'b': thisisalongstring}]
 
@@ -14,7 +14,7 @@ statement ok
 INSERT INTO a VALUES (NULL)
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 [{'a': 3, 'b': hello}, NULL, {'a': NULL, 'b': thisisalongstring}]
 NULL
@@ -23,11 +23,11 @@ statement ok
 INSERT INTO a VALUES ([{'a': 17, 'b': 'world'}])
 
 query I
-SELECT * FROM a;
+SELECT * FROM a ORDER BY ALL;
 ----
 [{'a': 3, 'b': hello}, NULL, {'a': NULL, 'b': thisisalongstring}]
-NULL
 [{'a': 17, 'b': world}]
+NULL
 
 query I
 SELECT UNNEST(l) FROM a

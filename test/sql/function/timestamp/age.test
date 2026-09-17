@@ -61,14 +61,14 @@ statement ok
 INSERT INTO timestamp VALUES(NULL, NULL)
 
 query T
-SELECT AGE(t1, TIMESTAMP '1957-06-13') FROM timestamp;
+SELECT AGE(t1, TIMESTAMP '1957-06-13') FROM timestamp ORDER BY ALL;
 ----
 43 years 9 months 27 days
 56 years 10 months 12 days
 56 years 10 months 12 days
 61 years 11 months 28 days
-NULL
 61 years 11 months 28 days
+NULL
 NULL
 
 query T

@@ -67,12 +67,12 @@ statement ok
 insert into ints values ([1],[1]), ([2],[2]),([3],[3]),([4],[4])
 
 query I
-select m from (select MAP(lsta,lstb) as m from (SELECT list(a) as lsta, list(b) as lstb FROM ints where a[1] < 4 and b[1] > 1) as lst_tbl) as T
+select m from (select MAP(lsta,lstb) as m from (SELECT list(a ORDER BY a) as lsta, list(b ORDER BY a) as lstb FROM ints where a[1] < 4 and b[1] > 1) as lst_tbl) as T
 ----
 {[2]=[2], [3]=[3]}
 
 query I
-select m[[2]] from (select MAP(lsta,lstb) as m from (SELECT list(a) as lsta, list(b) as lstb FROM ints where a[1] < 4 and b[1] > 1) as lst_tbl) as T
+select m[[2]] from (select MAP(lsta,lstb) as m from (SELECT list(a ORDER BY a) as lsta, list(b ORDER BY a) as lstb FROM ints where a[1] < 4 and b[1] > 1) as lst_tbl) as T
 ----
 [2]
 
@@ -81,15 +81,15 @@ statement ok
 insert into ints values ([5],[1]), ([1],[2]),([2],[3]),([6],[4])
 
 query I rowsort
-select m from (select MAP(lsta,lstb) as m from (SELECT list(a) as lsta, list(b) as lstb FROM ints group by b) as lst_tbl) as T
+select m from (select MAP(lsta,lstb) as m from (SELECT list(a ORDER BY a) as lsta, list(b ORDER BY a) as lstb FROM ints group by b) as lst_tbl) as T
 ----
 {[1]=[1], [5]=[1]}
-{[2]=[2], [1]=[2]}
-{[3]=[3], [2]=[3]}
+{[1]=[2], [2]=[2]}
+{[2]=[3], [3]=[3]}
 {[4]=[4], [6]=[4]}
 
 query I rowsort
-select m[[1]] from (select MAP(lsta,lstb) as m from (SELECT list(a) as lsta, list(b) as lstb FROM ints group by b) as lst_tbl) as T
+select m[[1]] from (select MAP(lsta,lstb) as m from (SELECT list(a ORDER BY a) as lsta, list(b ORDER BY a) as lstb FROM ints group by b) as lst_tbl) as T
 ----
 NULL
 NULL
@@ -101,7 +101,7 @@ statement ok
 insert into ints values ([1],[4])
 
 query I rowsort
-select m[[1]] from (select MAP(lsta,lstb) as m from (SELECT list(a) as lsta, list(b) as lstb FROM ints where b[1] <4 group by b) as lst_tbl) as T
+select m[[1]] from (select MAP(lsta,lstb) as m from (SELECT list(a ORDER BY a) as lsta, list(b ORDER BY a) as lstb FROM ints where b[1] <4 group by b) as lst_tbl) as T
 ----
 NULL
 [1]

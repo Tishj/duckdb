@@ -560,25 +560,25 @@ endloop
 
 query II
 SELECT datepart, DATESUB(datepart, '2004-01-31 12:00:00'::TIMESTAMP, '2004-02-29 13:05:47.123456'::TIMESTAMP)
-FROM parts;
+FROM parts ORDER BY ALL;
 ----
-NULL	NULL
-year	0
-quarter	0
-month	1
+century	0
 day	29
 dayofyear	29
-hour	697
-minute	41825
-second	2509547
-millisecond	2509547123
-microsecond	2509547123456
 decade	0
-century	0
-millennium	0
-week	4
-yearweek	4
+hour	697
 isoyear	0
+microsecond	2509547123456
+millennium	0
+millisecond	2509547123
+minute	41825
+month	1
+quarter	0
+second	2509547
+week	4
+year	0
+yearweek	4
+NULL	NULL
 
 foreach ltype DATE TIMESTAMP
 
