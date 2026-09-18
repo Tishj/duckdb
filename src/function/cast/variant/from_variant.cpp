@@ -7,7 +7,9 @@
 #include "duckdb/common/vector/struct_vector.hpp"
 #include "yyjson_memory.hpp"
 #include "duckdb/function/cast/default_casts.hpp"
+#include "duckdb/function/cast/vector_cast_helpers.hpp"
 #include "duckdb/common/types/variant.hpp"
+#include "duckdb/function/variant/variant_value_convert.hpp"
 #include "duckdb/function/scalar/variant_utils.hpp"
 #include "duckdb/common/serializer/varint.hpp"
 #include "yyjson.hpp"
@@ -66,6 +68,155 @@ public:
 public:
 	idx_t width;
 	idx_t scale;
+};
+
+struct VariantStringValue {
+	VariantStringValue(string value_p, LogicalType type_p, bool is_null_p = false)
+	    : value(std::move(value_p)), type(std::move(type_p)), is_null(is_null_p) {
+	}
+
+	string value;
+	LogicalType type;
+	bool is_null;
+};
+
+// Render directly because arbitrary VARIANT objects cannot always be represented by a STRUCT Value.
+struct VariantStringConverter {
+	using result_type = VariantStringValue;
+
+	static VariantStringValue Render(Value value) {
+		auto type = value.type();
+		auto is_null = value.IsNull();
+		return VariantStringValue(value.ToString(), std::move(type), is_null);
+	}
+
+	template <bool STRUCT_KEY>
+	static string Escape(const string &value) {
+		string_t input(value);
+		bool needs_quotes;
+		auto length = VectorCastHelpers::CalculateEscapedStringLength<STRUCT_KEY>(input, needs_quotes);
+		string result(length, '\0');
+		VectorCastHelpers::WriteEscapedString<STRUCT_KEY>(result.data(), input, needs_quotes);
+		return result;
+	}
+
+	static string RenderNested(const VariantStringValue &value) {
+		if (value.is_null || value.type.IsNested()) {
+			return value.value;
+		}
+		return Escape<false>(value.value);
+	}
+
+	static VariantStringValue VisitNull() {
+		return Render(Value());
+	}
+	static VariantStringValue VisitBoolean(bool val) {
+		return Render(ValueConverter::VisitBoolean(val));
+	}
+	template <typename T>
+	static VariantStringValue VisitInteger(T val) {
+		return Render(ValueConverter::VisitInteger<T>(val));
+	}
+	static VariantStringValue VisitTime(dtime_t val) {
+		return Render(ValueConverter::VisitTime(val));
+	}
+	static VariantStringValue VisitTimeNanos(dtime_ns_t val) {
+		return Render(ValueConverter::VisitTimeNanos(val));
+	}
+	static VariantStringValue VisitTimeTZ(dtime_tz_t val) {
+		return Render(ValueConverter::VisitTimeTZ(val));
+	}
+	static VariantStringValue VisitTimestampSec(timestamp_sec_t val) {
+		return Render(ValueConverter::VisitTimestampSec(val));
+	}
+	static VariantStringValue VisitTimestampMs(timestamp_ms_t val) {
+		return Render(ValueConverter::VisitTimestampMs(val));
+	}
+	static VariantStringValue VisitTimestamp(timestamp_t val) {
+		return Render(ValueConverter::VisitTimestamp(val));
+	}
+	static VariantStringValue VisitTimestampNanos(timestamp_ns_t val) {
+		return Render(ValueConverter::VisitTimestampNanos(val));
+	}
+	static VariantStringValue VisitTimestampTZ(timestamp_tz_t val) {
+		return Render(ValueConverter::VisitTimestampTZ(val));
+	}
+	static VariantStringValue VisitTimestampTZNanos(timestamp_tz_ns_t val) {
+		return Render(ValueConverter::VisitTimestampTZNanos(val));
+	}
+	static VariantStringValue VisitFloat(float val) {
+		return Render(ValueConverter::VisitFloat(val));
+	}
+	static VariantStringValue VisitDouble(double val) {
+		return Render(ValueConverter::VisitDouble(val));
+	}
+	static VariantStringValue VisitUUID(hugeint_t val) {
+		return Render(ValueConverter::VisitUUID(val));
+	}
+	static VariantStringValue VisitDate(date_t val) {
+		return Render(ValueConverter::VisitDate(val));
+	}
+	static VariantStringValue VisitInterval(interval_t val) {
+		return Render(ValueConverter::VisitInterval(val));
+	}
+	static VariantStringValue VisitString(const string_t &val) {
+		return Render(Value(val));
+	}
+	static VariantStringValue VisitBlob(const string_t &val) {
+		return Render(ValueConverter::VisitBlob(val));
+	}
+	static VariantStringValue VisitBignum(const string_t &val) {
+		return Render(ValueConverter::VisitBignum(val));
+	}
+	static VariantStringValue VisitGeometry(const string_t &val) {
+		return Render(ValueConverter::VisitGeometry(val));
+	}
+	static VariantStringValue VisitBitstring(const string_t &val) {
+		return Render(ValueConverter::VisitBitstring(val));
+	}
+	template <typename T>
+	static VariantStringValue VisitDecimal(T val, uint32_t width, uint32_t scale) {
+		return Render(ValueConverter::VisitDecimal(val, width, scale));
+	}
+	static VariantStringValue VisitArray(const UnifiedVariantVectorData &variant, idx_t row,
+	                                     const VariantNestedData &nested_data) {
+		auto values = VariantVisitor<VariantStringConverter>::VisitArrayItems(variant, row, nested_data);
+		auto child_type = LogicalType::VARIANT();
+		bool homogeneous = !values.empty();
+		if (homogeneous) {
+			child_type = values[0].type;
+			for (idx_t i = 1; i < values.size(); i++) {
+				if (values[i].type != child_type) {
+					homogeneous = false;
+					child_type = LogicalType::VARIANT();
+					break;
+				}
+			}
+		}
+		vector<string> entries;
+		entries.reserve(values.size());
+		for (auto &value : values) {
+			entries.push_back(homogeneous ? RenderNested(value) : value.value);
+		}
+		return VariantStringValue("[" + StringUtil::Join(entries, ", ") + "]", LogicalType::LIST(child_type));
+	}
+	static VariantStringValue VisitObject(const UnifiedVariantVectorData &variant, idx_t row,
+	                                      const VariantNestedData &nested_data) {
+		auto values = VariantVisitor<VariantStringConverter>::VisitObjectItems(variant, row, nested_data);
+		child_list_t<LogicalType> child_types;
+		vector<string> entries;
+		child_types.reserve(values.size());
+		entries.reserve(values.size());
+		for (auto &entry : values) {
+			child_types.emplace_back(entry.first, entry.second.type);
+			entries.push_back(Escape<true>(entry.first.GetIdentifierName()) + ": " + RenderNested(entry.second));
+		}
+		return VariantStringValue("{" + StringUtil::Join(entries, ", ") + "}",
+		                          LogicalType::STRUCT(std::move(child_types)));
+	}
+	static VariantStringValue VisitDefault(VariantLogicalType type_id, const_data_ptr_t) {
+		throw InternalException("VariantLogicalType(%s) not handled", EnumUtil::ToString(type_id));
+	}
 };
 
 struct ToVariantCastData : public BoundCastData {
@@ -205,18 +356,46 @@ static bool CastVariantToPrimitive(FromVariantConversionData &conversion_data, V
 			}
 		}
 		if (!converted) {
-			auto value = VariantUtils::ConvertVariantToValue(conversion_data.variant, row_index, sel[i]);
-			auto cast_value = conversion_data.TryCastAs(value, target_type, nullptr, true);
-			if (!cast_value) {
-				conversion_data.error = StringUtil::Format("Can't convert VARIANT(%s) value '%s'",
-				                                           EnumUtil::ToString(type_id), value.ToString());
-				cast_value = Value(target_type);
+			try {
+				auto value = VariantUtils::ConvertVariantToValue(conversion_data.variant, row_index, sel[i]);
+				auto cast_value = conversion_data.TryCastAs(value, target_type, nullptr, true);
+				if (!cast_value) {
+					conversion_data.error = StringUtil::Format("Can't convert VARIANT(%s) value '%s'",
+					                                           EnumUtil::ToString(type_id), value.ToString());
+					cast_value = Value(target_type);
+					all_valid = false;
+				}
+				result.SetValue(i + offset, *cast_value);
+			} catch (const ConversionException &) {
+				if (conversion_data.error.empty()) {
+					conversion_data.error =
+					    StringUtil::Format("Can't convert VARIANT(%s)", EnumUtil::ToString(type_id));
+				}
+				FlatVector::SetNull(result, offset + i, true);
 				all_valid = false;
 			}
-			result.SetValue(i + offset, *cast_value);
 		}
 	}
 	return all_valid;
+}
+
+static bool CastVariantToVarchar(FromVariantConversionData &conversion_data, Vector &result, const SelectionVector &sel,
+                                 idx_t offset, idx_t count, optional_idx row) {
+	auto result_data = FlatVector::Writer<string_t>(result, count, offset);
+	for (idx_t i = 0; i < count; i++) {
+		auto row_index = row.IsValid() ? row.GetIndex() : i;
+		if (!conversion_data.variant.RowIsValid(row_index)) {
+			result_data.WriteNull();
+			continue;
+		}
+		if (conversion_data.variant.GetTypeId(row_index, sel[i]) == VariantLogicalType::VARIANT_NULL) {
+			result_data.WriteNull();
+			continue;
+		}
+		auto value = VariantVisitor<VariantStringConverter>::Visit(conversion_data.variant, row_index, sel[i]);
+		result_data.WriteValue(string_t(value.value));
+	}
+	return true;
 }
 
 static bool FindValues(UnifiedVariantVectorData &variant, idx_t row_index, SelectionVector &sel,
@@ -605,8 +784,8 @@ static bool CastVariant(FromVariantConversionData &conversion_data, Vector &resu
 
 			//! Get the index into 'values'
 			uint32_t value_index = sel[i];
-			auto value = VariantUtils::ConvertVariantToValue(conversion_data.variant, row_index, value_index);
 			try {
+				auto value = VariantUtils::ConvertVariantToValue(conversion_data.variant, row_index, value_index);
 				auto cast_value = conversion_data.TryCastAs(value, target_type, nullptr, true);
 				if (!cast_value) {
 					cast_value = Value(target_type);
@@ -616,6 +795,9 @@ static bool CastVariant(FromVariantConversionData &conversion_data, Vector &resu
 			} catch (const BinderException &) {
 				// Bind-time exceptions (e.g., incompatible struct layouts) should be treated as conversion failures
 				// Set the value to NULL and mark as failed
+				FlatVector::SetNull(result, offset + i, true);
+				all_valid = false;
+			} catch (const ConversionException &) {
 				FlatVector::SetNull(result, offset + i, true);
 				all_valid = false;
 			}
@@ -692,9 +874,7 @@ static bool CastVariant(FromVariantConversionData &conversion_data, Vector &resu
 			if (target_type.IsJSONType()) {
 				return CastVariantToJSON(conversion_data, result, sel, offset, count, row);
 			}
-			StringConversionPayload string_payload(result);
-			return CastVariantToPrimitive<VariantDirectConversion<string_t, VariantLogicalType::VARCHAR>>(
-			    conversion_data, result, sel, offset, count, row, string_payload);
+			return CastVariantToVarchar(conversion_data, result, sel, offset, count, row);
 		}
 		case LogicalTypeId::INTERVAL:
 			return CastVariantToPrimitive<VariantDirectConversion<interval_t, VariantLogicalType::INTERVAL>>(

@@ -1,0 +1,43 @@
+# name: test/sql/storage/types/variant/variant_shredded_try_cast.test
+# description: TRY_CAST failures from persisted shredded variants return NULL
+# group: [variant]
+
+require json
+
+statement ok
+SET variant_minimum_shredding_size=0
+
+statement ok
+CREATE TABLE variants AS
+SELECT '[null, {"": []}]'::JSON::VARIANT AS v
+
+statement ok
+CHECKPOINT
+
+# VARCHAR conversion traverses nested values directly, including valid empty object keys.
+query T
+SELECT v::VARCHAR FROM variants
+----
+[NULL, {'': []}]
+
+query T
+SELECT variant_normalize(v)::VARCHAR FROM variants
+----
+[NULL, {'': []}]
+
+# Falling back through the heterogeneous array must not let the empty object key turn the failed cast into an error.
+query I
+SELECT TRY_CAST(v AS STRUCT(a BIGINT, b VARCHAR)) FROM variants
+----
+NULL
+
+query I
+SELECT TRY_CAST(v AS BIGINT) FROM variants
+----
+NULL
+
+# A regular CAST still reports the conversion failure.
+statement error
+SELECT CAST(v AS STRUCT(a BIGINT, b VARCHAR)) FROM variants
+----
+Conversion Error
