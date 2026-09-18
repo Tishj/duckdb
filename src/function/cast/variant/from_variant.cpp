@@ -80,7 +80,7 @@ struct VariantStringValue {
 	bool is_null;
 };
 
-// Render directly because arbitrary VARIANT objects cannot always be represented by a STRUCT Value.
+// Render the encoded VARIANT directly to preserve object keys and avoid materializing nested VARIANT Values.
 struct VariantStringConverter {
 	using result_type = VariantStringValue;
 
