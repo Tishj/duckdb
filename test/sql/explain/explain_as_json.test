@@ -1,0 +1,177 @@
+# name: test/sql/explain/explain_as_json.test
+# description: Inspect EXPLAIN JSON using a table function
+# group: [explain]
+
+require json
+
+query TTT
+SELECT explain_key, typeof(explain_value), json_extract_string(explain_value, '$[0].name') FROM explain_as_json('SELECT 42');
+----
+physical_plan	JSON	PROJECTION
+
+query II
+SELECT json_contains(explain_value, '{"name":"PROJECTION"}'), json_contains(explain_value, '{"name":"DUMMY_SCAN"}') FROM (SELECT * FROM explain_as_json('SELECT 42'));
+----
+true	true
+
+query I
+SELECT json_contains(explain_value, '{"Projections":["42", "43"]}') FROM explain_as_json('SELECT 42, 43');
+----
+true
+
+query I
+WITH p AS (SELECT * FROM explain_as_json('SELECT 42')) SELECT count(*) FROM p a JOIN explain_as_json('SELECT 43') b USING (explain_key);
+----
+1
+
+query TI
+SELECT k, json_contains(v, '{"name":"PROJECTION"}') FROM explain_as_json('SELECT 42') AS p(k, v);
+----
+physical_plan	true
+
+query I
+SELECT (SELECT json_contains(explain_value, '{"name":"PROJECTION"}') FROM explain_as_json('SELECT 42'));
+----
+true
+
+query I
+SELECT json_contains(explain_value, '{"name":"PROJECTION"}') FROM explain_as_json('SELECT [1, 2], {a: 42}');
+----
+true
+
+statement ok
+SET explain_output = 'all';
+
+query T rowsort
+SELECT explain_key FROM explain_as_json('SELECT 42');
+----
+logical_opt
+logical_plan
+physical_plan
+
+statement ok
+SET explain_output = 'optimized_only';
+
+query T
+SELECT explain_key FROM explain_as_json('SELECT 42');
+----
+logical_opt
+
+statement ok
+RESET explain_output;
+
+statement ok
+CREATE SEQUENCE explain_seq;
+
+query I
+SELECT count(*) FROM explain_as_json('SELECT nextval(''explain_seq'')');
+----
+1
+
+query I
+SELECT nextval('explain_seq');
+----
+1
+
+statement ok
+PREPARE explain_query AS SELECT json_extract_string(explain_value, '$[0].extra_info.Projections') FROM explain_as_json($1);
+
+query T
+EXECUTE explain_query('SELECT 42');
+----
+42
+
+query T
+EXECUTE explain_query('SELECT 43');
+----
+43
+
+statement ok
+CREATE VIEW explain_view AS SELECT * FROM explain_as_json('SELECT 42');
+
+query I
+SELECT json_contains(explain_value, '{"name":"PROJECTION"}') FROM explain_view;
+----
+true
+
+statement error
+SELECT * FROM explain_as_json(NULL);
+----
+Cannot use NULL
+
+statement error
+SELECT * FROM explain_as_json('');
+----
+single SELECT statement
+
+statement error
+SELECT * FROM explain_as_json('SELECT 1; SELECT 2');
+----
+single SELECT statement
+
+statement error
+SELECT * FROM explain_as_json('DELETE FROM tbl');
+----
+single SELECT statement
+
+statement error
+SELECT * FROM explain_as_json('EXPLAIN ANALYZE SELECT 1');
+----
+single SELECT statement
+
+statement error
+SELECT * FROM explain_as_json('SELECT $1');
+----
+Parameters inside explain_as_json
+
+statement error
+SELECT * FROM explain_as_json('SELECT * FROM missing_explain_table');
+----
+missing_explain_table
+
+statement error
+SELECT * FROM (VALUES ('SELECT 1')) q(sql), explain_as_json(q.sql);
+----
+does not support lateral join column parameters
+
+statement ok
+CREATE TABLE explain_source(a INTEGER);
+
+statement ok
+PREPARE explain_schema AS SELECT json_contains(explain_value, '{"Projections":["a", "b"]}') FROM explain_as_json('SELECT * FROM explain_source');
+
+query I
+EXECUTE explain_schema;
+----
+false
+
+statement ok
+ALTER TABLE explain_source ADD COLUMN b VARCHAR;
+
+query I
+EXECUTE explain_schema;
+----
+true
+
+statement ok
+PRAGMA disable_optimizer;
+
+query I
+SELECT json_contains(explain_value, '{"name":"PROJECTION"}') FROM explain_as_json('SELECT 42');
+----
+true
+
+statement ok
+PRAGMA enable_optimizer;
+
+load {TEST_DIR}/explain_as_json.db
+
+statement ok
+CREATE VIEW persisted_explain AS SELECT * FROM explain_as_json('SELECT 42');
+
+restart
+
+query I
+SELECT json_contains(explain_value, '{"name":"PROJECTION"}') FROM persisted_explain;
+----
+true

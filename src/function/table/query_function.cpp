@@ -6,6 +6,17 @@
 #include "duckdb/parser/statement/multi_statement.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 
+#include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/star_expression.hpp"
+#include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/statement/explain_statement.hpp"
+#include "duckdb/parser/tableref/expressionlistref.hpp"
+#include "duckdb/planner/planner.hpp"
+#include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/execution/physical_plan_generator.hpp"
+#include "duckdb/execution/operator/scan/physical_column_data_scan.hpp"
+#include "duckdb/main/settings.hpp"
+
 namespace duckdb {
 
 static unique_ptr<SubqueryRef> ParseSubquery(const string &query, const ParserOptions &options, const string &err_msg) {
@@ -79,7 +90,55 @@ static unique_ptr<TableRef> TableBindReplace(ClientContext &context, TableFuncti
 	return std::move(subquery_ref);
 }
 
+static unique_ptr<TableRef> ExplainAsJSONBindReplace(ClientContext &context, TableFunctionBindInput &input) {
+	if (input.inputs[0].IsNull()) {
+		throw BinderException("Cannot use NULL as function argument");
+	}
+	auto subquery = ParseSubquery(input.inputs[0].ToString(), context.GetParserOptions(),
+	                              "explain_as_json requires a single SELECT statement");
+	if (!subquery->subquery->named_param_map.empty()) {
+		throw BinderException("Parameters inside explain_as_json query strings are not supported");
+	}
+	// Render through the regular EXPLAIN pipeline without executing the supplied query.
+	auto statement = make_uniq<ExplainStatement>(std::move(subquery->subquery), ExplainType::EXPLAIN_STANDARD,
+	                                             ProfilerPrintFormat::JSON());
+	Planner planner(context);
+	planner.CreatePlan(std::move(statement));
+	Optimizer optimizer(*planner.binder, context);
+	if (Settings::Get<EnableOptimizerSetting>(context)) {
+		planner.plan = optimizer.Optimize(std::move(planner.plan));
+	} else {
+		planner.plan = optimizer.LowerMandatoryAggregateRewrites(std::move(planner.plan));
+	}
+	PhysicalPlanGenerator generator(context);
+	auto plan = generator.Plan(std::move(planner.plan));
+	auto &scan = plan->Root().Cast<PhysicalColumnDataScan>();
+	auto rows = scan.collection->GetRows();
+	auto result = make_uniq<ExpressionListRef>();
+	result->alias = "explain_as_json";
+	result->expected_names = {"explain_key", "explain_value"};
+	result->expected_types = {LogicalType::VARCHAR, LogicalType::JSON()};
+	for (idx_t i = 0; i < rows.size(); i++) {
+		vector<unique_ptr<ParsedExpression>> row;
+		row.push_back(ConstantExpression::FromValue(rows.GetValue(0, i)));
+		row.push_back(ConstantExpression::FromValue(rows.GetValue(1, i)));
+		result->values.push_back(std::move(row));
+	}
+	// Recompute captured plans when prepared statements are executed again.
+	input.binder->SetAlwaysRequireRebind();
+	auto select = make_uniq<SelectStatement>();
+	auto node = make_uniq<SelectNode>();
+	node->select_list.push_back(make_uniq<StarExpression>());
+	node->from_table = std::move(result);
+	select->node = std::move(node);
+	return make_uniq<SubqueryRef>(std::move(select), "explain_as_json");
+}
+
 void QueryTableFunction::RegisterFunction(BuiltinFunctions &set) {
+	TableFunction explain_as_json("explain_as_json", {LogicalType::VARCHAR}, nullptr, nullptr);
+	explain_as_json.bind_replace = ExplainAsJSONBindReplace;
+	set.AddFunction(explain_as_json);
+
 	TableFunction query("query", {LogicalType::VARCHAR}, nullptr, nullptr);
 	query.bind_replace = QueryBindReplace;
 	set.AddFunction(query);
