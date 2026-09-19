@@ -47,6 +47,24 @@ struct AlterEntryData {
 	OnEntryNotFound if_not_found;
 };
 
+//! Describes whether ALTER preserves or replaces the altered entry's bound dependencies.
+class DependencyUpdate {
+public:
+	static DependencyUpdate Preserve();
+	//! An empty list removes all non-ownership outgoing dependencies.
+	static DependencyUpdate ReplaceBoundDependencies(const LogicalDependencyList &dependencies);
+	DependencyUpdate(DependencyUpdate &&other) noexcept;
+	DependencyUpdate &operator=(DependencyUpdate &&other) noexcept;
+	~DependencyUpdate();
+
+	bool PreservesDependencies() const;
+	const LogicalDependencyList &GetReplacementDependencies() const;
+
+private:
+	explicit DependencyUpdate(unique_ptr<LogicalDependencyList> replacement);
+	unique_ptr<LogicalDependencyList> replacement;
+};
+
 struct AlterInfo : public ParseInfo {
 public:
 	static constexpr const ParseInfoType TYPE = ParseInfoType::ALTER_INFO;
@@ -62,8 +80,8 @@ public:
 	bool allow_internal;
 	//! Determine whether to skip Bind
 	AlterBindMode bind_mode = AlterBindMode::BIND_ON_ALTER;
-	//! New dependencies for the altered entry (set during binding)
-	unique_ptr<LogicalDependencyList> new_dependencies;
+	//! Set during binding; copying or serializing the parsed ALTER does not carry this update.
+	DependencyUpdate dependency_update = DependencyUpdate::Preserve();
 
 public:
 	const QualifiedName &GetQualifiedName() const {

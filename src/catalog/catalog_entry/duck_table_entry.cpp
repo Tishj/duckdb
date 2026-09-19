@@ -136,7 +136,7 @@ static void CheckTypeIsSupported(const LogicalType &logical_type, AttachedDataba
 }
 
 static void SetAlterDependencies(BoundCreateTableInfo &info, AlterInfo &alter_info) {
-	alter_info.new_dependencies = make_uniq<LogicalDependencyList>(info.Base().dependencies);
+	alter_info.dependency_update = DependencyUpdate::ReplaceBoundDependencies(info.Base().dependencies);
 }
 
 virtual_column_map_t DuckTableEntry::GetVirtualColumns() const {
@@ -536,9 +536,9 @@ unique_ptr<CatalogEntry> DuckTableEntry::RenameColumn(ClientContext &context, Re
 			    }
 		    }
 	    });
-	// Use a copy of info without new_dependencies so AlterObject does not
-	// replace the trigger's own dependency edges with the table's dep list.
+	// The column-list update preserves the trigger's dependencies.
 	auto trigger_alter_info = info.Copy();
+	trigger_alter_info->dependency_update = DependencyUpdate::Preserve();
 	for (const auto &trigger_name : triggers_to_update) {
 		triggers->AlterEntry(txn, trigger_name, *trigger_alter_info);
 	}

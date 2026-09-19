@@ -1,0 +1,80 @@
+# name: test/sql/catalog/dependencies/test_alter_dependency_update.test
+# description: Preserve and replace bound dependencies while retaining ownership
+# group: [dependencies]
+
+require skip_reload
+
+statement ok
+CREATE SEQUENCE bound_seq;
+
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE t (i INTEGER DEFAULT nextval('bound_seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY t;
+
+# Metadata-only alters preserve both kinds of relationship.
+statement ok
+COMMENT ON TABLE t IS 'preserve dependencies';
+
+statement error
+DROP SEQUENCE bound_seq;
+----
+there are entries that depend on it
+
+statement error
+DROP SEQUENCE owned_seq;
+----
+there are entries that depend on it
+
+# Replacing the last bound dependency does not remove ownership.
+statement ok
+ALTER TABLE t ALTER COLUMN i DROP DEFAULT;
+
+statement ok
+DROP SEQUENCE bound_seq;
+
+statement error
+DROP SEQUENCE owned_seq;
+----
+there are entries that depend on it
+
+# Rolling back a replacement restores the previous dependency set.
+statement ok
+CREATE SEQUENCE replacement_seq;
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE t ALTER COLUMN i SET DEFAULT nextval('replacement_seq');
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP SEQUENCE replacement_seq;
+
+statement error
+DROP SEQUENCE owned_seq;
+----
+there are entries that depend on it
+
+statement ok
+INSERT INTO t DEFAULT VALUES;
+
+query I
+SELECT i FROM t;
+----
+NULL
+
+statement ok
+DROP TABLE t;
+
+query I
+SELECT count(*) FROM duckdb_sequences() WHERE sequence_name = 'owned_seq';
+----
+0

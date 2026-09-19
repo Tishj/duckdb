@@ -401,7 +401,8 @@ bool CatalogSet::AlterEntry(CatalogTransaction transaction, const Identifier &na
 	write_lock.unlock();
 
 	// Check the dependency manager to verify that there are no conflicting dependencies with this alter
-	catalog.GetDependencyManager()->AlterObject(transaction, *entry, *new_entry, alter_info);
+	catalog.GetDependencyManager()->AlterObject(transaction, *entry, *new_entry, alter_info,
+	                                            alter_info.dependency_update);
 	return true;
 }
 

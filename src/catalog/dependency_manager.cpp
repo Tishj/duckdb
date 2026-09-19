@@ -249,7 +249,7 @@ static string CatalogEntryInfoToString(const CatalogEntryInfo &entry) {
 	       StringUtil::Format("(%s)", CatalogTypeToString(entry.type));
 }
 
-void DependencyManager::CreateDependency(CatalogTransaction transaction, DependencyInfo &info) {
+void DependencyManager::MergeDependency(CatalogTransaction transaction, DependencyInfo info) {
 	auto subject_entry = LookupEntry(transaction, info.subject.entry);
 	info.subject.oid = subject_entry ? subject_entry->oid : optional_idx();
 	if (!subject_entry) {
@@ -319,7 +319,7 @@ void DependencyManager::CreateDependencies(CatalogTransaction transaction, const
 		DependencyInfo info {
 		    /*dependent = */ DependencyDependent {object_info, flags},
 		    /*subject = */ DependencySubject {dependency.entry, DependencySubjectFlags(), optional_idx()}};
-		CreateDependency(transaction, info);
+		MergeDependency(transaction, info);
 	}
 }
 
@@ -739,67 +739,69 @@ static bool BlocksAlter(const DependencyInfo &dep, const AlterInfo &alter_info) 
 	return disallow_alter;
 }
 
-void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry &old_obj, CatalogEntry &new_obj,
-                                    AlterInfo &alter_info) {
-	if (IsSystemEntry(new_obj)) {
-		D_ASSERT(IsSystemEntry(old_obj));
-		// Don't do anything for this
-		return;
-	}
-
-	const auto old_info = GetLookupProperties(old_obj);
-	const auto new_info = GetLookupProperties(new_obj);
-
-	vector<DependencyInfo> dependencies;
-	// Other entries that depend on us
+vector<DependencyInfo> DependencyManager::CheckAlterDependencies(CatalogTransaction transaction,
+                                                                 const CatalogEntryInfo &old_info,
+                                                                 const AlterInfo &alter_info) {
+	vector<DependencyInfo> dependents;
 	ScanDependentsOf(transaction, old_info, [&](const DependencyInfo &dep) {
-		// It makes no sense to have a schema depend on anything
 		D_ASSERT(dep.dependent.entry.type != CatalogType::SCHEMA_ENTRY);
-
 		if (BlocksAlter(dep, alter_info)) {
 			throw DependencyException("Cannot alter entry %s because there are entries that "
 			                          "depend on it.",
-			                          old_obj.name);
+			                          old_info.name);
 		}
-
-		auto dep_info = dep;
-		dep_info.subject.entry = new_info;
-		dependencies.emplace_back(dep_info);
+		dependents.push_back(dep);
 	});
+	return dependents;
+}
 
-	// Keep old dependencies
-	bool has_new_dependencies = alter_info.new_dependencies.get();
+void DependencyManager::CollectAlterDependencies(CatalogTransaction transaction, const CatalogEntryInfo &old_info,
+                                                 const CatalogEntryInfo &new_info, const DependencyUpdate &update,
+                                                 vector<DependencyInfo> &dependencies) {
+	// Incoming relationships now point at the altered entry.
+	for (auto &dep : dependencies) {
+		dep.subject.entry = new_info;
+	}
+
 	ScanDependenciesOf(transaction, old_info, [&](const DependencyInfo &dep) {
-		if (has_new_dependencies && !dep.subject.flags.IsOwnership()) {
-			// The alter provided updated dependencies - skip old non-ownership subject dependencies
-			// as they will be replaced by the new dependencies
+		// Ownership survives replacement of the dependencies gathered during binding.
+		if (!update.PreservesDependencies() && !dep.subject.flags.IsOwnership()) {
 			return;
 		}
-		auto entry = LookupEntry(transaction, dep.subject.entry);
-		if (!entry) {
+		if (!LookupEntry(transaction, dep.subject.entry)) {
 			return;
 		}
-
 		auto dep_info = dep;
 		dep_info.dependent.entry = new_info;
-		dependencies.emplace_back(dep_info);
+		dependencies.emplace_back(std::move(dep_info));
 	});
+}
 
-	if (has_new_dependencies || !(old_obj.name == new_obj.name)) {
-		// The dependencies have changed (e.g. SET DEFAULT) or the name has changed
-		// We need to recreate the dependency links
+void DependencyManager::ApplyAlterDependencies(CatalogTransaction transaction, CatalogEntry &old_obj,
+                                               CatalogEntry &new_obj, const DependencyUpdate &update,
+                                               const vector<DependencyInfo> &dependencies) {
+	if (!update.PreservesDependencies() || old_obj.name != new_obj.name) {
 		CleanupDependencies(transaction, old_obj);
 	}
-
-	if (has_new_dependencies) {
-		// Add the new dependencies
-		CreateDependencies(transaction, new_obj, *alter_info.new_dependencies);
+	if (!update.PreservesDependencies()) {
+		CreateDependencies(transaction, new_obj, update.GetReplacementDependencies());
 	}
-
-	// Reinstate any old dependencies
 	for (auto &dep : dependencies) {
-		CreateDependency(transaction, dep);
+		MergeDependency(transaction, dep);
 	}
+}
+
+void DependencyManager::AlterObject(CatalogTransaction transaction, CatalogEntry &old_obj, CatalogEntry &new_obj,
+                                    const AlterInfo &alter_info, const DependencyUpdate &update) {
+	if (IsSystemEntry(new_obj)) {
+		D_ASSERT(IsSystemEntry(old_obj));
+		return;
+	}
+	const auto old_info = GetLookupProperties(old_obj);
+	const auto new_info = GetLookupProperties(new_obj);
+	auto dependencies = CheckAlterDependencies(transaction, old_info, alter_info);
+	CollectAlterDependencies(transaction, old_info, new_info, update, dependencies);
+	ApplyAlterDependencies(transaction, old_obj, new_obj, update, dependencies);
 }
 
 void DependencyManager::Scan(
@@ -881,7 +883,7 @@ void DependencyManager::AddOwnership(CatalogTransaction transaction, CatalogEntr
 	    /*dependent = */ DependencyDependent {GetLookupProperties(owner), DependencyDependentFlags().SetOwnedBy()},
 	    /*subject = */ DependencySubject {GetLookupProperties(entry), DependencySubjectFlags().SetOwnership(),
 	                                      optional_idx()}};
-	CreateDependency(transaction, info);
+	MergeDependency(transaction, info);
 }
 
 static string FormatString(const MangledEntryName &mangled) {

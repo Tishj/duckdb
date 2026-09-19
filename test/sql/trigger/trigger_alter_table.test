@@ -134,6 +134,12 @@ CREATE TRIGGER tr3 AFTER UPDATE OF b ON t3 INSERT INTO dep_log VALUES (1);
 statement ok
 ALTER TABLE t3 RENAME COLUMN b TO c;
 
+# The table's replacement dependencies must not replace the trigger's dependencies.
+statement error
+DROP TABLE dep_log;
+----
+there are entries that depend on it
+
 statement ok
 INSERT INTO t3 VALUES (0, 0);
 

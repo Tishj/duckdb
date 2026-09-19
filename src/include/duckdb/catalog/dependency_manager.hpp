@@ -23,6 +23,7 @@ class DuckCatalog;
 class ClientContext;
 class DependencyEntry;
 class LogicalDependencyList;
+class DependencyUpdate;
 
 // The subject of this dependency
 struct DependencySubject {
@@ -129,11 +130,19 @@ private:
 	//! Returns the objects that should be dropped alongside the object
 	catalog_entry_set_t CheckDropDependencies(CatalogTransaction transaction, CatalogEntry &object, bool cascade);
 	void DropObject(CatalogTransaction transaction, CatalogEntry &object, bool cascade);
-	void AlterObject(CatalogTransaction transaction, CatalogEntry &old_obj, CatalogEntry &new_obj, AlterInfo &info);
+	void AlterObject(CatalogTransaction transaction, CatalogEntry &old_obj, CatalogEntry &new_obj,
+	                 const AlterInfo &info, const DependencyUpdate &update);
+	vector<DependencyInfo> CheckAlterDependencies(CatalogTransaction transaction, const CatalogEntryInfo &old_info,
+	                                              const AlterInfo &info);
+	void CollectAlterDependencies(CatalogTransaction transaction, const CatalogEntryInfo &old_info,
+	                              const CatalogEntryInfo &new_info, const DependencyUpdate &update,
+	                              vector<DependencyInfo> &dependencies);
+	void ApplyAlterDependencies(CatalogTransaction transaction, CatalogEntry &old_obj, CatalogEntry &new_obj,
+	                            const DependencyUpdate &update, const vector<DependencyInfo> &dependencies);
 
 private:
 	void RemoveDependency(CatalogTransaction transaction, const DependencyInfo &info);
-	void CreateDependency(CatalogTransaction transaction, DependencyInfo &info);
+	void MergeDependency(CatalogTransaction transaction, DependencyInfo info);
 	void CreateDependencies(CatalogTransaction transaction, const CatalogEntry &object,
 	                        const LogicalDependencyList &dependencies);
 	using dependency_entry_func_t = const std::function<unique_ptr<DependencyEntry>(

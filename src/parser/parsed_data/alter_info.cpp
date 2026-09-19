@@ -6,6 +6,31 @@
 
 namespace duckdb {
 
+DependencyUpdate::DependencyUpdate(unique_ptr<LogicalDependencyList> replacement)
+    : replacement(std::move(replacement)) {
+}
+
+DependencyUpdate::DependencyUpdate(DependencyUpdate &&other) noexcept = default;
+DependencyUpdate &DependencyUpdate::operator=(DependencyUpdate &&other) noexcept = default;
+DependencyUpdate::~DependencyUpdate() = default;
+
+DependencyUpdate DependencyUpdate::Preserve() {
+	return DependencyUpdate(nullptr);
+}
+
+DependencyUpdate DependencyUpdate::ReplaceBoundDependencies(const LogicalDependencyList &dependencies) {
+	return DependencyUpdate(make_uniq<LogicalDependencyList>(dependencies));
+}
+
+bool DependencyUpdate::PreservesDependencies() const {
+	return !replacement;
+}
+
+const LogicalDependencyList &DependencyUpdate::GetReplacementDependencies() const {
+	D_ASSERT(!PreservesDependencies());
+	return *replacement;
+}
+
 AlterInfo::AlterInfo(AlterType type, QualifiedName name_p, OnEntryNotFound if_not_found)
     : ParseInfo(TYPE), type(type), if_not_found(if_not_found), allow_internal(false),
       qualified_name(std::move(name_p)) {
