@@ -44,10 +44,6 @@ struct DependencyDependent {
 //! dependency)
 struct DependencyInfo {
 public:
-	static DependencyInfo FromSubject(DependencyEntry &dep);
-	static DependencyInfo FromDependent(DependencyEntry &dep);
-
-public:
 	DependencyDependent dependent;
 	DependencySubject subject;
 };
@@ -105,7 +101,6 @@ private:
 private:
 	bool IsSystemEntry(CatalogEntry &entry) const;
 	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const LogicalDependency &dependency);
-	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, CatalogEntry &dependency);
 	optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const CatalogEntryInfo &info);
 	//! Look up a trigger dependency through the table it is defined on
 	optional_ptr<CatalogEntry> LookupTrigger(CatalogTransaction transaction, SchemaCatalogEntry &schema_entry,
@@ -148,8 +143,12 @@ private:
 	void CreateDependent(CatalogTransaction transaction, const DependencyInfo &info);
 
 	using dependency_callback_t = const std::function<void(DependencyEntry &)>;
-	void ScanDependents(CatalogTransaction transaction, const CatalogEntryInfo &info, dependency_callback_t &callback);
-	void ScanSubjects(CatalogTransaction transaction, const CatalogEntryInfo &info, dependency_callback_t &callback);
+	using dependency_info_callback_t = const std::function<void(const DependencyInfo &)>;
+	//! Both scans return relationships oriented from dependent to subject.
+	void ScanDependentsOf(CatalogTransaction transaction, const CatalogEntryInfo &info,
+	                      dependency_info_callback_t &callback);
+	void ScanDependenciesOf(CatalogTransaction transaction, const CatalogEntryInfo &info,
+	                        dependency_info_callback_t &callback);
 	void ScanSetInternal(CatalogTransaction transaction, const CatalogEntryInfo &info, bool subjects,
 	                     dependency_callback_t &callback);
 	void PrintSubjects(CatalogTransaction transaction, const CatalogEntryInfo &info);

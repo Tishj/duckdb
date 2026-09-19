@@ -272,6 +272,27 @@ CREATE TABLE audit9(x INTEGER);
 statement ok
 CREATE TRIGGER tr9 AFTER INSERT ON t9 FOR EACH STATEMENT INSERT INTO audit9 SELECT j FROM t9;
 
+# These alters remain allowed even when the trigger body blocks other table alters.
+statement ok
+ALTER TABLE t9 ADD COLUMN extra INTEGER;
+
+statement ok
+ALTER TABLE t9 ALTER COLUMN j SET DEFAULT 7;
+
+statement ok
+COMMENT ON TABLE t9 IS 'has a dependent trigger';
+
+statement ok
+COMMENT ON COLUMN t9.j IS 'read by the trigger';
+
+statement ok
+INSERT INTO t9 (i) VALUES (1);
+
+query I
+SELECT x FROM audit9;
+----
+7
+
 statement error
 ALTER TABLE t9 RENAME COLUMN j TO k;
 ----

@@ -39,6 +39,9 @@ protected:
 	                const DependencyInfo &info);
 
 public:
+	//! Return the complete relationship, independent of which catalog set stores this row.
+	DependencyInfo GetDependencyInfo() const;
+
 	const MangledEntryName &SubjectMangledName() const;
 	const DependencySubject &Subject() const;
 

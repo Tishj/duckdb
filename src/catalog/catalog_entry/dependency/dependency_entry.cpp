@@ -18,6 +18,10 @@ DependencyEntry::DependencyEntry(Catalog &catalog, DependencyEntryType side, con
 	}
 }
 
+DependencyInfo DependencyEntry::GetDependencyInfo() const {
+	return DependencyInfo {dependent, subject};
+}
+
 const MangledEntryName &DependencyEntry::SubjectMangledName() const {
 	return subject_name;
 }
