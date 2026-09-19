@@ -1,6 +1,5 @@
 #include "duckdb/catalog/catalog_entry/dependency/dependency_entry.hpp"
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
-#include "duckdb/catalog/dependency_manager.hpp"
 #include "duckdb/catalog/catalog.hpp"
 
 namespace duckdb {
@@ -8,9 +7,8 @@ namespace duckdb {
 DependencyEntry::DependencyEntry(Catalog &catalog, DependencyEntryType side, const MangledDependencyName &name,
                                  const DependencyInfo &info)
     : InCatalogEntry(CatalogType::DEPENDENCY_ENTRY, catalog, name.name),
-      dependent_name(DependencyManager::MangleName(info.dependent.entry)),
-      subject_name(DependencyManager::MangleName(info.subject.entry)), dependent(info.dependent), subject(info.subject),
-      side(side) {
+      dependent_name(MangledEntryName(info.dependent.entry)), subject_name(MangledEntryName(info.subject.entry)),
+      dependent(info.dependent), subject(info.subject), side(side) {
 	D_ASSERT(info.dependent.entry.type != CatalogType::DEPENDENCY_ENTRY);
 	D_ASSERT(info.subject.entry.type != CatalogType::DEPENDENCY_ENTRY);
 	if (catalog.IsTemporaryCatalog()) {

@@ -9,7 +9,7 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry.hpp"
-#include "duckdb/catalog/catalog_set.hpp"
+#include "duckdb/catalog/dependency_store.hpp"
 #include "duckdb/catalog/dependency.hpp"
 #include "duckdb/catalog/catalog_entry_map.hpp"
 #include "duckdb/catalog/catalog_transaction.hpp"
@@ -24,58 +24,6 @@ class ClientContext;
 class DependencyEntry;
 class LogicalDependencyList;
 class DependencyUpdate;
-
-// The subject of this dependency
-struct DependencySubject {
-	CatalogEntryInfo entry;
-	//! The type of dependency this is (e.g, ownership)
-	DependencySubjectFlags flags;
-	//! The oid of the subject entry when the dependency was created
-	optional_idx oid;
-};
-
-// The entry that relies on the other entry
-struct DependencyDependent {
-	CatalogEntryInfo entry;
-	//! The type of dependency this is (e.g, blocking, non-blocking, ownership)
-	DependencyDependentFlags flags;
-};
-
-//! Every dependency consists of a subject (the entry being depended on) and a dependent (the entry that has the
-//! dependency)
-struct DependencyInfo {
-public:
-	DependencyDependent dependent;
-	DependencySubject subject;
-};
-
-struct MangledEntryName {
-public:
-	explicit MangledEntryName(const CatalogEntryInfo &info);
-	MangledEntryName() = delete;
-
-public:
-	//! Format: Type\0Schema\0Name
-	Identifier name;
-
-public:
-	bool operator==(const MangledEntryName &other) const {
-		return other.name == name;
-	}
-	bool operator!=(const MangledEntryName &other) const {
-		return !(*this == other);
-	}
-};
-
-struct MangledDependencyName {
-public:
-	MangledDependencyName(const MangledEntryName &from, const MangledEntryName &to);
-	MangledDependencyName() = delete;
-
-public:
-	//! Format: MangledEntryName\0MangledEntryName
-	Identifier name;
-};
 
 //! The DependencyManager is in charge of managing dependencies between catalog entries
 class DependencyManager {
@@ -96,8 +44,7 @@ public:
 
 private:
 	DuckCatalog &catalog;
-	CatalogSet subjects;
-	CatalogSet dependents;
+	DependencyStore store;
 
 private:
 	bool IsSystemEntry(CatalogEntry &entry) const;
@@ -112,8 +59,6 @@ private:
 public:
 	//! The path of (nested) schemas that contain this entry, outermost first (empty for a top-level schema)
 	static vector<Identifier> GetSchemaPath(const CatalogEntry &entry);
-	static MangledEntryName MangleName(const CatalogEntryInfo &info);
-	static MangledEntryName MangleName(const CatalogEntry &entry);
 	static CatalogEntryInfo GetLookupProperties(const CatalogEntry &entry);
 	//! Navigate the given schema path (outermost first) and return the deepest schema in it. Returns nullptr for an
 	//! empty path (the entry lives in the catalog root) or if a schema along the path does not exist.
@@ -141,29 +86,17 @@ private:
 	                            const DependencyUpdate &update, const vector<DependencyInfo> &dependencies);
 
 private:
-	void RemoveDependency(CatalogTransaction transaction, const DependencyInfo &info);
 	void MergeDependency(CatalogTransaction transaction, DependencyInfo info);
 	void CreateDependencies(CatalogTransaction transaction, const CatalogEntry &object,
 	                        const LogicalDependencyList &dependencies);
-	using dependency_entry_func_t = const std::function<unique_ptr<DependencyEntry>(
-	    Catalog &catalog, const DependencyDependent &dependent, const DependencySubject &dependency)>;
-
-	void CreateSubject(CatalogTransaction transaction, const DependencyInfo &info);
-	void CreateDependent(CatalogTransaction transaction, const DependencyInfo &info);
-
-	using dependency_callback_t = const std::function<void(DependencyEntry &)>;
 	using dependency_info_callback_t = const std::function<void(const DependencyInfo &)>;
 	//! Both scans return relationships oriented from dependent to subject.
 	void ScanDependentsOf(CatalogTransaction transaction, const CatalogEntryInfo &info,
 	                      dependency_info_callback_t &callback);
 	void ScanDependenciesOf(CatalogTransaction transaction, const CatalogEntryInfo &info,
 	                        dependency_info_callback_t &callback);
-	void ScanSetInternal(CatalogTransaction transaction, const CatalogEntryInfo &info, bool subjects,
-	                     dependency_callback_t &callback);
 	void PrintSubjects(CatalogTransaction transaction, const CatalogEntryInfo &info);
 	void PrintDependents(CatalogTransaction transaction, const CatalogEntryInfo &info);
-	CatalogSet &Dependents();
-	CatalogSet &Subjects();
 };
 
 } // namespace duckdb

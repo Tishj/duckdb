@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/common/identifier.hpp"
+#include "duckdb/common/optional_idx.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/common/unordered_set.hpp"
@@ -204,6 +205,30 @@ public:
 public:
 	void Serialize(Serializer &serializer) const;
 	static CatalogEntryInfo Deserialize(Deserializer &deserializer);
+};
+
+// The subject of this dependency
+struct DependencySubject {
+	CatalogEntryInfo entry;
+	//! The type of dependency this is (e.g, ownership)
+	DependencySubjectFlags flags;
+	//! The oid of the subject entry when the dependency was created
+	optional_idx oid;
+};
+
+// The entry that relies on the other entry
+struct DependencyDependent {
+	CatalogEntryInfo entry;
+	//! The type of dependency this is (e.g, blocking, non-blocking, ownership)
+	DependencyDependentFlags flags;
+};
+
+//! Every dependency consists of a subject (the entry being depended on) and a dependent (the entry that has the
+//! dependency)
+struct DependencyInfo {
+public:
+	DependencyDependent dependent;
+	DependencySubject subject;
 };
 
 struct Dependency {

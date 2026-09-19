@@ -1,0 +1,82 @@
+# name: test/sql/catalog/dependencies/test_dependency_store_transactions.test
+# description: Mirrored dependencies retain snapshot visibility when ownership flags are merged
+# group: [dependencies]
+
+require skip_reload
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE TABLE t (i INTEGER DEFAULT nextval('seq'));
+
+statement ok reader
+BEGIN;
+
+query I reader
+SELECT count(*) FROM t;
+----
+0
+
+# Merge ownership into the existing default dependency, then roll it back.
+statement ok writer
+BEGIN;
+
+statement ok writer
+ALTER SEQUENCE seq OWNED BY t;
+
+statement error reader
+DROP SEQUENCE seq;
+----
+there are entries that depend on it
+
+statement ok writer
+ROLLBACK;
+
+statement ok reader
+ROLLBACK;
+
+statement ok
+DROP TABLE t;
+
+query I
+SELECT count(*) FROM duckdb_sequences() WHERE sequence_name = 'seq';
+----
+1
+
+statement ok
+CREATE TABLE t (i INTEGER);
+
+statement ok reader
+BEGIN;
+
+query I reader
+SELECT count(*) FROM t;
+----
+0
+
+# Newly committed ownership is still invisible to the reader's snapshot.
+statement ok writer
+ALTER SEQUENCE seq OWNED BY t;
+
+statement ok reader
+DROP TABLE t;
+
+# Commit validation must observe the new dependency and reject the stale drop.
+statement error reader
+COMMIT;
+----
+because a dependency was created after the transaction started
+
+query I
+SELECT count(*) FROM t;
+----
+0
+
+statement ok
+DROP TABLE t;
+
+query I
+SELECT count(*) FROM duckdb_sequences() WHERE sequence_name = 'seq';
+----
+0

@@ -3,10 +3,9 @@
 namespace duckdb {
 
 DependencySubjectEntry::DependencySubjectEntry(Catalog &catalog, const DependencyInfo &info)
-    : DependencyEntry(catalog, DependencyEntryType::SUBJECT,
-                      MangledDependencyName(DependencyManager::MangleName(info.dependent.entry),
-                                            DependencyManager::MangleName(info.subject.entry)),
-                      info) {
+    : DependencyEntry(
+          catalog, DependencyEntryType::SUBJECT,
+          MangledDependencyName(MangledEntryName(info.dependent.entry), MangledEntryName(info.subject.entry)), info) {
 }
 
 const MangledEntryName &DependencySubjectEntry::EntryMangledName() const {

@@ -15,13 +15,10 @@
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/catalog/catalog_entry.hpp"
 #include "duckdb/catalog/catalog_set.hpp"
-#include "duckdb/catalog/dependency.hpp"
-#include "duckdb/catalog/dependency_manager.hpp"
+#include "duckdb/catalog/dependency_catalog_set.hpp"
 #include <memory>
 
 namespace duckdb {
-
-class DependencyManager;
 
 class DependencySetCatalogEntry;
 
