@@ -3,6 +3,7 @@
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
+#include "duckdb/common/types/chunk_layout.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/execution/row_id_deduplicator.hpp"
@@ -72,10 +73,10 @@ public:
 
 class UpdateLocalState : public LocalSinkState {
 public:
-	UpdateLocalState(ClientContext &context, const vector<unique_ptr<Expression>> &expressions,
-	                 const vector<LogicalType> &table_types, const vector<unique_ptr<Expression>> &bound_defaults,
-	                 const vector<unique_ptr<BoundConstraint>> &bound_constraints, bool capture_old_rows)
-	    : default_executor(context, bound_defaults), bound_constraints(bound_constraints) {
+	UpdateLocalState(ClientContext &context, const PhysicalUpdate &op)
+	    : default_executor(context, op.bound_defaults), bound_constraints(op.bound_constraints) {
+		auto &expressions = op.expressions;
+		auto table_types = op.table.GetTypes();
 		// Initialize the update chunk.
 		auto &allocator = Allocator::Get(context);
 		vector<LogicalType> update_types;
@@ -89,14 +90,94 @@ public:
 		mock_chunk.Initialize(allocator, table_types);
 		delete_chunk.Initialize(allocator, table_types);
 
-		// When capturing OLD rows, the return chunk holds the NEW image followed by the OLD image.
-		if (capture_old_rows) {
-			vector<LogicalType> combined_types(table_types);
-			combined_types.insert(combined_types.end(), table_types.begin(), table_types.end());
-			combined_chunk.Initialize(allocator, combined_types);
+		ChunkLayoutBuilder table_builder;
+		table_builder.AddColumns(table_types);
+		table_layout = make_uniq<ChunkLayout>(table_builder.Build());
+
+		if (op.return_chunk || op.update_is_del_and_insert) {
+			ChunkLayoutBuilder update_builder;
+			auto updates = update_builder.AddColumns(update_types);
+			vector<idx_t> table_columns(table_types.size(), DConstants::INVALID_INDEX);
+			for (idx_t i = 0; i < op.columns.size(); i++) {
+				D_ASSERT(table_columns[op.columns[i].index] == DConstants::INVALID_INDEX);
+				table_columns[op.columns[i].index] = i;
+			}
+			vector<ChunkColumn> new_columns;
+			for (auto column : table_columns) {
+				new_columns.push_back(updates.Column(column));
+			}
+			new_image_projection =
+			    make_uniq<ChunkProjection>(update_builder.Build(), *table_layout, std::move(new_columns));
+		}
+
+		if (op.capture_old_rows) {
+			ChunkLayoutBuilder return_builder;
+			new_image_columns = make_uniq<ChunkColumnGroup>(return_builder.AddColumns(table_types));
+			old_image_columns = make_uniq<ChunkColumnGroup>(return_builder.AddColumns(table_types));
+			return_layout = make_uniq<ChunkLayout>(return_builder.Build());
+			combined_chunk.Initialize(allocator, return_layout->GetTypes());
+			old_image.InitializeEmpty(table_types);
 		}
 	}
 
+	Vector &RowIds(DataChunk &input, const PhysicalUpdate &op) {
+		if (!input_layout) {
+			auto input_types = input.GetTypes();
+			D_ASSERT(!input_types.empty() && input_types.back() == LogicalType::ROW_TYPE);
+			ChunkLayoutBuilder builder;
+			builder.AddColumns(vector<LogicalType>(input_types.begin(), input_types.end() - 1));
+			row_id_column = make_uniq<ChunkColumn>(builder.AddColumn(LogicalType::ROW_TYPE));
+			input_layout = make_uniq<ChunkLayout>(builder.Build());
+			if (op.capture_old_rows) {
+				auto input_columns = input_layout->AllColumns();
+				vector<ChunkColumn> old_columns;
+				for (auto column : op.old_row_columns) {
+					old_columns.push_back(input_columns.Column(column));
+				}
+				old_image_projection = make_uniq<ChunkProjection>(*input_layout, *table_layout, std::move(old_columns));
+			}
+		}
+		return input_layout->Column(input, *row_id_column);
+	}
+
+	void ArrangeNewImage(idx_t count) {
+		new_image_projection->Reference(update_chunk, mock_chunk);
+		mock_chunk.CheckCardinality(count);
+	}
+
+	ChunkColumnView NewImage() {
+		return return_layout->Columns(combined_chunk, *new_image_columns);
+	}
+
+	ChunkColumnView OldImage() {
+		return return_layout->Columns(combined_chunk, *old_image_columns);
+	}
+
+	void AppendReturnRows(ColumnDataCollection &collection, DataChunk &input, idx_t count,
+	                      optional_ptr<const SelectionVector> sel) {
+		old_image_projection->Reference(input, old_image);
+		if (sel) {
+			old_image.Slice(*sel, count);
+		}
+		combined_chunk.Reset();
+		NewImage().ReferenceFrom(mock_chunk);
+		OldImage().ReferenceFrom(old_image);
+		combined_chunk.CheckCardinality(count);
+		collection.Append(combined_chunk);
+	}
+
+private:
+	unique_ptr<ChunkLayout> table_layout;
+	unique_ptr<ChunkLayout> input_layout;
+	unique_ptr<ChunkLayout> return_layout;
+	unique_ptr<ChunkColumn> row_id_column;
+	unique_ptr<ChunkColumnGroup> new_image_columns;
+	unique_ptr<ChunkColumnGroup> old_image_columns;
+	unique_ptr<ChunkProjection> new_image_projection;
+	unique_ptr<ChunkProjection> old_image_projection;
+	DataChunk old_image;
+
+public:
 	DataChunk update_chunk;
 	DataChunk mock_chunk;
 	DataChunk delete_chunk;
@@ -121,27 +202,6 @@ public:
 	}
 };
 
-// Append one return-chunk row set: the NEW image (already arranged in table order) followed by the OLD image,
-// sourced from the captured OLD columns of the input chunk. old_row_columns[c] is the input-chunk index of the
-// c-th physical column's captured OLD value. When a selection vector is given (del+insert dedup), it is applied
-// to the OLD columns so their cardinality matches the NEW image.
-static void AppendReturnRows(ColumnDataCollection &collection, DataChunk &combined, DataChunk &new_image,
-                             DataChunk &input, idx_t new_col_count, const vector<idx_t> &old_row_columns, idx_t count,
-                             optional_ptr<const SelectionVector> sel) {
-	combined.Reset();
-	for (idx_t c = 0; c < new_col_count; c++) {
-		combined.data[c].Reference(new_image.data[c]);
-		auto &old_source = input.data[old_row_columns[c]];
-		if (sel) {
-			combined.data[new_col_count + c].Slice(old_source, *sel, count);
-		} else {
-			combined.data[new_col_count + c].Reference(old_source);
-		}
-	}
-	combined.CheckCardinality(count);
-	collection.Append(combined);
-}
-
 SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &g_state = input.global_state.Cast<UpdateGlobalState>();
 	auto &l_state = input.local_state.Cast<UpdateLocalState>();
@@ -164,7 +224,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 		update_chunk.data[i].Reference(chunk.data[binding.Index()]);
 	}
 
-	auto &row_ids = chunk.data[chunk.ColumnCount() - 1];
+	auto &row_ids = l_state.RowIds(chunk, *this);
 	DataChunk &mock_chunk = l_state.mock_chunk;
 
 	// Regular in-place update.
@@ -190,12 +250,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 		}
 
 		if (return_chunk) {
-			// (re)reference all output columns first, then validate + set the cardinality. mock_chunk is not reset
-			// here, but with return_chunk the update projects every table column, so all columns are referenced.
-			for (idx_t i = 0; i < columns.size(); i++) {
-				mock_chunk.data[columns[i].index].Reference(update_chunk.data[i]);
-			}
-			mock_chunk.CheckCardinality(update_count);
+			l_state.ArrangeNewImage(update_count);
 		}
 		auto &update_state = l_state.GetUpdateState(table, tableref, context.client);
 		table.Update(update_state, context.client, tableref, update_row_ids, columns, update_chunk);
@@ -204,8 +259,7 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 			lock_guard<mutex> glock(g_state.lock);
 			if (capture_old_rows) {
 				// When we deduplicated, apply the selection vector to the OLD columns so they line up with NEW.
-				AppendReturnRows(g_state.return_collection, l_state.combined_chunk, mock_chunk, chunk,
-				                 mock_chunk.ColumnCount(), old_row_columns, update_count, deduplicate ? &sel : nullptr);
+				l_state.AppendReturnRows(g_state.return_collection, chunk, update_count, deduplicate ? &sel : nullptr);
 			} else {
 				g_state.return_collection.Append(mock_chunk);
 			}
@@ -258,19 +312,13 @@ SinkResultType PhysicalUpdate::Sink(ExecutionContext &context, DataChunk &chunk,
 	auto &delete_state = l_state.GetDeleteState(table, tableref, context.client);
 	table.Delete(delete_state, context.client, tableref, del_row_ids, update_count);
 
-	// Arrange the columns in the standard table order, then validate + set the cardinality from the referenced
-	// columns. The del+insert path projects every table column (it re-inserts the full row), so all are referenced.
-	for (idx_t i = 0; i < columns.size(); i++) {
-		mock_chunk.data[columns[i].index].Reference(update_chunk.data[i]);
-	}
-	mock_chunk.CheckCardinality(update_count);
+	l_state.ArrangeNewImage(update_count);
 
 	table.LocalAppend(tableref, context.client, mock_chunk, bound_constraints, del_row_ids, delete_chunk);
 	if (return_chunk) {
 		if (capture_old_rows) {
 			// Apply the dedup selection vector to the OLD columns so they line up with the NEW image.
-			AppendReturnRows(g_state.return_collection, l_state.combined_chunk, mock_chunk, chunk,
-			                 mock_chunk.ColumnCount(), old_row_columns, update_count, deduplicate ? &sel : nullptr);
+			l_state.AppendReturnRows(g_state.return_collection, chunk, update_count, deduplicate ? &sel : nullptr);
 		} else {
 			g_state.return_collection.Append(mock_chunk);
 		}
@@ -285,8 +333,7 @@ unique_ptr<GlobalSinkState> PhysicalUpdate::GetGlobalSinkState(ClientContext &co
 }
 
 unique_ptr<LocalSinkState> PhysicalUpdate::GetLocalSinkState(ExecutionContext &context) const {
-	return make_uniq<UpdateLocalState>(context.client, expressions, table.GetTypes(), bound_defaults, bound_constraints,
-	                                   capture_old_rows);
+	return make_uniq<UpdateLocalState>(context.client, *this);
 }
 
 SinkCombineResultType PhysicalUpdate::Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const {
