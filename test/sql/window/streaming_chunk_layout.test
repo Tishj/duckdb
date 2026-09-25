@@ -1,0 +1,42 @@
+# name: test/sql/window/streaming_chunk_layout.test
+# description: Streaming payload and result groups across delayed chunk boundaries
+# group: [window]
+
+statement ok
+SET threads=1;
+
+foreach rows 0 1 17 4097 7000
+
+statement ok
+CREATE OR REPLACE TABLE layout_source AS
+SELECT i, CASE WHEN i % 5 = 0 THEN NULL ELSE i::VARCHAR END AS s,
+       CASE WHEN i % 7 = 0 THEN NULL ELSE [i, i + 1] END AS n
+FROM range({rows}) t(i) WHERE i % 3 <> 1;
+
+statement ok
+CREATE OR REPLACE TABLE streaming_result AS
+SELECT i, s, n, lead(n, 2048) OVER w AS ahead, lag(s, 2) OVER w AS behind,
+       sum(i) FILTER (WHERE i % 2 = 0) OVER (w ROWS UNBOUNDED PRECEDING) AS running,
+       count(*) OVER (w ROWS UNBOUNDED PRECEDING) AS numbered
+FROM layout_source WINDOW w AS ();
+
+statement ok
+CREATE OR REPLACE TABLE ordered_result AS
+SELECT i, s, n, lead(n, 2048) OVER w AS ahead, lag(s, 2) OVER w AS behind,
+       sum(i) FILTER (WHERE i % 2 = 0) OVER (w ROWS UNBOUNDED PRECEDING) AS running,
+       count(*) OVER (w ROWS UNBOUNDED PRECEDING) AS numbered
+FROM layout_source WINDOW w AS (ORDER BY i);
+
+query I
+SELECT count(*) FROM (
+    (FROM streaming_result EXCEPT ALL FROM ordered_result)
+    UNION ALL
+    (FROM ordered_result EXCEPT ALL FROM streaming_result)
+);
+----
+0
+
+endloop
+
+statement ok
+RESET threads;

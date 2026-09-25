@@ -36,6 +36,11 @@ void ChunkColumnView::ReferenceFrom(const ChunkColumnView &source) const {
 	}
 }
 
+void ChunkColumnView::ReferenceFrom(DataChunk &source) const {
+	D_ASSERT(ColumnCount() == source.ColumnCount());
+	ReferenceFrom(ChunkColumnView(source, 0, source.ColumnCount()));
+}
+
 ChunkColumnView ChunkColumnView::Rebind(DataChunk &target) const {
 	D_ASSERT(offset + count <= target.ColumnCount());
 #ifdef DEBUG

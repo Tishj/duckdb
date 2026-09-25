@@ -1,6 +1,7 @@
 #include "duckdb/execution/operator/aggregate/physical_streaming_window.hpp"
 
 #include "duckdb/common/vector/flat_vector.hpp"
+#include "duckdb/common/types/chunk_layout.hpp"
 #include "duckdb/execution/aggregate_hashtable.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/function/aggregate_function.hpp"
@@ -122,6 +123,14 @@ public:
 	}
 
 	void Initialize(ClientContext &client, DataChunk &input, const vector<unique_ptr<Expression>> &expressions) {
+		ChunkLayoutBuilder builder;
+		payload_columns = make_uniq<ChunkColumnGroup>(builder.AddColumns(input.GetTypes()));
+		vector<LogicalType> result_types;
+		for (auto &expr : expressions) {
+			result_types.push_back(expr->GetReturnType());
+		}
+		window_columns = make_uniq<ChunkColumnGroup>(builder.AddColumns(result_types));
+		output_layout = make_uniq<ChunkLayout>(builder.Build());
 		states.resize(expressions.size());
 
 		for (idx_t expr_idx = 0; expr_idx < expressions.size(); expr_idx++) {
@@ -149,9 +158,31 @@ public:
 		initialized = true;
 	}
 
+	ChunkColumnView Payload(DataChunk &output) const {
+		return output_layout->Columns(output, *payload_columns);
+	}
+
+	ChunkColumnView WindowResults(DataChunk &output) const {
+		return output_layout->Columns(output, *window_columns);
+	}
+
+	void ReferencePayload(DataChunk &output, DataChunk &input, idx_t count) const {
+		auto payload = Payload(output);
+		payload.ReferenceFrom(input);
+		for (idx_t i = 0; i < payload.ColumnCount(); i++) {
+			FlatVector::SetSize(payload.Column(i), count_t(count));
+		}
+		output.SetCardinalityUnsafe(count);
+	}
+
 	static inline void ResetChunk(DataChunk &chunk) {
 		chunk.Reset();
 	}
+
+private:
+	unique_ptr<ChunkLayout> output_layout;
+	unique_ptr<ChunkColumnGroup> payload_columns;
+	unique_ptr<ChunkColumnGroup> window_columns;
 
 public:
 	//! We can't initialise until we have an input chunk
@@ -311,12 +342,11 @@ void PhysicalStreamingWindow::ExecuteFunctions(ExecutionContext &context, DataCh
 	auto &state = gstate.local_state->Cast<StreamingWindowState>();
 
 	// Compute window functions
-	const column_t input_width = children[0].get().GetTypes().size();
-	for (column_t expr_idx = 0; expr_idx < select_list.size(); expr_idx++) {
-		column_t col_idx = input_width + expr_idx;
+	auto results = state.WindowResults(output);
+	for (idx_t expr_idx = 0; expr_idx < results.ColumnCount(); expr_idx++) {
 		auto &expr = *select_list[expr_idx];
 		auto &wexpr = expr.Cast<BoundWindowExpression>();
-		auto &result = output.data[col_idx];
+		auto &result = results.Column(expr_idx);
 		auto &fstate = *state.states[expr_idx];
 		if (expr.GetExpressionType() == ExpressionType::WINDOW_AGGREGATE) {
 			fstate.Cast<StreamingWindowState::AggregateState>().Execute(context, output, result);
@@ -343,11 +373,7 @@ void PhysicalStreamingWindow::ExecuteInput(ExecutionContext &context, DataChunk 
 		input.Copy(delayed, count);
 	}
 
-	// Put payload columns in place (ensuring they match the new cardinality)
-	for (idx_t col_idx = 0; col_idx < input.data.size(); col_idx++) {
-		output.data[col_idx].Reference(input.data[col_idx]);
-		FlatVector::SetSize(output.data[col_idx], count_t(count));
-	}
+	state.ReferencePayload(output, input, count);
 
 	ExecuteFunctions(context, output, state.delayed, gstate_p);
 }
@@ -368,10 +394,8 @@ void PhysicalStreamingWindow::ExecuteShifted(ExecutionContext &context, DataChun
 	delayed.Copy(shifted);
 	state.ResetChunk(delayed);
 	const idx_t new_delayed_count = delay - out + in;
+	state.ReferencePayload(output, shifted, out);
 	for (idx_t col_idx = 0; col_idx < delayed.data.size(); ++col_idx) {
-		// output[0:out] = delayed[0:out]
-		output.data[col_idx].Reference(shifted.data[col_idx]);
-		FlatVector::SetSize(output.data[col_idx], count_t(out));
 		// delayed[0:out] = delayed[out:delay-out]
 		VectorOperations::Copy(shifted.data[col_idx], delayed.data[col_idx], delay, out, 0);
 		// delayed[delay-out:delay-out+in] = input[0:in]
@@ -384,12 +408,9 @@ void PhysicalStreamingWindow::ExecuteShifted(ExecutionContext &context, DataChun
 
 void PhysicalStreamingWindow::ExecuteDelayed(ExecutionContext &context, DataChunk &delayed, DataChunk &input,
                                              DataChunk &output, GlobalOperatorState &gstate_p) const {
-	idx_t count = delayed.size();
-	// Put payload columns in place
-	for (idx_t col_idx = 0; col_idx < delayed.data.size(); col_idx++) {
-		output.data[col_idx].Reference(delayed.data[col_idx]);
-		FlatVector::SetSize(output.data[col_idx], count_t(count));
-	}
+	auto &gstate = gstate_p.Cast<StreamingWindowGlobalState>();
+	auto &state = gstate.local_state->Cast<StreamingWindowState>();
+	state.ReferencePayload(output, delayed, delayed.size());
 
 	ExecuteFunctions(context, output, input, gstate_p);
 }

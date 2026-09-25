@@ -80,7 +80,7 @@ TEST_CASE("Chunk layouts preserve group identity and project overlapping columns
 	DataChunk assembled;
 	assembled.InitializeEmpty(layout.GetTypes());
 	layout.Columns(assembled, flags).ReferenceFrom(layout.Columns(source, flags));
-	layout.Columns(assembled, values).ReferenceFrom(layout.Columns(source, values));
+	layout.Columns(assembled, values).ReferenceFrom(group);
 	assembled.CheckCardinality(2);
 	REQUIRE(assembled.GetValue(2, 0).IsNull());
 	REQUIRE(assembled.GetValue(0, 1).GetValue<int32_t>() == 11);

@@ -67,6 +67,7 @@ public:
 	void ReferenceInto(DataChunk &target) const;
 	//! Populate only this group; the caller finalizes the containing chunk's row count.
 	void ReferenceFrom(const ChunkColumnView &source) const;
+	void ReferenceFrom(DataChunk &source) const;
 	//! Access the vector array required by aggregate callbacks; empty groups return null.
 	optional_ptr<Vector> ContiguousVectors() const;
 	//! Access the same columns after a row selection has been applied to the chunk.
