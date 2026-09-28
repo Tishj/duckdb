@@ -141,6 +141,18 @@ MultiFileList::MultiFileList() {
 MultiFileList::~MultiFileList() {
 }
 
+void MultiFileList::FinalizeFilterPushdown() {
+	filter_pushdown_finalized = true;
+}
+
+bool MultiFileList::IsFilterPushdownFinalized() const {
+	return filter_pushdown_finalized;
+}
+
+bool MultiFileList::CanExpandForCardinality() const {
+	return true;
+}
+
 void MultiFileList::InitializeScan(MultiFileListScanData &iterator) const {
 	iterator.current_file_idx = 0;
 }

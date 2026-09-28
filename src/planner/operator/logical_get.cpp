@@ -83,6 +83,16 @@ optional_ptr<TableCatalogEntry> LogicalGet::GetTable() const {
 	return function.get_bind_info(bind_data.get()).table;
 }
 
+void LogicalGet::FinalizeFilterPushdown(ClientContext &context) {
+	if (filter_pushdown_finalized) {
+		return;
+	}
+	if (function.finalize_filter_pushdown) {
+		function.finalize_filter_pushdown(context, *this, bind_data.get());
+	}
+	filter_pushdown_finalized = true;
+}
+
 InsertionOrderPreservingMap<string> LogicalGet::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 

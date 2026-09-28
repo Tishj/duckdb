@@ -101,6 +101,7 @@ public:
 		get_bind_info = MultiFileGetBindInfo;
 		projection_pushdown = true;
 		pushdown_complex_filter = MultiFileComplexFilterPushdown;
+		finalize_filter_pushdown = MultiFileFinalizeFilterPushdown;
 		get_partition_info = MultiFileGetPartitionInfo;
 		get_virtual_columns = MultiFileGetVirtualColumns;
 		get_metrics = MultiFileGetMetrics;
@@ -778,6 +779,7 @@ public:
 
 		if (IsEmptyResult(bind_data)) {
 			result = make_uniq<MultiFileGlobalState>(*bind_data.file_list);
+			result->file_list.FinalizeFilterPushdown();
 			result->file_list.InitializeScan(result->file_list_scan);
 			result->file_index = 0;
 			result->column_indexes = input.column_indexes;
@@ -795,6 +797,7 @@ public:
 			result = make_uniq<MultiFileGlobalState>(*bind_data.file_list);
 		}
 		auto &file_list = result->file_list;
+		file_list.FinalizeFilterPushdown();
 		file_list.InitializeScan(result->file_list_scan);
 
 		auto &global_columns = bind_data.reader_bind.schema.empty() ? bind_data.columns : bind_data.reader_bind.schema;
@@ -1200,6 +1203,9 @@ public:
 
 	static unique_ptr<NodeStatistics> MultiFileCardinality(ClientContext &context, const FunctionData *bind_data) {
 		auto &data = bind_data->Cast<MultiFileBindData>();
+		if (!data.file_list->CanExpandForCardinality()) {
+			return data.file_list->GetCardinality(context);
+		}
 		if (IsEmptyResult(data)) {
 			return make_uniq<NodeStatistics>(idx_t(0));
 		}
@@ -1231,6 +1237,21 @@ public:
 			estimated_file_count *= 2;
 		}
 		return data.interface->GetCardinality(context, data, estimated_file_count);
+	}
+
+	static void MultiFileFinalizeFilterPushdown(ClientContext &context, LogicalGet &get, FunctionData *bind_data_p) {
+		auto &data = bind_data_p->Cast<MultiFileBindData>();
+		// Table filters can also be produced by later optimizer passes, without complex filter pushdown.
+		auto new_list = get.table_filters.HasFilters()
+		                    ? MultiFileFilterPushdown(context, data, get.GetColumnIds(), &get.table_filters)
+		                    : nullptr;
+		if (new_list) {
+			data.file_list = std::move(new_list);
+			data.file_list->FinalizeFilterPushdown();
+			MultiFileReader::PruneReaders(data, *data.file_list);
+		} else {
+			data.file_list->FinalizeFilterPushdown();
+		}
 	}
 
 	static void MultiFileComplexFilterPushdown(ClientContext &context, LogicalGet &get, FunctionData *bind_data_p,

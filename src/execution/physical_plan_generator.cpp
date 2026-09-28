@@ -21,6 +21,16 @@ PhysicalPlanGenerator::PhysicalPlanGenerator(ClientContext &context) : context(c
 PhysicalPlanGenerator::~PhysicalPlanGenerator() {
 }
 
+static void FinalizeFilterPushdown(ClientContext &context, LogicalOperator &op) {
+	for (auto &child : op.children) {
+		FinalizeFilterPushdown(context, *child);
+	}
+	if (op.type == LogicalOperatorType::LOGICAL_GET) {
+		auto &get = op.Cast<LogicalGet>();
+		get.FinalizeFilterPushdown(context);
+	}
+}
+
 unique_ptr<PhysicalPlan> PhysicalPlanGenerator::Plan(unique_ptr<LogicalOperator> op) {
 	auto &plan = ResolveAndPlan(std::move(op));
 	plan.Verify();
@@ -29,6 +39,7 @@ unique_ptr<PhysicalPlan> PhysicalPlanGenerator::Plan(unique_ptr<LogicalOperator>
 
 PhysicalOperator &PhysicalPlanGenerator::ResolveAndPlan(unique_ptr<LogicalOperator> op) {
 	auto &profiler = QueryProfiler::Get(context);
+	FinalizeFilterPushdown(context, *op);
 
 	// Resolve the types of each operator.
 	{

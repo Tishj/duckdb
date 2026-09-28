@@ -102,6 +102,7 @@ public:
 	vector<ColumnIndex> &GetMutableColumnIds();
 	vector<ColumnBinding> GetColumnBindings() override;
 	idx_t EstimateCardinality(ClientContext &context) override;
+	void FinalizeFilterPushdown(ClientContext &context);
 	bool TryGetStorageIndex(const ColumnIndex &column_index, StorageIndex &out_index) const;
 	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
 	void SetPartitionsToScan(vector<idx_t> partition_indices);
@@ -137,5 +138,6 @@ private:
 private:
 	//! Bound column IDs
 	vector<ColumnIndex> column_ids;
+	bool filter_pushdown_finalized = false;
 };
 } // namespace duckdb

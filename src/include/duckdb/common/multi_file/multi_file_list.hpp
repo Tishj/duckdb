@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
+#include "duckdb/common/atomic.hpp"
 #include "duckdb/common/multi_file/multi_file_options.hpp"
 #include "duckdb/common/extra_operator_info.hpp"
 #include "duckdb/common/open_file_info.hpp"
@@ -90,6 +91,11 @@ public:
 	MultiFileList();
 	virtual ~MultiFileList();
 
+	//! Mark this view's planning-time filters complete, including an empty filter set. Idempotent.
+	//! Further pushdown must create a new view; finalization does not prevent runtime filter pushdown.
+	void FinalizeFilterPushdown();
+	bool IsFilterPushdownFinalized() const;
+
 	//! Get Iterator over the files for pretty for loops
 	MultiFileListIterationHelper Files() const;
 
@@ -120,6 +126,9 @@ public:
 	virtual vector<OpenFileInfo> GetDisplayFileList(optional_idx max_files = optional_idx()) const;
 
 	virtual unique_ptr<NodeStatistics> GetCardinality(ClientContext &context) const;
+	//! Whether cardinality estimation may expand files. If false, only GetCardinality is called, without a fallback.
+	//! Lazy lists can return IsFilterPushdownFinalized() to defer expansion until planning-time filters are complete.
+	virtual bool CanExpandForCardinality() const;
 	virtual unique_ptr<MultiFileList> Copy() const;
 
 protected:
@@ -139,6 +148,9 @@ public:
 		DynamicCastCheck<TARGET>(this);
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+
+private:
+	atomic<bool> filter_pushdown_finalized {false};
 };
 
 //! MultiFileList that takes a list of files and produces the same list of paths. Useful for quickly wrapping

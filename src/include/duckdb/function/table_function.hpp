@@ -405,6 +405,8 @@ typedef void (*table_function_pushdown_complex_filter_t)(ClientContext &context,
                                                          FunctionData *bind_data,
                                                          vector<unique_ptr<Expression>> &filters);
 typedef bool (*table_function_pushdown_expression_t)(ClientContext &context, const LogicalGet &get, Expression &expr);
+typedef void (*table_function_finalize_filter_pushdown_t)(ClientContext &context, LogicalGet &get,
+                                                         FunctionData *bind_data);
 //! Claims the next batch for the given local state - returns false when there is nothing left to scan.
 //! A function that implements this is scanned one batch at a time by its caller, rather than being run until it
 //! returns an empty chunk. This lets the caller tell the batches apart, so that batches scanned in parallel can be
@@ -542,6 +544,9 @@ public:
 	//! (Optional) pushdown a set of arbitrary filter expressions, rather than only simple comparisons with a constant
 	//! Any functions remaining in the expression list will be pushed as a regular filter after the scan
 	table_function_pushdown_complex_filter_t pushdown_complex_filter;
+	//! (Optional) called after optimization, before physical planning and cardinality estimation.
+	//! Called even without filters or with optimization disabled. Runtime filters may still arrive during execution.
+	table_function_finalize_filter_pushdown_t finalize_filter_pushdown = nullptr;
 	//! (Optional) whether or not this table function supports pushing down an expression into a TableFilter
 	table_function_pushdown_expression_t pushdown_expression;
 	//! (Optional) combines the schemas of several files that were bound individually into a single schema
