@@ -596,6 +596,55 @@ def merge_vcpkg_manifests(synced_extension_names, external_dir, repo_root, outpu
     print(f"  Wrote {out_path} with dependencies: {dep_names}")
 
 
+def discover_extensions(
+    repo_root,
+    output_dir,
+    cmake_args,
+    build_extensions=None,
+    extension_configs=None,
+    extension_config_base_dir=None,
+    cmake_command='cmake',
+):
+    """Use CMake's toolchain detection and selection logic, without installing dependencies."""
+    discovery_dir = Path(output_dir).resolve() / 'extension-discovery'
+    if build_extensions is None:
+        build_extensions = os.environ.get('BUILD_EXTENSIONS') or os.environ.get('DUCKDB_EXTENSIONS') or ''
+    build_extensions = ';'.join(
+        value.strip("'\"") for value in (build_extensions, os.environ.get('CORE_EXTENSIONS', '')) if value
+    )
+    if extension_configs is None:
+        extension_configs = os.environ.get('EXTENSION_CONFIGS', '')
+    command = [cmake_command]
+    # emcmake takes the CMake executable as its first argument.
+    if cmake_command != 'cmake' and cmake_args and cmake_args[0] == 'cmake':
+        command.append(cmake_args[0])
+        cmake_args = cmake_args[1:]
+    settings = {
+        'BUILD_EXTENSIONS': build_extensions,
+        'DUCKDB_EXTENSION_CONFIGS': extension_configs,
+        'EXTENSION_CONFIG_BASE_DIR': extension_config_base_dir,
+    }
+    for key, value in settings.items():
+        if value is not None:
+            command.append(f'-D{key}={value}')
+    command.extend(cmake_args)
+    command.extend(
+        [
+            '-DDUCKDB_EXTENSION_DISCOVERY=ON',
+            '-DVCPKG_MANIFEST_INSTALL=OFF',
+            '-S',
+            str(repo_root),
+            '-B',
+            str(discovery_dir),
+        ]
+    )
+    subprocess.run(command, check=True)
+    result = json.loads((discovery_dir / 'extensions.json').read_text())
+    return {ext['name']: ext for ext in result['extensions']}, [
+        Path(directory) for directory in result['local_manifest_dirs']
+    ]
+
+
 def main():
     repo_root = Path(__file__).resolve().parent.parent
 
@@ -612,19 +661,36 @@ def main():
         default=str(repo_root / 'build'),
         help='Directory to write the merged vcpkg.json into (default: build/)',
     )
+    parser.add_argument('--cmake-command', default='cmake', help='CMake executable used for dependency discovery')
+    parser.add_argument(
+        '--cmake-args',
+        nargs=argparse.REMAINDER,
+        help='Evaluate configs with CMake using the build flags following this option',
+    )
     args = parser.parse_args()
 
     external_dir = repo_root / 'extension' / 'external'
     output_dir = Path(args.output_dir)
 
-    extensions = collect_extensions(
-        repo_root, args.build_extensions, args.extension_configs, args.extension_config_base_dir
-    )
+    local_manifest_dirs = []
+    if args.cmake_args is not None:
+        extensions, local_manifest_dirs = discover_extensions(
+            repo_root,
+            output_dir,
+            args.cmake_args,
+            args.build_extensions,
+            args.extension_configs,
+            args.extension_config_base_dir,
+            args.cmake_command,
+        )
+    else:
+        extensions = collect_extensions(
+            repo_root, args.build_extensions, args.extension_configs, args.extension_config_base_dir
+        )
 
     # The directory of each --extension-configs file is the driving extension's repo
     # root; fold its own vcpkg.json (if any) into the merged manifest so the driving
     # extension's dependencies are installed alongside the out-of-tree ones.
-    local_manifest_dirs = []
     raw_extension_configs = args.extension_configs or os.environ.get('EXTENSION_CONFIGS') or ''
     for config_path_str in re.split(r'[;]+', raw_extension_configs):
         config_path_str = config_path_str.strip()

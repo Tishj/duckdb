@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.14...3.29)
 
+# Discover extension dependencies with the real toolchain, before installing them.
+if(DUCKDB_EXTENSION_DISCOVERY)
+  set(VCPKG_MANIFEST_INSTALL OFF)
+  project(DuckDBExtensionDiscovery)
+  include(extension/extension_discovery.cmake)
+  return()
+endif()
+
 if(NOT CLANG_TIDY)
   find_package(Python3)
 endif()
@@ -257,23 +265,7 @@ if(DUCKDB_EXPLICIT_PLATFORM)
   add_definitions(-DDUCKDB_CUSTOM_PLATFORM=${DUCKDB_EXPLICIT_PLATFORM})
 endif()
 
-option(BUILD_COMPLETE_EXTENSION_SET
-       "Whether we need to actually build the complete set" TRUE)
-if(DEFINED ENV{BUILD_COMPLETE_EXTENSION_SET})
-  set(BUILD_COMPLETE_EXTENSION_SET "$ENV{BUILD_COMPLETE_EXTENSION_SET}")
-endif()
-
-option(WASM_ENABLED "Are DuckDB-Wasm extensions build enabled" FALSE)
-if(DEFINED ENV{WASM_EXTENSIONS})
-  set(WASM_ENABLED "$ENV{WASM_EXTENSIONS}")
-endif()
-option(MUSL_ENABLED "Are Musl extensions build enabled" FALSE)
-if(DEFINED ENV{DUCKDB_PLATFORM})
-  if("$ENV{DUCKDB_PLATFORM}" STREQUAL "linux_amd64_musl"
-     OR "$ENV{DUCKDB_PLATFORM}" STREQUAL "linux_arm64_musl")
-    set(MUSL_ENABLED ON)
-  endif()
-endif()
+include(extension/extension_platform.cmake)
 
 if(MUSL_ENABLED)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__MUSL_ENABLED__")

@@ -297,13 +297,108 @@ class ExtensionSyncTest(unittest.TestCase):
                     command.append(f'-DEXTENSION_CONFIG_BASE_DIR={config_dir}')
                 configured = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                 self.assertEqual(configured.returncode, 0, configured.stdout)
-                extensions = sync.collect_extensions(
-                    REPO_ROOT, 'sample', str(project) if use_project else '', config_dir
+                extensions, _ = sync.discover_extensions(
+                    REPO_ROOT,
+                    build_dir / 'discovery',
+                    [],
+                    'sample',
+                    str(project) if use_project else '',
+                    config_dir,
+                    CMAKE,
                 )
                 self.assertIn(
                     f'sample, "{extensions["sample"]["git_tag"]}"',
                     (build_dir / 'extensions.csv').read_text(),
                 )
+
+    @unittest.skipUnless(CMAKE, 'CMake is required for dependency discovery')
+    def test_discovery_evaluates_conditions_variables_and_toolchain_without_installing(self):
+        os.environ['PATH'] = os.defpath
+        configs = self.root / 'configs'
+        configs.mkdir()
+        (configs / 'avro.cmake').write_text(
+            '''
+            if(NOT EMSCRIPTEN)
+                set(REVISION "computed-${CMAKE_CXX_COMPILER_ID}")
+                duckdb_extension_load(avro GIT_URL https://example.invalid/avro
+                    GIT_TAG "${REVISION}" SUBMODULES "third_party/avro-c;path with spaces" APPLY_PATCHES)
+            endif()
+        '''
+        )
+        (configs / 'aws.cmake').write_text(
+            '''
+            if(NOT EMSCRIPTEN AND NOT MINGW)
+                duckdb_extension_load(aws GIT_URL https://example.invalid/aws GIT_TAG native)
+            endif()
+        '''
+        )
+        toolchain = self.root / 'toolchain.cmake'
+        toolchain.write_text(
+            '''
+            if(VCPKG_MANIFEST_INSTALL)
+                message(FATAL_ERROR "Discovery must not install dependencies")
+            endif()
+            set(EMSCRIPTEN "${DISCOVERY_TEST_WASM}")
+            set(MINGW "${DISCOVERY_TEST_MINGW}")
+        '''
+        )
+        project = self.root / 'project.cmake'
+        project.write_text('duckdb_extension_load(local SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/local source")')
+        for wasm, mingw, expected in [
+            ('OFF', 'OFF', ['avro', 'aws']),
+            ('ON', 'OFF', []),
+            ('OFF', 'ON', ['avro']),
+            ('OFF', 'OFF', ['avro', 'aws']),
+        ]:
+            with self.subTest(wasm=wasm, mingw=mingw):
+                extensions, local_dirs = sync.discover_extensions(
+                    REPO_ROOT,
+                    self.root / 'build',
+                    [
+                        f'-DCMAKE_TOOLCHAIN_FILE={toolchain}',
+                        '-DVCPKG_MANIFEST_INSTALL=ON',
+                        f'-DDISCOVERY_TEST_WASM={wasm}',
+                        f'-DDISCOVERY_TEST_MINGW={mingw}',
+                    ],
+                    'avro;aws',
+                    str(project),
+                    configs,
+                    CMAKE,
+                )
+                self.assertEqual(list(extensions), expected)
+                self.assertEqual(local_dirs, [self.root / 'local source'])
+                if 'avro' in extensions:
+                    self.assertRegex(extensions['avro']['git_tag'], r'^computed-\w+')
+                    self.assertEqual(extensions['avro']['submodules'], ['third_party/avro-c', 'path with spaces'])
+                    self.assertTrue(extensions['avro']['apply_patches'])
+
+    @unittest.skipUnless(CMAKE, 'CMake is required for dependency discovery')
+    def test_discovery_preserves_overrides_disabled_and_skipped_extensions(self):
+        os.environ['PATH'] = os.defpath
+        self.make_named_configs()
+        project = self.root / 'project.cmake'
+        project.write_text(
+            '''
+            if(USE_LOCAL)
+                duckdb_extension_load(httpfs SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+            endif()
+            duckdb_extension_load(avro DONT_BUILD GIT_URL unused GIT_TAG unused)
+        '''
+        )
+        configs = self.root / '.github/config/extensions'
+        os.environ.update(
+            BUILD_EXTENSIONS='httpfs;avro;aws',
+            EXTENSION_CONFIGS=str(project),
+            EXTENSION_CONFIG_BASE_DIR=str(configs),
+        )
+        for use_local in ('ON', 'OFF'):
+            extensions, _ = sync.discover_extensions(
+                REPO_ROOT,
+                self.root / 'build',
+                [f'-DUSE_LOCAL={use_local}', '-DSKIP_EXTENSIONS=aws'],
+                cmake_command=CMAKE,
+            )
+            self.assertEqual(list(extensions), [] if use_local == 'ON' else ['httpfs'])
 
     def test_sync_clones_only_required_submodule_and_reuses_checkout(self):
         os.environ.update(

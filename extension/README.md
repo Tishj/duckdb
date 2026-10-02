@@ -83,11 +83,21 @@ The sync script also accepts `--extension-configs` and `--extension-config-base-
 CMake accepts `-DEXTENSION_CONFIG_BASE_DIR=...` or the environment variable. Build wrappers
 must pass the same settings to both steps.
 
-Sync reads literal `duckdb_extension_load` declarations and follows absolute includes and
-includes using `${CMAKE_CURRENT_LIST_DIR}` or `${EXTENSION_CONFIG_BASE_DIR}`. It does not
-evaluate general CMake variables or conditionals; keep repository URLs and commit hashes
-literal in configs used by sync. This controls extension Git revisions, not vcpkg registry
-baselines.
+Builds in new mode run a lightweight CMake discovery configure before sync. Discovery
+uses the build's flags and toolchain, evaluates the same selection files as the build,
+and reports the selected repositories and local source directories. CMake conditions,
+includes, and computed revisions therefore work without translating platform logic into
+Make. Discovery disables vcpkg installation and does not add extension build targets.
+It caches compiler detection in `<build-directory>/extension-discovery`.
+
+Custom wrappers must pass their configure flags after `--cmake-args` (the final script
+option). For WebAssembly, use `--cmake-command emcmake --cmake-args cmake ...` so both
+configures use Emscripten's toolchain. Configs can use toolchain variables and explicitly
+passed options; they must not depend on targets or variables created later in DuckDB's
+build. Without `--cmake-args`, the standalone script retains its legacy literal parser,
+which does not evaluate conditions or general variables.
+
+These settings control extension Git revisions, not vcpkg registry baselines.
 
 ## Makefile environment variables
 Another way to specify building an extension is with the `BUILD_<extension name>` variables defined in the root
