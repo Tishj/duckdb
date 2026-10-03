@@ -390,8 +390,10 @@ ChangeColumnTypeInfo::~ChangeColumnTypeInfo() {
 }
 
 unique_ptr<AlterInfo> ChangeColumnTypeInfo::Copy() const {
-	return make_uniq_base<AlterInfo, ChangeColumnTypeInfo>(GetAlterEntryData(), column_name, target_type,
-	                                                       expression ? expression->Copy() : nullptr);
+	auto result = make_uniq<ChangeColumnTypeInfo>(GetAlterEntryData(), column_name, target_type,
+	                                              expression ? expression->Copy() : nullptr);
+	result->column_path = column_path;
+	return std::move(result);
 }
 
 string ChangeColumnTypeInfo::ToString() const {
@@ -402,7 +404,16 @@ string ChangeColumnTypeInfo::ToString() const {
 	}
 	result += GetQualifiedName().ToString(QualifiedNameToStringMode::HIDE_DEFAULT_SCHEMA);
 	result += " ALTER COLUMN ";
-	result += SQLIdentifier(column_name);
+	if (column_path.empty()) {
+		result += SQLIdentifier(column_name);
+	} else {
+		for (idx_t i = 0; i < column_path.size(); i++) {
+			if (i > 0) {
+				result += ".";
+			}
+			result += SQLIdentifier(column_path[i]);
+		}
+	}
 	result += " TYPE ";
 	if (target_type.IsValid()) {
 		result += target_type.ToString();

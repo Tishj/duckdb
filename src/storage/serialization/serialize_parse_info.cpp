@@ -361,6 +361,7 @@ void ChangeColumnTypeInfo::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<Identifier>(400, "column_name", column_name);
 	serializer.WriteProperty<LogicalType>(401, "target_type", target_type);
 	serializer.WritePropertyWithDefault<unique_ptr<ParsedExpression>>(402, "expression", expression);
+	serializer.WritePropertyWithDefault<vector<Identifier>>(403, "column_path", column_path);
 }
 
 unique_ptr<AlterTableInfo> ChangeColumnTypeInfo::Deserialize(Deserializer &deserializer) {
@@ -368,6 +369,7 @@ unique_ptr<AlterTableInfo> ChangeColumnTypeInfo::Deserialize(Deserializer &deser
 	deserializer.ReadPropertyWithDefault<Identifier>(400, "column_name", result->column_name);
 	deserializer.ReadProperty<LogicalType>(401, "target_type", result->target_type);
 	deserializer.ReadPropertyWithDefault<unique_ptr<ParsedExpression>>(402, "expression", result->expression);
+	deserializer.ReadPropertyWithDefault<vector<Identifier>>(403, "column_path", result->column_path);
 	return std::move(result);
 }
 

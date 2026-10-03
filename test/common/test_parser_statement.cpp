@@ -1,14 +1,24 @@
 #include "catch.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+#include "duckdb/common/serializer/binary_serializer.hpp"
+#include "duckdb/common/serializer/memory_stream.hpp"
+#include "duckdb/parser/expression/cast_expression.hpp"
+#include "duckdb/parser/expression/columnref_expression.hpp"
+#include "duckdb/parser/parsed_data/alter_table_info.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/query_node/delete_query_node.hpp"
 #include "duckdb/parser/query_node/insert_query_node.hpp"
 #include "duckdb/parser/query_node/merge_query_node.hpp"
 #include "duckdb/parser/query_node/update_query_node.hpp"
+#include "duckdb/parser/statement/alter_statement.hpp"
 #include "duckdb/parser/statement/delete_statement.hpp"
 #include "duckdb/parser/statement/insert_statement.hpp"
 #include "duckdb/parser/statement/merge_into_statement.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/statement/update_statement.hpp"
+#include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/operator/logical_alter.hpp"
+#include "test_helpers.hpp"
 
 using namespace duckdb;
 
@@ -30,6 +40,54 @@ static void RequireStatementRoundTrip(const string &query, StatementType expecte
 
 	auto reparsed = ParseSingleStatement(rendered);
 	REQUIRE(reparsed->type == expected_type);
+}
+
+TEST_CASE("ALTER COLUMN preserves nested references through binding", "[parser][alter]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE nested_alter (s STRUCT(k INTEGER, v BOOLEAN), v STRUCT(n VARIANT))"));
+	REQUIRE_NO_FAIL(con.Query("CREATE TYPE nested_alter_type AS BIGINT"));
+	con.BeginTransaction();
+	duckdb::vector<pair<string, duckdb::vector<string>>> cases {
+	    {"ALTER TABLE nested_alter ALTER COLUMN s.k TYPE BIGINT", {"s", "k"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN s.v TYPE BOOLEAN", {"s", "v"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN v.n TYPE VARIANT", {"v", "n"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN s.child.k TYPE BIGINT", {"s", "child", "k"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN \"s.dot\".\"Field.Name\" TYPE BIGINT", {"s.dot", "Field.Name"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN s TYPE VARCHAR", {"s"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN s TYPE VARCHAR COLLATE nocase", {"s"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN s.k TYPE nested_alter_type", {"s", "k"}},
+	    {"ALTER TABLE nested_alter ALTER COLUMN s.k TYPE BIGINT USING CAST(s.v AS BIGINT)", {"s", "v"}},
+	    {"ALTER TABLE IF EXISTS missing_alter ALTER COLUMN s.k TYPE BIGINT", {"s", "k"}},
+	};
+	for (auto &entry : cases) {
+		for (idx_t mode = 0; mode < 4; mode++) {
+			CAPTURE(entry.first, mode);
+			auto statement = ParseSingleStatement(entry.first);
+			if (mode == 1) {
+				statement = statement->Copy();
+			} else if (mode == 2) {
+				MemoryStream stream;
+				auto &alter = statement->Cast<AlterStatement>();
+				BinarySerializer::Serialize(*alter.info, stream);
+				stream.Rewind();
+				alter.info = unique_ptr_cast<ParseInfo, AlterInfo>(BinaryDeserializer::Deserialize<ParseInfo>(stream));
+			} else if (mode == 3) {
+				statement = ParseSingleStatement(statement->ToString());
+			}
+			auto binder = Binder::CreateBinder(*con.context);
+			auto bound = binder->Bind(*statement);
+			auto &info = bound.plan->Cast<LogicalAlter>().info->Cast<ChangeColumnTypeInfo>();
+			REQUIRE(info.expression);
+			auto &cast = info.expression->Cast<CastExpression>();
+			auto &names = cast.Child().Cast<ColumnRefExpression>().ColumnNames();
+			REQUIRE(names.size() == entry.second.size());
+			for (idx_t i = 0; i < names.size(); i++) {
+				REQUIRE(names[i].GetIdentifierName() == entry.second[i]);
+			}
+		}
+	}
+	con.Rollback();
 }
 
 static QueryNode &GetQueryNode(SQLStatement &statement) {

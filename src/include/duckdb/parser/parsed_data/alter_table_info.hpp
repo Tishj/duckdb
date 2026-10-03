@@ -302,6 +302,8 @@ struct ChangeColumnTypeInfo : public AlterTableInfo {
 
 	//! The column name to alter
 	Identifier column_name;
+	//! The full path to the column or nested field, if provided
+	vector<Identifier> column_path;
 	//! The target type of the column
 	LogicalType target_type;
 	//! The expression used for data conversion
