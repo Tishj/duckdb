@@ -55,6 +55,7 @@ private:
 //! A borrowed contiguous group of vectors. The chunk must outlive the view.
 class ChunkColumnView {
 	friend class ChunkLayout;
+	friend class ChunkProjection;
 
 public:
 	idx_t ColumnCount() const {
@@ -119,10 +120,24 @@ private:
 //! A complete projection into a layout; source columns can be reordered or repeated.
 class ChunkProjection {
 public:
+	//! Infer the target schema from the selected source columns.
+	ChunkProjection(ChunkLayout source, const vector<ChunkColumn> &columns);
 	ChunkProjection(ChunkLayout source, ChunkLayout target, vector<ChunkColumn> columns);
+	//! Types of the projected chunk.
+	const vector<LogicalType> &GetTypes() const {
+		return target_layout.GetTypes();
+	}
+	//! Compatibility with APIs that require flat source column indices.
+	const vector<column_t> &GetColumnIndices() const {
+		return columns;
+	}
 	void Reference(DataChunk &source, DataChunk &target) const;
+	//! Project a group with the source schema from a larger chunk.
+	void Reference(const ChunkColumnView &source, DataChunk &target) const;
 
 private:
+	static ChunkLayout CreateTargetLayout(const ChunkLayout &source, const vector<ChunkColumn> &columns);
+
 	ChunkLayout source_layout;
 	ChunkLayout target_layout;
 	vector<column_t> columns;

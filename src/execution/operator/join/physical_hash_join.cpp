@@ -72,30 +72,7 @@ PhysicalHashJoin::PhysicalHashJoin(PhysicalPlan &physical_plan, LogicalOperator 
 		residual_info = make_uniq<ResidualPredicateInfo>();
 	}
 
-	// build lhs_output_columns
-	lhs_output_columns.col_idxs = FillProjectionMap(left, left_projection_map);
-	for (auto &lhs_col : lhs_output_columns.col_idxs) {
-		lhs_output_columns.col_types.push_back(lhs_input_types[lhs_col]);
-	}
-
-	// initialize residual predicate structures if present
-	if (residual_info) {
-		InitializeResidualPredicate(lhs_input_types, probe_cols);
-	} else {
-		// lhs_probe_columns = lhs_output_columns
-		lhs_probe_columns = lhs_output_columns;
-		lhs_output_in_probe.reserve(lhs_output_columns.col_idxs.size());
-		for (idx_t i = 0; i < lhs_output_columns.col_idxs.size(); i++) {
-			lhs_output_in_probe.push_back(i);
-		}
-	}
-
-	// store probe types
-	if (residual_info) {
-		residual_info->probe_types = lhs_probe_columns.col_types;
-	}
-
-	// handle build side (RHS)
+	InitializeProbeSide(lhs_input_types, FillProjectionMap(left, left_projection_map), probe_cols);
 	InitializeBuildSide(lhs_input_types, rhs_input_types, right_projection_map, build_cols);
 }
 
@@ -131,44 +108,42 @@ void PhysicalHashJoin::ExtractResidualPredicateColumns(unique_ptr<Expression> &p
 	build_column_ids.assign(build_cols.begin(), build_cols.end());
 }
 
-void PhysicalHashJoin::InitializeResidualPredicate(const vector<LogicalType> &lhs_input_types,
-                                                   const vector<idx_t> &probe_cols) {
-	D_ASSERT(residual_info);
-	// build lhs_probe_columns (output + predicate columns)
-	unordered_set<idx_t> required_probe_cols;
-	for (auto col : lhs_output_columns.col_idxs) {
-		required_probe_cols.insert(col);
+static unique_ptr<ChunkProjection> CreateJoinProjection(const vector<LogicalType> &input_types,
+                                                        const vector<idx_t> &column_ids) {
+	ChunkLayoutBuilder builder;
+	auto input_columns = builder.AddColumns(input_types);
+	auto input_layout = builder.Build();
+	vector<ChunkColumn> columns;
+	for (auto column_id : column_ids) {
+		columns.push_back(input_columns.Column(column_id));
 	}
-	for (auto col : probe_cols) {
-		required_probe_cols.insert(col);
+	return make_uniq<ChunkProjection>(std::move(input_layout), columns);
+}
+
+void PhysicalHashJoin::InitializeProbeSide(const vector<LogicalType> &lhs_input_types, const vector<idx_t> &output_cols,
+                                           const vector<idx_t> &probe_cols) {
+	lhs_output_projection = CreateJoinProjection(lhs_input_types, output_cols);
+	auto required_probe_cols = output_cols;
+	if (residual_info) {
+		required_probe_cols.insert(required_probe_cols.end(), probe_cols.begin(), probe_cols.end());
+		std::sort(required_probe_cols.begin(), required_probe_cols.end());
+		required_probe_cols.erase(std::unique(required_probe_cols.begin(), required_probe_cols.end()),
+		                          required_probe_cols.end());
 	}
+	lhs_probe_projection = CreateJoinProjection(lhs_input_types, required_probe_cols);
 
-	lhs_probe_columns.col_idxs.assign(required_probe_cols.begin(), required_probe_cols.end());
-	std::sort(lhs_probe_columns.col_idxs.begin(), lhs_probe_columns.col_idxs.end());
-
-	for (auto col_idx : lhs_probe_columns.col_idxs) {
-		lhs_probe_columns.col_types.push_back(lhs_input_types[col_idx]);
+	unordered_map<idx_t, idx_t> input_to_probe;
+	for (idx_t i = 0; i < required_probe_cols.size(); i++) {
+		input_to_probe.emplace(required_probe_cols[i], i);
 	}
-
-	// build mapping for predicate probe columns
-	for (auto predicate_col_idx : probe_cols) {
-		for (idx_t i = 0; i < lhs_probe_columns.col_idxs.size(); i++) {
-			if (lhs_probe_columns.col_idxs[i] == predicate_col_idx) {
-				residual_info->probe_input_to_probe_map[predicate_col_idx] = i;
-				break;
-			}
+	for (auto column_id : output_cols) {
+		lhs_output_in_probe.push_back(input_to_probe.at(column_id));
+	}
+	if (residual_info) {
+		for (auto column_id : probe_cols) {
+			residual_info->probe_input_to_probe_map.emplace(column_id, input_to_probe.at(column_id));
 		}
-	}
-
-	// build lhs_output_in_probe mapping
-	lhs_output_in_probe.reserve(lhs_output_columns.col_idxs.size());
-	for (auto output_col_idx : lhs_output_columns.col_idxs) {
-		for (idx_t i = 0; i < lhs_probe_columns.col_idxs.size(); i++) {
-			if (lhs_probe_columns.col_idxs[i] == output_col_idx) {
-				lhs_output_in_probe.push_back(i);
-				break;
-			}
-		}
+		residual_info->probe_types = lhs_probe_projection->GetTypes();
 	}
 }
 
@@ -176,89 +151,46 @@ void PhysicalHashJoin::InitializeBuildSide(const vector<LogicalType> &lhs_input_
                                            const vector<LogicalType> &rhs_input_types,
                                            const vector<ProjectionIndex> &right_projection_map,
                                            const vector<idx_t> &build_cols) {
-	unordered_map<idx_t, idx_t> build_columns_in_conditions;
-	unordered_map<idx_t, idx_t> build_input_to_layout;
-
-	// Only consider comparison conditions for the hash join conditions
-	idx_t cond_idx = 0;
-	for (auto &condition : conditions) {
-		if (condition.GetRHS().GetExpressionClass() == ExpressionClass::BOUND_REF) {
-			auto build_input_idx = condition.GetRHS().Cast<BoundReferenceExpression>().Index();
-			build_columns_in_conditions.emplace(build_input_idx, cond_idx);
+	ChunkLayoutBuilder builder;
+	auto keys = builder.AddColumns(condition_types);
+	unordered_map<idx_t, ChunkColumn> input_to_build;
+	for (idx_t i = 0; i < conditions.size(); i++) {
+		auto &rhs = conditions[i].GetRHS();
+		if (rhs.GetExpressionClass() == ExpressionClass::BOUND_REF) {
+			input_to_build.emplace(rhs.Cast<BoundReferenceExpression>().Index(), keys.Column(i));
 		}
-		cond_idx++;
 	}
 
-	// handle SEMI/ANTI/MARK joins
-	if (join_type == JoinType::ANTI || join_type == JoinType::SEMI || join_type == JoinType::MARK) {
-		MapResidualBuildColumns(lhs_input_types, rhs_input_types, build_cols, build_columns_in_conditions,
-		                        build_input_to_layout);
-
-		if (residual_info) {
-			residual_info->build_input_to_layout_map = std::move(build_input_to_layout);
+	vector<idx_t> payload_cols;
+	auto get_build_column = [&](idx_t column_id) {
+		auto entry = input_to_build.find(column_id);
+		if (entry != input_to_build.end()) {
+			return entry->second;
 		}
-		return;
+		auto column = builder.AddColumn(rhs_input_types[column_id]);
+		input_to_build.emplace(column_id, column);
+		payload_cols.push_back(column_id);
+		return column;
+	};
+
+	// Predicate-only columns must be retained even when the join has no build output.
+	for (auto column_id : build_cols) {
+		get_build_column(column_id - lhs_input_types.size());
+	}
+	vector<ChunkColumn> output_columns;
+	if (join_type != JoinType::ANTI && join_type != JoinType::SEMI && join_type != JoinType::MARK) {
+		for (auto column_id : FillProjectionMap(children[1].get(), right_projection_map)) {
+			output_columns.push_back(get_build_column(column_id));
+		}
 	}
 
-	// for other join types
-	auto right_projection_map_copy = FillProjectionMap(children[1].get(), right_projection_map);
-
-	// map ALL predicate columns (both in conditions and not)
-	MapResidualBuildColumns(lhs_input_types, rhs_input_types, build_cols, build_columns_in_conditions,
-	                        build_input_to_layout);
-
-	// build rhs_output_columns
-	for (auto &rhs_col : right_projection_map_copy) {
-		auto &rhs_col_type = rhs_input_types[rhs_col];
-		idx_t rhs_col_with_offset = lhs_input_types.size() + rhs_col;
-
-		auto it = build_columns_in_conditions.find(rhs_col);
-		if (it != build_columns_in_conditions.end()) {
-			// it's in join conditions
-			rhs_output_columns.col_idxs.push_back(it->second);
-		} else {
-			// check if already in payload (from predicate)
-			auto layout_it = build_input_to_layout.find(rhs_col_with_offset);
-			if (layout_it != build_input_to_layout.end()) {
-				rhs_output_columns.col_idxs.push_back(layout_it->second);
-			} else {
-				// new column - add to payload
-				idx_t layout_pos = condition_types.size() + payload_columns.col_idxs.size();
-				payload_columns.col_idxs.push_back(rhs_col);
-				payload_columns.col_types.push_back(rhs_col_type);
-				rhs_output_columns.col_idxs.push_back(layout_pos);
-			}
-		}
-		rhs_output_columns.col_types.push_back(rhs_col_type);
-	}
-
+	auto build_layout = builder.Build();
+	payload_projection = CreateJoinProjection(rhs_input_types, payload_cols);
+	rhs_output_projection = make_uniq<ChunkProjection>(build_layout, output_columns);
 	if (residual_info) {
-		residual_info->build_input_to_layout_map = std::move(build_input_to_layout);
-	}
-}
-
-void PhysicalHashJoin::MapResidualBuildColumns(const vector<LogicalType> &lhs_input_types,
-                                               const vector<LogicalType> &rhs_input_types,
-                                               const vector<idx_t> &build_cols,
-                                               const unordered_map<idx_t, idx_t> &build_columns_in_conditions,
-                                               unordered_map<idx_t, idx_t> &build_input_to_layout) {
-	if (!residual_info) {
-		return;
-	}
-
-	for (auto rhs_idx_with_offset : build_cols) {
-		idx_t rhs_idx = rhs_idx_with_offset - lhs_input_types.size();
-		auto it = build_columns_in_conditions.find(rhs_idx);
-
-		if (it != build_columns_in_conditions.end()) {
-			// column IS in conditions
-			build_input_to_layout[rhs_idx_with_offset] = it->second;
-		} else {
-			// column NOT in conditions - add to payload
-			idx_t layout_pos = condition_types.size() + payload_columns.col_idxs.size();
-			build_input_to_layout[rhs_idx_with_offset] = layout_pos;
-			payload_columns.col_idxs.push_back(rhs_idx);
-			payload_columns.col_types.push_back(rhs_input_types[rhs_idx]);
+		for (auto column_id : build_cols) {
+			auto &column = input_to_build.at(column_id - lhs_input_types.size());
+			residual_info->build_input_to_layout_map.emplace(column_id, build_layout.GetColumnIndex(column));
 		}
 	}
 }
@@ -345,9 +277,10 @@ public:
 		build_side_multi_source = BuildSideHasMultipleSources(op.children[1].get());
 		// For external hash join
 		external = Settings::Get<DebugForceExternalSetting>(context);
-		// Set probe types
-		probe_types = op.children[0].get().GetTypes();
-		probe_types.emplace_back(LogicalType::HASH);
+		ChunkLayoutBuilder probe_builder;
+		probe_input_columns = make_uniq<ChunkColumnGroup>(probe_builder.AddColumns(op.children[0].get().GetTypes()));
+		probe_hash = make_uniq<ChunkColumn>(probe_builder.AddColumn(LogicalType::HASH));
+		probe_layout = make_uniq<ChunkLayout>(probe_builder.Build());
 
 		if (op.filter_pushdown) {
 			if (op.filter_pushdown->probe_info.empty() && use_perfect_hash) {
@@ -440,7 +373,9 @@ public:
 	vector<unique_ptr<JoinHashTable>> owned_local_hash_tables;
 
 	//! Excess probe data gathered during Sink
-	vector<LogicalType> probe_types;
+	unique_ptr<ChunkLayout> probe_layout;
+	unique_ptr<ChunkColumnGroup> probe_input_columns;
+	unique_ptr<ChunkColumn> probe_hash;
 	unique_ptr<JoinHashTable::ProbeSpill> probe_spill;
 
 	//! Whether or not we have started scanning data using GetData
@@ -479,9 +414,7 @@ public:
 		}
 		join_keys.Initialize(allocator, op.condition_types);
 
-		if (!op.payload_columns.col_types.empty()) {
-			payload_chunk.InitializeEmpty(op.payload_columns.col_types);
-		}
+		payload_chunk.InitializeEmpty(op.payload_projection->GetTypes());
 
 		hash_table = op.InitializeHashTable(context, gstate.hash_table->GetRadixBits());
 		// sink_collection exists only after the layout is published on the first build chunk, so
@@ -599,7 +532,7 @@ static bool CanUseDictSurvivingJoin(const PhysicalHashJoin &op, const JoinHashTa
 	if (ht.join_type == JoinType::OUTER) {
 		return false;
 	}
-	if (op.rhs_output_columns.col_types.empty()) {
+	if (op.rhs_output_projection->GetTypes().empty()) {
 		return false;
 	}
 	// PHJ's FullScanHashTable reads payload from the row store at native width; a narrowed slot would corrupt it.
@@ -658,10 +591,10 @@ void HashJoinGlobalSinkState::PublishLayoutIfFirst(HashJoinLocalSinkState &lstat
 
 unique_ptr<JoinHashTable> PhysicalHashJoin::InitializeHashTable(ClientContext &context,
                                                                 const idx_t initial_radix_bits) const {
-	auto result =
-	    make_uniq<JoinHashTable>(context, *this, conditions, payload_columns.col_types, join_type, initial_radix_bits,
-	                             rhs_output_columns.col_idxs, residual_info ? residual_info->Copy() : nullptr,
-	                             predicate ? predicate.get() : nullptr, lhs_output_in_probe);
+	auto result = make_uniq<JoinHashTable>(context, *this, conditions, payload_projection->GetTypes(), join_type,
+	                                       initial_radix_bits, rhs_output_projection->GetColumnIndices(),
+	                                       residual_info ? residual_info->Copy() : nullptr,
+	                                       predicate ? predicate.get() : nullptr, lhs_output_in_probe);
 
 	if (!delim_types.empty() && join_type == JoinType::MARK) {
 		// correlated MARK join
@@ -775,11 +708,7 @@ SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chun
 		filter_pushdown->Sink(lstate.join_keys, *lstate.local_filter_state);
 	}
 
-	if (payload_columns.col_types.empty()) { // there are only keys: place an empty chunk in the payload
-		lstate.payload_chunk.SetChildCardinality(chunk.size());
-	} else { // there are payload columns
-		lstate.payload_chunk.ReferenceColumns(chunk, payload_columns.col_idxs);
-	}
+	payload_projection->Reference(chunk, lstate.payload_chunk);
 
 	// first-chunk: publish the canonical layout against the actually-arriving vector types
 	gstate.PublishLayoutIfFirst(lstate, lstate.payload_chunk);
@@ -1189,7 +1118,7 @@ void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event)
 void HashJoinGlobalSinkState::InitializeProbeSpill() {
 	annotated_lock_guard<annotated_mutex> guard(lock);
 	if (!probe_spill) {
-		probe_spill = make_uniq<JoinHashTable::ProbeSpill>(*hash_table, context, probe_types);
+		probe_spill = make_uniq<JoinHashTable::ProbeSpill>(*hash_table, context, probe_layout->GetTypes());
 	}
 }
 
@@ -2044,13 +1973,8 @@ unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorState(ExecutionContext &c
 	auto state = make_uniq<HashJoinOperatorState>(context.client, *this, sink);
 	state->lhs_join_keys.Initialize(allocator, condition_types);
 
-	// initialize probe data with ALL probe columns (output + predicate)
-	if (!lhs_probe_columns.col_types.empty()) {
-		state->lhs_probe_data.InitializeEmpty(lhs_probe_columns.col_types);
-	}
-	if (!lhs_output_columns.col_types.empty()) {
-		state->lhs_output_data.InitializeEmpty(lhs_output_columns.col_types);
-	}
+	state->lhs_probe_data.InitializeEmpty(lhs_probe_projection->GetTypes());
+	state->lhs_output_data.InitializeEmpty(lhs_output_projection->GetTypes());
 
 	for (auto &cond : conditions) {
 		state->probe_executor.AddExpression(cond.GetLHS());
@@ -2062,7 +1986,7 @@ unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorState(ExecutionContext &c
 	}
 
 	if (sink.external) {
-		state->spill_chunk.InitializeEmpty(sink.probe_types);
+		state->spill_chunk.InitializeEmpty(sink.probe_layout->GetTypes());
 		sink.InitializeProbeSpill();
 	}
 
@@ -2085,7 +2009,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 		if (sink.hash_table->HasUncorrelatedMarkJoin()) {
 			state.lhs_join_keys.Reset();
 			state.probe_executor.Execute(input, state.lhs_join_keys);
-			state.lhs_probe_data.ReferenceColumns(input, lhs_probe_columns.col_idxs);
+			lhs_probe_projection->Reference(input, state.lhs_probe_data);
 			sink.hash_table->ConstructMarkJoinResult(state.lhs_join_keys, state.lhs_probe_data, chunk);
 			return OperatorResultType::NEED_MORE_INPUT;
 		}
@@ -2093,7 +2017,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 			return OperatorResultType::FINISHED;
 		}
 		// for empty result, only need output columns (no predicate evaluation)
-		state.lhs_output_data.ReferenceColumns(input, lhs_output_columns.col_idxs);
+		lhs_output_projection->Reference(input, state.lhs_output_data);
 		ConstructEmptyJoinResult(sink.hash_table->join_type, sink.hash_table->has_null, state.lhs_output_data, chunk);
 		return OperatorResultType::NEED_MORE_INPUT;
 	}
@@ -2105,7 +2029,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 			state.perfect_hash_join_state = sink.perfect_join_executor->GetOperatorState(context);
 		}
 		// for perfect hash join, when predicate is NULL, only output columns are needed
-		state.lhs_output_data.ReferenceColumns(input, lhs_output_columns.col_idxs);
+		lhs_output_projection->Reference(input, state.lhs_output_data);
 		return sink.perfect_join_executor->ProbePerfectHashTable(context, input, state.lhs_output_data, chunk,
 		                                                         *state.perfect_hash_join_state);
 	}
@@ -2135,7 +2059,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 	}
 
 	// pass probe data and mapping to Next
-	state.lhs_probe_data.ReferenceColumns(input, lhs_probe_columns.col_idxs);
+	lhs_probe_projection->Reference(input, state.lhs_probe_data);
 	state.scan_structure.Next(state.lhs_join_keys, state.lhs_probe_data, chunk);
 
 	if (state.scan_structure.PointersExhausted() && chunk.size() == 0) {
@@ -2501,12 +2425,12 @@ HashJoinLocalSourceState::HashJoinLocalSourceState(ExecutionContext &context, Gl
                                                    Allocator &allocator)
     : op(op), addresses(LogicalType::POINTER), lhs_join_key_executor(sink.context),
       scan_structure(*sink.hash_table, join_key_state) {
-	lhs_probe_chunk.Initialize(allocator, sink.probe_types);
+	lhs_probe_chunk.Initialize(allocator, sink.probe_layout->GetTypes());
 	lhs_join_keys.Initialize(allocator, op.condition_types);
 
 	// initialize with PROBE columns (not just output)
-	lhs_probe_data.InitializeEmpty(op.lhs_probe_columns.col_types);
-	lhs_output_data.InitializeEmpty(op.lhs_output_columns.col_types);
+	lhs_probe_data.InitializeEmpty(op.lhs_probe_projection->GetTypes());
+	lhs_output_data.InitializeEmpty(op.lhs_output_projection->GetTypes());
 
 	TupleDataCollection::InitializeChunkState(join_key_state, op.condition_types);
 
@@ -2585,8 +2509,8 @@ void HashJoinLocalSourceState::ExternalProbe(HashJoinGlobalSinkState &sink, Hash
 	lhs_join_keys.Reset();
 	lhs_join_key_executor.Execute(lhs_probe_chunk, lhs_join_keys);
 
-	// reference ALL probe columns
-	lhs_probe_data.ReferenceColumns(lhs_probe_chunk, gstate.op.lhs_probe_columns.col_idxs);
+	auto probe_input = sink.probe_layout->Columns(lhs_probe_chunk, *sink.probe_input_columns);
+	gstate.op.lhs_probe_projection->Reference(probe_input, lhs_probe_data);
 
 	if (sink.hash_table->Count() == 0 && sink.hash_table->HasUncorrelatedMarkJoin()) {
 		sink.hash_table->ConstructMarkJoinResult(lhs_join_keys, lhs_probe_data, chunk);
@@ -2595,7 +2519,7 @@ void HashJoinLocalSourceState::ExternalProbe(HashJoinGlobalSinkState &sink, Hash
 	}
 	if (sink.hash_table->Count() == 0 && !gstate.op.EmptyResultIfRHSIsEmpty()) {
 		// for empty result, only need output columns (no predicate evaluation)
-		lhs_output_data.ReferenceColumns(lhs_probe_chunk, gstate.op.lhs_output_columns.col_idxs);
+		gstate.op.lhs_output_projection->Reference(probe_input, lhs_output_data);
 		gstate.op.ConstructEmptyJoinResult(sink.hash_table->join_type, sink.hash_table->has_null, lhs_output_data,
 		                                   chunk);
 		empty_ht_probe_in_progress = true;
@@ -2603,7 +2527,7 @@ void HashJoinLocalSourceState::ExternalProbe(HashJoinGlobalSinkState &sink, Hash
 	}
 
 	// Perform the probe
-	auto precomputed_hashes = &lhs_probe_chunk.data.back();
+	auto precomputed_hashes = &sink.probe_layout->Column(lhs_probe_chunk, *sink.probe_hash);
 	sink.hash_table->Probe(scan_structure, lhs_join_keys, join_key_state, probe_state, precomputed_hashes);
 	scan_structure.Next(lhs_join_keys, lhs_probe_data, chunk);
 }

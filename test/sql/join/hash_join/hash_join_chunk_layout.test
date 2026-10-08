@@ -1,0 +1,181 @@
+# name: test/sql/join/hash_join/hash_join_chunk_layout.test
+# description: Hash join projections retain keys, payloads and predicate-only columns
+# group: [hash_join]
+
+statement ok
+SET disabled_optimizers='join_order,build_side_probe_side';
+
+statement ok
+CREATE TABLE layout_probe(id INTEGER, k INTEGER, pred INTEGER, label VARCHAR, items INTEGER[]);
+
+statement ok
+INSERT INTO layout_probe VALUES
+    (10, 1, 5, 'p1', [1, NULL]),
+    (20, 2, 15, 'p2', []),
+    (30, 3, NULL, 'p3', NULL),
+    (40, 4, 25, NULL, [4]);
+
+statement ok
+CREATE TABLE layout_build(k INTEGER, pred INTEGER, label VARCHAR, obj STRUCT(v INTEGER));
+
+statement ok
+INSERT INTO layout_build VALUES
+    (1, 10, 'b1', {'v': 1}),
+    (2, 2, 'b2', {'v': 2}),
+    (2, 20, 'b2x', NULL),
+    (5, 50, 'b5', {'v': 5});
+
+statement ok
+CREATE TABLE layout_perfect AS SELECT k, label FROM layout_build WHERE pred<>20;
+
+foreach external false true
+
+statement ok
+SET debug_force_external={external};
+
+foreach mode none dictionary_operator
+
+statement ok
+SET debug_verify_vector='{mode}';
+
+# Unique integer keys allow the perfect hash join to use the same projections.
+query TII rowsort
+SELECT b.label, p.id, b.k
+FROM layout_probe p JOIN layout_perfect b ON p.k=b.k;
+----
+b1	10	1
+b2	20	2
+
+# Reordered output includes a stored key, nested payloads and repeated columns.
+query TTITTT rowsort
+SELECT b.label, p.label, b.k, p.items, b.obj, b.label
+FROM layout_probe p JOIN layout_build b ON p.k=b.k;
+----
+b1	p1	1	[1, NULL]	{'v': 1}	b1
+b2	p2	2	[]	{'v': 2}	b2
+b2x	p2	2	[]	NULL	b2x
+
+# Both sides need predicate columns that are absent from the output.
+query TT rowsort
+SELECT b.label, p.label
+FROM layout_probe p JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+b2x	p2
+
+# A residual can also reference a key that is already stored in the hash table.
+query TI rowsort
+SELECT b.label, p.id
+FROM layout_probe p JOIN layout_build b ON p.k=b.k AND p.pred+b.k>10;
+----
+b2	20
+b2x	20
+
+# Payload columns used by a residual can also be returned.
+query IIT rowsort
+SELECT b.pred, p.pred, b.label
+FROM layout_probe p JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+20	15	b2x
+
+query TTI rowsort
+SELECT b.label, p.label, p.id
+FROM layout_probe p LEFT JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+NULL	NULL	40
+NULL	p1	10
+NULL	p3	30
+b2x	p2	20
+
+query IT rowsort
+SELECT p.id, b.label
+FROM layout_probe p FULL JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+10	NULL
+20	b2x
+30	NULL
+40	NULL
+NULL	b1
+NULL	b2
+NULL	b5
+
+# SEMI, ANTI and MARK retain predicate payloads without build output.
+query T
+SELECT p.label FROM layout_probe p SEMI JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+p2
+
+query I rowsort
+SELECT p.id FROM layout_probe p ANTI JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+10
+30
+40
+
+query II rowsort
+SELECT p.id, __mark_join_marker
+FROM layout_probe p JOIN BY(TYPE MARK) layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+10	false
+20	true
+30	false
+40	false
+
+# Computed keys still require the original build column in the payload.
+query IT rowsort
+SELECT b.k, p.label
+FROM layout_probe p JOIN layout_build b ON p.k=b.k+1 AND p.pred+b.pred>20;
+----
+1	p2
+
+# Key-only build and empty output projections still carry row counts.
+query I
+SELECT count(*) FROM layout_probe p JOIN layout_build b ON p.k=b.k;
+----
+3
+
+query I
+SELECT count(*) FROM layout_probe p SEMI JOIN layout_build b ON p.k=b.k AND p.pred+b.pred>20;
+----
+1
+
+endloop
+
+# An empty build preserves only the projected probe columns.
+statement ok
+CREATE OR REPLACE TABLE layout_empty AS SELECT * FROM layout_build WHERE false;
+
+query TIT rowsort
+SELECT p.label, p.id, b.label
+FROM layout_probe p LEFT JOIN layout_empty b ON p.k=b.k AND p.pred+b.pred>20;
+----
+NULL	40	NULL
+p1	10	NULL
+p2	20	NULL
+p3	30	NULL
+
+query II rowsort
+SELECT p.id, __mark_join_marker
+FROM layout_probe p JOIN BY(TYPE MARK) layout_empty b ON p.k=b.k AND p.pred+b.pred>20;
+----
+10	false
+20	false
+30	false
+40	false
+
+# Multiple probe chunks exercise projection reuse and spilled input/hash separation.
+query III
+SELECT count(*), sum(p.i), sum(b.pred)
+FROM range(5000) p(i) JOIN layout_build b ON p.i%3=b.k AND p.i+b.pred>2500;
+----
+2509	9395342	26816
+
+endloop
+
+statement ok
+RESET debug_verify_vector;
+
+statement ok
+RESET debug_force_external;
+
+statement ok
+RESET disabled_optimizers;

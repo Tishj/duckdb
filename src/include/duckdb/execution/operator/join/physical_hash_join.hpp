@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "duckdb/common/types/chunk_layout.hpp"
 #include "duckdb/execution/operator/join/physical_comparison_join.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 
@@ -35,11 +36,6 @@ class PhysicalHashJoin : public PhysicalComparisonJoin {
 public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::HASH_JOIN;
 
-	struct JoinProjectionColumns {
-		vector<idx_t> col_idxs;
-		vector<LogicalType> col_types;
-	};
-
 public:
 	PhysicalHashJoin(PhysicalPlan &physical_plan, LogicalOperator &op, PhysicalOperator &left, PhysicalOperator &right,
 	                 vector<JoinCondition> conds, JoinType join_type,
@@ -55,20 +51,20 @@ public:
 	//! The types of the join keys
 	vector<LogicalType> condition_types;
 
-	//! The indices/types of the payload columns
-	JoinProjectionColumns payload_columns;
-	//! The indices/types of the lhs columns that need to be output
-	JoinProjectionColumns lhs_output_columns;
-	//! The indices/types of the rhs columns that need to be output
-	JoinProjectionColumns rhs_output_columns;
+	//! Build input columns stored after the join keys
+	unique_ptr<ChunkProjection> payload_projection;
+	//! Probe input columns that need to be output
+	unique_ptr<ChunkProjection> lhs_output_projection;
+	//! Join key and payload columns that need to be output
+	unique_ptr<ChunkProjection> rhs_output_projection;
 
 	//! Duplicate eliminated types; only used for delim_joins (i.e. correlated subqueries)
 	vector<LogicalType> delim_types;
 
 	unique_ptr<ResidualPredicateInfo> residual_info;
 	//! For probe phase (includes predicate columns)
-	JoinProjectionColumns lhs_probe_columns;
-	//! Mapping from lhs_output_columns positions to lhs_probe_columns positions
+	unique_ptr<ChunkProjection> lhs_probe_projection;
+	//! Mapping from lhs output positions to lhs probe positions
 	vector<idx_t> lhs_output_in_probe;
 
 public:
@@ -135,14 +131,11 @@ private:
 	static void ExtractResidualPredicateColumns(unique_ptr<Expression> &predicate, idx_t probe_column_count,
 	                                            vector<idx_t> &probe_column_ids, vector<idx_t> &build_column_ids);
 
-	void InitializeResidualPredicate(const vector<LogicalType> &lhs_input_types, const vector<idx_t> &probe_cols);
+	void InitializeProbeSide(const vector<LogicalType> &lhs_input_types, const vector<idx_t> &output_cols,
+	                         const vector<idx_t> &probe_cols);
 
 	void InitializeBuildSide(const vector<LogicalType> &lhs_input_types, const vector<LogicalType> &rhs_input_types,
 	                         const vector<ProjectionIndex> &right_projection_map, const vector<idx_t> &build_cols);
-	void MapResidualBuildColumns(const vector<LogicalType> &lhs_input_types, const vector<LogicalType> &rhs_input_types,
-	                             const vector<idx_t> &build_cols,
-	                             const unordered_map<idx_t, idx_t> &build_columns_in_conditions,
-	                             unordered_map<idx_t, idx_t> &build_input_to_layout);
 };
 
 } // namespace duckdb
