@@ -2799,7 +2799,7 @@ bool JoinHashTable::CanUseDictionaryEmission(const PhysicalHashJoin &op, bool ex
 	if (join_type == JoinType::SINGLE) {
 		return false;
 	}
-	if (op.rhs_output_columns.col_types.empty()) {
+	if (op.rhs_output_projection->GetTypes().empty()) {
 		return false;
 	}
 	if (Count() == 0) {
@@ -2812,7 +2812,7 @@ bool JoinHashTable::CanUseDictionaryEmission(const PhysicalHashJoin &op, bool ex
 		return false;
 	}
 	// Vector::Dictionary does not support nested types
-	for (const auto &type : op.rhs_output_columns.col_types) {
+	for (const auto &type : op.rhs_output_projection->GetTypes()) {
 		switch (type.InternalType()) {
 		case PhysicalType::STRUCT:
 		case PhysicalType::LIST:
@@ -2822,7 +2822,7 @@ bool JoinHashTable::CanUseDictionaryEmission(const PhysicalHashJoin &op, bool ex
 			break;
 		}
 	}
-	if (ComputeBuildPayloadBytes(op.rhs_output_columns.col_types) >
+	if (ComputeBuildPayloadBytes(op.rhs_output_projection->GetTypes()) >
 	    DictionaryEmissionActivation::MAX_BUILD_PAYLOAD_BYTES) {
 		return false;
 	}
@@ -2868,8 +2868,8 @@ void JoinHashTable::BuildDictionaryArrays(const PhysicalHashJoin &op) {
 
 	// gather RHS output columns into columnar dictionary arrays
 	const auto &sel = *FlatVector::IncrementalSelectionVector();
-	for (idx_t col_idx = 0; col_idx < op.rhs_output_columns.col_types.size(); col_idx++) {
-		const auto &type = op.rhs_output_columns.col_types[col_idx];
+	for (idx_t col_idx = 0; col_idx < op.rhs_output_projection->GetTypes().size(); col_idx++) {
+		const auto &type = op.rhs_output_projection->GetTypes()[col_idx];
 		auto dict_entry = dict_on_every_chunk ? DictionaryVector::CreateReusableGlobalDictionary(type, build_count)
 		                                      : DictionaryVector::CreateReusableDictionary(type, build_count);
 		const auto output_col_idx = output_columns[col_idx];

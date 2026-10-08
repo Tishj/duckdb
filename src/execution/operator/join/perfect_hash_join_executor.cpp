@@ -139,7 +139,7 @@ bool PerfectHashJoinExecutor::CanDoPerfectHashJoin(const PhysicalHashJoin &op, c
 bool PerfectHashJoinExecutor::BuildPerfectHashTable() {
 	// First, allocate memory for each build column
 	const auto build_size = perfect_join_statistics.build_range + 1;
-	for (const auto &type : join.rhs_output_columns.col_types) {
+	for (const auto &type : join.rhs_output_projection->GetTypes()) {
 		// PHJ keeps each entry alive for the operator's lifetime and wraps it in every emitted chunk
 		perfect_hash_table.emplace_back(DictionaryVector::CreateReusableGlobalDictionary(type, build_size));
 	}
@@ -179,7 +179,7 @@ bool PerfectHashJoinExecutor::FullScanHashTable() {
 	key_count = unique_keys; // do not consider keys out of the range
 
 	// Full scan the remaining build columns and fill the perfect hash table
-	for (idx_t i = 0; i < join.rhs_output_columns.col_types.size(); i++) {
+	for (idx_t i = 0; i < join.rhs_output_projection->GetTypes().size(); i++) {
 		auto &vector = perfect_hash_table[i]->data;
 		const auto output_col_idx = ht.output_columns[i];
 		D_ASSERT(vector.GetType() == ht.layout_ptr->GetTypes()[output_col_idx]);
@@ -300,7 +300,7 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 		result.Slice(lhs_output_columns, state.probe_sel_vec, probe_sel_count, 0);
 	}
 	// on the build side, we need to fetch the data and build dictionary vectors with the sel_vec
-	for (idx_t i = 0; i < join.rhs_output_columns.col_types.size(); i++) {
+	for (idx_t i = 0; i < join.rhs_output_projection->GetTypes().size(); i++) {
 		auto &result_vector = result.data[lhs_output_columns.ColumnCount() + i];
 		D_ASSERT(result_vector.GetType() == ht.layout_ptr->GetTypes()[ht.output_columns[i]]);
 		result_vector.Dictionary(perfect_hash_table[i], state.build_sel_vec, probe_sel_count);

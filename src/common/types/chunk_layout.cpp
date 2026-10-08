@@ -102,6 +102,21 @@ ChunkLayout ChunkLayoutBuilder::Build() {
 	return ChunkLayout(std::move(data));
 }
 
+ChunkLayout ChunkProjection::CreateTargetLayout(const ChunkLayout &source, const vector<ChunkColumn> &columns) {
+	ChunkLayoutBuilder builder;
+	for (auto &column : columns) {
+		if (column.layout != source.data || column.index >= source.GetTypes().size()) {
+			throw InternalException("Chunk projection column belongs to a different layout");
+		}
+		builder.AddColumn(source.GetTypes()[column.index]);
+	}
+	return builder.Build();
+}
+
+ChunkProjection::ChunkProjection(ChunkLayout source, const vector<ChunkColumn> &columns)
+    : ChunkProjection(source, CreateTargetLayout(source, columns), columns) {
+}
+
 ChunkProjection::ChunkProjection(ChunkLayout source, ChunkLayout target, vector<ChunkColumn> columns_p)
     : source_layout(std::move(source)), target_layout(std::move(target)) {
 	if (columns_p.size() != target_layout.GetTypes().size()) {
@@ -120,11 +135,23 @@ ChunkProjection::ChunkProjection(ChunkLayout source, ChunkLayout target, vector<
 }
 
 void ChunkProjection::Reference(DataChunk &source, DataChunk &target) const {
-	D_ASSERT(&source != &target);
-	source_layout.Verify(source);
+	Reference(ChunkColumnView(source, 0, source.ColumnCount()), target);
+}
+
+void ChunkProjection::Reference(const ChunkColumnView &source, DataChunk &target) const {
+	D_ASSERT(&source.chunk != &target);
+	D_ASSERT(source.ColumnCount() == source_layout.GetTypes().size());
+#ifdef DEBUG
+	for (idx_t i = 0; i < source.ColumnCount(); i++) {
+		D_ASSERT(source.Column(i).GetType() == source_layout.GetTypes()[i]);
+	}
+#endif
 	target_layout.Verify(target);
-	target.ReferenceColumns(source, columns);
-	target.SetCardinalityUnsafe(source.size());
+	target.Reset();
+	for (idx_t i = 0; i < columns.size(); i++) {
+		target.data[i].Reference(source.Column(columns[i]));
+	}
+	target.SetCardinalityUnsafe(source.RowCount());
 }
 
 } // namespace duckdb
